@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- 技能行的图标与行高不再被边框撑大 2px：图标回到 48×48，行高回到 64px。
+
 ## [0.1.0] - 2026-11-09
 
 ### Added

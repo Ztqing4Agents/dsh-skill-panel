@@ -287,3 +287,7 @@
 | 骨架动画 | 2s `cubic-bezier(.36,0,.64,1)` infinite，1 → .6 → 1 | `@keyframes skc-skeleton` |
 | 错误行 | `StateDot state="error"` + 13/20 tertiary 文字 + `role="alert"` + outline 重试按钮 | `.skc_failure`（宿主结构） |
 | 行内失败原因 | 12px / 18px / error 色 / `pre-wrap` | `.skc_reason` |
+
+> **固定尺寸 + 边框的盒子必须显式写 `box-sizing: border-box`**（宿主那套 CSS 是逐条声明的，没有全局 reset）。
+> 漏写的后果：`.skc_cardIcon` 的 48×48 被 0.5px 边框撑到 50px，行高从 64px 变成 66px —— 2026-11-09 真机验收实测，
+> 修法是给该规则补一行 `box-sizing: border-box`（锚点：`src/client/styles.js` 的 `.skc_cardIcon`，回归见 `test/styles.test.mjs`）。

@@ -75,7 +75,7 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | A4 | 停用后重启 DSH | 面板仍显示为停用 | 真机抽检 1 次（磁盘是唯一真源，重启读的就是同一字节） |
 | A5 | 把 `provider-toggles.json` 改成非法 JSON | 面板正常打开、全部显示为启用、不报错 | 自动：K15 |
 | A6 | 读取期制造权限不足 | 首次失败 → 原位错误 + 重试；有缓存 → 列表保留 + toast | 自动：K24 + 真机注入 |
-| A7 | 窗口从 1200px 拖到 700px | 内边距 20px；页签落到操作组上方 | 真机（L4，容器查询只能在浏览器里看） |
+| A7 | 窗口从 1200px 拖到 560px | ≤767px 内边距 20px；<600px 时页签与图标操作同行（页签在左），600–767px 页签独占下一行 | 真机（L4，容器查询只能在浏览器里看） |
 | A8 | `prefers-reduced-motion: reduce` | 骨架不呼吸、页签指示块无位移过渡 | 真机（CSS 层已写 `animation:none`，字符串渲染断言不到） |
 | A9 | `npm test && npm run check` | 全绿 | 门禁 |
 

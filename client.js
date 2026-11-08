@@ -326,6 +326,7 @@ var CSS = `
 .skc_card{ border-radius: var(--dsw-radius-xl); min-width: 0; margin: 0 -8px }
 .skc_cardHead{ align-items: center; gap: 14px; padding: 8px; display: flex }
 .skc_cardIcon{
+  box-sizing: border-box;
   border: .5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-lg);
   width: 48px; height: 48px; color: var(--dsw-alias-label-secondary); flex: none;
   justify-content: center; align-items: center; display: inline-flex;
