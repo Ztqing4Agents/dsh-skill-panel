@@ -1,7 +1,15 @@
 # dsh-skill-center 系统设计
 
+> 类型：规范
+> 读者：改 `lib/**`、`src/client/**`、路由表或分类判据的人（含新会话里的 agent）
+> 真源：代码与测试是最终真源（`lib/**`、`src/client/**`、`scripts/**`、`locale/*.json`）；本文件只写「必须成立的事实」与可 grep 的锚点
+> 更新触发：改分类判据（`lib/classify.js`）/ 路由与错误码（§3.3、§8.1）/ frontmatter 读写规则（§3.2.4）/ 视觉刻度（附录 A.9）时，同步改对应小节
+> 规模上限：400（规范档；现状超档，原因与拆分方向见文末 `## 体量与拆分计划`）
+> 编号约定：小节号保持历史值、不随删除重排——26 个测试文件的头注按 `§x.y` 编号锚定本文件
+
 模式：系统设计（架构师 · 高见远）｜Language：中文（简体）
-上游输入：`docs/PRD.md`（388 行，task-1）+ 队长补充决策（2026-11-08，两条，覆盖 PRD 对应条款）
+上游输入：PRD（388 行，2026-11-08）+ 队长补充决策（2026-11-08，两条，覆盖 PRD 对应条款）。
+PRD 是过程产物，已于 2026-11-09 移出仓库，原件见 commit `a8141eb`；其中仍然成立的部分已并入本文件（验收口径见附录 D.4）。
 本文不含业务实现代码；可出现签名、类型、契约与 ≤10 行伪代码。
 
 **证据记号**（本文所有「依据」列的缩写，全部为本机真实产物）：
@@ -12,7 +20,7 @@
 | `SHELL/` | `EX/dsh-web-frontend/dist/assets`（`index-BgUyXZcc.js`、`index-lh_YM6sT.css`） | 前端 shell 产物，单行压缩，按唯一字串 grep |
 | `PROF/` | `~/.dsh/profiles/desktop/node_modules/` | 本机已装插件 |
 | `HIDDER/` | `~/Documents/Agents/Plugins/dsh-hidder/` | 用户自己的插件；`docs/reference/host-selectors.md`、`docs/reference/settings-ui.md`、`spec.md` 有宿主真实取值 |
-| `PRD` | `docs/PRD.md` | 上游产品规格 |
+| `PRD` | `git show a8141eb:docs/PRD.md` | 上游产品规格。2026-11-09 作为过程产物移出工作树，正文里的 `PRD §x` 引用保留以便追溯 |
 
 > 宿主版本：`0.2.2-rc.1`（`HIDDER/docs/reference/host-selectors.md` 头部的双证采集记录）。本文所有宿主读数采集于 2026-11-08，同一版本。
 
@@ -41,7 +49,7 @@
 一个包、两半、四个导出点：
 
 ```jsonc
-// package.json（节选；完整形态见附录 C）
+// package.json（节选；完整形态以文件本身为准）
 {
   "name": "dsh-skill-center",
   "type": "module",
@@ -338,13 +346,13 @@ ledger.readAll() ─────────────────┘   （R5�
 | `scripts/check-client.mjs` | 重新构建到临时文件并与 `client.js` 逐字节比对；校验产物含 `__ModuleLoader__.load({ id: "<包名>"`；无 esbuild 时给出可读报错 |
 | `scripts/check-i18n.mjs` | `zh.json`/`en.json` 键集一致；`src/client/**` 与 `lib/**` 中**禁止 CJK 字面量**；`panel.label` 键存在 |
 
-### 2.5 测试（QA 拥有，本设计只给骨架）
+### 2.5 测试（QA 拥有）
 
-`test/classify.test.mjs`、`test/frontmatter.test.mjs`、`test/scan.test.mjs`、`test/loopback.test.mjs`、`test/routes.test.mjs`、`test/provider-toggles.test.mjs`、`test/render.test.mjs`、`test/fixtures/`（分层依据与用例骨架见**附录 D**）。
+全部用例在 `test/**/*.test.mjs`，`npm test` 一次跑完；**分层依据、夹具与用例编号见附录 D**（本设计只给口径，不给骨架）。
 
 ### 2.6 文档
 
-`docs/PRD.md`（产品）、`docs/system_design.md`（本文）、`docs/class-diagram.mermaid`、`docs/sequence-diagram.mermaid`、`docs/test-report.md`（QA）。
+本文件是契约真源。「想知道什么该看哪份」的读者入口见 `AGENTS.md` 的文档地图；宿主页面形状另见 `docs/reference/host-plugin-page.md`（带采集日期）。
 
 ---
 
@@ -973,28 +981,6 @@ react-dom                              ^18.2.0
 
 ---
 
-## 7 任务列表
-
-> 规则：≤5 个；每个 ≥3 个文件；T01 是基础设施（配置 + 入口 + 依赖声明全在同一个任务里）；按依赖顺序开工。
-
-| Task ID | Task Name | Source Files（相对包根） | Dependencies | Priority |
-| --- | --- | --- | --- | --- |
-| **T01** | 基础设施与接线 | `package.json`、`cordis.patch.yml`、`index.js`、`assets/icon.svg`、`locale/zh.json`、`locale/en.json`、`scripts/build-client.mjs` | — | P0 |
-| **T02** | Host 数据面（扫描 / 台账 / 注册表 / 判定） | `lib/names.js`、`lib/loopback.js`、`lib/http.js`、`lib/ledger.js`、`lib/scan.js`、`lib/registry.js`、`lib/classify.js` | T01 | P0 |
-| **T03** | Host 写入面与路由 | `lib/frontmatter.js`、`lib/write-skill.js`、`lib/provider-toggles.js`、`lib/routes.js` | T02 | P0 |
-| **T04** | Client 页面与视觉 1:1 | `src/client/styles.js`、`src/client/index.jsx`、`src/client/api.js`、`src/client/state.js`、`src/client/model.js`、`src/client/page.jsx`、`src/client/row.jsx`、`src/client/skeleton.jsx`、`src/client/header-scroll.js`、`src/client/toast.jsx`（+ 构建产出 `client.js`） | T02 | P0 |
-| **T05** | 集成门禁与文档收尾 | `scripts/check-client.mjs`、`scripts/check-i18n.mjs`、`README.md`（已知限制终稿）、`AGENTS.md`（命令与真源地图终稿） | T03、T04 | P0 |
-
-任务执行要点（交给工程师时不可省）：
-
-- **T01** 的 `package.json` 必须一次写全：`exports["./client"]`（字符串）、`dsh.client.{platform,immediately,inject}`、`peerDependencies`、`scripts.{build,check:client,check:i18n,test}`；`index.js` 先给出 `name`/`inject`/`apply` 骨架并调用 T02 才会出现的 `makeRoutes`（先留 `export` 契约，避免 T02 返工改接口）。
-- **T02** 的 `classify.js` 必须能在**没有文件系统**的情况下被调用（全部输入由参数传入）；`scan.js` 与 `ledger.js` 是唯一碰盘的两个。
-- **T03** 的四条路由必须在同一文件里共用 `guard()`，禁止每条各自写围栏。
-- **T04** 只允许在 `styles.js` 里出现 px 数值与 `--dsw-*` 引用；其它组件文件里不得有颜色/尺寸字面量（除 `size={11|13}` 这类图标尺寸）。
-- **T05** 的 `check-i18n.mjs` 是「不硬编码中文」的机器保证：`src/client/**` 与 `lib/**` 出现 CJK 即 exit 1。
-
----
-
 ## 8 共享知识（跨模块约定）
 
 ### 8.1 响应格式与错误码
@@ -1101,26 +1087,10 @@ react-dom                              ^18.2.0
 - 数字：`counts` 全部是整数，缺失按 0（不做 `undefined` 透出）。
 - 日志：`ctx.logger.warn(error)` 记录，**不把路径之外的敏感内容打进日志**。
 
----
+### 8.5 样式字面量单点
 
-## 9 任务依赖图
-
-```mermaid
-graph LR
-    T01["T01 基础设施与接线<br/>package.json · cordis.patch.yml · index.js · locale · build 脚本"]
-    T02["T02 Host 数据面<br/>scan · ledger · registry · classify"]
-    T03["T03 Host 写入面与路由<br/>frontmatter · write-skill · provider-toggles · routes"]
-    T04["T04 Client 页面与视觉<br/>styles · page · row · skeleton · header-scroll"]
-    T05["T05 集成门禁与文档<br/>check-client · check-i18n · README/AGENTS 终稿"]
-
-    T01 --> T02
-    T02 --> T03
-    T02 --> T04
-    T03 --> T05
-    T04 --> T05
-```
-
-关键路径：`T01 → T02 → T03 → T05`（4 跳）；`T04` 与 `T03` 可并行（都只依赖 T02 的契约）。T04 与 T03 的写入文件集**零重叠**（`src/client/**` vs `lib/**`），可以并发。
+尺寸与颜色字面量只允许出现在 `src/client/styles.js`；其它组件文件不得写颜色/尺寸（`size={11|13}` 这类图标尺寸除外）。
+锚点：`test/styles.test.mjs`；把刻度搬进组件时那条用例先红。
 
 ---
 
@@ -1408,7 +1378,9 @@ graph LR
 
 ---
 
-## 附录 B PRD 更正与刻意偏离登记
+## 附录 B 决策登记：与 PRD 的偏离与更正
+
+> PRD 已于 2026-11-09 移出仓库（过程产物），原件见 commit `a8141eb`；下表「PRD 原文」列保留原文以便追溯，判定仍然有效。
 
 **B 组：有宿主证据的更正**（不是设计偏好，是「PRD 写错了控件/类名」）：
 
@@ -1445,70 +1417,7 @@ graph LR
 
 ---
 
-## 附录 C package.json 完整形态（T01 的验收基准）
-
-```jsonc
-{
-  "name": "dsh-skill-center",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "description": "DSH 技能中心：一眼分清内置、本地与市场安装的技能，逐行启用或停用。",
-  "icon": "assets/icon.svg",
-  "main": "index.js",
-  "exports": {
-    ".": "./index.js",
-    "./client": "./client.js",
-    "./package.json": "./package.json",
-    "./locale/*.json": "./locale/*.json"
-  },
-  "files": ["index.js", "client.js", "lib", "locale", "assets", "cordis.patch.yml", "README.md"],
-  "scripts": {
-    "build": "node scripts/build-client.mjs",
-    "check:client": "node scripts/check-client.mjs",
-    "check:i18n": "node scripts/check-i18n.mjs",
-    "check": "npm run check:i18n && npm run check:client",
-    "test": "node --test test/"
-  },
-  "dsh": {
-    "manifestVersion": 1,
-    "bundle": { "patch": "./cordis.patch.yml" },
-    "client": {
-      "platform": "web",
-      "immediately": true,
-      "inject": [
-        "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-ui-layout",
-        "@deepseek-ai/dsh-client-ui-sidebar"
-      ]
-    }
-  },
-  "peerDependencies": {
-    "@deepseek-ai/cordis": ">=4.0.1",
-    "@deepseek-ai/dsh-host-webserver": ">=0.2.0-rc.1 <0.3.0-0",
-    "@deepseek-ai/dsh-skill": ">=0.2.0-rc.1 <0.3.0-0",
-    "@deepseek-ai/dsh-session": ">=0.2.0-rc.1 <0.3.0-0",
-    "@deepseek-ai/dsh-client-locale": ">=0.2.0-rc.1 <0.3.0-0",
-    "@deepseek-ai/dsh-client-ui-layout": ">=0.2.0-rc.1 <0.3.0-0",
-    "@deepseek-ai/dsh-client-ui-sidebar": ">=0.2.0-rc.1 <0.3.0-0",
-    "@deepseek-ai/dsh-client-ui-primitives": ">=0.2.0-rc.1 <0.3.0-0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
-  },
-  "devDependencies": {
-    "esbuild": "0.25.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "@types/react": "~18.3.1",
-    "@types/react-dom": "~18.3.1"
-  },
-  "engines": { "node": ">=20", "dsh": ">=0.2.1" }
-}
-```
-
----
-
-## 附录 D 测试策略与用例骨架（给 QA 的最小可落地集）
+## 附录 D 验收：分层、夹具与用例骨架
 
 ### D.1 三层分类：什么能被自动断言
 
@@ -1524,14 +1433,14 @@ graph LR
 ### D.2 `test/fixtures/` 需要的四棵树
 
 ```
-fixtures/skills-plain/       ← PRD §3.1.3 五条样本的最小复刻（含 _meta.json 两种写法）
+fixtures/skills-plain/       ← 本机五条真实样本的最小复刻（含 _meta.json 两种写法，采集于 2026-11-08）
 fixtures/skills-crlf/        ← 一个 CRLF 的 SKILL.md（照抄本机 indiv-guipi--find-skills 的首两行）
 fixtures/skills-symlink/     ← 一个指向 fixtures/target-repo/ 的软链（git 仓库形态，只读）
 fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录、非法 name、超长描述、
                                带 `disable-model-invocation: true  # 注释` 的技能、无 frontmatter 但合法目录
 ```
 
-### D.3 用例骨架（QA 直接抄成 `.test.mjs`）
+### D.3 用例编号（测试头注按此编号锚定）
 
 | ID | 目标 | 断言（可直接写成 `assert`） | 层 |
 | --- | --- | --- | --- |
@@ -1563,19 +1472,22 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | **K26** | 计数文案 | `statusLine({total:5,disabled:1}) === '共 5 个技能，1 个已停用'`；`{total:5,disabled:0} === '共 5 个技能'` | L1 |
 | **K27** | 不硬编码中文 | `scripts/check-i18n.mjs`：`src/client/**` 与 `lib/**` 的 CJK 计数为 0；`zh.json`/`en.json` 键集相等；`panel.label` 存在 | 门禁 |
 
-### D.4 与 `PRD` §3.5 验收口径的映射
+### D.4 验收口径（A 组：通过标准，每条都能现场执行）
 
-| PRD | 本设计的用例 |
-| --- | --- |
-| A1 五条真机样本 | K6 |
-| A2 新建手写目录 / 假 `clawhub-a--b` / 软链 | K6 + K11 + K12 |
-| A3 停用后其余字节不变 | K7 + K8 + K9 |
-| A4 重启后状态一致 | 真机（L4）——磁盘是唯一真源，重启读的就是同一字节，故只需真机抽检 1 次 |
-| A5 `provider-toggles.json` 非法 | K15 |
-| A6 读取失败两种表现 | K24 + 真机（网络/权限注入） |
-| A7 1200→700px | L4 真机（容器查询生效后页签在操作组上方） |
-| A8 `prefers-reduced-motion` | 真机（CSS 层已写 `animation:none`，无法在字符串渲染里断言） |
-| —— | **新增**：K17–K20（围栏与身份校验）、K18（软链零写入，队长决策 2 的验收点） |
+| 编号 | 验收动作 | 通过标准 | 由谁保证 |
+| --- | --- | --- | --- |
+| A1 | 打开面板，对照本机 5 条真实样本 | 三分区归属 5/5 命中 | 自动：K6 |
+| A2 | 造一个手写目录 + 一个假 `clawhub-a--b` 空目录 + 一个软链，刷新 | 手写 → 本地；空 `clawhub-a--b` → 已安装（中置信）；软链 → 本地 | 自动：K6 + K11 + K12 |
+| A3 | 停用本地技能后 `git diff` 该 `SKILL.md` | 只多 `disable-model-invocation: true` 一行，其余字节（含 CRLF/BOM/注释）不变 | 自动：K7 + K8 + K9 |
+| A4 | 停用后重启 DSH | 面板仍显示为停用 | 真机抽检 1 次（磁盘是唯一真源，重启读的就是同一字节） |
+| A5 | 把 `provider-toggles.json` 改成非法 JSON | 面板正常打开、全部显示为启用、不报错 | 自动：K15 |
+| A6 | 读取期制造权限不足 | 首次失败 → 原位错误 + 重试；有缓存 → 列表保留 + toast | 自动：K24 + 真机注入 |
+| A7 | 窗口从 1200px 拖到 700px | 内边距 20px；页签落到操作组上方 | 真机（L4，容器查询只能在浏览器里看） |
+| A8 | `prefers-reduced-motion: reduce` | 骨架不呼吸、页签指示块无位移过渡 | 真机（CSS 层已写 `animation:none`，字符串渲染断言不到） |
+| A9 | `npm test && npm run check` | 全绿 | 门禁 |
+
+补充验收点：K17–K20 覆盖围栏、方法、body 上限与路由身份校验；K18 是「软链零写入」的验收点（队长决策 2）。
+真机逐项清单（几何、深色模式、页头停靠、标题栏安全区、页面切换、热刷新）见文末「真机才能验证的项」。
 
 ---
 
@@ -1606,9 +1518,21 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 ### 真机才能验证的项（不进自动化测试）
 
 1. 像素几何：内边距、页签 34px、行高 64px、图标 48×48、开关 36×20（`HIDDER/AGENTS.md` 的教训：几何只能由真实浏览器量）。
-2. 深度色模式：所有 `--dsw-*` 解析成功（失败表现为「透明边框 / 看不见的文字」，`HIDDER/docs/reference/settings-ui.md` §9）。
+2. 深色模式：所有 `--dsw-*` 解析成功（失败表现为「透明边框 / 看不见的文字」，`HIDDER/docs/reference/settings-ui.md` §9）。
 3. 页头停靠在滚到紧凑态时**列表滚动范围不变**、反向滚动沿同一坐标返回。
 4. darwin 标题栏安全区（含侧栏收起时的 8px 特例）。
 5. 打开任意会话 → 主区回到会话正文；回到「技能」→ 页签保持。
 6. 改完 frontmatter 后模型目录热刷新（`skill-filesystem` 的 `watch`）：停用一个技能后，下一轮会话的可用技能列表减少。
 7. `prefers-reduced-motion: reduce` 下骨架不呼吸、页签指示块无位移过渡。
+
+---
+
+## 体量与拆分计划
+
+现状约 1500 行，超出「规范 400」档近 4 倍。这不是靠删句子能解决的：其中约 280 行是逐字视觉规格（附录 A）、450 行是接口契约（§3），两块的读者与更新触发本就不同。拆分方向（**尚未执行**，按此顺序）：
+
+1. **附录 A → `docs/contracts/visual.md`**：读者只有改样式的人，更新触发是宿主改版。搬走时同步改 `test/styles.test.mjs`、`test/view-*.test.mjs` 里的「附录 A」引用（6 处）与 `AGENTS.md`（1 处）。
+2. **§3 按模块拆 3 份**（扫描与判定 / 写入 / 路由）：代价是 20 个测试头注的 `§3.x` 编号锚点要全部改指新文件，必须与 QA 同批改。
+3. **§1/§2/§4/§8 合成一份架构契约**，目标 ≤400 行。
+
+第 1 步风险最低、收益最大；跳过第 2 步直接合并不解决档位问题。

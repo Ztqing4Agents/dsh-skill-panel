@@ -4,3 +4,5 @@ test/.tmp/
 .DS_Store
 *.tmp
 !test/fixtures/**/.DS_Store
+.agents/memory/
+.agents/work/
