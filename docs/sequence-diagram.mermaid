@@ -1,0 +1,59 @@
+%% dsh-skill-center — 调用时序（写路径：开关 + 软链拒绝）
+%% 由 docs/system_design.md §4.2 抽出；两者必须同批更新。
+%% 读取路径（list / 首次打开）见 system_design.md §4.1，不放本文件以免出现「一个文件两份图」的解析歧义。
+
+sequenceDiagram
+    autonumber
+    actor U as 用户
+    participant SW as EnableSwitch
+    participant PG as SkillsPage
+    participant ST as PageStore
+    participant API as SkillCenterApi
+    participant RT as RouteTable
+    participant SC as SkillScanner
+    participant FM as FrontmatterCodec
+    participant AW as AtomicWriter
+    participant FS as SKILL.md
+
+    U->>SW: 点击开关
+    SW->>PG: onToggle(row, !row.enabled)
+    PG->>ST: actions.pending(identityKey)
+    Note over PG,SW: 不做乐观 UI：开关 disabled + StateDot(ongoing) + aria-live 播报
+    PG->>API: toggle({name, path, enabled})
+    API->>RT: POST api/dsh-skill-center/toggle
+    RT->>RT: isLoopbackRequest(req) 失败则 403 E_FORBIDDEN
+    RT->>SC: 重新扫描（磁盘是唯一真源）
+    SC-->>RT: row 或 undefined
+    alt row 不存在
+        RT-->>API: 404 E_NOT_FOUND
+    else row.symlink 为 true
+        RT-->>API: 409 E_SYMLINK_READONLY
+        Note over RT,FS: 不写任何字节（队长决策：软链只读）
+    else row.path 与提交的 path 不一致
+        RT-->>API: 409 E_STALE_PATH
+        Note over RT: 拒绝过期同名回退
+    else 身份校验通过
+        RT->>FM: setDisableModelInvocation(bytes, !enabled)
+        FM-->>RT: next 字节与 changed 标记
+        RT->>AW: writeDisableFlag(row.path, !enabled)
+        AW->>FS: lstat 后 read 并 fstat 取指纹
+        AW->>FS: 写 tmp(wx) 后 fsync 并复核指纹再 rename
+        AW->>FS: 回读并逐字节校验
+        alt 校验失败
+            AW->>FS: 回滚原字节
+            AW-->>RT: E_VERIFY_FAILED
+            RT-->>API: 500 E_VERIFY_FAILED
+        else 成功
+            AW-->>RT: path 与 disableModelInvocation
+            RT-->>API: 200 {code:'OK', data:{name, enabled, modelInvocable, path}}
+        end
+    end
+    alt 成功
+        API-->>PG: ToggleResult
+        PG->>ST: actions.commit(identityKey, enabled)
+        PG-->>U: 新状态（下一次 list 亦一致）
+    else 失败
+        API-->>PG: ApiError{code}
+        PG->>ST: actions.fail(identityKey, code)
+        PG-->>U: 开关回弹 + 行内 .skc_reason
+    end

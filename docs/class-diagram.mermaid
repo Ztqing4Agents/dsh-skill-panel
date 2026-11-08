@@ -1,0 +1,139 @@
+%% dsh-skill-center — 类图 / 模块关系
+%% 由 docs/system_design.md §3.1 抽出；两者必须同批更新。
+%% 命名规则：Host 半部（lib/*.js）无 React；Client 半部（src/client/*）只经 /api/* 与 Host 通信。
+
+classDiagram
+    direction LR
+
+    class HostPlugin {
+        +string name
+        +string[] inject
+        +apply(ctx, config) void
+        -resolveDshHome(config) string
+    }
+    class RouteTable {
+        +makeRoutes(ctx, deps) WebRoute[]
+        +ROUTES Map~string,string~
+        -guard(req, res, method) bool
+        -resolveScannedRow(name, path) ScanCandidate
+    }
+    class LoopbackFence {
+        <<module>>
+        +isLoopbackAddress(address) bool
+        +isLoopbackHostname(host) bool
+        +isProxiedRequest(req) bool
+        +isLoopbackRequest(req) bool
+    }
+    class SkillScanner {
+        +scanUserSkills(skillsRoot) ScanCandidate[]
+        -readCandidate(dirEntry) ScanCandidate
+        -lstatEntry(absPath) bool
+    }
+    class RegistryReader {
+        +snapshotRegistry(skills, cwd) RegistryView
+        +rankOfSummary(summary) int
+    }
+    class InstallLedger {
+        +readLedger(dshHome, skillsRoot) LedgerFacts
+        -readJsonDegrading(file) any
+    }
+    class Classifier {
+        <<pure>>
+        +rankOf(level) int
+        +classifySkill(input) Classification
+        +mergeCatalog(input) Catalog
+        +buildGroups(skills) Group[]
+    }
+    class FrontmatterCodec {
+        <<pure>>
+        +parseFrontmatter(text) Frontmatter
+        +stripFrontmatter(text) string
+        +setDisableModelInvocation(bytes, disabled) Buffer
+    }
+    class AtomicWriter {
+        +writeDisableFlag(file, disabled) WriteResult
+        -fingerprint(stat) Fingerprint
+        -verify(file, expected) void
+    }
+    class ProviderToggleStore {
+        +read(dshHome) ProviderToggleDoc
+        +setEnabled(dshHome, identity, enabled) ProviderToggleDoc
+        +deserialize(raw) ProviderToggleDoc
+        +serialize(doc) string
+    }
+    class ScanCandidate {
+        +string dirName
+        +string declaredName
+        +string description
+        +string instructionPath
+        +string realPath
+        +bool symlink
+        +bool disableModelInvocation
+        +string metaEvidence
+    }
+    class Classification {
+        +string partition
+        +string rule
+        +string confidence
+        +string evidence
+    }
+    class ClientPlugin {
+        +apply(ctx) Function
+        -registerPanel(ctx) Function
+        -registerToast(ctx) Function
+    }
+    class SkillCenterApi {
+        +list() ListPayload
+        +toggle(payload) ToggleResult
+        +toggleProvider(payload) ProviderToggleResult
+    }
+    class PageStore {
+        +getSnapshot() PageState
+        +subscribe(listener) Function
+    }
+    class PageState {
+        +string tab
+        +string status
+        +ListPayload payload
+        +ApiError error
+        +Map rows
+        +Notice notice
+    }
+    class SkillsPage {
+        +render() ReactElement
+        -refresh() void
+        -onToggle(row, enabled) void
+    }
+    class SkillRow {
+        +render() ReactElement
+    }
+    class EnableSwitch {
+        +render() ReactElement
+    }
+    class HeaderScroll {
+        +attachHeader(bar) Function
+        +interpolateParts(parts, offset) Frame[]
+    }
+    class ToastHost {
+        +render() ReactElement
+    }
+
+    HostPlugin --> RouteTable : builds
+    RouteTable --> LoopbackFence : fence
+    RouteTable --> SkillScanner : re-scan for identity
+    RouteTable --> Classifier : merge
+    RouteTable --> AtomicWriter : write
+    RouteTable --> ProviderToggleStore : write
+    SkillScanner --> ScanCandidate : produces
+    RegistryReader --> Classifier : summaries and rank
+    InstallLedger --> Classifier : R5 facts
+    Classifier --> Classification : produces
+    FrontmatterCodec <-- AtomicWriter : uses
+    ClientPlugin --> SkillsPage : registers in main slot
+    ClientPlugin --> ToastHost : registers in shell.overlay
+    SkillsPage --> PageStore : reads and writes
+    SkillsPage --> SkillCenterApi : fetches
+    SkillsPage --> SkillRow : renders
+    SkillRow --> EnableSwitch : renders
+    SkillsPage --> HeaderScroll : measures header
+    PageStore --> PageState : snapshot
