@@ -1,6 +1,6 @@
 # AGENTS.md — dsh-skill-center 维护者开工地图
 
-只写「不写就会返工」的。契约细节在 `docs/system_design.md`（真源），本文件不复述。
+只写「不写就会返工」的。契约细节在 `docs/system_design.md` 与 `docs/contracts/visual.md`（真源），本文件不复述。
 
 ## 命令
 
@@ -16,7 +16,8 @@ npm test             # node --test test/（测试由 QA 维护）
 
 | 想知道什么 | 看哪份 | 注意 |
 | --- | --- | --- |
-| 现在必须成立的事实（判据、路由、接口、视觉刻度、验收口径） | `docs/system_design.md` | 唯一契约真源；改代码要同步改对应小节，编号（§x.y）有 26 个测试头注锚定，不许重排 |
+| 现在必须成立的事实：判据、路由、接口、验收口径 | `docs/system_design.md` | 契约真源之一；编号（§x.y）有 26 个测试头注锚定，不许重排 |
+| 页面视觉刻度：px、令牌、`skc_` 类名、响应式收拢顺序 | `docs/contracts/visual.md` | 契约真源之一；编号（A.1–A.9）有 2 个测试头注锚定 |
 | 宿主「插件」页长什么样（外部形状、稳定钩子、几何） | `docs/reference/host-plugin-page.md` | 带采集日期；宿主升级后整份重采，不在旧值上打补丁 |
 | 使用者能感知什么、怎么装、有哪些已知限制 | `README.md` | 只写使用者视角 |
 | 升级时我要注意什么 | `CHANGELOG.md` | 记行为变化与迁移，不记改过哪些文件 |
@@ -47,7 +48,7 @@ npm test             # node --test test/（测试由 QA 维护）
    界面文案一律进 `locale/*.json`，代码里只出现键名。
 3. **入口名只在 `locale/*.json` 里改**（`panel.label` + `meta.title`），代码零改动。
 4. **不写同名 `--dsw-*` 变量**，不引第二套样式系统。宿主类名是构建哈希，不许出现在选择器里；
-   页骨架用 `skc_` 前缀，规则体逐字来自宿主「插件」页（`docs/system_design.md` 附录 A）。
+   页骨架用 `skc_` 前缀，规则体逐字来自宿主「插件」页（`docs/contracts/visual.md`）。
 5. **软链技能只读，三层同时拦**：扫描层给 `symlink` 事实 → 前端渲染只读标记不渲染开关 →
    写路由返回 `409 E_SYMLINK_READONLY`。任何一层被去掉都算回归。
 6. **写路由不得信任请求里的路径**：先按 name 重新扫描，`row.path !== path` 即 `409 E_STALE_PATH`。

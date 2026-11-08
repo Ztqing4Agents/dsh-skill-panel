@@ -3,7 +3,7 @@
 > 类型：规范
 > 读者：改 `lib/**`、`src/client/**`、路由表或分类判据的人（含新会话里的 agent）
 > 真源：代码与测试是最终真源（`lib/**`、`src/client/**`、`scripts/**`、`locale/*.json`）；本文件只写「必须成立的事实」与可 grep 的锚点
-> 更新触发：改分类判据（`lib/classify.js`）/ 路由与错误码（§3.3、§8.1）/ frontmatter 读写规则（§3.2.4）/ 视觉刻度（附录 A.9）时，同步改对应小节
+> 更新触发：改分类判据（`lib/classify.js`）/ 路由与错误码（§3.3、§8.1）/ frontmatter 读写规则（§3.2.4）/ 视觉刻度（`docs/contracts/visual.md` A.9）时，同步改对应小节
 > 规模上限：400（规范档；现状超档，原因与拆分方向见文末 `## 体量与拆分计划`）
 > 编号约定：小节号保持历史值、不随删除重排——26 个测试文件的头注按 `§x.y` 编号锚定本文件
 
@@ -251,7 +251,7 @@ ledger.readAll() ─────────────────┘   （R5�
 | 类别 | 元素 | 做法 | 理由 |
 | --- | --- | --- | --- |
 | **A. 直接使用宿主组件** | 页签 `SegmentedTabs`、行内 `Switch`、`Button`、`Tooltip`、`Toast`、`StateDot`、全部图标 | `require('@deepseek-ai/dsh-client-ui-primitives')` 取组件，只传 `className` 调尺寸 | 这些组件**就是**宿主插件页渲染的那几个；用它们，1:1 由构造保证，不需要复刻 |
-| **B. 逐字转写规则** | 页面外壳 / 页头 / 页头停靠 / 分区 / 行 / 骨架 / 空错态 | 自有前缀 `skc_`，取值逐字照抄 [PM-CSS] 与 SHELL 的对应规则（附录 A） | 宿主类名是构建哈希，不能复用；但规则体是稳定的，可以抄 |
+| **B. 逐字转写规则** | 页面外壳 / 页头 / 页头停靠 / 分区 / 行 / 骨架 / 空错态 | 自有前缀 `skc_`，取值逐字照抄 [PM-CSS] 与 SHELL 的对应规则（`docs/contracts/visual.md`） | 宿主类名是构建哈希，不能复用；但规则体是稳定的，可以抄 |
 | **C. 新造（受限）** | 软链只读标记、页脚计数行、`＋ 添加技能 ⌄` 禁用态 | 只用宿主已存在的配方拼装（`.attemptBadge` / `.empty` / `.addGroup`），不引入新视觉语言 | 队长决策 2/3；不新造颜色、不新造阴影 |
 
 **禁止清单**（验收会查）：不写任何 `--dsw-*` 同名变量；不 `import` 宿主 `*.module.css`；不引 tailwind/MUI/antd/任何 UI 库；不使用宿主哈希类名做选择器；不在 `client/src/**` 里出现 CJK 字面量（由 `scripts/check-i18n.mjs` 强制）。
@@ -333,9 +333,9 @@ ledger.readAll() ─────────────────┘   （R5�
 | `src/client/model.js` | **纯函数**：`toGroups(payload)`、`statusLine(counts, t)`、`rowViewState(row, rows)`、`isPending(rows, key)`、`groupEmptyKey(key)` |
 | `src/client/page.jsx` | 页面组件：`page` → `pageBody` → `pageBar`(header) + 两个 `tabPanel`；骨架/空/错/页脚的组装 |
 | `src/client/row.jsx` | `SkillRow`（图标/标题/描述/`cardEnd`）、`EnableSwitch`（`bundleToggle` + `toggleProgress` + primitives `Switch`）、`ReadonlyTag`（软链只读标记） |
-| `src/client/skeleton.jsx` | 加载态：区标题占位 + 4 行骨架卡（规格见附录 A.6） |
+| `src/client/skeleton.jsx` | 加载态：区标题占位 + 4 行骨架卡（规格见 `docs/contracts/visual.md` A.6） |
 | `src/client/header-scroll.js` | `attachHeader(bar)`（克隆量测 + 观测）+ **纯函数** `interpolateParts(parts, offset)` |
-| `src/client/styles.js` | 单一 CSS 字符串（附录 A 的全文）+ `injectStyles()`（按 `data-plugin-css` 去重） |
+| `src/client/styles.js` | 单一 CSS 字符串（`docs/contracts/visual.md` 的全文）+ `injectStyles()`（按 `data-plugin-css` 去重） |
 | `src/client/toast.jsx` | `shell.overlay` 占位者：渲染刷新失败 toast（primitives `Toast`），离开页面后仍可见 |
 
 ### 2.4 构建与门禁脚本（`scripts/`）
@@ -352,7 +352,7 @@ ledger.readAll() ─────────────────┘   （R5�
 
 ### 2.6 文档
 
-本文件是契约真源。「想知道什么该看哪份」的读者入口见 `AGENTS.md` 的文档地图；宿主页面形状另见 `docs/reference/host-plugin-page.md`（带采集日期）。
+本文件是架构与接口契约。「想知道什么该看哪份」的读者入口见 `AGENTS.md` 的文档地图；页面视觉刻度在 `docs/contracts/visual.md`；宿主页面形状（外部取值来源）在 `docs/reference/host-plugin-page.md`。
 
 ---
 
@@ -787,7 +787,7 @@ ClientPlugin.apply(ctx)
 
 ### 3.6 视觉契约
 
-完整、可直接抄进代码的样式表见**附录 A**；「哪条规则抄自宿主哪条」逐行标注。关键类名与宿主规则的对应：
+完整、可直接抄进代码的样式表见 **`docs/contracts/visual.md`**；「哪条规则抄自宿主哪条」逐行标注。关键类名与宿主规则的对应：
 
 | 我们的类 | 宿主来源 | 语义 |
 | --- | --- | --- |
@@ -1094,290 +1094,6 @@ react-dom                              ^18.2.0
 
 ---
 
-## 附录 A 视觉实现规格（可直接抄进代码）
-
-> **唯一允许的取值来源**：`--dsw-*` 令牌 + 宿主 primitive 组件。本附录里的 px 是**字号/行高/尺寸刻度**（DSH 没有 typography token，见 `HIDDER/docs/reference/settings-ui.md` §6），不是颜色。
-> 所有规则体逐字来自 `[PM-CSS]`（`EX/dsh-client-ui-plugin-manager/lib/client.js` 内 `PluginManagerPage.module.css` 的 `css` 字符串）或 `SHELL/index-lh_YM6sT.css`，只把类名前缀换成 `skc_`、把局部变量换成 `--skc-*`。**不允许在别处再声明同名 `--dsw-*` 变量。**
-
-### A.1 页面外壳
-
-```css
-/* [PM-CSS] .page —— 页面根；--plugin-page-inset/top-inset 换成 --skc-*，其余逐字 */
-.skc_page{
-  --skc-page-inset: clamp(24px, 4vw, 48px);
-  --skc-page-top-inset: 28px;
-  --skc-progress-size: 14px;      /* = 宿主 --bundle-progress-size */
-  --skc-toggle-gap: 8px;          /* = 宿主 --bundle-toggle-gap */
-  box-sizing: border-box; height: 100%; padding: 0 var(--skc-page-inset);
-  color: var(--dsw-alias-label-primary);
-  display: flex; flex-direction: column; align-items: center;
-}
-@media (width <= 767px){ .skc_page{ --skc-page-inset: 20px } }
-.skc_page > *{ flex: none; width: 100%; max-width: 960px }
-```
-
-### A.2 滚动容器与页头条（含停靠机制）
-
-```css
-/* [PM-CSS] .pageBody */
-.skc_pageBody{
-  min-height: 0;
-  width: calc(100% + 2 * var(--skc-page-inset));
-  max-width: none; margin-inline: calc(-1 * var(--skc-page-inset));
-  box-sizing: border-box; padding: 0 var(--skc-page-inset) 48px;
-  scroll-padding-top: var(--skc-header-scroll-padding, 0px);
-  display: flex; flex: 1; flex-direction: column; align-items: center; gap: 32px;
-  position: relative; overflow: hidden auto;
-}
-.skc_pageBody > *{ flex: none; width: 100%; max-width: 960px }
-
-/* [PM-CSS] .pageBar —— 页头条：宽度吃掉滚动条宽度，左右外扩到页面边距外 */
-.skc_pageBar{
-  width: calc(100% + 2 * var(--skc-page-inset) + var(--skc-page-scrollbar-width, 0px));
-  max-width: none; margin-inline: calc(-1 * var(--skc-page-inset));
-  box-sizing: border-box; padding-inline: var(--skc-page-inset);
-  display: flex; flex-direction: column; align-self: flex-start;
-  position: relative; container: skc-page-bar / inline-size;
-}
-.skc_pageBar > .skc_pageHead{ align-self: center; width: 100%; max-width: 960px }
-
-/* 量测副本（隐藏、脱离流） */
-.skc_pageBody > .skc_pageBar[data-measuring]{
-  visibility: hidden; pointer-events: none; margin: 0; position: absolute; top: 0; left: 0;
-}
-/* 停靠本体 */
-.skc_pageBody > .skc_pageBar[data-natural]{ z-index: 2; pointer-events: none; position: sticky; top: 0 }
-.skc_pageBar[data-natural] .skc_pageHead{
-  height: var(--skc-header-rest-height);
-  clip-path: inset(0 0 max(0px, calc(var(--skc-header-rest-height) - var(--skc-header-paint-height))) 0);
-  pointer-events: auto; position: relative;
-}
-.skc_pageBar[data-natural] .skc_pageHeading{ display: contents }
-.skc_pageBar[data-natural] [data-skc-header-part]{
-  left: var(--skc-part-x); top: var(--skc-part-y); width: var(--skc-part-width);
-  pointer-events: auto; margin: 0; position: absolute;
-}
-.skc_pageBar[data-natural] .skc_pageTabs{ z-index: 2; pointer-events: none }
-.skc_pageBar[data-natural] .skc_pageTabList{ pointer-events: auto }
-/* 不透明底：滚过的内容不能透到页头下面 */
-.skc_pageBar[data-natural]:before{
-  content: ""; height: var(--skc-header-paint-height, var(--skc-header-rest-height));
-  background: var(--dsw-alias-bg-base); pointer-events: none; position: absolute; inset: 0 0 auto;
-}
-/* 紧凑态：横跨整行页面的 .5px 分隔线 */
-.skc_pageBar[data-natural][data-compact]:after{
-  content: ""; inset-inline: 0; height: var(--skc-header-compact-height);
-  box-sizing: border-box; border-bottom: .5px solid var(--dsw-alias-border-l3);
-  position: absolute; top: 0;
-}
-```
-
-### A.3 页头（标题 / 副标题 / ⓘ / 操作组 / 页签）
-
-```css
-/* [PM-CSS] .pageHead —— macOS 额外让出框架标题栏安全区 */
-.skc_pageHead{
-  box-sizing: border-box; padding-top: var(--skc-page-top-inset);
-  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 16px;
-}
-[data-platform=darwin] .skc_pageHead{
-  padding-top: calc(var(--skc-page-top-inset) + var(--dsh-frame-top-clearance, 0px));
-}
-
-.skc_pageHeading{ order: 1; min-width: 0; max-width: 100% }
-.skc_pageTitle{ margin: 0; font-size: 20px; font-weight: 500; line-height: 28px }
-.skc_pageIntro{
-  color: var(--dsw-alias-label-secondary);
-  align-items: center; gap: 4px; margin: 4px 0 0; font-size: 13px; line-height: 20px; display: flex;
-}
-.skc_infoButton{ width: 20px; height: 20px; color: var(--dsw-alias-label-caption); flex: none; padding: 0 }
-
-.skc_toolbar{
-  white-space: nowrap; flex-wrap: wrap; flex: 0 auto; order: 2;
-  justify-content: flex-end; align-items: center; gap: 8px 16px; min-width: 0; display: flex;
-}
-.skc_toolbar[hidden]{ display: none }
-
-/* 状态文案：宿主页头用的是 .updatesNote（12/18 tertiary），不是 .status（13/20）——见附录 B-1 */
-.skc_status{ color: var(--dsw-alias-label-tertiary); margin: 0; font-size: 12px; line-height: 18px }
-
-/* 按钮尺寸：宿主 .addButton / .addPrimary / .addMore 共用 */
-.skc_addButton, .skc_addPrimary, .skc_addMore{
-  border-radius: var(--dsw-radius-md); height: 32px; padding: 0 12px; font-size: 13px; line-height: 20px;
-}
-
-/* 「＋ 添加技能 ⌄」分裂按钮（P0 禁用态，队长决策 3） */
-.skc_addGroup{ flex: none; align-items: stretch; display: inline-flex }
-.skc_addPrimary{ border-top-right-radius: 0; border-bottom-right-radius: 0 }
-.skc_addMore{
-  border-left: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary-foreground) 30%, transparent);
-  border-top-left-radius: 0; border-bottom-left-radius: 0; width: 32px; padding: 0;
-}
-
-/* 页签容器 */
-.skc_pageTabs{ flex: 100%; order: 3; display: flex }
-.skc_pageTabList{ width: fit-content; min-width: 240px }
-```
-
-### A.4 分区
-
-```css
-/* [PM-CSS] .installedPanel / .tabPanel / .group / .groupHead / .groupTitle */
-.skc_installedPanel{ flex-direction: column; gap: 32px; display: flex }
-.skc_tabPanel{ flex-direction: column; gap: 24px; display: flex }
-.skc_group{ flex-direction: column; gap: 8px; display: flex }
-.skc_groupHead{ align-items: center; gap: 8px; display: flex }
-.skc_groupTitle{ flex: 1; margin: 0; font-size: 14px; font-weight: 500; line-height: 22px }
-```
-
-> 「更多 ›」(`.groupMore`) **P0 不实现**：三个分区都没有可展开的更多页（`PRD` §3.3.7）。
-
-### A.5 行
-
-```css
-/* [PM-CSS] .cards / .card / .cardHead / .cardIcon / .cardMain / .titleRow / .cardTitle / .cardDesc / .cardEnd */
-.skc_cards{ flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; display: flex }
-.skc_card{ border-radius: var(--dsw-radius-xl); min-width: 0; margin: 0 -8px }
-.skc_cardHead{ align-items: center; gap: 14px; padding: 8px; display: flex }
-.skc_cardIcon{
-  border: .5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-lg);
-  width: 48px; height: 48px; color: var(--dsw-alias-label-secondary); flex: none;
-  justify-content: center; align-items: center; display: inline-flex;
-}
-.skc_cardMain{ flex-direction: column; flex: 1; gap: 4px; min-width: 0; display: flex }
-.skc_titleRow{ flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; display: flex }
-.skc_cardTitle{
-  text-overflow: ellipsis; white-space: nowrap;
-  font-size: 14px; font-weight: 500; line-height: 20px; overflow: hidden;
-}
-.skc_cardDesc{
-  color: var(--dsw-alias-label-tertiary); display: -webkit-box;
-  -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
-  font-size: 13px; line-height: 18px;
-}
-.skc_cardEnd{ z-index: 1; flex: none; align-items: center; gap: 8px; display: inline-flex; position: relative }
-```
-
-> **不实现** `.cardLink:hover` / `:active`（宿主行是链接，我们的行不可点击，见附录 B-4）。行高恒 64px（48 图标 + 8×2 padding）。
-
-### A.6 开关位、软链只读标记、骨架
-
-```css
-/* [PM-CSS] .bundleToggle / .toggleProgress / .progressAnnouncement —— 开关左侧 22px 预留 */
-.skc_bundleToggle{ align-items: center; gap: var(--skc-toggle-gap); display: inline-flex }
-.skc_toggleProgress{ width: var(--skc-progress-size); height: var(--skc-progress-size); display: inline-flex }
-.skc_toggleProgress > svg{ width: 100%; height: 100% }
-.skc_progressAnnouncement{
-  clip-path: inset(50%); white-space: nowrap; width: 1px; height: 1px; position: absolute; overflow: hidden;
-}
-
-/* 软链只读标记（队长决策 2）：配方抄宿主 .attemptBadge，位置在 .skc_cardEnd（原开关座位） */
-.skc_roTag{
-  border-radius: var(--dsw-radius-sm); background: var(--dsw-alias-bg-layer-3);
-  color: var(--dsw-alias-label-secondary); height: 18px; padding: 0 6px;
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: 11px; line-height: 18px; white-space: nowrap;
-}
-.skc_roTag > svg{ width: 12px; height: 12px; flex: none }
-
-/* [PM-CSS] .skeleton* —— 加载骨架 */
-.skc_skeletonFill{
-  background: var(--dsw-alias-bg-skeleton);
-  animation: 2s cubic-bezier(.36, 0, .64, 1) infinite skc-skeleton;
-}
-@keyframes skc-skeleton{ 0%{opacity:1} 40%{opacity:.6} 80%,100%{opacity:1} }
-@media (prefers-reduced-motion: reduce){ .skc_skeletonFill{ animation: none } }
-.skc_skeletonText{ align-items: center; height: 1lh; display: flex }
-.skc_skeletonBar{ border-radius: var(--dsw-radius-xs); width: 100%; height: 12px }
-.skc_skeletonHeading{ width: 48px }
-.skc_skeletonTitle{ width: min(144px, 60%) }
-.skc_skeletonDescription{ width: min(280px, 85%) }
-.skc_skeletonIcon{ border-color: #0000 }        /* 唯一保留的透明字面量，宿主原文 */
-.skc_skeletonActions{ width: calc(36px + var(--skc-toggle-gap) + var(--skc-progress-size)); height: 20px }
-```
-
-### A.7 空态 / 错误态 / 行内原因 / 页脚
-
-```css
-/* [PM-CSS] .empty / .status / .failure / .failure p / .statusWithDot / .reason / .updatesNote */
-.skc_empty{ color: var(--dsw-alias-label-tertiary); margin: 0; font-size: 13px; line-height: 20px }
-.skc_failure{ color: var(--dsw-alias-state-error-primary); align-items: center; gap: 10px; display: flex }
-.skc_failure p{ color: var(--dsw-alias-label-tertiary); margin: 0; font-size: 13px; line-height: 20px }
-.skc_statusWithDot{ align-items: center; gap: 6px; display: inline-flex }
-.skc_reason{
-  color: var(--dsw-alias-state-error-primary); overflow-wrap: anywhere; white-space: pre-wrap;
-  margin: 0; font-size: 12px; line-height: 18px;
-}
-/* 页脚「另有 N 个…」：取 .empty 的配方，位置在 installedPanel 末尾（PRD §3.3.7 已登记为偏离） */
-.skc_footer{ color: var(--dsw-alias-label-tertiary); margin: 0; font-size: 13px; line-height: 20px }
-```
-
-### A.8 响应式与收拢顺序（容器查询，逐字）
-
-```css
-/* [PM-CSS] 紧凑态（非停靠路径的兜底外观） */
-.skc_pageBar[data-compact]:not([data-natural]){ --skc-page-top-inset: 16px; padding-bottom: 16px }
-[data-platform=darwin] .skc_pageBar[data-compact]:not([data-natural]) .skc_pageHead{
-  padding-top: var(--skc-page-top-inset);
-}
-[data-platform=darwin] [data-sidebar-collapsed] .skc_pageBar[data-compact]:not([data-natural]) .skc_pageHead{
-  --skc-page-top-inset: 8px;
-  padding-top: calc(var(--skc-page-top-inset) + var(--dsh-frame-top-clearance, 0px));
-}
-.skc_pageBar[data-compact]:not([data-natural]):after{
-  content: ""; inset-inline: 0; border-bottom: .5px solid var(--dsw-alias-border-l3);
-  pointer-events: none; position: absolute; bottom: 0;
-}
-.skc_pageBar[data-compact]:not([data-natural]) .skc_pageHead{ align-items: center }
-.skc_pageBar[data-compact]:not([data-natural]) .skc_pageIntro{ display: none }
-.skc_pageBarWithTabs[data-compact]:not([data-natural]) .skc_pageHeading{
-  clip: rect(0 0 0 0); white-space: nowrap; width: 1px; height: 1px; position: absolute; overflow: hidden;
-}
-.skc_pageBarWithTabs[data-compact]:not([data-natural]) .skc_pageTabs{ flex: none; order: 1 }
-
-/* 容器查询：< 600px —— 页签与图标操作共用一行，标签退化，按钮收成 32px 方图标 */
-@container skc-page-bar (width < 600px){
-  .skc_pageBarWithTabs .skc_pageHead{ align-items: center }
-  .skc_pageBarWithTabs .skc_pageHeading{ flex-basis: 100% }
-  .skc_pageBarWithTabs .skc_pageTabs{ flex: none; order: 2 }
-  .skc_pageBarWithTabs .skc_toolbar{ order: 3 }
-  .skc_toolbarLabel{ display: none }
-  .skc_pageHead .skc_addButton, .skc_pageHead .skc_addPrimary{
-    width: 32px; min-width: 32px; padding-inline: 0;
-  }
-  .skc_toolbar{ flex-shrink: 0; max-width: 100% }
-}
-@container skc-page-bar (width < 372px){ .skc_pageTabList{ min-width: 0 } }
-```
-
-### A.9 关键度量速查（验收时直接量这些）
-
-| 元素 | 值 | 来源 |
-| --- | --- | --- |
-| 页内边距 | `clamp(24px,4vw,48px)`；≤767px 时 20px | `.skc_page` |
-| 内容最大宽 | 960px（`page` 与 `pageBody` 的直接子元素） | `.skc_page>*` |
-| 页头顶部留白 | 28px；darwin 加 `--dsh-frame-top-clearance`（=48px） | `.skc_pageHead` |
-| 大标题 | 20px / 28px / 500 | `.skc_pageTitle` |
-| 副标题 | 13px / 20px / `label-secondary` | `.skc_pageIntro` |
-| ⓘ | 20×20 盒，图标 11px，与副标题 gap 4px | `.skc_infoButton` |
-| 状态文案 | **12px / 18px** / `label-tertiary` | `.skc_status`（= 宿主 `.updatesNote`） |
-| 刷新按钮 | 高 32px，padding 0 12px，13px/20px，`radius-md` | `.skc_addButton` |
-| 页签总高 | **34px** = 30px tab + 2px×2（`SegmentedTabs size="sm"`） | `SHELL` `._tabs_1lga9_1[data-size=sm]` |
-| 页签文字 | 14px / 20px，选中 500（sm 档） | `._tab_1lga9_1` |
-| 区标题 | 14px / 22px / 500 | `.skc_groupTitle` |
-| 列表 gap / 行外扩 | 2px / `margin:0 -8px` | `.skc_cards` / `.skc_card` |
-| 行内 gap / padding | 14px / 8px → 行高 64px | `.skc_cardHead` |
-| 图标 | 48×48，`.5px` `border-l3`，`radius-lg` | `.skc_cardIcon` |
-| 名称 / 描述 | 14/20/500 · 13/18 tertiary 单行 | `.skc_cardTitle` / `.skc_cardDesc` |
-| 开关 | 36×20（`Switch`），左侧预留 14px + 8px | `.skc_bundleToggle` |
-| 软链标记 | 高 18px，padding 0 6px，11/18，`bg-layer-3`，图标 12px | `.skc_roTag` |
-| 骨架条 | 高 12px，`radius-xs`；`48px` / `min(144px,60%)` / `min(280px,85%)` / `58px×20px` | `.skc_skeleton*` |
-| 骨架动画 | 2s `cubic-bezier(.36,0,.64,1)` infinite，1 → .6 → 1 | `@keyframes skc-skeleton` |
-| 错误行 | `StateDot state="error"` + 13/20 tertiary 文字 + `role="alert"` + outline 重试按钮 | `.skc_failure`（宿主结构） |
-| 行内失败原因 | 12px / 18px / error 色 / `pre-wrap` | `.skc_reason` |
-
----
-
 ## 附录 B 决策登记：与 PRD 的偏离与更正
 
 > PRD 已于 2026-11-09 移出仓库（过程产物），原件见 commit `a8141eb`；下表「PRD 原文」列保留原文以便追溯，判定仍然有效。
@@ -1391,7 +1107,7 @@ react-dom                              ^18.2.0
 | B-3 | §3.3.5 错误态文字 = `state-error-primary` | 宿主 `.failure{color:error}` 但内部 `<p>` 被 `.failure p` 覆盖成 `label-tertiary`；错误信号由 `StateDot state="error"` 承担，`role="alert"` | 照宿主：容器 error 色 + 文字 tertiary + 红色 StateDot。若用户要求文字也变红，改 1 条规则即可 |
 | B-4 | §3.3.4 行 hover/active 底色 | 宿主行是链接（`.cardLink:hover`）；我们的行**不可点击**（Q6 + 队长决策） | **不实现** hover/active；给不可点的行加 hover 反馈等于骗点击 |
 | B-5 | §3.3.2/§3.3.5 把分段控件与开关当「规格」手写 | 两者都是 primitives 导出组件（`SegmentedTabs` / `Switch`），PRD 抄的正是它们的 CSS | **直接用组件**，不手写；`className` 只调容器（`skc_pageTabList`） |
-| B-6 | §3.3.1 页签位置「`order:3`，`flex:100%`」 | 正确，但仅在「无 container query」时成立；`<600px` 时改 `flex:none; order:2`，`toolbar` 变 `order:3` | 附录 A.8 已逐字包含 |
+| B-6 | §3.3.1 页签位置「`order:3`，`flex:100%`」 | 正确，但仅在「无 container query」时成立；`<600px` 时改 `flex:none; order:2`，`toolbar` 变 `order:3` | `docs/contracts/visual.md` A.8 已逐字包含 |
 | B-7 | §3.4 软链技能写 realpath + 首次确认（Q4） | 队长 2026-11-08 决策：**软链只读，不给开关** | 全文按队长决策执行；Q4 关闭 |
 
 **C 组：刻意偏离（已由 PRD/队长登记，实现必须照做）**：
@@ -1426,7 +1142,7 @@ react-dom                              ^18.2.0
 | **L1 纯函数** | 无 I/O、无 `Date`、无 `Math.random`、无 DOM | `lib/names.js`、`lib/loopback.js`、`lib/http.js`（`asJsonObject`）、`lib/frontmatter.js`、`lib/classify.js`、`lib/ledger.js`（解析半）、`lib/provider-toggles.js`（序列化半）、`src/client/model.js`、`src/client/header-scroll.js`（`interpolateParts`） | `node --test`，直接 import ESM，**不需要构建、不需要浏览器** |
 | **L2 需临时目录 / 假请求** | 真实读写临时文件，或手工构造 `{socket, headers}` 对象 | `lib/scan.js`、`lib/write-skill.js`、`lib/routes.js`、`lib/provider-toggles.js`（读写半） | `node --test` + `fs.mkdtemp(os.tmpdir())`，每个用例自建 fixture 树，结束时 `rm -rf` |
 | **L3 需假 DOM** | 组件树结构（不是几何） | `src/client/page.jsx`、`row.jsx`、`skeleton.jsx`、`toast.jsx` | **`renderToStaticMarkup`**（`react-dom/server`）把组件渲染成字符串再断言结构；**不用 jsdom**：我们只验 DOM 结构与 ARIA，不验样式计算 |
-| **L4 只能真机** | 像素几何、令牌解析、滚动停靠、深色模式、热刷新 | —— | 见文末「真机才能验证的项」清单，人工按 §附录 A.9 的度量表逐项量 |
+| **L4 只能真机** | 像素几何、令牌解析、滚动停靠、深色模式、热刷新 | —— | 见文末「真机才能验证的项」清单，人工按 `docs/contracts/visual.md` A.9 的度量表逐项量 |
 
 > `renderToStaticMarkup` 能覆盖的边界：组件必须接受显式 props（不允许在组件里直接 `fetch` 或读 `window`）。因此 `SkillsPage` 只从 `store` + `api` props 取数据，`HeaderScroll` 的 DOM 量测放在 `attachHeader` 内部（渲染时返回 `null`，不参与 SSR）。
 
@@ -1529,10 +1245,10 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 
 ## 体量与拆分计划
 
-现状约 1500 行，超出「规范 400」档近 4 倍。这不是靠删句子能解决的：其中约 280 行是逐字视觉规格（附录 A）、450 行是接口契约（§3），两块的读者与更新触发本就不同。拆分方向（**尚未执行**，按此顺序）：
+现状约 1250 行，仍是「规范 400」档的三倍。这不是靠删句子能解决的：其中约 450 行是接口契约（§3），其余是架构决策、模块职责与跨模块约定，读者与更新触发各不相同。已做与待做（按顺序）：
 
-1. **附录 A → `docs/contracts/visual.md`**：读者只有改样式的人，更新触发是宿主改版。搬走时同步改 `test/styles.test.mjs`、`test/view-*.test.mjs` 里的「附录 A」引用（6 处）与 `AGENTS.md`（1 处）。
+1. ✅ **视觉规格已拆出** → `docs/contracts/visual.md`（2026-11-09）：A.1–A.9 编号保持原值，`test/styles.test.mjs`、`test/view-skeleton.test.mjs` 与 `AGENTS.md` 的引用已同步改指。
 2. **§3 按模块拆 3 份**（扫描与判定 / 写入 / 路由）：代价是 20 个测试头注的 `§3.x` 编号锚点要全部改指新文件，必须与 QA 同批改。
-3. **§1/§2/§4/§8 合成一份架构契约**，目标 ≤400 行。
+3. **§1/§2/§4/§8 合成一份架构契约**，目标 ≤400 行；同批把 `docs/system_design.md` 改名搬进 `docs/contracts/`，与其他契约同层。
 
-第 1 步风险最低、收益最大；跳过第 2 步直接合并不解决档位问题。
+跳过第 2 步直接合并不解决档位问题；第 2、3 步必须一起做（否则同一批测试头注要改两轮）。

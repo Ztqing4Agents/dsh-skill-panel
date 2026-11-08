@@ -8,7 +8,7 @@
 > 采集日期：2026-11-08
 > 来源版本：DeepSeek Harness `0.2.2-rc.1`（`/Applications/DeepSeek Harness.app/Contents/Resources/app.asar`）
 
-只描述**宿主长什么样**，不写「我们应该怎么用」——复刻口径在 `docs/system_design.md` 附录 A。
+只描述**宿主长什么样**，不写「我们应该怎么用」——复刻口径在 `docs/contracts/visual.md`。
 
 ## 1 怎么采集、怎么验
 

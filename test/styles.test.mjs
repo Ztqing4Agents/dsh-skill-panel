@@ -2,7 +2,7 @@
  * `src/client/styles.js` — one class-name helper and one stylesheet string.
  *
  * Contract: AGENTS.md hard rule 4 (skc_ prefix, no `--dsw-*` declarations, no host
- * hashed class names) and docs/system_design.md 附录 A.
+ * hashed class names) and docs/contracts/visual.md.
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
