@@ -3,3 +3,4 @@ test/.build/
 test/.tmp/
 .DS_Store
 *.tmp
+!test/fixtures/**/.DS_Store
