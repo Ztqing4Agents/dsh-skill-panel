@@ -25,6 +25,22 @@ grep -ac -- --bundle-progress-size "$A"   # 打开进度占位宽（本文 §4�
 
 截图：[宿主插件页首屏](../assets/host-plugins-page.png)（1440×920，2026-11-08）。
 
+### 1.1 证据记号（全文通用）
+
+原文里出现这些缩写时，指向的都是本机真实产物：
+
+**证据记号**（本文所有「依据」列的缩写，全部为本机真实产物）：
+
+| 记号 | 实际路径 | 说明 |
+| --- | --- | --- |
+| `EX/` | `/Applications/DeepSeek Harness.app/Contents/Resources/app.asar` 内的 `dsh/node_modules/@deepseek-ai/` | asar 是「头部 JSON + 拼接内容」，不是目录：`u32@4 = headerSize`、`u32@12 = jsonLen`、JSON 从 byte 16 起、内容区 = `8 + headerSize` |
+| `SHELL/` | `EX/dsh-web-frontend/dist/assets`（`index-BgUyXZcc.js`、`index-lh_YM6sT.css`） | 前端 shell 产物，单行压缩，按唯一字串 grep |
+| `PROF/` | `~/.dsh/profiles/desktop/node_modules/` | 本机已装插件 |
+| `HIDDER/` | `~/Documents/Agents/Plugins/dsh-hidder/` | 用户自己的插件；`HIDDER/docs/reference/host-selectors.md`、`HIDDER/docs/reference/settings-ui.md`、`HIDDER/spec.md` 有宿主真实取值 |
+| `PRD` | `git show a8141eb:docs/PRD.md` | 上游产品规格。2026-11-09 作为过程产物移出工作树，正文里的 `PRD §x` 引用保留以便追溯 |
+
+> 宿主版本：`0.2.2-rc.1`（`HIDDER/docs/reference/host-selectors.md` 头部的双证采集记录）。本文所有宿主读数采集于 2026-11-08，同一版本。
+
 ## 2 页面骨架
 
 - 入口是侧栏的 `插件` 行，点开占满主区整页，没有右侧抽屉、没有二级页。

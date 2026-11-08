@@ -6,7 +6,7 @@
 > 更新触发：宿主改版（先重采 reference）或改任何 px / 令牌 / 类名时，同时改 `styles.js` 与本文件
 > 规模上限：400
 
-原为 `docs/system_design.md` 的附录 A，2026-11-09 拆出成独立契约。**编号 A.1–A.9 保持原值**——`test/styles.test.mjs`、`test/view-skeleton.test.mjs` 的头注按 `A.x` 锚定本文件。
+2026-11-09 从原单文件契约拆出（`git show a8141eb:docs/system_design.md`），编号 A.1–A.9 保持原值。**编号 A.1–A.9 保持原值**——`test/styles.test.mjs`、`test/view-skeleton.test.mjs` 的头注按 `A.x` 锚定本文件。
 
 > **唯一允许的取值来源**：`--dsw-*` 令牌 + 宿主 primitive 组件。本文件里的 px 是**字号/行高/尺寸刻度**（DSH 没有 typography token，见 `HIDDER/docs/reference/settings-ui.md` §6），不是颜色。
 > 所有规则体逐字来自 `[PM-CSS]`（`EX/dsh-client-ui-plugin-manager/lib/client.js` 内 `PluginManagerPage.module.css` 的 `css` 字符串）或 `SHELL/index-lh_YM6sT.css`，只把类名前缀换成 `skc_`、把局部变量换成 `--skc-*`。**不允许在别处再声明同名 `--dsw-*` 变量。**
@@ -287,5 +287,3 @@
 | 骨架动画 | 2s `cubic-bezier(.36,0,.64,1)` infinite，1 → .6 → 1 | `@keyframes skc-skeleton` |
 | 错误行 | `StateDot state="error"` + 13/20 tertiary 文字 + `role="alert"` + outline 重试按钮 | `.skc_failure`（宿主结构） |
 | 行内失败原因 | 12px / 18px / error 色 / `pre-wrap` | `.skc_reason` |
-
----

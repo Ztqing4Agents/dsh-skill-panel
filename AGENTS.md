@@ -1,6 +1,6 @@
 # AGENTS.md — dsh-skill-center 维护者开工地图
 
-只写「不写就会返工」的。契约细节在 `docs/system_design.md` 与 `docs/contracts/visual.md`（真源），本文件不复述。
+只写「不写就会返工」的。契约细节在 `docs/contracts/*.md`（真源），本文件不复述。
 
 ## 命令
 
@@ -8,21 +8,30 @@
 npm run build        # src/client/** → client.js（esbuild，产物入库）
 npm run check:i18n   # zh/en 键集一致 + 入口键存在 + lib/ 与 src/ 无 CJK 字面量
 npm run check:client # 重打一次与 client.js 逐字节比对 + 装载形状 + exports["./client"]
-npm run check        # 上面两个
+npm run check:docs   # 文档门禁：白名单/头注/章节/锚点/引用/零行号（脚本自测见 test/docs-gate）
+npm run check        # 上面三个
 npm test             # node --test test/（测试由 QA 维护）
 ```
 
 ## 文档地图
 
-| 想知道什么 | 看哪份 | 注意 |
+| 想知道什么 | 看哪份 | 编号 / 注意 |
 | --- | --- | --- |
-| 现在必须成立的事实：判据、路由、接口、验收口径 | `docs/system_design.md` | 契约真源之一；编号（§x.y）有 26 个测试头注锚定，不许重排 |
-| 页面视觉刻度：px、令牌、`skc_` 类名、响应式收拢顺序 | `docs/contracts/visual.md` | 契约真源之一；编号（A.1–A.9）有 2 个测试头注锚定 |
+| 架构、文件清单、依赖与接线 | `docs/contracts/architecture.md` | §1 §2 §6 |
+| 类型总览、判据阶梯、纯函数契约 | `docs/contracts/data-model.md` | §3.1 §3.2 |
+| 路由表、写盘、错误码 | `docs/contracts/routes.md` | §3.3 §3.4 §8.1 |
+| 前端组件、状态机、命名与 i18n | `docs/contracts/client.md` | §3.5 §3.6 §8.2–§8.5 |
+| 调用流程与未定事项 | `docs/contracts/flows.md` | §4 §5 |
+| 验收口径、夹具、用例编号 K1–K27 | `docs/contracts/acceptance.md` | 附录 D |
+| 决策登记（偏离 / 更正 / 假设） | `docs/contracts/decisions.md` | 附录 B |
+| 页面视觉刻度（px、令牌、`skc_` 类名、收拢顺序） | `docs/contracts/visual.md` | A.1–A.9 |
 | 宿主「插件」页长什么样（外部形状、稳定钩子、几何） | `docs/reference/host-plugin-page.md` | 带采集日期；宿主升级后整份重采，不在旧值上打补丁 |
 | 使用者能感知什么、怎么装、有哪些已知限制 | `README.md` | 只写使用者视角 |
 | 升级时我要注意什么 | `CHANGELOG.md` | 记行为变化与迁移，不记改过哪些文件 |
 | 过去是什么、为什么这么定 | `git log`（`git log -S`） | 仓库里没有 `archive/`，历史交 git |
 | 现在卡在哪、还剩什么没验 | `.agents/work/BOARD.md` | 本地看板，不入库 |
+
+契约按**编号分区**：`§x.y` 与 `附录 X.n` 在全仓库唯一，正文里看到编号就按上表定位；编号是 26 个测试头注的锚点，**不许重排或复用**。
 
 **新知识写哪**：可 grep 的断言 → 契约；不能做错的事 → 本文件「硬约束」；用户可感知的变化 → `CHANGELOG`；还没做的事 → 看板；**没定型的探索结论**才进项目记忆。文档里不放过程（PRD、测试报告、设计图）——已移出，见 commit `a8141eb`。
 
@@ -36,8 +45,7 @@ npm test             # node --test test/（测试由 QA 维护）
 | `lib/frontmatter.js` | 字节级改写器（CRLF/BOM/注释保真）+ 读侧解析器（含块标量 `>`/`\|`） |
 | `lib/write-skill.js` | 指纹 → 临时文件 → fsync → rename → 回读校验 → 回滚 |
 | `lib/routes.js` | 4 条 exact 路由，共用一个 `guard()` |
-| `src/client/**` | 浏览器半部的**源码**（10 个文件，纯逻辑模块不含 JSX，node 可直接测） |
-| `client.js` | **构建产物，入库**。不要手改 |
+| `src/client/**` → `client.js` | 源码 10 个文件（纯逻辑模块不含 JSX，node 可直接测）；`client.js` 是**构建产物、入库、不要手改** |
 | `locale/{zh,en}.json` | 唯一文案真源 |
 
 ## 硬约束（改错就是返工）
@@ -77,15 +85,15 @@ npm test             # node --test test/（测试由 QA 维护）
   要给 `mergeCatalog` 加新来源，先补这张表，否则同名裁决会错。
 - **frontmatter 有两套规则，不要混**：写入器（`setDisableModelInvocation`）只做**字节手术**，
   只替换 `disable-model-invocation` 一行；解析器（`parseFrontmatter`）负责**读**，含块标量
-  （`>`/`|` 及其 `+`/`-` 变体，见 `docs/system_design.md` §3.2.4「读侧契约」）。改读规则不会影响
+  （`>`/`|` 及其 `+`/`-` 变体，见 `docs/contracts/data-model.md` §3.2.4「读侧契约」）。改读规则不会影响
   写回字节；反过来也成立。QA 第 1 轮在这条缝上踩过一次（`description: >` 被读成 `>`）。
 - **宿主 primitives 来自浏览器 seed**，node 里 import 不到。测组件要先映射
-  `@deepseek-ai/dsh-client-ui-primitives`（见 `docs/system_design.md` 附录 D.1 的 L3 层）。
+  `@deepseek-ai/dsh-client-ui-primitives`（见 `docs/contracts/acceptance.md` 附录 D.1 的 L3 层）。
   `useSyncExternalStore` 必须带第三个参数（`getServerSnapshot`），否则 SSR 渲染直接抛错。
 
 ## 改完自检
 
 ```bash
 node scripts/build-client.mjs && node scripts/check-client.mjs && node scripts/check-i18n.mjs \
-  && node --check index.js && node --check client.js && node --check lib/*.js
+  && node scripts/check-docs.mjs && node --check index.js && node --check client.js && node --check lib/*.js
 ```

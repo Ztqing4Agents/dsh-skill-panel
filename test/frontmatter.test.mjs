@@ -1,7 +1,7 @@
 /**
  * `lib/frontmatter.js` — byte-faithful rewriting of one frontmatter field.
  *
- * Contract: docs/system_design.md §3.2.4 and §3.4.2; case ids K7, K8, K9, K10.
+ * Contract: docs/contracts/data-model.md §3.2.4 and docs/contracts/routes.md §3.4.2; case ids K7, K8, K9, K10.
  * The CRLF sample is the one this machine actually ships
  * (`~/.dsh/skills/indiv-guipi--find-skills/SKILL.md`, first two bytes `2d 2d 2d 0d 0a`).
  */

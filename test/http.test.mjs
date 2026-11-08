@@ -1,7 +1,7 @@
 /**
  * `lib/http.js` — the response envelope and the bounded body reader.
  *
- * Contract: docs/system_design.md §8.1; case id K20 (64 KiB cap).
+ * Contract: docs/contracts/routes.md §8.1; case id K20 (64 KiB cap).
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';

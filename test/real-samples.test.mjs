@@ -8,7 +8,7 @@
  * `test/fixtures/skills-plain` + `target-repo` and say so through `t.diagnostic`, so
  * the count never changes between machines and nothing is silently skipped.
  *
- * Contract: docs/system_design.md §3.2.3 invariant 4, 附录 D.4 A1.
+ * Contract: docs/contracts/data-model.md §3.2.3 invariant 4, docs/contracts/acceptance.md 附录 D.4 A1.
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';

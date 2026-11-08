@@ -1,7 +1,7 @@
 /**
  * `src/client/header-scroll.js` — the pure half of the docking header.
  *
- * Contract: docs/system_design.md §3.2.5 (`interpolateParts`). The measured layout,
+ * Contract: docs/contracts/data-model.md §3.2.5 (`interpolateParts`). The measured layout,
  * the clone, and `ResizeObserver` need a real browser, so only the interpolation is
  * asserted here; "the list's scroll range does not change" stays on the real-machine
  * checklist.

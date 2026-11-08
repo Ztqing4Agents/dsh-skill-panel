@@ -1,7 +1,7 @@
 /**
  * `src/client/state.js` — the page store that outlives the page.
  *
- * Contract: docs/system_design.md §3.5 (state machine, no optimistic UI, store scope).
+ * Contract: docs/contracts/client.md §3.5 (state machine, no optimistic UI, store scope).
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';

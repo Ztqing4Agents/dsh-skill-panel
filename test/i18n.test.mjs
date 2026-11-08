@@ -1,7 +1,7 @@
 /**
  * `locale/{zh,en}.json` — the only place user-facing text may live.
  *
- * Contract: docs/system_design.md §8.3 and AGENTS.md rules 2 and 3; case id K27.
+ * Contract: docs/contracts/client.md §8.3 and AGENTS.md rules 2 and 3; case id K27.
  * This file re-implements the gate's three checks as assertions, so a broken
  * dictionary fails `npm test` and not only `npm run check:i18n`.
  */

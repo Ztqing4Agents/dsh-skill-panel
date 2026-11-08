@@ -1,7 +1,7 @@
 /**
  * `lib/routes.js` — the four exact routes, one shared guard, one identity check.
  *
- * Contracts: docs/system_design.md §3.3 (route table), §3.3.2 (path identity),
+ * Contracts: docs/contracts/routes.md §3.3 (route table), §3.3.2 (path identity),
  * §8.1 (error codes); case ids K18, K19, K20, K21.
  */
 import assert from 'node:assert/strict';

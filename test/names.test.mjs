@@ -1,7 +1,7 @@
 /**
  * `lib/names.js` — the grammar and path predicates every other module trusts.
  *
- * Contract: docs/system_design.md §3.2.1; case id K1.
+ * Contract: docs/contracts/data-model.md §3.2.1; case id K1.
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';

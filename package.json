@@ -26,7 +26,8 @@
     "build": "node scripts/build-client.mjs",
     "check:client": "node scripts/check-client.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
-    "check": "npm run check:i18n && npm run check:client",
+    "check:docs": "node scripts/check-docs.mjs",
+    "check": "npm run check:i18n && npm run check:client && npm run check:docs",
     "test": "node --test test/"
   },
   "dsh": {

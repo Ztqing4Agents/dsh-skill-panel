@@ -1,7 +1,7 @@
 /**
  * `lib/provider-toggles.js` — the panel-owned switch store for provider skills.
  *
- * Contract: docs/system_design.md §3.4.4; case ids K15 (degradation) and K16 (idempotency).
+ * Contract: docs/contracts/routes.md §3.4.4; case ids K15 (degradation) and K16 (idempotency).
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';

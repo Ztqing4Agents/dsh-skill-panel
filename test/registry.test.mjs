@@ -1,7 +1,7 @@
 /**
  * `lib/registry.js` — the registry projection and the rank the registry hides.
  *
- * Contract: AGENTS.md "SkillSummary 不暴露 rank" and docs/system_design.md §1.4.3.
+ * Contract: AGENTS.md "SkillSummary 不暴露 rank" and docs/contracts/architecture.md §1.4.3.
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';

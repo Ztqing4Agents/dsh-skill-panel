@@ -9,7 +9,7 @@
  * report's real-machine checklist). The primitives are a documented stub, so
  * `role="switch"` here is evidence of prop wiring, not of the host painting.
  *
- * Contract: docs/system_design.md 附录 D.1 (L3) and case ids K22, K23, K24, K25.
+ * Contract: docs/contracts/acceptance.md 附录 D.1 (L3) and case ids K22, K23, K24, K25.
  */
 import assert from 'node:assert/strict';
 import test, { before } from 'node:test';

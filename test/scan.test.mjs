@@ -1,7 +1,7 @@
 /**
  * `lib/scan.js` — the only module that reads the skills directory.
  *
- * Contract: docs/system_design.md §3.3.1 (symlink facts) and AGENTS.md rule 5;
+ * Contract: docs/contracts/routes.md §3.3.1 (symlink facts) and AGENTS.md rule 5;
  * case ids K11 (noise skipped) and K12 (symlink facts).
  */
 import assert from 'node:assert/strict';

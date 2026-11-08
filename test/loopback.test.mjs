@@ -1,7 +1,7 @@
 /**
  * `lib/loopback.js` — the fence every route shares.
  *
- * Contract: docs/system_design.md §8.1 (`E_FORBIDDEN`) and case id K17.
+ * Contract: docs/contracts/routes.md §8.1 (`E_FORBIDDEN`) and case id K17.
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';

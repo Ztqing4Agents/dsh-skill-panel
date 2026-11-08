@@ -54,7 +54,7 @@ export async function copyFixtureTree(tree) {
 }
 
 /**
- * The five PRD §3.1.3 samples as a fixture tree: four directories plus the symlink
+ * The five real-machine samples (collected 2026-11-08) as a fixture tree: four directories plus the symlink
  * whose target lives beside the root.
  * @returns {Promise<{dshHome: string, skillsRoot: string, targetRepo: string, cleanup: () => Promise<void>}>} the tree.
  */

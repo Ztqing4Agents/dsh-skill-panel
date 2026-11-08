@@ -3,7 +3,7 @@
  * inline reason. Rendering is string-only; interaction is asserted through the
  * props the row hands its controls.
  *
- * Contract: docs/system_design.md 附录 D.3 K22 and §3.5 (no optimistic UI).
+ * Contract: docs/contracts/acceptance.md 附录 D.3 K22 and docs/contracts/client.md §3.5 (no optimistic UI).
  */
 import assert from 'node:assert/strict';
 import test, { before } from 'node:test';

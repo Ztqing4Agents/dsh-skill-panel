@@ -1,7 +1,7 @@
 /**
  * L3 — `src/client/skeleton.jsx`: the first frame the panel paints.
  *
- * Contract: docs/contracts/visual.md A.6 / docs/system_design.md 附录 D.3 K24, with one correction: the design
+ * Contract: docs/contracts/visual.md A.6 / docs/contracts/acceptance.md 附录 D.3 K24, with one correction: the design
  * says "4 个骨架条" while the host structure it copies is 1 group heading + 4 cards ×
  * 2 bars = 9. The assertions below follow the shipped structure and pin the kinds, so
  * the design's typo cannot silently rewrite the markup.

@@ -1,7 +1,7 @@
 /**
  * L3 — `src/client/toast.jsx`: the refresh-failure toast that outlives the page.
  *
- * Contract: docs/system_design.md §3.5 (`shell.overlay` seat, P0-12).
+ * Contract: docs/contracts/client.md §3.5 (`shell.overlay` seat, P0-12).
  */
 import assert from 'node:assert/strict';
 import test, { before } from 'node:test';

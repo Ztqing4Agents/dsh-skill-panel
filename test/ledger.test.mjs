@@ -1,7 +1,7 @@
 /**
  * `lib/ledger.js` — the read-only install ledgers (rule R5).
  *
- * Contract: docs/system_design.md §3.2.2 (R5) and §3.4.4 (degradation).
+ * Contract: docs/contracts/data-model.md §3.2.2 (R5) and docs/contracts/routes.md §3.4.4 (degradation).
  * On this machine three of the four ledgers are empty, which is exactly why the
  * reader never guesses and never throws.
  */

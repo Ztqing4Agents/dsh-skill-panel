@@ -1,7 +1,7 @@
 /**
  * `lib/classify.js` — the nine-step ladder, the rank table, and the same-name merge.
  *
- * Contracts: docs/system_design.md §3.2.2, §3.2.3; case ids K2, K3, K4, K5, K21.
+ * Contracts: docs/contracts/data-model.md §3.2.2, §3.2.3; case ids K2, K3, K4, K5, K21.
  * PRD §3.1.2 (priority) and §3.1.3 (real samples) are the acceptance source.
  */
 import assert from 'node:assert/strict';

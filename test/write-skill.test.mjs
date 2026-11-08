@@ -1,7 +1,7 @@
 /**
  * `lib/write-skill.js` — fingerprint, temp file, fsync, rename, read back, roll back.
  *
- * Contract: docs/system_design.md §3.4.3; case ids K13 (atomic write + rollback on
+ * Contract: docs/contracts/routes.md §3.4.3; case ids K13 (atomic write + rollback on
  * failure) and the "symlink is never written" half of the three-layer fence.
  *
  * Every case works on a copy: the fixtures are read-only inputs.

@@ -1,7 +1,7 @@
 /**
  * `src/client/model.js` — the pure view-model, including the symlink rule.
  *
- * Contract: docs/system_design.md §3.2.5 and §4.3; case ids K26 and the
+ * Contract: docs/contracts/data-model.md §3.2.5 and docs/contracts/flows.md §4.3; case ids K26 and the
  * "switchMode 对软链返回 null" half of the three-layer fence.
  */
 import assert from 'node:assert/strict';

@@ -1,7 +1,7 @@
 /**
  * L3 — `src/client/index.jsx`: the three seats, the stylesheet, and the dictionary.
  *
- * Contract: docs/system_design.md §3.5 (seats), §8.3 (the entry name lives only in
+ * Contract: docs/contracts/client.md §3.5 (seats), §8.3 (the entry name lives only in
  * locale), AGENTS.md rule 3 (rename = a JSON edit, zero code change).
  *
  * The host is stubbed: `slots.inject` is called on the spot, `slots.register` records

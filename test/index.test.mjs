@@ -1,7 +1,7 @@
 /**
  * `index.js` — the host entry: config resolution, one-shot apply, route registration.
  *
- * Contract: docs/system_design.md §2.1, §4.4 (initialisation) and §3.3 (routes).
+ * Contract: docs/contracts/architecture.md §2.1, docs/contracts/flows.md §4.4 (initialisation) and docs/contracts/routes.md §3.3 (routes).
  *
  * `apply` carries a module-level one-shot guard (registering an exact route twice
  * throws and would take the boot down), so the first `apply` in this process is the

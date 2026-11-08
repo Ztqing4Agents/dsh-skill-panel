@@ -1,0 +1,299 @@
+# 类型、判据与纯函数契约
+
+> 类型：规范
+> 读者：改 `lib/classify.js`、`lib/scan.js`、`lib/frontmatter.js`、`lib/registry.js` 或要读 payload 的人
+> 真源：上述模块的导出签名与 `test/classify.test.mjs`、`test/scan.test.mjs`、`test/frontmatter.test.mjs`
+> 更新触发：改 payload 字段、判据阶梯、rank 反推表或 frontmatter 读写规则时，同步改 §3.1 / §3.2
+> 规模上限：400
+
+编号 §3.1 / §3.2 保持原值（原件见 `git show a8141eb:docs/system_design.md`）。证据记号 `EX/` `PROF/` `SHELL/` `HIDDER/` 的定义见 `docs/reference/host-plugin-page.md` §1。
+
+---
+
+## 3.1 类型总览（classDiagram）
+
+```mermaid
+classDiagram
+    direction LR
+
+    class HostPlugin {
+        +string name
+        +string[] inject
+        +apply(ctx, config) void
+        -resolveDshHome(config) string
+    }
+    class RouteTable {
+        +makeRoutes(ctx, deps) WebRoute[]
+        +ROUTES Map~string,string~
+        -guard(req, res, method) bool
+        -resolveScannedRow(name, path) ScanCandidate
+    }
+    class LoopbackFence {
+        <<module>>
+        +isLoopbackAddress(address) bool
+        +isLoopbackHostname(host) bool
+        +isProxiedRequest(req) bool
+        +isLoopbackRequest(req) bool
+    }
+    class SkillScanner {
+        +scanUserSkills(skillsRoot) ScanCandidate[]
+        -readCandidate(dirEntry) ScanCandidate
+        -lstatEntry(absPath) bool
+    }
+    class RegistryReader {
+        +snapshotRegistry(skills, cwd) RegistryView
+        +rankOfSummary(summary) int
+    }
+    class InstallLedger {
+        +readLedger(dshHome, skillsRoot) LedgerFacts
+        -readJsonDegrading(file) any
+    }
+    class Classifier {
+        <<pure>>
+        +rankOf(level) int
+        +classifySkill(input) Classification
+        +mergeCatalog(input) Catalog
+        +buildGroups(skills) Group[]
+    }
+    class FrontmatterCodec {
+        <<pure>>
+        +parseFrontmatter(text) Frontmatter
+        +stripFrontmatter(text) string
+        +setDisableModelInvocation(bytes, disabled) Buffer
+    }
+    class AtomicWriter {
+        +writeDisableFlag(file, disabled) WriteResult
+        -fingerprint(stat) Fingerprint
+        -verify(file, expected) void
+    }
+    class ProviderToggleStore {
+        +read(dshHome) ProviderToggleDoc
+        +setEnabled(dshHome, identity, enabled) ProviderToggleDoc
+        +deserialize(raw) ProviderToggleDoc
+        +serialize(doc) string
+    }
+    class ScanCandidate {
+        +string dirName
+        +string declaredName
+        +string description
+        +string instructionPath
+        +string realPath
+        +bool symlink
+        +bool disableModelInvocation
+        +string metaEvidence
+    }
+    class Classification {
+        +string partition
+        +string rule
+        +string confidence
+        +string evidence
+    }
+    class ClientPlugin {
+        +apply(ctx) () => void
+        -registerPanel(ctx) () => void
+        -registerToast(ctx) () => void
+    }
+    class SkillCenterApi {
+        +list() ListPayload
+        +toggle(payload) ToggleResult
+        +toggleProvider(payload) ProviderToggleResult
+    }
+    class PageStore {
+        +getSnapshot() PageState
+        +subscribe(listener) () => void
+        +actions
+    }
+    class PageState {
+        +string tab
+        +string status
+        +ListPayload payload
+        +ApiError error
+        +Map rows
+        +Notice notice
+    }
+    class SkillsPage {
+        +render() ReactElement
+        -refresh() void
+        -onToggle(row, enabled) void
+    }
+    class SkillRow {
+        +render() ReactElement
+    }
+    class EnableSwitch {
+        +render() ReactElement
+    }
+    class HeaderScroll {
+        +attachHeader(bar) () => void
+        +interpolateParts(parts, offset) Frame[]
+    }
+    class ToastHost {
+        +render() ReactElement
+    }
+
+    HostPlugin --> RouteTable : builds
+    RouteTable --> LoopbackFence : fence
+    RouteTable --> SkillScanner : re-scan for identity
+    RouteTable --> Classifier : merge
+    RouteTable --> AtomicWriter : write
+    RouteTable --> ProviderToggleStore : write
+    SkillScanner --> ScanCandidate : produces
+    RegistryReader --> Classifier : summaries + rank
+    InstallLedger --> Classifier : R5 facts
+    Classifier --> Classification : produces
+    FrontmatterCodec <-- AtomicWriter : uses
+    ClientPlugin --> SkillsPage : registers in main slot
+    ClientPlugin --> ToastHost : registers in shell.overlay
+    SkillsPage --> PageStore : reads/writes
+    SkillsPage --> SkillCenterApi : fetches
+    SkillsPage --> SkillRow : renders
+    SkillRow --> EnableSwitch : renders
+    SkillsPage --> HeaderScroll : measures header
+    PageStore --> PageState : snapshot
+```
+
+---
+
+## 3.2 纯函数契约（QA 可直接单测）
+
+> 全部为**无 I/O、无 DOM、无时间依赖**的函数。参数/返回值即断言面。
+
+#### 3.2.1 `lib/names.js`
+
+```js
+isSkillName(name: string): boolean
+// 真: 'dev-docs-standards' | 'a1'   假: '-a' | 'a-' | 'a--b' | 'A' | '' | 'a b'
+// 依据 EX/dsh-skill/lib/index.js 的 SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+isWithin(root: string, target: string): boolean     // path.relative 结果不以 '..' 开头且非绝对
+identityKey(provider: string, name: string): string // `${provider || ''}#${name}`
+```
+
+#### 3.2.2 `lib/classify.js`
+
+```js
+/** 分区判定的完整输入（每个字段都有精确来源，见注释） */
+/**
+ * @typedef {Object} ClassifyInput
+ * @property {string}  provider            // R1：summary.provider / 自扫描恒 'filesystem'
+ * @property {number}  rank                // R2：1.4.3 反推；自扫描恒 400
+ * @property {boolean} symlink             // R4：lstat().isSymbolicLink()
+ * @property {boolean} ledgerHit           // R5：台账任一命中
+ * @property {boolean} metaSource          // R6：_skillhub_meta.json/_meta.json 有 source
+ * @property {boolean} metaRelease         // R7：_meta.json 同时有 ownerId+slug
+ * @property {string}  dirName             // R8：目录名
+ * @property {string}  declaredName        // R8：frontmatter name
+ */
+/**
+ * @typedef {Object} Classification
+ * @property {'builtin'|'local'|'installed'|'excluded'} partition
+ * @property {'R1'|'R2'|'R3'|'R4'|'R5'|'R6'|'R7'|'R8'|'R9'} rule   // 命中的那条阶梯（可直接断言）
+ * @property {'high'|'medium'} confidence
+ * @property {string} evidence        // 只进 tooltip 的文案键，如 'evidence.metaRelease'
+ */
+classifySkill(input: ClassifyInput): Classification
+
+rankOf(level: string): number       // 1.4.3 表；未知 → 600（不是 Infinity，避免 NaN 比较）
+```
+
+判定表（**首个命中即定**，与 `PRD` §3.1.2 逐条对应；`rule` 是给 QA 的断言点）：
+
+| 序 | 条件 | partition | rule |
+| --- | --- | --- | --- |
+| 1 | `provider !== 'filesystem'` | `builtin` | `R1` |
+| 2 | `provider === 'filesystem' && rank === 600` | `builtin` | `R2` |
+| 3 | `rank ∈ {100,200,300,500}` | `excluded` | `R3` |
+| 4 | `symlink === true` | `local` | `R4` |
+| 5 | `ledgerHit` | `installed` | `R5` |
+| 6 | `metaSource` | `installed` | `R6` |
+| 7 | `metaRelease` | `installed` | `R7` |
+| 8 | `dirName` 匹配 `^[a-z0-9][a-z0-9-]*--[a-z0-9][a-z0-9-]*$` 且 `--` 后段 === `declaredName` | `installed`（`confidence:'medium'`） | `R8` |
+| 9 | 其余 | `local` | `R9` |
+
+冲突处理（`PRD` §3.1.2 的五条，逐条变成可断言行为）：
+
+| 冲突 | 断言 |
+| --- | --- |
+| 软链 + 有来源元数据 | `classifySkill({symlink:true, metaRelease:true, …}).partition === 'local'`，`rule === 'R4'` |
+| 内置 + 用户根同名 | 由 `mergeCatalog` 的 rank 裁决：bundled(600) 与 user-dsh(400) 同名时 **400 胜**，显示为本地/已安装行；runtime(250) 与 user-dsh(400) 同名时 250 胜，显示为内置行 |
+| 「内置判定永远胜出」与「rank 小者胜」互斥 | **以 rank 为准**。理由：G1 的承诺是「面板显示的必须就是模型实际拿到的那一条」；若强制内置胜出，bundled(600) 会盖掉 rank 更小、模型真正拿到的 user-dsh(400) 条目，直接违背 G1。runtime(250) 的存在使两句在多数场景一致，只有 bundled 会冲突。已作为待用户拍板项 Q-B 登记 |
+| R5 与 R8 相悖（有前缀但台账记为 local） | `ledgerHit` 在序 5 先命中 ⇒ `installed` |
+| 同名只显示一次 | `mergeCatalog` 的 `groups` 内每个 `name` 出现一次 |
+
+#### 3.2.3 `lib/classify.js` 的合并函数
+
+```js
+/**
+ * @typedef {Object} MergeInput
+ * @property {ScanCandidate[]} scanned      // 自扫描（rank 恒 400）
+ * @property {RegistrySummary[]} registry   // ctx.skills 快照（已附 rank）
+ * @property {LedgerFacts} ledger
+ * @property {string} skillsRoot
+ * @returns {{groups: Group[], excluded: number, diagnostics: string[]}}
+ */
+mergeCatalog(input: MergeInput): Catalog
+```
+
+不变量（QA 可写成 property test）：
+
+1. 输出的所有 `name` 全局唯一（三分区合起来）。
+2. 每条输出的 `rank` 等于输入中同名候选的最小 rank；若并列则来自 `scanned`。
+3. `excluded + Σ|groups| === 输入中不同 name 的个数`。
+4. 输入含 `PRD` §3.1.3 的五条 fixture 时：`dev-docs-standards → local/R4`、两个 `clawhub-* → installed/R7`、两个 `indiv-* → installed/R8(medium)`。
+
+#### 3.2.4 `lib/frontmatter.js`（字节级）
+
+```js
+/** @returns {{ next: Buffer, changed: boolean, inserted: boolean, frontmatter: Frontmatter }} */
+setDisableModelInvocation(original: Buffer, disabled: boolean): Rewrite
+```
+
+保真清单（每条都是断言）：
+
+| 属性 | 要求 |
+| --- | --- |
+| BOM（`EF BB BF`） | 有则保留在输出开头，位置不变 |
+| 行尾风格 | 逐行保留：CRLF 文件写完仍是 CRLF；混排文件逐行不变 |
+| 其它 frontmatter 行 | 字节不变（含空行、缩进、折叠/块标量、注释行） |
+| 目标键已存在 | 只替换该行的**值**，保留原前缀空白与行尾注释 |
+| 目标键不存在 | 追加为 frontmatter 块内**最后一个顶层键之后**的新行，行尾跟随块内风格 |
+| 正文与结尾分隔符之后 | 完全不变（`match[2]` 的原字节切片） |
+| 幂等 | `f(f(x,true),true) === f(x,true)`（`changed === false`） |
+| 无 frontmatter | 抛 `NO_FRONTMATTER`（路由把它映射成 409 `E_NOT_WRITABLE`，绝不新建块） |
+
+**读侧契约（`parseFrontmatter` / `stripFrontmatter`）**——写入器与解析器解耦：写入器只替换
+`disable-model-invocation` 那一行，本节的解析规则只影响**读出什么值**，不影响写回什么字节。
+
+```js
+/** @returns {{name?: string, description?: string, displayName?: string, disableModelInvocation: boolean, present: boolean}} */
+parseFrontmatter(text: string): Frontmatter
+```
+
+| 值类型 | 规则（与宿主 `yaml` 的 `parse` 对齐，宿主即用它读 frontmatter） |
+| --- | --- |
+| 普通标量 | 去一层引号、去行尾 `#` 注释后 trim（现行为不变） |
+| 折叠块标量 `>` | 指示符本身**不是值**；正文行之间以**一个空格**连接；`n` 个连续空行折成 `n-1` 个 `\n`（空行成段） |
+| 字面块标量 `\|` | 正文行之间保留 `\n`，空行保留为空行 |
+| 缩进更深的续行 | 缩进**深于**正文公共缩进的行按字面保留（其换行不被折叠），行内额外缩进原样保留——这是行内列表/代码块不被压平的唯一规则 |
+| 公共缩进 | 取正文非空行的最小缩进，逐行剥离；块可以整体更靠右（不要求 2 空格） |
+| `-` / `+` / 缺省（chomping） | `-` 去掉末尾换行；缺省(clip) 保留**一个**末尾 `\n`；`+` 保留全部末尾换行 |
+| 标量边界 | 正文遇到**非空且不缩进**的行即结束（同级键或闭合 `---`）；指示符后允许行尾 `# 注释` 与可选缩进数字 |
+| 空正文（`description: >` 紧跟同级键） | 值为 `''`（因此该条目在扫描层被当作「没有 description」跳过，与宿主 `stringField` 的 `length > 0` 一致） |
+| 布尔字段 | 块标量形式同样接受，值按 `true/false/yes/no/on/off/1/0` 判定 |
+
+真机样本：`~/.dsh/skills/clawhub-wpank--ui-design/SKILL.md` 的 `description: >` +
+三行缩进正文 → 三句以空格连接、末尾一个 `\n`；修复前该行被读成一个 `>`（QA 报告 KI-2）。
+
+#### 3.2.5 `src/client/model.js` / `header-scroll.js`
+
+```js
+statusLine(counts: {total:int, disabled:int}, t: TFunction): string   // '共 N 个技能' + （disabled>0 时）'，M 个已停用'
+rowViewState(row: Row, rows: Map<string,RowRuntime>): 'idle'|'pending'|'failed'
+groupEmptyKey(key: 'builtin'|'local'|'installed'): string             // 'group.builtinEmpty' 等
+interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几何插值，无 DOM
+```
+
+---
+
+## 验收
+
+用例编号即验收：K1–K5（判据阶梯 / rank / 同名裁决，`test/classify.test.mjs`）、K7–K10（frontmatter 保真，`test/frontmatter.test.mjs`）、K11–K12（扫描，`test/scan.test.mjs`）、K26（计数文案取自同一份 payload，`test/model.test.mjs`）。

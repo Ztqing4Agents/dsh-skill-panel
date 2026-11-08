@@ -1,7 +1,7 @@
 /**
  * `src/client/api.js` — the browser's only door to the host half.
  *
- * Contract: docs/system_design.md §8.2 (document-relative route prefix) and §8.1
+ * Contract: docs/contracts/client.md §8.2 (document-relative route prefix) and docs/contracts/routes.md §8.1
  * (the envelope is normalised here, so nothing above sees an HTTP status).
  */
 import assert from 'node:assert/strict';
