@@ -345,24 +345,24 @@ test('K79 authorTextOf 三级回落：@owner/slug → @owner → author → null
 });
 
 test('K79 statSegments：三格恒在，present 只由数值是否有限决定', () => {
-  assert.deepEqual([...MARKET_STAT_SLOTS], ['downloads', 'saves', 'rating'], '槽位顺序写死：下载 / 收藏 / 评分');
+  assert.deepEqual([...MARKET_STAT_SLOTS], ['rating', 'downloads', 'saves'], '槽位顺序写死：评分 / 下载 / 收藏（用户草图）');
 
   const full = statSegments({ downloads: 12, saves: 99, score: 100000 });
-  assert.deepEqual(full.map((slot) => slot.slot), ['downloads', 'saves', 'rating'], '恒三元素，顺序不变');
+  assert.deepEqual(full.map((slot) => slot.slot), ['rating', 'downloads', 'saves'], '恒三元素，顺序与 MARKET_STAT_SLOTS 一致');
   assert.deepEqual(full.map((slot) => slot.present), [true, true, true], '三项齐全时三格都有内容');
-  assert.deepEqual(full.map((slot) => slot.value), ['12', '99', '5.0'], '计数走 compact、评分恒一位小数');
+  assert.deepEqual(full.map((slot) => slot.value), ['5.0', '12', '99'], '评分恒一位小数、计数走 compact');
 
   const bare = statSegments({});
   assert.deepEqual(bare.map((slot) => slot.present), [false, false, false], '什么都没有时三格都 absent（页面据此整行不渲染）');
   assert.deepEqual(bare.map((slot) => slot.value), [null, null, null], 'absent 的格没有值（不是 0、不是破折号）');
 
   const partial = statSegments({ downloads: 0, saves: null, score: null });
-  assert.deepEqual(partial.map((slot) => slot.present), [true, false, false], '上游真给 0 的下载是 present');
-  assert.equal(partial[0].value, '0', '真 0 显示 0');
-  assert.equal(partial[0].labelKey, 'market.metaDownloads', '每格自带文案键');
-  assert.equal(partial[1].labelKey, 'market.metaSaves', '收藏格用 market.metaSaves');
-  assert.equal(partial[2].labelKey, 'market.metaRating', '评分格用 market.metaRating');
-  assert.deepEqual(partial.map((slot) => slot.param), ['count', 'count', 'rating'], '插值名与字典占位符一致');
+  assert.deepEqual(partial.map((slot) => slot.present), [false, true, false], '上游真给 0 的下载是 present');
+  assert.equal(partial[1].value, '0', '真 0 显示 0');
+  assert.equal(partial[0].labelKey, 'market.metaRating', '评分格用 market.metaRating');
+  assert.equal(partial[1].labelKey, 'market.metaDownloads', '下载格用 market.metaDownloads');
+  assert.equal(partial[2].labelKey, 'market.metaSaves', '收藏格用 market.metaSaves');
+  assert.deepEqual(partial.map((slot) => slot.param), ['rating', 'count', 'count'], '插值名与字典占位符一致');
 });
 
 test('K79 ratingOf：score 折到 4.0–5.0，score<=0 与缺值都是 null', () => {
@@ -390,7 +390,7 @@ test('K79 ratingTextOf：恒一位小数、恒用点，不依赖 locale', () => 
   process.env.LANG = 'de_DE.UTF-8';
   try {
     assert.equal(ratingTextOf(4.6), '4.6', '改环境语言也不影响（toFixed 与 locale 无关）');
-    assert.equal(statSegments({ score: 55385 })[2].value, '4.6', '整条链路都不走 locale');
+    assert.equal(statSegments({ score: 55385 })[0].value, '4.6', '整条链路都不走 locale');
   } finally {
     process.env.LANG = previous;
   }

@@ -182,7 +182,16 @@ test('K38 首屏骨架：分类 chip 占位 + 6 张卡骨架，带 status 播报
   assert.ok(html.includes('class="skc_marketChips"'), 'chips 占位行存在');
   assert.equal(matches(html, /skc_marketSkeletonChip"/g).length, 6, '六个 chip 占位');
   assert.equal(matches(html, /<li class="skc_marketCard"/g).length, 6, '首屏六张卡骨架');
-  assert.equal(matches(html, /skc_marketSkeletonAction"/g).length, 6, '每张骨架卡右下有动作占位');
+  assert.equal(matches(html, /skc_marketSkeletonAction"/g).length, 6, '每张骨架卡有一个动作占位');
+  assert.equal(matches(html, /skc_marketSkeletonTag"/g).length, 18, '每张骨架卡三枚标签占位（真件的上限）');
+  // The action placeholder sits in the head row, exactly where the real button is.
+  const skeletonCard = html.slice(html.indexOf('<li class="skc_marketCard"'), html.indexOf('</li>'));
+  const headAt = skeletonCard.indexOf('class="skc_marketHead"');
+  const bodyAt = skeletonCard.indexOf('class="skc_marketBody"');
+  const actionAt = skeletonCard.indexOf('skc_marketSkeletonAction');
+  assert.ok(headAt !== -1 && bodyAt !== -1 && actionAt !== -1, '骨架卡也有头部与正文两块');
+  assert.ok(headAt < actionAt && actionAt < bodyAt, '动作占位在头部（正文之前），与真件同位置');
+  assert.ok(skeletonCard.indexOf('skc_marketSkeletonTag') > bodyAt, '标签占位在正文里');
   const status = /role="status"[^>]*aria-label="([^"]+)"/.exec(html);
   assert.ok(status !== null, '骨架是 status 角色，读屏会播报');
   assert.equal(status[1], '正在读取技能市场…', '播报文案来自 market.loading');
@@ -190,7 +199,7 @@ test('K38 首屏骨架：分类 chip 占位 + 6 张卡骨架，带 status 播报
   assert.equal(html.includes('data-skc-market-id'), false, '骨架里没有真卡片');
 });
 
-test('K38 卡片：头像 + 标题 + 来源图形 + 收藏按钮，作者行 / 描述 / 三段 / 安装', () => {
+test('K38 卡片：头部（头像 + 标题 + 来源图 + 安装）+ 正文（描述 / 标签 / 三段）', () => {
   const html = renderMarket((store) => {
     store.actions.marketBootReady({
       sources: [{ id: 'skillhub', labelKey: 'market.source.skillhub', hasCategories: true, packageKind: 'files' }],
@@ -218,14 +227,13 @@ test('K38 卡片：头像 + 标题 + 来源图形 + 收藏按钮，作者行 / �
   assert.ok(html.includes('@ake/dev-god'), '作者行是 @owner/slug（market.metaAuthor）');
   assert.ok(html.includes('· v1.0.0'), '作者行第二段是版本（market.metaVersion）');
   assert.ok(html.includes('A fixture skill for the market tab.'), '描述上屏');
-  assert.ok(html.includes('aria-label="下载 12"'), '第一段是下载数');
-  assert.ok(html.includes('aria-label="收藏 99"'), '第二段是上游收藏数（stars，不是本地书签）');
-  assert.ok(html.includes('aria-label="评分 4.6"'), '第三段是折算后的评分');
+  assert.ok(html.includes('aria-label="评分 4.6"'), '第一段是折算后的评分（草图顺序）');
+  assert.ok(html.includes('aria-label="下载 12"'), '第二段是下载数');
+  assert.ok(html.includes('aria-label="收藏 99"'), '第三段是上游收藏数（stars，不是本地书签）');
   assert.ok(html.includes('>4.6<'), '评分按一位小数显示（5.0 也是 5.0）');
-  assert.ok(html.includes('aria-pressed="false"'), '未收藏时按钮的 aria-pressed 是 false');
-  assert.ok(html.includes('aria-label="收藏 Dev God"'), '收藏按钮的可读名带技能名');
-  assert.ok(html.includes('title="收藏"'), '悬停文案是短句');
-  assert.ok(html.includes('>安装<'), '右侧是「安装」按钮');
+  const cardHtml = html.slice(html.indexOf('class="skc_marketCard"'));
+  assert.equal(cardHtml.includes('aria-pressed'), false, '卡片上没有收藏开关了（U5 撤除）');
+  assert.ok(html.includes('>安装<'), '头部右侧是「安装」按钮');
 });
 
 test('K38 卡片可点只用一个手段：没有 <a>、卡片本身不是按钮、内部不再嵌第二个可点区', () => {
@@ -244,11 +252,10 @@ test('K38 卡片可点只用一个手段：没有 <a>、卡片本身不是按钮
   assert.equal(matches(grid, /class="skc_marketCardOpen"/g).length, 1, '整卡点击只有一个锚点');
   assert.equal(
     matches(grid, /<button/g).length,
-    3,
-    '卡片里恰好三个按钮：详情锚点 + 收藏 + 安装（键盘 Tab 顺序即 DOM 顺序）',
+    2,
+    '卡片里恰好两个按钮：详情锚点 + 安装（U5 撤掉收藏，键盘 Tab 顺序即 DOM 顺序）',
   );
-  assert.equal(matches(grid, /class="skc_marketFavorite/g).length, 1, '收藏是第二个动作位');
-  assert.ok(grid.includes('skc_marketFavorite skc_') === false, '未收藏时不多带一个空类名');
+  assert.equal(matches(grid, /skc_marketFavorite/g).length, 0, '收藏控件整块消失');
   assert.ok(grid.includes('skc_marketCardEnd'), '动作位独立成格（z-index:1 让它浮在点击层上）');
 });
 
@@ -944,22 +951,6 @@ test('K79 三格全缺时整行不渲染（ClawHub 列表条目可能连下载�
   assert.ok(html.includes('skc_marketCardOpen'), '标题与点击层照常');
 });
 
-test('K79 已收藏：aria-pressed 表达状态，文案与类名跟着换', () => {
-  const html = renderMarket((store) => {
-    store.actions.marketPageAppended({
-      pages: [{ sourceId: 'skillhub', page: { items: [item()], next: null } }],
-      merged: [item()],
-    });
-    store.actions.marketFavoritesLoaded(['skillhub:ake:dev-god'], true);
-  });
-  assert.ok(html.includes('aria-pressed="true"'), '已收藏时 aria-pressed 是 true');
-  assert.ok(html.includes('aria-label="取消收藏 Dev God"'), '可读名说的是「点了会发生什么」');
-  assert.ok(html.includes('title="已收藏，点击取消"'), '悬停文案也换了');
-  assert.ok(html.includes('skc_marketFavoriteOn'), '实心书签靠 -On 类着色（唯一的颜色来源是令牌）');
-  assert.ok(html.includes('fill="currentColor"'), '已收藏的图形是实心（同一个 path 只换 fill）');
-  assert.ok(html.includes('aria-label="收藏 99"'), '上游收藏数不受本地书签影响（两条不同源的数字）');
-});
-
 test('K79 作者行两级：没有 owner/slug 时回落 publisher 名，两段都没有就整行不渲染', () => {
   const publisherOnly = item({ author: 'Ake Studio' });
   publisherOnly.owner = null;
@@ -998,7 +989,7 @@ test('K79 没有品牌图的来源：不画 <img>、也不留空盒，标题行�
   assert.equal(matches(html, /class="skc_marketSourceMark"/g).length, 0, '没有品牌图就不渲染图形位');
   assert.equal(html.includes('<img'), false, '也不留下一个坏图或空 <img>');
   assert.ok(html.includes('skc_marketCardOpen'), '标题锚点照常（整卡仍可点）');
-  assert.ok(html.includes('aria-pressed="false"'), '收藏按钮照常（第二个动作位不依赖来源图）');
+  assert.equal(html.includes('aria-pressed'), false, '卡片本来就没有收藏控件（U5），更不依赖来源图');
   assert.ok(html.includes('aria-label="下载 12"'), '三段数字照常');
 });
 
@@ -1015,4 +1006,145 @@ test('K79 上游真给 0 就显示 0：缺值与 0 是两件事', () => {
   assert.equal(matches(html, /class="skc_marketStatValue"/g).length, 2, '两个数字节点：0 各自都在');
   assert.equal(html.includes('评分'), false, 'score 0 折算不出评分（4.0 是缺值伪装），整段不出现');
   assert.equal(matches(html, /class="skc_marketStat"/g).length, 3, '轨道仍然是三格（缺的那格留空）');
+});
+
+test('K83 标签行：有就渲染成描边 chip（纯文本，不是按钮），没有就整行不渲染', () => {
+  const tagged = item();
+  tagged.tags = ['代码生成', 'Bug 修复', '后端开发'];
+  const html = renderMarket((store) => {
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'skillhub', page: { items: [tagged], next: null } }],
+      merged: [tagged],
+    });
+  });
+  const list = /<ul class="skc_marketTags">([\s\S]*?)<\/ul>/.exec(html);
+  assert.ok(list !== null, '标签行是 ul.skc_marketTags');
+  assert.equal(matches(list[1], /<li class="skc_marketTag" title="([^"]+)"/g).length, 3, '三枚都是 li，带 title');
+  assert.ok(list[1].includes('>代码生成<'), '标签文本是上游原文（不进字典）');
+  assert.equal(matches(list[1], /<button|<a[\s>]/g).length, 0, 'chip 不是按钮也不是链接（点了就是进详情）');
+  // Order inside the body: description -> tags -> figures.
+  const body = html.slice(html.indexOf('class="skc_marketBody"'));
+  assert.ok(body.indexOf('skc_marketDesc') < body.indexOf('skc_marketTags'), '标签在描述之后');
+  assert.ok(body.indexOf('skc_marketTags') < body.indexOf('skc_marketStats'), '标签在三段之前');
+
+  const bare = item({ id: 'clawhub:ivangdavila:design', sourceId: 'clawhub', version: null });
+  bare.tags = [];
+  const bareHtml = renderMarket((store) => {
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'clawhub', page: { items: [bare], next: null } }],
+      merged: [bare],
+    });
+  });
+  assert.equal(bareHtml.includes('skc_marketTags'), false, '空数组 ⇒ 整行不渲染（不留空行）');
+});
+
+test('K84 卡片新结构：头部三件 + 正文三块，卡片里只有两个按钮', () => {
+  const html = renderMarket((store) => {
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'skillhub', page: { items: [item()], next: null } }],
+      merged: [item()],
+    });
+  });
+  const card = html.slice(html.indexOf('class="skc_marketCard"'));
+  const head = card.slice(card.indexOf('class="skc_marketHead"'), card.indexOf('class="skc_marketBody"'));
+  // Head order: tile -> main(title row + meta) -> action seat. No source-name Tag, no bookmark.
+  assert.ok(head.indexOf('skc_cardIcon') < head.indexOf('class="skc_marketMain"'), '图标在头部最前');
+  assert.ok(head.indexOf('class="skc_marketMain"') < head.indexOf('class="skc_marketCardEnd"'), '两行块在动作位之前（安装在最右）');
+  assert.ok(head.includes('class="skc_marketTitleRow"'), '标题行在 marketMain 里');
+  assert.ok(head.includes('class="skc_marketMeta"'), '作者行也在 marketMain 里（与标题同一块）');
+  assert.ok(head.includes('class="skc_marketCardEnd"'), '动作位坐在头部');
+  assert.equal(head.includes('skc_marketBody'), false, '正文不在头部里');
+  // Body is a direct child of the card, not nested inside marketMain.
+  const body = card.slice(card.indexOf('class="skc_marketBody"'));
+  assert.ok(body.includes('skc_marketDesc'), '正文第一块是描述');
+  assert.ok(body.includes('skc_marketStats'), '正文最后一块是三段数字');
+  assert.equal(
+    matches(card.slice(0, card.indexOf('class="skc_marketBody"')), /class="skc_marketDesc"/g).length,
+    0,
+    '描述不在头部（头部只有一行 + 作者行）',
+  );
+  assert.equal(matches(card, /<button/g).length, 2, '整卡两个按钮：详情锚点 + 安装');
+  // Three figures in the sketch's order; the ClawHub card proves the slots stay three.
+  const order = [...card.matchAll(/aria-label="(评分|下载|收藏) [^"]*"/g)].map((m) => m[1]);
+  assert.deepEqual(order, ['评分', '下载', '收藏'], '三段顺序 = 评分 / 下载 / 收藏');
+});
+
+test('K84 缺段不左移（新顺序下）：ClawHub 卡是「空 / 下载 / 空」，下载留在第二格', () => {
+  // The three slots are fixed positions, so a source that reports only downloads must not
+  // shift it into slot one - that is where every SkillHub card draws its rating.
+  const claw = item({ sourceId: 'clawhub', id: 'clawhub:ivangdavila:design', version: null, downloads: 12 });
+  const html = renderMarket((store) => {
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'clawhub', page: { items: [claw], next: null } }],
+      merged: [claw],
+    });
+  });
+  const row = /<p class="skc_marketStats">([\s\S]*?)<\/p>/.exec(html);
+  assert.ok(row !== null, '三段那一行在');
+  const cells = [...row[1].matchAll(/<span class="skc_marketStat"(?: role="img" aria-label="([^"]+)")?/g)];
+  assert.equal(cells.length, 3, '轨道恒三格');
+  assert.equal(cells[0][1], undefined, '第一格是空格（评分位，ClawHub 没有）');
+  assert.equal(cells[1][1], '下载 12', '第二格才是下载数（没有往前挤）');
+  assert.equal(cells[2][1], undefined, '第三格是空格（收藏位，ClawHub 没有）');
+  assert.ok(html.includes('aria-label="收藏 12"') === false, '下载数不会被写成收藏');
+});
+
+test('K84 标签行的两道防御：item.tags 不是数组就当没有；标签文本按原文转义', () => {
+  const noTags = item();
+  noTags.tags = null;
+  const nullHtml = renderMarket((store) => {
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'skillhub', page: { items: [noTags], next: null } }],
+      merged: [noTags],
+    });
+  });
+  assert.equal(nullHtml.includes('skc_marketTags'), false, 'tags 为 null（不该发生）⇒ 不渲染、也不抛');
+
+  const hostile = item();
+  hostile.tags = ['<b>粗</b>', 'a&b'];
+  const escaped = renderMarket((store) => {
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'skillhub', page: { items: [hostile], next: null } }],
+      merged: [hostile],
+    });
+  });
+  assert.equal(escaped.includes('<b>粗</b>'), false, '标签是纯文本，HTML 元字符不会被当成标签');
+  assert.ok(escaped.includes('&lt;b&gt;'), '按原文转义后上屏');
+  assert.ok(escaped.includes('a&amp;b'), '& 也转义');
+  assert.ok(escaped.includes('title="&lt;b&gt;粗&lt;/b&gt;"'), 'title 属性同样转义');
+});
+
+test('K84 四态下动作位都待在唯一那一层里：安装按钮始终落在 marketCardEnd 与 marketBody 之间', () => {
+  // If a state rendered its button outside the seat wrapper it would fall under the
+  // card-wide click layer, and "click install" would open the detail view instead.
+  const LABELS = ['安装', '已安装', '安装中…', '重试'];
+  const scenes = [
+    ['ready', (store) => {}],
+    ['installed', (store) => store.actions.marketInstalledLoaded({
+      'skillhub:ake:dev-god': { name: 'dev-god', version: '1.0.0', path: '/tmp/skills/dev-god', exists: true },
+    })],
+    ['installing', (store) => store.actions.marketInstallStart('skillhub:ake:dev-god')],
+    ['failed', (store) => store.actions.marketInstallFail('skillhub:ake:dev-god', '这个名字已经被占用')],
+  ];
+  for (const [state, extra] of scenes) {
+    const html = renderMarket((store) => {
+      store.actions.marketPageAppended({
+        pages: [{ sourceId: 'skillhub', page: { items: [item()], next: null } }],
+        merged: [item()],
+      });
+      extra(store);
+    });
+    // Scope to the card: the page's own tab label is also "已安装".
+    const cardHtml = html.slice(html.indexOf('class="skc_marketCard"'));
+    const seatAt = cardHtml.indexOf('class="skc_marketCardEnd"');
+    const bodyAt = cardHtml.indexOf('class="skc_marketBody"');
+    assert.ok(seatAt !== -1 && bodyAt !== -1, `${state}: 动作位与正文都在`);
+    const label = LABELS.find((text) => cardHtml.indexOf(`>${text}<`) > seatAt && cardHtml.indexOf(`>${text}<`) < bodyAt);
+    assert.ok(label !== undefined, `${state}: 动作位文案出现在 cardEnd 与 body 之间（在唯一那一层里）`);
+    assert.equal(
+      matches(cardHtml.slice(0, seatAt), /<button/g).length,
+      1,
+      `${state}: 头部动作位之前只有标题一个按钮`,
+    );
+  }
 });

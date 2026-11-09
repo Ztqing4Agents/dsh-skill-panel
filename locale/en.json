@@ -115,10 +115,6 @@
   "error.E_DOWNLOAD_FAILED": "Could not download the skill package: {reason}",
   "error.E_INSTALL_IO": "Could not write the skill directory: {reason}",
   "error.E_INSTALL_BUSY": "This skill is already being installed",
-  "market.favorite": "Save {name}",
-  "market.unfavorite": "Remove {name} from saved",
-  "market.favoriteTitle": "Save",
-  "market.unfavoriteTitle": "Saved. Tap to remove",
   "error.E_FAVORITE_FULL": "You have reached the saved-items limit",
   "error.E_FAVORITE_IO": "Could not save the favourite: {reason}"
 }

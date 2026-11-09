@@ -115,10 +115,6 @@
   "error.E_DOWNLOAD_FAILED": "下载技能包失败：{reason}",
   "error.E_INSTALL_IO": "写入技能目录失败：{reason}",
   "error.E_INSTALL_BUSY": "这个技能正在安装，请稍候",
-  "market.favorite": "收藏 {name}",
-  "market.unfavorite": "取消收藏 {name}",
-  "market.favoriteTitle": "收藏",
-  "market.unfavoriteTitle": "已收藏，点击取消",
   "error.E_FAVORITE_FULL": "收藏数量已达上限，请先取消一些",
   "error.E_FAVORITE_IO": "写入收藏失败：{reason}"
 }

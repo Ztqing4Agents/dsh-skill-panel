@@ -196,27 +196,6 @@ export class SkillCenterApi {
   }
 
   /**
-   * Save or unsave one item. The body carries identity and the target state only:
-   * no bookmark id and no path, because the host rebuilds the key from the triple
-   * (`marketId(source, owner, slug)`) and answers with the whole authoritative list.
-   * @param {{source: string, owner: string, slug: string, favorited: boolean}} ref - the item.
-   * @returns {Promise<{favorites: string[], favorited: boolean}>} the authoritative list
-   *   (most recent first) and the state that took effect.
-   */
-  async marketFavorite(ref) {
-    return this.request('market/favorite', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        source: ref?.source ?? '',
-        owner: ref?.owner ?? '',
-        slug: ref?.slug ?? '',
-        favorited: ref?.favorited === true,
-      }),
-    });
-  }
-
-  /**
    * Install one item. The body carries identity only: the file list and the target
    * path are the host's business, never the browser's.
    * @param {{source: string, owner: string, slug: string, version?: string|null}} ref - the item.

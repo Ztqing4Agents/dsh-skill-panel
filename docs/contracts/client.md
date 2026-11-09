@@ -82,7 +82,7 @@ market = {
   installs: {[id]: {state, reason?, path?, version?, seq?}},   // 确认/安装中/已安装/失败
   icons / iconsTried,                             // 图标缓存 {[key]: url} 与「本会话已问过」{[key]: true}；两个消费者共用（市场条目 + 已装行的 upstream）
   names,                                          // 上游标题缓存 {[key]: title}；与 icons 同键空间、同生命周期
-  favorites / favoritesOk / favoritesGen,          // 本地收藏 {[id]:true}、可用性、防乱序代次（toggle 的乐观值就写在 favorites 里）
+  favorites / favoritesOk,                        // 本地收藏 {[id]:true} 与可用性；**U5 起没有 UI 入口**，只为 M8 与 bootstrap 对齐而留（写侧已撤）
   installedDirty,                                 // 已安装页签标脏
   scrollTop,                                      // 进详情前记下，返回时恢复
 }
@@ -108,7 +108,6 @@ market = {
 | 点安装 | `installs[id].state='confirm'` | 只有确认弹窗，不发请求 |
 | 确认 / 成功 / 失败 | `installing` → `installed` 或 `failed` | 成功：toast + `installedDirty=true` + `installed[id]`；失败：行内原因 + 「重试」 |
 | 切到已安装页签且 `installedDirty` | 重拉 `list` 一次并清脏 | 用户不必手按刷新 |
-| 点收藏 | `favorites[id]` 取反、`favoritesGen+1` | 发 POST；**代次不是最新的响应一律丢弃**；失败则回滚该 id 并弹 `favorite-failed` toast（bootstrap 失败时按钮先按未收藏画，第一次点击的权威回包自愈） |
 
 两条闸：`installs[id].state === 'installing'` 时按钮 `disabled`，且 action 自身幂等（重复调用直接返回），因此连点只发一次请求。
 
@@ -120,7 +119,7 @@ SkillsPage (page.jsx：页头 + 两个页签)
 └─ tabPanel(market) → MarketPanel (market-panel.jsx)
     ├─ MarketFilters (market-filters.jsx)：Input(250ms 防抖) / Menu(来源 = SkillHub｜ClawHub) / Menu(排序) / Pill(分类 chips + 数量)
     ├─ 首屏骨架｜整页错误态（当前源失败）｜空态
-    ├─ ul.skc_marketGrid → MarketCard (market-card.jsx) × N（**标题行 = 头像 + 标题 + 来源图标 + 收藏按钮**；作者行；描述 2 行；三段等宽；动作位只有安装；尾部 3 张骨架；头像位是 MarketIcon → tileElement）
+    ├─ ul.skc_marketGrid → MarketCard (market-card.jsx) × N（**头部 = 48 头像 + 标题行（标题 + 来源图）/ 作者行 + 安装位**；正文 = 描述 2 行 / 标签 chips / 三段 `评分·下载·收藏`；动作位只有安装；尾部 3 张骨架；头像位是 MarketIcon → tileElement）
     ├─ MarketDetail (market-detail.jsx)：面包屑 + 头 + 事实表 + 概览 + 文件
     └─ MarketConfirm (market-confirm.jsx)：Modal（width:min(480px,100vw - 32px)）
 MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
@@ -129,7 +128,7 @@ icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安�
 
 八条结构约束：
 
-1. **整卡可点只有一个手段**：标题按钮 `.skc_marketCardOpen::after{inset:0}` 铺满整卡，动作位用**显式层级**浮在上面——安装位 `.skc_marketCardEnd{z-index:1}`、收藏按钮 `.skc_marketFavorite{z-index:2}`；卡片里只有这两个动作位，其余区域（含底行三段数字）都落在点击层上、点的都是「进详情」。不做 `<a href>`、不加第三个可点区域、不用 JS 拦冒泡代替层级。已安装页签的行一个字节不变。
+1. **整卡可点只有一个手段**：标题按钮 `.skc_marketCardOpen::after{inset:0}` 铺满整卡，**唯一的动作位**用显式层级浮在上面——安装位 `.skc_marketCardEnd{z-index:1}`（U5 起坐在头部右侧）；卡片里只有这一个动作位，其余区域（含**标签行**与三段数字）都落在点击层上、点的都是「进详情」。不做 `<a href>`、不加第二个可点区域、不用 JS 拦冒泡代替层级。已安装页签的行一个字节不变。
 2. **详情就地替换网格**（`detail !== null` 时返回详情而不是网格），与宿主的页内详情同构；返回不重拉任何东西。
 3. 详情正文用宿主 primitives 的 `MarkdownText` 渲染（与对话里的第三方 markdown 同一个渲染器，不自造 sanitizer）；渲染抛错或正文为空时回落纯文本 + `market.detailNoOverview`。
 4. 组件只读 props（`store/api/t`）写 `store.actions`，不直接 `fetch`；只有滚动位置恢复与触底预取读 DOM，且都在 `useEffect` 里（字符串渲染不触发）。
@@ -165,10 +164,10 @@ icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安�
 | `marketIconsSeeded(icons)` | `{[id]: url}` | 只合并进 `icons`（已有键不覆盖），**不写 `iconsTried`**：列表内联的图标是已知答案，不是一次上游提问 |
 | `marketIconsReady(icons)` | `{[id]: url|null}` | 合并进 `icons`（非空才存），每个 id 记进 `iconsTried`（**null 也记**，负结果同样只问一次） |
 | `marketIconsAttempted(ids)` | `string[]` | 批次整体失败：只记 `iconsTried`、不写 `icons`，静默保持字母 |
-| `marketFavoritesLoaded(list,ok)` / `marketFavoriteToggle(id)` / `marketFavoriteOk(gen,list)` / `marketFavoriteFail(gen,reason)` | 数组+布尔 / id / 代次+权威列表 / 代次+本地化原因 | 只在 bootstrap 写一次 / toggle 翻转 `favorites[id]`、代次+1 并**返回**新代次 / ok 仅在代次最新时用权威列表重建 `favorites` / fail 仅在代次最新时回滚**该 id** 并推 `notice{kind:'favorite-failed', reason, seq}` |
+| `marketFavoritesLoaded(list,ok)` | 数组 + 布尔 | 只在 `bootstrap` 写一次：数组转 `{[id]:true}`，`ok` 进 `favoritesOk`；**U5 起是纯读侧**（写侧三个 action 已撤，见 `docs/contracts/decisions.md` 附录 L） |
 | `marketSetScroll(top)` / `marketClearInstalledDirty()` | number / —— | 记滚动位置 / 清脏 |
 
-`notice` 复用既有字段：`refresh-failed`、`install-ok`（副行给安装路径）与 `favorite-failed`（正文是那句本地化原因，`{kind, reason, seq}`），由 `toast.jsx` 按 `kind` 选文案，5 秒后 `dismissNotice(seq)`。
+`notice` 复用既有字段：`refresh-failed` 与 `install-ok`（副行给安装路径），由 `toast.jsx` 按 `kind` 选文案，5 秒后 `dismissNotice(seq)`；U5 起没有第三种 `kind`（收藏写侧已撤，见 `docs/contracts/decisions.md` 附录 L）。
 
 `marketPageAppended` 的入参仍是**数组**（设计文档写的是单源形状）：现在是「一源一项」，留着数组是为了将来真要同屏多源时不必改签名；语义（写游标、合并、翻页计数）不变。
 
@@ -181,7 +180,6 @@ icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安�
 | `marketDetail({source,owner,slug,version})` | `GET market/detail` | —— |
 | `marketInstalled()` | `GET market/installed` | 形状 `{items, readable}` |
 | `marketInstall({source,owner,slug,version})` | `POST market/install` | body 只有身份，**没有 path/files** |
-| `marketFavorite({source,owner,slug,favorited})` | `POST market/favorite` | body 只有身份与目标状态（**没有 id / path**）；出参 `{favorites, favorited}`，整份替换本地集合 |
 | `marketIcons({items})` | `POST market/icons` | `items` 是 **`{source,owner,slug}`** 数组（每源 ≤12、合计 **≤24**，一批可混两源）；出参 `{icons:{[key]: url|null}}`；失败静默 |
 
 全部走既有 `request()`：文档相对 URL + 信封解包 + `ApiError{code, message, data}`（`data` 是信封里的 `data`，安装失败时用来取冲突路径与声明名）。安装永不自动重试。
@@ -212,7 +210,7 @@ icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安�
 | 标题优先级 | `rowTitleOf(row, market)`：`names[marketKeyOf(row.upstream)]` → `row.displayName`（本地 `metadata.displayName`）→ `row.name`。**kebab 名退到 tooltip**（`title` 属性仍是 `row.name`），因为它是模型调用技能时用的那个字符串，换了可见标题后仍要随手可查 |
 | 失效 | 切页签不动 · 已安装页签刷新不动 · `marketReload()` 清空（`icons`/`iconsTried`/`names` 一起，一次性、下一批自愈）· 安装成功后不动（新技能与市场条目同键）· 新会话清空（不落盘） |
 
-收藏的持久化在 `docs/contracts/market.md` §7.7；本页只负责「画对不对」：卡片上的「收藏 N」是上游 `saves`，按钮的 `aria-pressed` 才是你的书签——两者不同源、不互相修正。
+收藏的持久化在 `docs/contracts/market.md` §7.7；本页只负责「画对不对」：卡片上的「收藏 N」是上游 `saves`，与本地书签不同源、不互相修正（U5 起卡片上没有书签控件，集合与写路由仍在）。
 
 ---
 
@@ -248,7 +246,7 @@ icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安�
 - `client/src/**` 与 `lib/**` **不得出现 CJK 字面量**（`check:i18n` 强制）；界面文案一律 `t('key')`。
 - 占位符用 `{name}`（宿主同款：`t('partToggle', { name: title })`）。
 - 入口标题**只允许**通过 `panel.label` 表达：改名 = 改 `locale/*.json` 的 `panel.label` + `meta.title`，代码零改动（这是「不硬编码中文」的可验收形态）。两处都要改的理由：`meta.title` 是插件列表里的显示名（`PROF/*/locale/zh.json` 四家都是 `{meta:{title,description}}`），`panel.label` 是侧栏行标题。`check-i18n` 会校验两者都存在。
-- 市场面沿用两族键：`market.*`（61 个 → **68 个**）与 `error.E_*`（11 个 → **13 个**），全字典 111 → **120**；**`market.placeholder` 已删除**（市场页签不再是占位文案）。下表有几行把同族的新键合并成一行，这是为了守住 400 行上限（`check-docs` 的 R11），键与值逐条列出、语义不变。
+- 市场面沿用两族键：`market.*`（61 个 → **64 个**）与 `error.E_*`（11 个 → **13 个**），全字典 111 → **116**；**`market.placeholder` 已删除**（市场页签不再是占位文案）。下表有几行把同族的新键合并成一行，这是为了守住 400 行上限（`check-docs` 的 R11），键与值逐条列出、语义不变。
 - 键表（P0 全集 + 市场轮；`zh` 值逐字来自 `PRD` §3.3.5 与本设计）：
 
 | key | zh |
@@ -309,7 +307,6 @@ icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安�
 | `market.metaVersion` | v{version} |
 | `market.metaDownloads` | 下载 {count} |
 | `market.metaSaves` / `market.metaRating` / `market.metaRatingHint` | 收藏 {count} ／ 评分 {rating} ／ 上游评分的折算（4.0–5.0），不是用户评分均值 |
-| `market.favorite` / `market.unfavorite` / `market.favoriteTitle` / `market.unfavoriteTitle` | 收藏 {name} ／ 取消收藏 {name} ／ 收藏 ／ 已收藏，点击取消 |
 | `market.install` | 安装 |
 | `market.installing` | 安装中… |
 | `market.installed` | 已安装 |

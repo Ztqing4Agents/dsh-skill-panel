@@ -1,9 +1,9 @@
 /**
  * `src/client/state.js` — the page store that outlives the page.
  *
- * Contract: docs/contracts/client.md §3.5 (state machine, store scope), §3.9.1 (the
- * bookmark transfer: optimistic flip + generation guard) and §3.9.3 (the market
- * sub-state's 33 actions, four of them for bookmarks); case ids K45, K80.
+ * Contract: docs/contracts/client.md §3.5 (state machine, store scope) and §3.9.3 (the
+ * market sub-state's 30 actions; the bookmark write side was removed in U5 - see
+ * docs/contracts/decisions.md appendix L - and only the read side is left); case id K45.
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -364,25 +364,26 @@ test('K45 单源：那一次请求失败就是整页失败（不再有 sourceErr
   assert.equal(failed.page.code, 'E_SOURCE_TIMEOUT', '错误码留在 page 上（界面据此选文案）');
 });
 
-test('K45 市场子状态的 action 数量是可核对的：新增的 4 个都属于收藏', () => {
+test('K45 市场子状态的 action 数量是可核对的：收藏只剩读侧一个', () => {
   const store = createStore();
   const names = Object.keys(store.actions);
   const market = names.filter((name) => name.startsWith('market'));
-  assert.equal(market.length, 33, '市场子状态共 33 个 action（原 29 + 收藏 4）');
-  for (const added of ['marketFavoritesLoaded', 'marketFavoriteToggle', 'marketFavoriteOk', 'marketFavoriteFail']) {
-    assert.equal(market.includes(added), true, `${added} 已落地`);
+  assert.equal(market.length, 30, '市场子状态共 30 个 action（U5 撤掉写侧 3 个）');
+  assert.equal(market.includes('marketFavoritesLoaded'), true, '读侧 action 仍在（bootstrap 仍下发收藏）');
+  for (const gone of ['marketFavoriteToggle', 'marketFavoriteOk', 'marketFavoriteFail']) {
+    assert.equal(market.includes(gone), false, `${gone} 已随卡片上的收藏开关一起撤除`);
   }
   assert.equal(names.every((name) => typeof store.actions[name] === 'function'), true, '每个 action 都是函数');
 });
 
-test('K80 初始收藏状态：空集、可用、代次 0', () => {
+test('K45 初始收藏状态：空集、可用（读侧还在，但没有代次这一层了）', () => {
   const market = createStore().getSnapshot().market;
   assert.deepEqual(market.favorites, {}, '没有收藏');
   assert.equal(market.favoritesOk, true, '缺省当作可用（bootstrap 说了才算）');
-  assert.equal(market.favoritesGen, 0, '代次从 0 起');
+  assert.equal('favoritesGen' in market, false, 'U5 撤掉写侧后不再有防乱序代次');
 });
 
-test('K80 marketFavoritesLoaded：数组变布尔映射，非数组/坏条目一律丢', () => {
+test('K45 marketFavoritesLoaded：数组变布尔映射，非数组/坏条目一律丢', () => {
   const store = createStore();
   store.actions.marketFavoritesLoaded(['skillhub:ake:dev-god', 'clawhub:ivan:design', '', 42], true);
   assert.deepEqual(
@@ -397,71 +398,7 @@ test('K80 marketFavoritesLoaded：数组变布尔映射，非数组/坏条目一
   assert.equal(store.getSnapshot().market.favoritesOk, false, 'ok=false 说明 Host 没读到文件');
 });
 
-test('K80 乐观翻转：toggle 立刻改 favorites、代次 +1，并返回新代次', () => {
-  const store = createStore();
-  const first = store.actions.marketFavoriteToggle('skillhub:ake:dev-god');
-  assert.equal(first, 1, '第一次翻转子代次是 1');
-  assert.deepEqual(store.getSnapshot().market.favorites, { 'skillhub:ake:dev-god': true }, '立刻变成已收藏');
-  assert.equal(store.getSnapshot().market.favoritesGen, 1, '代次写进状态');
-
-  const second = store.actions.marketFavoriteToggle('skillhub:ake:dev-god');
-  assert.equal(second, 2, '再点一次代次是 2');
-  assert.deepEqual(store.getSnapshot().market.favorites, {}, '再次翻转回未收藏（两次相反的意图）');
-  assert.equal(store.actions.marketFavoriteToggle(''), 2, '空 id 不产生新代次（按钮不会发这种请求）');
-});
-
-test('K80 代次防乱序：旧代次的 Ok / Fail 一律不改状态', () => {
-  const store = createStore();
-  const stale = store.actions.marketFavoriteToggle('skillhub:ake:a');
-  const fresh = store.actions.marketFavoriteToggle('skillhub:ake:b');
-  const before = store.getSnapshot();
-
-  store.actions.marketFavoriteOk(stale, ['clawhub:x:y']);
-  assert.equal(store.getSnapshot(), before, '旧代次的成功回包被丢弃（状态对象引用都没变）');
-
-  store.actions.marketFavoriteFail(stale, '写失败');
-  assert.equal(store.getSnapshot(), before, '旧代次的失败也不回滚、不弹 toast');
-
-  store.actions.marketFavoriteOk(fresh, ['clawhub:x:y', 'skillhub:ake:a']);
-  assert.deepEqual(
-    store.getSnapshot().market.favorites,
-    { 'clawhub:x:y': true, 'skillhub:ake:a': true },
-    '最新代次的成功用权威列表整份替换（包括那两条本地没猜到的）',
-  );
-  assert.equal(store.getSnapshot().market.favoritesOk, true, '回包成功说明可用');
-});
-
-test('K80 最新代次失败：只回滚那一个 id，并推 favorite-failed 提示', () => {
-  const store = createStore();
-  store.actions.marketFavoritesLoaded(['clawhub:ivan:design'], true);
-  const gen = store.actions.marketFavoriteToggle('skillhub:ake:dev-god');
-  store.actions.marketFavoriteFail(gen, '收藏数量已达上限，请先取消一些');
-
-  const state = store.getSnapshot();
-  assert.deepEqual(
-    state.market.favorites,
-    { 'clawhub:ivan:design': true },
-    '只回滚被翻的那条：另一条收藏不动',
-  );
-  assert.equal(state.notice.kind, 'favorite-failed', '提示的 kind 是 favorite-failed');
-  assert.equal(state.notice.reason, '收藏数量已达上限，请先取消一些', '提示带本地化原因');
-  assert.equal(typeof state.notice.seq, 'number', '带序号，dismissNotice 才关得掉');
-
-  const seq = state.notice.seq;
-  store.actions.dismissNotice(seq - 1);
-  assert.notEqual(store.getSnapshot().notice, null, '序号不匹配不关');
-  store.actions.dismissNotice(seq);
-  assert.equal(store.getSnapshot().notice, null, '序号匹配才关');
-
-  // The rolled-back id must be collectable again, and the next failure must roll back the
-  // *new* flip rather than the old one.
-  const again = store.actions.marketFavoriteToggle('skillhub:ake:dev-god');
-  assert.deepEqual(store.getSnapshot().market.favorites['skillhub:ake:dev-god'], true, '再点一次仍然乐观翻成已收藏');
-  store.actions.marketFavoriteFail(again, '再来一次');
-  assert.equal(store.getSnapshot().market.favorites['skillhub:ake:dev-god'], undefined, '第二次失败也回滚同一 id');
-});
-
-test('K80 reload / boot 兜底都不动收藏，也不把 favoritesOk 置 true', () => {
+test('K45 reload / boot 兜底都不动收藏，也不把 favoritesOk 置 true', () => {
   const store = createStore();
   store.actions.marketFavoritesLoaded(['skillhub:ake:dev-god'], false);
   const favorites = store.getSnapshot().market.favorites;
@@ -475,38 +412,3 @@ test('K80 reload / boot 兜底都不动收藏，也不把 favoritesOk 置 true',
   assert.equal(store.getSnapshot().market.favoritesOk, false, '也不虚报可用');
 });
 
-test('K80 两条不同的乐观翻转：最新代次失败只回滚它自己，另一条的乐观值留在原地', () => {
-  const store = createStore();
-  const older = store.actions.marketFavoriteToggle('skillhub:ake:a');
-  const newer = store.actions.marketFavoriteToggle('clawhub:ivan:design');
-  assert.deepEqual(
-    store.getSnapshot().market.favorites,
-    { 'skillhub:ake:a': true, 'clawhub:ivan:design': true },
-    '两条都先乐观翻上去了',
-  );
-
-  store.actions.marketFavoriteFail(newer, '写失败');
-  assert.deepEqual(
-    store.getSnapshot().market.favorites,
-    { 'skillhub:ake:a': true },
-    '只回滚新一代那条；前一条的乐观值等它自己的回包，不被别人的失败牵连',
-  );
-
-  // The older turn's own answer is stale now and must not touch the set either.
-  const before = store.getSnapshot();
-  store.actions.marketFavoriteFail(older, '更早的失败');
-  assert.equal(store.getSnapshot(), before, '旧代次的失败仍然什么都不改（也不弹第二条 toast）');
-});
-
-test('K80 权威回包整份替换：服务端列表缺的那条不会靠本地乐观值补回来', () => {
-  const store = createStore();
-  const gen = store.actions.marketFavoriteToggle('skillhub:ake:dev-god');
-  // The host answered "no such bookmark" (someone edited the file): its list is truth.
-  store.actions.marketFavoriteOk(gen, ['clawhub:ivan:design']);
-  assert.deepEqual(
-    store.getSnapshot().market.favorites,
-    { 'clawhub:ivan:design': true },
-    '整份替换：本地猜的那条被服务端答案覆盖掉',
-  );
-  assert.equal(store.getSnapshot().market.favoritesOk, true, '成功的回包说明收藏可用（bootstrap 失败也能自愈）');
-});

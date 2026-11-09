@@ -304,6 +304,7 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 3. **进程内串行化**：两个并发 POST 在 `lib/market/favorites.js` 里被一条 Promise 链排队，读-改-写整体排他，不会互相覆盖。跨进程并发不处理（与 `install.js` 同一档次的本机单宿主假设，见 `docs/contracts/market.md` §7.7）。
 4. **响应永远是权威全量** `favorites[]`（最新在前）：客户端整份替换，不做增量合并。
 5. **写失败** ⇒ `500 E_FAVORITE_IO`，`message` 带系统错误摘要；日志只记 `{route, code}`，**永不**记 owner / slug。
+6. **U5 起没有 UI 入口**：卡片上的收藏按钮已按用户决定撤除（`docs/contracts/decisions.md` 附录 L），本路由与 `bootstrap` 的 `favorites` / `favoritesOk` 原样保留，等 M8 的「收藏」入口接回；K76 仍守着它。
 
 ---
 

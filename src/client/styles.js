@@ -284,14 +284,34 @@ const CSS = `
   padding: 14px; flex-direction: column; display: flex; position: relative;
 }
 @media (hover: hover){ .skc_marketCard:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
+/* the card's head: the 48px tile, the title/byline block and the one action seat in a
+   single row. nowrap is the flex default and is what keeps the seat on this row: when the
+   install label grows ("installing" is the widest of the four) the block shrinks into an
+   ellipsis instead of pushing the seat to a second line. */
+.skc_marketHead{ align-items: center; gap: 12px; min-width: 0; display: flex }
+/* the body: description, tags and figures share one rhythm of 6px; the card's own gap
+   (14px) stays the single separator between the head and this block. */
+.skc_marketBody{ flex-direction: column; gap: 6px; min-width: 0; display: flex }
 .skc_marketMain{ flex-direction: column; flex: 1; gap: 2px; min-width: 0; display: flex }
-.skc_marketTitleRow{ flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; display: flex }
-/* flex + min-width:0 so a long title ellipsises instead of pushing the source mark and
-   the bookmark button onto the next line (min-width:auto would keep the full text width) */
+/* the title row is as wide as its content, not as wide as the block: align-self keeps it
+   from being stretched by the column parent, so the source mark sits one 8px gap after the
+   title instead of being pushed to the far right of the block. max-width:100% keeps a long
+   title inside the card, and min-width:0 lets it ellipsise (the mark never shrinks).
+   nowrap is load-bearing: a wrapping container breaks lines on the flex base size *before*
+   any shrinking happens, so a long title would push the mark onto a second line (measured on
+   two real cards: 20px row grew to 44px) instead of ellipsising. This row has exactly two
+   children - the title and the mark - and nothing to wrap. */
+.skc_marketTitleRow{
+  flex-wrap: nowrap; align-items: center; gap: 8px; min-width: 0;
+  align-self: flex-start; max-width: 100%; display: flex;
+}
+/* flex:0 1 auto - grow 0 (the title takes its content width, so the mark stays right after
+   it), shrink 1 with min-width:0 (a long title gives way and ellipsises instead of pushing
+   the mark or the action seat onto a second line). */
 .skc_marketCardOpen{
   max-width: 100%; color: inherit; font: inherit; text-align: left; cursor: pointer;
   text-overflow: ellipsis; white-space: nowrap; background: 0 0; border: 0; padding: 0;
-  flex: 1; min-width: 0; font-size: 14px; font-weight: 500; line-height: 20px; overflow: hidden;
+  flex: 0 1 auto; min-width: 0; font-size: 14px; font-weight: 500; line-height: 20px; overflow: hidden;
 }
 .skc_marketCardOpen::after{ content: ""; border-radius: var(--dsw-radius-xl); position: absolute; inset: 0 }
 .skc_marketCardOpen:focus-visible{ outline: none }
@@ -304,17 +324,19 @@ const CSS = `
   color: var(--dsw-alias-label-tertiary); -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   font-size: 13px; line-height: 18px; display: -webkit-box; overflow: hidden;
 }
+/* the author line stays one line: an owner/slug handle can reach 129 characters, and
+   letting it wrap would grow the head from 48px to 66px and jump the card height */
 .skc_marketMeta{
-  color: var(--dsw-alias-label-tertiary); margin: 0; overflow-wrap: anywhere;
-  font-size: 12px; line-height: 18px;
+  color: var(--dsw-alias-label-tertiary); margin: 0; text-overflow: ellipsis;
+  white-space: nowrap; overflow: hidden; font-size: 12px; line-height: 18px;
 }
-/* market: the card's figures - three equal-width slots, downloads / saves / rating.
+/* market: the card's figures - three equal-width slots, rating / downloads / saves.
    The slots are fixed-width and always three, so the same column lands on the same x in
    every card of a row (they are empty, not absent, when a source does not report a
    number). tabular-nums keeps 1 and 8 the same width inside a slot. */
 .skc_marketStats{
   grid-template-columns: repeat(3, minmax(0, 72px)); gap: 8px; justify-content: start;
-  margin: 2px 0 0; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums;
+  margin: 0; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums;
   font-size: 12px; line-height: 18px; display: grid;
 }
 .skc_marketStat{
@@ -325,28 +347,21 @@ const CSS = `
 .skc_marketStatValue{ min-width: 0; overflow: hidden; text-overflow: ellipsis }
 /* the source's own brand mark, 16px: a 32x32 PNG at 2x. Decoration, not a control. */
 .skc_marketSourceMark{ border-radius: var(--dsw-radius-sm); width: 16px; height: 16px; flex: none; display: block }
-/* the bookmark toggle sits above the card-wide click layer (::after), hence z-index: 2;
-   it is the second and last action seat this card is allowed (the click-boundary rule). */
-.skc_marketFavorite{
-  z-index: 2; margin-left: auto; width: 22px; height: 22px; flex: none; position: relative;
-  border: 0; border-radius: var(--dsw-radius-sm); padding: 0; background: 0 0;
-  color: var(--dsw-alias-label-tertiary); cursor: pointer;
-  align-items: center; justify-content: center; display: inline-flex;
+/* tag chips: one line of rounded hairline boxes, tertiary text one step below the meta
+   line. Wrapping is allowed (three labels can still exceed a 280px card) but each chip is
+   clamped, so no single long topic can stretch the row. */
+.skc_marketTags{ flex-wrap: wrap; gap: 6px; min-width: 0; margin: 0; padding: 0; display: flex; list-style: none }
+.skc_marketTag{
+  border: .5px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-sm);
+  color: var(--dsw-alias-label-tertiary); max-width: 100%; padding: 1px 6px;
+  font-size: 11px; line-height: 16px; white-space: nowrap;
+  text-overflow: ellipsis; overflow: hidden;
 }
-@media (hover: hover){
-  .skc_marketFavorite:hover{
-    color: var(--dsw-alias-label-primary); background: var(--dsw-alias-interactive-bg-hover);
-  }
-}
-.skc_marketFavorite:focus-visible{
-  outline: var(--dsw-focus-ring-width) solid
-    var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
-  outline-offset: 2px;
-}
-.skc_marketFavoriteOn{ color: var(--dsw-alias-state-business-primary) }
-.skc_marketFavorite > svg{ width: 16px; height: 16px; display: block }
+/* the one action seat: it sits in the head row (U5), so its vertical position comes from
+   the head's align-items; a flex-end self-alignment would push the button to the row's
+   bottom and grow the row. z-index:1 floats it above the card-wide click layer. */
 .skc_marketCardEnd{
-  z-index: 1; flex: none; align-self: flex-end; align-items: center; gap: 8px;
+  z-index: 1; flex: none; align-items: center; gap: 8px;
   display: inline-flex; position: relative;
 }
 
@@ -419,6 +434,8 @@ const CSS = `
 .skc_marketSkeletonAction{ border-radius: var(--dsw-radius-md); width: 64px; height: 24px }
 /* three figure placeholders in the real row's rhythm; the bed is the shared skeleton fill */
 .skc_marketSkeletonStat{ border-radius: var(--dsw-radius-xs); width: 56px; height: 12px }
+/* the tag placeholder is the real chip's box (48x19), so the skeleton keeps the body's rhythm */
+.skc_marketSkeletonTag{ border-radius: var(--dsw-radius-sm); width: 48px; height: 19px }
 .skc_marketToastHint{
   color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere;
   margin-top: 2px; font-size: 12px; line-height: 18px; display: block;

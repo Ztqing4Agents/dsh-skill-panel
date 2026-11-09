@@ -338,8 +338,8 @@ export function metaSegments(item) {
   return segments;
 }
 
-/** The figure slots of one card, in the order they are drawn. */
-export const MARKET_STAT_SLOTS = Object.freeze(['downloads', 'saves', 'rating']);
+/** The figure slots of one card, in the order they are drawn (rating first: the sketch). */
+export const MARKET_STAT_SLOTS = Object.freeze(['rating', 'downloads', 'saves']);
 
 /** The top of the upstream popularity score, which maps onto a rating of 5.0. */
 const SCORE_TOP = 100000;
@@ -380,6 +380,9 @@ export function ratingTextOf(rating) {
 /**
  * The three figure slots of one card, always three.
  *
+ * The order is rating, downloads, saves (the user's sketch); the slot *identity* is what
+ * `StatMark` and `labelKey` follow, so reordering cannot swap an icon or a sentence.
+ *
  * The slots are fixed even when a source reports nothing: the track stays, the contents
  * do not. Three fixed slots are the only way the same column lands on the same x in every
  * card of a row, so an item missing its saves cannot push its rating into slot two. A
@@ -393,6 +396,13 @@ export function statSegments(item) {
   const rating = ratingOf(item);
   return [
     {
+      slot: 'rating',
+      present: Number.isFinite(rating),
+      value: ratingTextOf(rating),
+      labelKey: 'market.metaRating',
+      param: 'rating',
+    },
+    {
       slot: 'downloads',
       present: Number.isFinite(item?.downloads),
       value: countText(item?.downloads),
@@ -405,13 +415,6 @@ export function statSegments(item) {
       value: countText(item?.saves),
       labelKey: 'market.metaSaves',
       param: 'count',
-    },
-    {
-      slot: 'rating',
-      present: Number.isFinite(rating),
-      value: ratingTextOf(rating),
-      labelKey: 'market.metaRating',
-      param: 'rating',
     },
   ];
 }

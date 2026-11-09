@@ -2,8 +2,8 @@
  * `lib/market/normalize.js` — raw upstream payloads to the one shape the page renders.
  *
  * Contract: docs/contracts/market.md §7.4 (the field table, the five-item invariant
- * list, and the `saves`/`score` row) and §7.2 (per-source capability table);
- * case ids K31, K78.
+ * list, and the `saves`/`score`/`tags` rows) and §7.2 (per-source capability table);
+ * case ids K31, K78, K82.
  *
  * Fixtures here are *shaped like the real responses* but synthetic: the real endpoints
  * change, and a test that quotes a live payload breaks when they do. What must not
@@ -40,7 +40,7 @@ import {
 /** Every field a MarketItem must carry, from the §7.4 table. */
 const ITEM_FIELDS = [
   'sourceId', 'id', 'owner', 'slug', 'displayName', 'iconUrl', 'summary',
-  'author', 'version', 'downloads', 'saves', 'score', 'updatedAt', 'category', 'packageKind',
+  'author', 'version', 'downloads', 'saves', 'score', 'tags', 'updatedAt', 'category', 'packageKind',
 ];
 
 /** A real-looking SkillHub icon address (the `/skill-icons/` prefix is the rule). */
@@ -352,4 +352,137 @@ test('K78 finiteOrNull 与 numberOrNull 的分工：一个不截断，一个取�
   for (const value of [NaN, Infinity, -Infinity, '3', null, undefined, {}]) {
     assert.equal(finiteOrNull(value), null, `finiteOrNull(${String(value)}) ⇒ null`);
   }
+});
+
+test('K82 tags：SkillHub 取 subCategories[].name 且保留大小写', () => {
+  const item = fromSkillhubListItem({
+    slug: 'dev-god',
+    namespace: { handle: 'ake' },
+    subCategories: [
+      { key: 'code-gen', name: '代码生成' },
+      { key: 'bugfix', name: 'Bug 修复' },
+      { key: 'api', name: 'API' },
+      { key: 'fourth', name: '第四枚不该出现' },
+    ],
+  });
+  assert.deepEqual(item.tags, ['代码生成', 'Bug 修复', 'API'], '取 .name（不是 key）、最多三枚、大小写原样');
+  assert.equal(Array.isArray(item.tags), true, 'tags 是数组');
+
+  const byKeyOnly = fromSkillhubListItem({
+    slug: 'x',
+    namespace: { handle: 'ake' },
+    subCategories: [{ key: 'dev-tools' }],
+  });
+  assert.deepEqual(byKeyOnly.tags, [], '只有 key 没有 name ⇒ 不拿 key 顶替');
+});
+
+test('K82 tags：ClawHub 取 topics 前 3、转小写、去重；tags:{latest} 不是标签', () => {
+  const item = fromClawhubListItem({
+    slug: 'buzzmark',
+    ownerHandle: 'ivangdavila',
+    topics: ['social-media', 'Marketing', 'linkedin', 'instagram', 'mcp'],
+    tags: { latest: '1.4.0' },
+  });
+  assert.deepEqual(item.tags, ['social-media', 'marketing', 'linkedin'], '前 3 且转小写（不做 title-case）');
+
+  const dedupe = fromClawhubListItem({
+    slug: 'x',
+    ownerHandle: 'ake',
+    topics: ['Marketing', 'marketing', 'MCP'],
+  });
+  assert.deepEqual(dedupe.tags, ['marketing', 'mcp'], '归一后同值只留一条');
+
+  const versionOnly = fromClawhubListItem({ slug: 'y', ownerHandle: 'ake', tags: { latest: '2.0.0' } });
+  assert.deepEqual(versionOnly.tags, [], 'tags 是 {latest: version}，不是标签清单');
+});
+
+test('K82 tags 的边界：≤24 字符截断、丢空与畸形、非数组 ⇒ []、恒不是 null', () => {
+  const long = 'x'.repeat(40);
+  const item = fromSkillhubListItem({
+    slug: 'x',
+    namespace: { handle: 'ake' },
+    subCategories: [{ name: long }],
+  });
+  assert.equal(item.tags.length, 1, '超长标签仍保留一条');
+  assert.equal(item.tags[0].length, 24, '单条截到 24 字符');
+  assert.ok(item.tags[0].endsWith('...'), '截断用 ASCII 省略号（与 clampLine 同口径）');
+
+  const junk = fromSkillhubListItem({
+    slug: 'x',
+    namespace: { handle: 'ake' },
+    subCategories: [{ name: '   ' }, { name: 42 }, null, { name: 'ok' }],
+  });
+  assert.deepEqual(junk.tags, ['ok'], '空串 / 非字符串 / null 元素逐条丢弃');
+
+  for (const raw of [undefined, null, 'nope', {}, 3]) {
+    const bare = fromSkillhubListItem({ slug: 'x', namespace: { handle: 'ake' }, subCategories: raw });
+    assert.deepEqual(bare.tags, [], `非数组（${String(raw)}）⇒ 空数组`);
+    assert.notEqual(bare.tags, null, 'tags 永远不是 null（列表型字段的缺值是 []）');
+  }
+});
+
+test('K82 tags：详情与列表同形，两源详情的兜底路径都覆盖', () => {
+  const skillhubDetail = fromSkillhubDetail({
+    skill: { slug: 'dev-god', subCategories: [{ key: 'a', name: '代码生成' }] },
+  });
+  assert.deepEqual(skillhubDetail.tags, ['代码生成'], 'SkillHub 详情取 skill.subCategories');
+
+  const clawhubDetail = fromClawhubDetail({
+    skill: { slug: 'buzzmark', topics: ['Marketing'] },
+  });
+  assert.deepEqual(clawhubDetail.tags, ['marketing'], 'ClawHub 详情取 skill.topics 并转小写');
+
+  const search = fromClawhubSearchItem({ slug: 'buzzmark', ownerHandle: 'ivangdavila', topics: ['MCP'] });
+  assert.deepEqual(search.tags, ['mcp'], '搜索结果也带标签（同一口径）');
+});
+
+test('K82 标签的脏输入：大写、连字符、非字符串元素、去重发生在截断之后', () => {
+  const mixed = fromClawhubListItem({
+    slug: 'buzzmark',
+    ownerHandle: 'ake',
+    topics: ['MCP', 'Social-Media', 42, null, { name: 'nope' }, '', '   ', 'LinkedIn'],
+  });
+  assert.deepEqual(mixed.tags, ['mcp', 'social-media', 'linkedin'], '大写转小写、连字符原样、畸形元素逐条丢');
+
+  // Two topics that only differ after the 24-character cut are the same chip once clamped.
+  const longA = `${'k'.repeat(30)}-alpha`;
+  const longB = `${'k'.repeat(30)}-beta`;
+  const collapsed = fromClawhubListItem({ slug: 'x', ownerHandle: 'ake', topics: [longA, longB, 'tail'] });
+  assert.equal(collapsed.tags.length, 2, '截断后同值的两条合并成一条');
+  assert.equal(collapsed.tags[0].length, 24, '每条仍 ≤24 字符');
+  assert.equal(collapsed.tags[1], 'tail', '去重后把后面的好条目补上来');
+
+  // `marketItem` itself never lets a non-array through, whoever calls it.
+  assert.deepEqual(marketItem({ sourceId: 'skillhub', owner: 'ake', slug: 'x', tags: null }).tags, [], 'null ⇒ []');
+  assert.deepEqual(marketItem({ sourceId: 'skillhub', owner: 'ake', slug: 'x', tags: 'nope' }).tags, [], '非数组 ⇒ []');
+  assert.deepEqual(
+    marketItem({ sourceId: 'skillhub', owner: 'ake', slug: 'x' }).tags,
+    [],
+    '没给 tags 的调用方也拿到 []（字段恒存在）',
+  );
+});
+
+test('K82 详情的两层兜底：skill 上没有就用响应的顶层，空数组不再兜底', () => {
+  const fromTop = fromSkillhubDetail({
+    skill: { slug: 'dev-god' },
+    subCategories: [{ key: 'a', name: '代码生成' }],
+  });
+  assert.deepEqual(fromTop.tags, ['代码生成'], 'skill.subCategories 缺失时回落 raw.subCategories');
+
+  const emptyStaysEmpty = fromSkillhubDetail({
+    skill: { slug: 'dev-god', subCategories: [] },
+    subCategories: [{ key: 'a', name: '不该被用到' }],
+  });
+  assert.deepEqual(emptyStaysEmpty.tags, [], '空数组不是「缺失」：不再回落顶层（?? 的语义）');
+
+  const clawNative = fromClawhubSearchItem({
+    slug: 'buzzmark',
+    ownerHandle: 'ivangdavila',
+    native: { skill: { topics: ['MCP', 'Marketing'] } },
+    topics: ['ignored'],
+  });
+  assert.deepEqual(clawNative.tags, ['mcp', 'marketing'], '搜索结果优先取 native.skill.topics，再转小写');
+
+  const clawTop = fromClawhubSearchItem({ slug: 'y', ownerHandle: 'ake', topics: ['MCP'] });
+  assert.deepEqual(clawTop.tags, ['mcp'], '没有 native 时回落 raw.topics');
 });

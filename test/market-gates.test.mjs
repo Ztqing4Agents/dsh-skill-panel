@@ -4,7 +4,7 @@
  *
  * Contracts: AGENTS.md rules 2 / 4 / 9 / 13 (no CJK in sources, no host hash class
  * names, click affordance boundaries, the browser never calls an upstream), and
- * docs/contracts/acceptance.md 附录 D.5 numbering; case ids K40, K41, K81.
+ * docs/contracts/acceptance.md 附录 D.5 numbering; case ids K40, K41, K81, K83, K84, K85.
  *
  * The three scripts are executed as subprocesses, exactly as `npm run check` runs
  * them: importing them would skip their `process.exitCode` handling, which is the
@@ -13,6 +13,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -132,7 +133,17 @@ test('K40 市场刻度逐条落地：网格 280/12、卡片竖排 14、cardOpen 
 
   const end = ruleOf('.skc_marketCardEnd');
   assert.match(end, /z-index: 1/, '动作位浮在可点层之上（不可省）');
-  assert.match(end, /align-self: flex-end/, '动作位靠右下（新刻度 ③）');
+  assert.equal(/align-self/.test(end), false, 'U5 起动作位坐在头部行里，不再自己贴边（新刻度 ③ 作废）');
+  const head = ruleOf('.skc_marketHead');
+  assert.match(head, /align-items: center/, '头部三件垂直居中（与已安装行同配方）');
+  assert.match(head, /gap: 12px/, '头部间距 12px');
+  assert.match(head, /display: flex/, '头部是一行 flex');
+  assert.equal(/z-index/.test(head), false, '头部不带 z-index（只有动作位浮起）');
+  const body = ruleOf('.skc_marketBody');
+  assert.match(body, /flex-direction: column/, '正文竖排');
+  assert.match(body, /gap: 6px/, '正文三块共用 6px 节奏（新刻度 ⑪）');
+  assert.match(ruleOf('.skc_marketMeta'), /white-space: nowrap/, '作者行单行（换行会让头部高度抖动）');
+  assert.match(ruleOf('.skc_marketMeta'), /text-overflow: ellipsis/, '作者行超出省略');
 
   // U2: the figures row and the two new seats are new ticks of the same table.
   const stats = ruleOf('.skc_marketStats');
@@ -143,16 +154,19 @@ test('K40 市场刻度逐条落地：网格 280/12、卡片竖排 14、cardOpen 
   assert.match(ruleOf('.skc_marketStat > svg'), /width: 13px; height: 13px/, '字形 13px');
   assert.match(ruleOf('.skc_marketSourceMark'), /width: 16px; height: 16px/, '来源图形 16×16（新刻度 ⑦）');
   assert.match(ruleOf('.skc_marketSourceMark'), /border-radius: var\(--dsw-radius-sm\)/, '来源图形用 radius-sm');
-  const favorite = ruleOf('.skc_marketFavorite');
-  assert.match(favorite, /z-index: 2/, '收藏按钮浮在安装位之上（新刻度 ⑧）');
-  assert.match(favorite, /width: 22px; height: 22px/, '命中区 22×22');
-  assert.match(favorite, /margin-left: auto/, '右对齐（贴在标题行末尾）');
-  assert.match(ruleOf('.skc_marketFavoriteOn'), /state-business-primary/, '已收藏用 business primary');
-  assert.match(ruleOf('.skc_marketFavorite > svg'), /width: 16px; height: 16px/, '书签 16px');
   assert.match(ruleOf('.skc_marketSkeletonStat'), /width: 56px; height: 12px/, '骨架三段 56×12（新刻度 ⑨）');
   assert.match(ruleOf('.skc_marketSkeletonStat'), /border-radius: var\(--dsw-radius-xs\)/, '骨架三段用 radius-xs');
+  assert.match(ruleOf('.skc_marketSkeletonTag'), /width: 48px; height: 19px/, '骨架标签与真件同盒 48×19（新刻度 ⑬）');
   assert.match(ruleOf('.skc_marketDesc'), /-webkit-line-clamp: 2/, '描述两行（新刻度 ⑩）');
-  assert.match(ruleOf('.skc_marketCardOpen'), /flex: 1; min-width: 0/, '标题可收缩（否则挤掉来源图与收藏按钮）');
+  // The title keeps its own width (grow 0) and still shrinks (shrink 1 + min-width:0), so
+  // the source mark stays right after it and a long title ellipsises instead of wrapping.
+  const openRule = ruleOf('.skc_marketCardOpen');
+  assert.match(openRule, /flex: 0 1 auto/, '标题按内容宽、可收缩（U5 后的写法）');
+  assert.match(openRule, /min-width: 0/, '标题可以缩到比内容窄（省略号的前提）');
+  const titleRow = ruleOf('.skc_marketTitleRow');
+  assert.match(titleRow, /align-self: flex-start/, '标题行不被 column 父级拉满（品牌图紧跟标题）');
+  assert.match(titleRow, /max-width: 100%/, '标题行仍关在卡片内');
+  assert.match(titleRow, /flex-wrap: nowrap/, '标题行不换行（换行容器会先把长标题换行、把品牌图挤到第二行）');
 
   assert.match(ruleOf('.skc_marketDialog'), /min\(480px, 100vw - 32px\)/, '确认弹窗宽度用 min()');
   assert.match(ruleOf('.skc_marketSkeletonChip'), /width: 64px; height: 26px/, 'chip 骨架 64×26');
@@ -279,40 +293,173 @@ test('K41 点击边界按页签划：市场页有 cardOpen 手段，已安装行
   assert.equal(/role="button"/.test(row), false, '已安装行仍然不是按钮');
 });
 
-test('K81 点击层级：三层显式共存，卡片里只有两个动作位', async () => {
+test('K81 点击层级：一个动作位，其余都在点击层之下', async () => {
   const css = await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8');
   const ruleOf = (selector) => {
     const index = css.indexOf(`${selector}{`);
     return index === -1 ? '' : css.slice(index, css.indexOf('}', index) + 1);
   };
 
-  // Layer 0: the card-wide click target. Layer 1: the install seat. Layer 2: the bookmark.
+  // Layer 0: the card-wide click target. Layer 1: the one action seat, now in the head.
   assert.match(ruleOf('.skc_marketCardOpen::after'), /inset: 0/, '点击层铺满整卡');
-  assert.match(ruleOf('.skc_marketCardEnd'), /z-index: 1/, '安装位在第 1 层');
-  assert.match(ruleOf('.skc_marketFavorite'), /z-index: 2/, '收藏位在第 2 层');
+  assert.match(ruleOf('.skc_marketCardEnd'), /z-index: 1/, '安装位是唯一的浮起层');
+  assert.equal(ruleOf('.skc_marketCardEnd').includes('align-self'), false, '动作位不再自己贴边（它在头部行里）');
+  assert.equal(css.includes('.skc_marketFavorite'), false, '收藏控件整块从样式表里消失（U5）');
+  const marketBlock = css.slice(css.indexOf('/* market: toolbar and chips'));
+  assert.equal(marketBlock.includes('z-index: 2'), false, '市场块里没有第 2 层（唯一的动作位是安装；页头的 z-index:2 与它无关）');
   assert.match(ruleOf('.skc_marketCard'), /position: relative/, '卡片是定位参照（但自己不建 stacking context）');
   assert.equal(/z-index/.test(ruleOf('.skc_marketCard')), false, '卡片不声明 z-index（否则动作位的层级被关进新上下文）');
+  // Tap targets that must fall through to the click layer.
+  for (const selector of ['.skc_marketHead', '.skc_marketBody', '.skc_marketTags', '.skc_marketStats']) {
+    assert.equal(/z-index/.test(ruleOf(selector)), false, `${selector} 不带 z-index（点它 = 点空白 = 进详情）`);
+    assert.equal(/position: absolute/.test(ruleOf(selector)), false, `${selector} 不脱离文档流`);
+  }
 
   const card = await readFile(join(ROOT, 'src', 'client', 'market-card.jsx'), 'utf8');
   const code = card.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   assert.equal(/<a[\s>]/.test(code), false, '卡片里没有 <a>（不是链接）');
   assert.equal(/role="button"/.test(code), false, '卡片本身不是按钮');
   assert.equal(/stopPropagation/.test(code), false, '不用 JS 拦冒泡代替层级');
-  // The install seat is a primitives `Button` (it renders its own <button>), so the source
-  // holds two literal <button> tags; the rendered card has three controls, which K38 pins.
   const literalButtons = [...code.matchAll(/<button/g)].length;
-  assert.equal(literalButtons, 2, `源码里恰好两个字面 <button>：标题锚点 + 收藏（实际 ${literalButtons}）`);
+  assert.equal(literalButtons, 1, `源码里只有一个字面 <button>：标题锚点（实际 ${literalButtons}）`);
   const primitiveButtons = [...code.matchAll(/<Button/g)].length;
-  assert.equal(
-    primitiveButtons,
-    2,
-    '安装位是唯一的 primitives Button，四态里两个分支各一处（第三个控件由它渲染，不是第三个动作位）',
-  );
-  // The <li> must stay inert: no handler, no tabindex, no role.
+  assert.equal(primitiveButtons, 2, '安装位是唯一的 primitives Button（四态里两个分支各一处）');
   const listItem = /<li className=\{cn\('marketCard'\)\}([^>]*)>/.exec(code);
   assert.ok(listItem !== null, '找得到卡片的 <li>');
   assert.equal(/onClick|tabIndex|role=/.test(listItem[1]), false, '<li> 上没有 onClick / tabIndex / role');
-  // The figures row must not carry a z-index either: tapping a number opens the detail.
-  assert.match(ruleOf('.skc_marketStats'), /display: grid/, '三段那一行是网格');
-  assert.equal(/z-index/.test(ruleOf('.skc_marketStats')), false, '三段那一行没有 z-index（落在点击层之下）');
+});
+
+test('K83 标签 chip 的刻度逐字落地（描边、无颜色字面量、可省略）', async () => {
+  const css = await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8');
+  const ruleOf = (selector) => {
+    const index = css.indexOf(`${selector}{`);
+    return index === -1 ? '' : css.slice(index, css.indexOf('}', index) + 1);
+  };
+  const list = ruleOf('.skc_marketTags');
+  assert.match(list, /flex-wrap: wrap/, '标签行允许折行（三枚也可能超宽）');
+  assert.match(list, /gap: 6px/, 'chip 间距 6px');
+  assert.match(list, /list-style: none/, '标签行是 ul，去掉项目符号');
+  const tag = ruleOf('.skc_marketTag');
+  assert.match(tag, /border: \.5px solid var\(--dsw-alias-border-l2\)/, '描边 chip，且只用宿主令牌');
+  assert.match(tag, /border-radius: var\(--dsw-radius-sm\)/, '圆角 radius-sm');
+  assert.match(tag, /padding: 1px 6px/, '内边距 1×6（19px 高）');
+  assert.match(tag, /font-size: 11px; line-height: 16px/, '11/16 一档小字');
+  assert.match(tag, /white-space: nowrap/, '单枚不折行');
+  assert.match(tag, /text-overflow: ellipsis/, '超长单枚省略');
+  assert.match(tag, /max-width: 100%/, '单枚不得宽过卡片');
+  const marketBlock = css.slice(css.indexOf('/* market: toolbar and chips'));
+  const literals = [...marketBlock.matchAll(/#[0-9a-fA-F]{3,8}\b|rgba?\(/g)].map((m) => m[0]);
+  assert.deepEqual(literals, [], `市场块仍然零颜色字面量（发现：${literals.join(', ')}）`);
+});
+
+test('K85 客户端收藏写侧已撤、后端一条未删（负向门禁）', async () => {
+  const clientDir = join(ROOT, 'src', 'client');
+  const names = (await readdir(clientDir)).filter((name) => /\.(js|jsx)$/.test(name));
+  const sources = new Map();
+  for (const name of names) sources.set(name, await readFile(join(clientDir, name), 'utf8'));
+  const joined = [...sources.values()].join('\n');
+
+  // Gone: the whole write path, from the store actions to the button's own CSS class.
+  for (const gone of ['marketFavoriteToggle', 'marketFavoriteOk', 'marketFavoriteFail', 'favorite-failed', 'marketFavoriteOn']) {
+    assert.equal(joined.includes(gone), false, `客户端不再有 ${gone}`);
+  }
+  assert.equal(/marketFavorite\s*\(/.test(sources.get('api.js')), false, 'api.marketFavorite 已删');
+  assert.equal(/favoritesGen/.test(joined), false, '不做乐观值就不需要防乱序代次');
+  assert.equal((await readFile(join(clientDir, 'market-marks.jsx'), 'utf8')).includes('BookmarkMark'), false, '书签字形已删（三段那枚小书签是 StatMark 的另一支）');
+
+  // Kept on the read side: bootstrap still delivers, the panel still stores.
+  assert.equal(joined.includes('favoritesOk'), true, '读侧仍在：favoritesOk');
+  for (const [file, expected] of [['state.js', 1], ['market-panel.jsx', 1]]) {
+    const hits = sources.get(file).split('marketFavoritesLoaded').length - 1;
+    assert.equal(hits, expected, `${file} 里 marketFavoritesLoaded 出现 ${expected} 次（读侧唯一入口）`);
+  }
+  assert.match(sources.get('state.js'), /favorites: \{\}/, 'initialMarket 仍留 favorites');
+  assert.match(sources.get('state.js'), /favoritesOk: true/, 'initialMarket 仍留 favoritesOk');
+
+  // Kept on the Host: store, route, bootstrap keys, both error copies.
+  assert.equal(existsSync(join(ROOT, 'lib', 'market', 'favorites.js')), true, 'lib/market/favorites.js 仍在');
+  const { ROUTES } = await import('../lib/routes.js');
+  assert.equal(ROUTES.marketFavorite, '/api/dsh-skill-center/market/favorite', '第 13 条路由仍在');
+  const routes = await readFile(join(ROOT, 'lib', 'routes.js'), 'utf8');
+  assert.match(routes, /favorites: bookmarks\.favorites/, 'bootstrap 仍下发 favorites');
+  assert.match(routes, /favoritesOk: bookmarks\.readable/, 'bootstrap 仍下发 favoritesOk');
+  for (const lang of ['zh', 'en']) {
+    const dict = JSON.parse(await readFile(join(ROOT, 'locale', `${lang}.json`), 'utf8'));
+    for (const code of ['E_FAVORITE_FULL', 'E_FAVORITE_IO']) {
+      assert.equal(typeof dict[`error.${code}`], 'string', `${lang} 仍有 error.${code}（路由仍会返回）`);
+    }
+  }
+  // And the four labels that belonged to the removed control are gone from both dictionaries.
+  for (const lang of ['zh', 'en']) {
+    const dict = JSON.parse(await readFile(join(ROOT, 'locale', `${lang}.json`), 'utf8'));
+    for (const key of ['market.favorite', 'market.unfavorite', 'market.favoriteTitle', 'market.unfavoriteTitle']) {
+      assert.equal(key in dict, false, `${lang} 不再有 ${key}`);
+    }
+  }
+});
+
+test('K81 包装层不得掉下点击层：头部/正文/标签/三段都没有 position，动作位必须自带 position', async () => {
+  // The click layer is one absolutely positioned `::after` owned by the title button. Any
+  // `position` on a sibling wrapper paints that wrapper in the positioned layer, i.e. above
+  // the layer - clicks on it would then land on a node with no handler ("looks clickable,
+  // does nothing"). `position: relative` is as fatal here as `position: absolute`.
+  const css = await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8');
+  const ruleOf = (selector) => {
+    const index = css.indexOf(`${selector}{`);
+    return index === -1 ? '' : css.slice(index, css.indexOf('}', index) + 1);
+  };
+
+  for (const selector of ['.skc_marketHead', '.skc_marketBody', '.skc_marketTags', '.skc_marketStats', '.skc_marketMeta']) {
+    assert.equal(/position\s*:/.test(ruleOf(selector)), false, `${selector} 不声明 position（否则它盖在点击层上面）`);
+  }
+  // The one seat must be positioned, or its z-index is inert and the button sits under
+  // the layer it is supposed to float above.
+  const end = ruleOf('.skc_marketCardEnd');
+  assert.match(end, /position: relative/, '动作位自己是定位元素（z-index 才有意义）');
+  assert.match(end, /z-index: 1/, '动作位在第 1 层');
+  assert.match(end, /flex: none/, '动作位不参与收缩（标题先缩）');
+
+  // nowrap is the flex default: the seat must not be pushed to a second line by state copy.
+  for (const selector of ['.skc_marketHead', '.skc_marketCardEnd']) {
+    assert.equal(/flex-wrap/.test(ruleOf(selector)), false, `${selector} 不写 flex-wrap（保持 nowrap）`);
+  }
+  // The title row is the exception that has to say it out loud: it *was* `wrap` once, and a
+  // wrapping row breaks on the flex base size before any shrinking, so the mark dropped to a
+  // second line on the two longest titles (row height 20px -> 44px on the real machine).
+  const titleRowRule = ruleOf('.skc_marketTitleRow');
+  assert.match(titleRowRule, /flex-wrap: nowrap/, '标题行显式 nowrap：品牌图永远留在第一行');
+  assert.equal(/flex-wrap:\s*wrap/.test(titleRowRule), false, '标题行不允许换行（含 wrap-reverse 一类）');
+  const main = ruleOf('.skc_marketMain');
+  assert.match(main, /flex: 1(?![\d])/, '两行块吃掉头部剩余宽度（唯一可收缩项）');
+  assert.match(main, /min-width: 0/, '两行块可以缩到比内容窄（否则标题的省略号不生效）');
+  const title = ruleOf('.skc_marketCardOpen');
+  const flexOf = (rule) => {
+    const value = /flex:\s*([^;]+);/.exec(rule);
+    return value === null ? [] : value[1].trim().split(/\s+/);
+  };
+  const titleFlex = flexOf(title);
+  assert.equal(titleFlex.length >= 2, true, `标题用 flex 简写（实际 ${titleFlex.join(' ')}）`);
+  assert.equal(titleFlex[0], '0', 'flex-grow 为 0：标题只占内容宽，品牌图不会被打到最右端');
+  assert.notEqual(titleFlex[1], '0', 'flex-shrink 不为 0：长标题必须让位给省略号');
+  assert.equal(titleFlex[2], 'auto', 'flex-basis 为 auto：标题按自身内容宽排版（`flex:0 1 100%` 会把块撑满）');
+  assert.match(title, /min-width: 0/, '标题可收缩成省略号（min-width:auto 会卡住内容宽）');
+  const titleRow = ruleOf('.skc_marketTitleRow');
+  assert.match(titleRow, /align-self: flex-start/, '标题行按内容宽排版（不被 column 父级拉满）');
+  assert.match(titleRow, /max-width: 100%/, '标题行不超过卡片内容宽');
+  assert.match(titleRow, /min-width: 0/, '标题行本身也可以被压窄（它在 column 的 main 里）');
+  assert.match(titleRow, /gap: 8px/, '标题与品牌图之间只有一个 8px 的 gap');
+});
+
+test('K85 客户端一行都不许提到收藏写入口：连 ROUTES 的字面量也不许出现', async () => {
+  const clientDir = join(ROOT, 'src', 'client');
+  const names = (await readdir(clientDir)).filter((name) => /\.(js|jsx)$/.test(name));
+  for (const name of names) {
+    const text = await readFile(join(clientDir, name), 'utf8');
+    assert.equal(text.includes('market/favorite'), false, `${name} 里没有 market/favorite 这条字面量（写侧已撤）`);
+    assert.equal(/marketFavorite\b/.test(text) && name !== 'state.js' && name !== 'market-panel.jsx', false,
+      `${name} 只有读侧的 marketFavoritesLoaded，没有 marketFavorite`);
+  }
+  const styles = await readFile(join(clientDir, 'styles.js'), 'utf8');
+  assert.equal(styles.includes('marketFavorite'), false, '样式表里没有收藏控件的任何类');
+  assert.equal(styles.includes('marketFavoriteOn'), false, '已收藏态的 -On 类也一并消失');
 });

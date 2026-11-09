@@ -241,32 +241,6 @@ export function MarketPanel({ store, api, t }) {
     store.actions.marketDetailClose();
   }, [store]);
 
-  /**
-   * Save or unsave one item: flip it locally first, then let the route's answer (or its
-   * failure) settle the set. The generation guards against two clicks racing - an answer
-   * to an earlier click never overwrites a later one.
-   * @param {object} item - the market item.
-   * @returns {Promise<void>}
-   */
-  const toggleFavorite = useCallback(async (item) => {
-    const id = marketKeyOf(item);
-    const gen = store.actions.marketFavoriteToggle(id);
-    const favorited = store.getSnapshot().market.favorites[id] === true;
-    try {
-      const data = await api.marketFavorite({
-        source: item.sourceId,
-        owner: item.owner,
-        slug: item.slug,
-        favorited,
-      });
-      store.actions.marketFavoriteOk(gen, data?.favorites ?? []);
-    } catch (error) {
-      store.actions.marketFavoriteFail(gen, t(reasonKeyOf(error?.code), {
-        reason: error?.message ?? '',
-      }));
-    }
-  }, [api, store, t]);
-
   /** Ask before installing: the dialog holds the request back. @param {object} item - the market item. @returns {void} */
   const askInstall = useCallback((item) => {
     store.actions.marketInstallConfirm(marketKeyOf(item));
@@ -370,7 +344,6 @@ export function MarketPanel({ store, api, t }) {
                   t={t}
                   onOpen={openDetail}
                   onInstall={askInstall}
-                  onToggleFavorite={toggleFavorite}
                 />
               ))}
               {market.page.status === 'loading' ? <MarketTailSkeleton /> : null}

@@ -116,6 +116,7 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 | `downloads` | 上游 | SkillHub `downloads`／ClawHub `stats.downloads`；缺失 `null` |
 | `saves` | 上游 | SkillHub `stars`（小整数，实测 37 / 99 / 158）；ClawHub 恒 `null`。**卡片把它显示成「收藏」**——这是上游的收藏数，与本地收藏（§7.7）不是一个东西；缺失 `null`，绝不补 `0`，上游真给 `0` 就显示 `0` |
 | `score` | 上游 | SkillHub `score`（0–100000 连续分，实测 `95757.41562195931`）；ClawHub 恒 `null`。**只作原料**：卡上的 4.0–5.0 是客户端 `ratingOf()` 的折算，Host 不解释、不格式化 |
+| `tags` | 上游 | **`string[]`，≤ 3 条、单条 ≤ 24 字符**；SkillHub 取 `subCategories[].name`（保留大小写），ClawHub 取 `topics` 前 3 并**转小写**；两源都不保证有 ⇒ **`[]`**（列表型字段的缺值是空数组，不是 `null`） |
 | `updatedAt` | 上游 | epoch 毫秒，**只用于排序，不上屏** |
 | `category` | 上游 | 仅 SkillHub 有；ClawHub 恒 `null` |
 | `packageKind` | 本地算 | 来自 `caps.package`，决定详情页「文件」从哪来 |
@@ -126,7 +127,7 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 
 **不变式（逐条可断言）**：
 
-1. 上表每个字段都存在（不出现 `undefined`）；上游没给的一律 `null`，`downloads`、`saves`、`score` 绝不补 `0`、`version` 绝不补 `'latest'`。
+1. 上表每个字段都存在（不出现 `undefined`）；上游没给的一律 `null`，`downloads`、`saves`、`score` 绝不补 `0`、`version` 绝不补 `'latest'`、**`tags` 是 `[]`（列表型字段的缺值是空数组，不是 `null`）**。
 2. `id` 全仓库唯一；同一 `id` 出现两次时保留第一次出现的那条。
 3. `overview` 不含 frontmatter 分隔行（`---`）与 `name:` 之类的头字段。
 4. `files` 里 `path` 一律通过 `isSafeRelativePath`；`path` 与 `size` 是详情页唯一需要的两项。
@@ -161,7 +162,7 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 
 **读侧只有一处**：`market/bootstrap` 的 `favorites` 与 `favoritesOk`。**不新增 GET**——收藏是全局集合，而 `bootstrap` 正是「全局一次」的那条，同一往返拿齐、首帧书签就对；新开一条只读端点，等于为「bootstrap 挂了还能读收藏」这一个代价多一份 `guard()` / 错误码 / 测试，却不减少任何一次往返。`bootstrap` 失败时书签态未知，由 #13 的权威回包自愈（点一下无论方向，响应里的 `favorites` 就是真值，且 `toggle` 幂等）。`bootstrap?refresh=1` **不清**收藏（收藏不是缓存）。
 
-**两条同名不同源**：卡片上的「收藏 N」是上游 `stars`（别人收藏了多少），你自己的书签由按钮的 `aria-pressed` 表达。界面**不合并、不互相修正**，按钮的 `aria-label` 与数字段的 `aria-label` 分别说清，否则「我收藏了它为什么显示 0」是一定的投诉。
+**两条同名不同源**：卡片上的「收藏 N」是上游 `stars`（别人收藏了多少），你自己的书签（**U5 起卡片上没有入口**，见 `docs/contracts/decisions.md` 附录 L；这份集合与写路由原样保留）。界面**不合并、不互相修正**，数字段的 `aria-label` 说清它是上游收藏数——否则「我收藏了它为什么显示 0」是一定的投诉。
 
 **降级 / 上限 / 幂等 / 并发**：文件**缺失** ⇒ 空集 + `readable:true`（全新安装没写过这个文件，**缺失 ≠ 损坏**，`favoritesOk` 的唯一语义是「书签可能丢了」）；**只有**解析失败或不可读（非 JSON、顶层非对象、`favorites` 非数组、EACCES/EISDIR…）才 `readable:false`，此时 `bootstrap` 照常 `200`（`favoritesOk:false`），**绝不让市场页失败**；读侧逐条丢弃「不是 `sourceId:owner:slug` 三元组或超过 200 字符」的条目与重复项，手改坏了只丢坏行；上限 **500**，满时新增 `409 E_FAVORITE_FULL`，取消永远允许；与现状一致的写入不落盘（幂等）；写盘复用 `store.js` 的 `writeAtomic`（临时文件 + fsync + rename，临时名带 `favorites` 前缀），进程内一条 Promise 链把读-改-写串行化。跨进程并发不处理：与 `install.js` 一样按「本机单宿主」设计。路由细节见 `docs/contracts/routes.md` §3.7.6。
 
@@ -181,13 +182,13 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 | `.skc_marketNotice` | `border-radius:var(--dsw-radius-md); background:var(--dsw-alias-state-warn-tertiary); align-items:flex-start; gap:8px; margin:0; padding:10px 12px; font-size:12px; line-height:18px; display:flex` | `.notice` |
 | `.skc_marketGrid` | `display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px; margin:0; padding:0; list-style:none` | **新刻度** |
 | `.skc_marketCard` | `border-radius:var(--dsw-radius-xl); align-items:stretch; gap:14px; padding:14px; display:flex; flex-direction:column; position:relative; min-width:0` + hover `background:var(--dsw-alias-interactive-bg-hover)` | `.card`（**无边框**）；column 下必须 `stretch`——`flex-start` 会让骨架条形段与描述收缩包裹 |
-| `.skc_marketMain` / `TitleRow` | `flex-direction:column; flex:1; gap:2px; min-width:0; display:flex` / `flex-wrap:wrap; align-items:center; gap:8px; min-width:0; display:flex` | `.main` / `.titleRow` |
-| `.skc_marketCardOpen` | `max-width:100%; color:inherit; font:inherit; text-align:left; cursor:pointer; text-overflow:ellipsis; white-space:nowrap; background:0 0; border:0; padding:0; flex:1; min-width:0; font-size:14px; font-weight:500; line-height:20px; overflow:hidden` | `.cardOpen`。`flex:1; min-width:0` 让标题**收缩**成省略号，否则长标题把来源图标与收藏按钮挤到下一行（不加 `min-width:0` 时 `min-width:auto` = 文本整宽） |
+| `.skc_marketMain` / `TitleRow` | `flex-direction:column; flex:1; gap:2px; min-width:0; display:flex` / `flex-wrap:nowrap; align-items:center; gap:8px; min-width:0; align-self:flex-start; max-width:100%; display:flex` | `.main` / `.titleRow`。`align-self:flex-start` 让标题行按**内容宽**排版（不被 column 父级拉满），所以来源品牌图紧跟标题、只隔一个 8px 的 `gap`；`max-width:100%` 把长标题关在卡片内。**`flex-wrap:nowrap` 不可省**：换行容器按 flex base size 先分行、收缩只在同一行内生效，长标题会先把品牌图挤到第二行（实测两张卡：行高 20 → 44px）而不是自己省略；这一行只有「标题 + 品牌图」两个子项，永远不需要换行 |
+| `.skc_marketCardOpen` | `max-width:100%; color:inherit; font:inherit; text-align:left; cursor:pointer; text-overflow:ellipsis; white-space:nowrap; background:0 0; border:0; padding:0; flex:0 1 auto; min-width:0; font-size:14px; font-weight:500; line-height:20px; overflow:hidden` | `.cardOpen`。`flex:0 1 auto` = **grow 0 / shrink 1**：标题只占自己的内容宽（品牌图因此紧跟），长标题靠 `shrink:1` + `min-width:0` 缩成省略号，绝不把品牌图或安装位挤到第二行（`flex:1` 会把品牌图推到文本块最右端，与草图不符） |
 | `.skc_marketCardOpen::after` | `content:""; border-radius:var(--dsw-radius-xl); position:absolute; inset:0` | `.cardOpen:after`（整卡可点的唯一手段） |
 | `.skc_marketCardOpen:focus-visible` | `outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset:2px` | `.cardOpen:focus-visible` |
 | `.skc_marketDesc` | `color:var(--dsw-alias-label-tertiary); -webkit-line-clamp:2; -webkit-box-orient:vertical; display:-webkit-box; overflow:hidden; font-size:13px; line-height:18px` | `.description` |
-| `.skc_marketMeta` / `FileSize` | `color:var(--dsw-alias-label-tertiary); margin:0; overflow-wrap:anywhere; font-size:12px; line-height:18px` | `.meta` |
-| `.skc_marketCardEnd` | `z-index:1; flex:none; align-self:flex-end; align-items:center; gap:8px; display:inline-flex; position:relative` | `.cardEnd`（`z-index:1` 让安装按钮浮在点击层之上，不可省；`align-self:flex-end` 让动作靠右下） |
+| `.skc_marketMeta` / `FileSize` | `color:var(--dsw-alias-label-tertiary); margin:0; text-overflow:ellipsis; white-space:nowrap; overflow:hidden; font-size:12px; line-height:18px` | `.meta`。作者行**单行省略**：`@owner/slug` 可到 129 字符，允许换行会让头部从 48px 长到 66px、卡片高度随 owner 长度抖动 |
+| `.skc_marketCardEnd` | `z-index:1; flex:none; align-items:center; gap:8px; display:inline-flex; position:relative` | `.cardEnd`（`z-index:1` 让安装按钮浮在点击层之上，**不可省**；U5 起它坐在**头部右侧**，原来的 `align-self:flex-end` 随底行一起作废） |
 | `.skc_marketEmpty` / `EmptyTitle` | `text-align:center; flex-direction:column; align-items:center; gap:8px; padding:64px 0; display:flex` / `margin:8px 0 0; font-size:14px; font-weight:500; line-height:20px` | `.empty` / `.emptyTitle` |
 | `.skc_marketError` / `Failure` / `More` | `color:var(--dsw-alias-state-error-primary); align-items:center; gap:6px; margin:0; font-size:13px; line-height:20px; display:inline-flex` / `align-items:center; gap:10px; display:flex` / `align-self:center` | `.error` / `.failure` / `.more` |
 | `.skc_marketDetail` / `Crumb` / `CrumbIcon` | `flex-direction:column; gap:16px; display:flex` / `color:var(--dsw-alias-label-tertiary); font:inherit; cursor:pointer; background:0 0; border:0; align-self:flex-start; align-items:center; gap:6px; padding:0; font-size:12.5px; display:inline-flex` / `transform:rotate(90deg)` | `.detail` / `.crumb` / `.crumbIcon` |
@@ -201,12 +202,15 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 | `.skc_marketSkeletonChip` | `border-radius:var(--dsw-radius-lg); width:64px; height:26px` | 分类 chips 占位（对齐 `Button size="sm"` 的静态尺寸） |
 | `.skc_marketSkeletonAction` | `border-radius:var(--dsw-radius-md); width:64px; height:24px` | 安装按钮占位（同上） |
 | `.skc_marketToastHint` | `color:var(--dsw-alias-label-secondary); overflow-wrap:anywhere; margin-top:2px; font-size:12px; line-height:18px; display:block` | 安装 toast 的副行（安装路径），12/18 secondary |
-| `.skc_marketStats` / `.skc_marketStat` / `StatValue` | `grid-template-columns:repeat(3, minmax(0, 72px)); gap:8px; justify-content:start; margin:2px 0 0; color:var(--dsw-alias-label-tertiary); font-variant-numeric:tabular-nums; font-size:12px; line-height:18px; display:grid` / `align-items:center; gap:3px; min-width:0; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; display:inline-flex`（`> svg` 13×13、`opacity:.75`）/ `min-width:0; overflow:hidden; text-overflow:ellipsis` | **新刻度** ⑦（见下） |
+| `.skc_marketStats` / `.skc_marketStat` / `StatValue` | **顺序是 评分 · 下载 · 收藏**（`MARKET_STAT_SLOTS`；三格轨道与 `tabular-nums` 与顺序无关，对齐照旧）`grid-template-columns:repeat(3, minmax(0, 72px)); gap:8px; justify-content:start; margin:0; color:var(--dsw-alias-label-tertiary); font-variant-numeric:tabular-nums; font-size:12px; line-height:18px; display:grid` / `align-items:center; gap:3px; min-width:0; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; display:inline-flex`（`> svg` 13×13、`opacity:.75`）/ `min-width:0; overflow:hidden; text-overflow:ellipsis` | **新刻度** ⑦（见下） |
 | `.skc_marketSourceMark` | `border-radius:var(--dsw-radius-sm); width:16px; height:16px; flex:none; display:block` | **新刻度** ⑧（见下） |
-| `.skc_marketFavorite` / `FavoriteOn` | `z-index:2; margin-left:auto; width:22px; height:22px; flex:none; position:relative; border:0; border-radius:var(--dsw-radius-sm); padding:0; background:0 0; color:var(--dsw-alias-label-tertiary); cursor:pointer; align-items:center; justify-content:center; display:inline-flex` + hover `color:label-primary` / `background:interactive-bg-hover` + `:focus-visible` 焦点环同 `.skc_marketCrumb`（`outline-offset:2px`）/ `color:var(--dsw-alias-state-business-primary)`（`> svg` 16×16） | **新刻度** ⑨（见下） |
+| `.skc_marketHead` | `align-items:center; gap:12px; min-width:0; display:flex` | **新刻度** ③（就地改写，见下：安装位坐在头部右侧；`nowrap` 是 flex 默认） |
+| `.skc_marketBody` | `flex-direction:column; gap:6px; min-width:0; display:flex` | **新刻度** ⑪（描述/标签/三段共用 6px 节奏；头部到正文的 14px 由卡片自身的 `gap` 给） |
 | `.skc_marketSkeletonStat` | `border-radius:var(--dsw-radius-xs); width:56px; height:12px`；底色复用既有 `.skc_skeletonFill` | **新刻度** ⑩（见下） |
+| `.skc_marketTags` / `Tag` | `flex-wrap:wrap; gap:6px; min-width:0; margin:0; padding:0; display:flex; list-style:none` / `border:.5px solid var(--dsw-alias-border-l2); border-radius:var(--dsw-radius-sm); color:var(--dsw-alias-label-tertiary); max-width:100%; padding:1px 6px; font-size:11px; line-height:16px; white-space:nowrap; text-overflow:ellipsis; overflow:hidden` | **新刻度** ⑫（19px 描边 chip；与 `.skc_roTag` 同档字号、不同材质） |
+| `.skc_marketSkeletonTag` | `border-radius:var(--dsw-radius-sm); width:48px; height:19px`；底色复用既有 `.skc_skeletonFill` | **新刻度** ⑬（与真件同盒 48×19） |
 
-**新刻度共十条**（宿主没有对应规则体，逐条给理由；其余全部是宿主规则体转写）：① 网格 `minmax(280px, 1fr)` + `gap:12px`（960px 内容宽正好 3 列、<600px 一行 1 列）；② 卡片改竖向排布、`padding` 8 → 14、`align-items:stretch`（column 下 `flex-start` 会让骨架条形段与描述收缩包裹）；③ 安装按钮行 `align-self:flex-end`（动作靠右下，而不是被拉伸成整行）；④ 骨架占位 `SkeletonChip` 64×26；⑤ 骨架占位 `SkeletonAction` 64×24（④⑤ 都对齐 `Button size="sm"`，骨架与真件同宽同高）；⑥ 安装 toast 副行 `ToastHint` 12/18 secondary（与元信息行同刻度）；⑦ 底行三段 `marketStats`：三格轨道恒为 `repeat(3, minmax(0,72px))`、左对齐、`tabular-nums`，缺值的格留空——**三格固定宽度是三段在任何两张卡上落到同一 x 的唯一办法**，`tabular-nums` 让 `1` 与 `8` 同宽；⑧`.skc_marketSourceMark` 16×16 品牌位图 + `radius-sm`（与标题 14/20 同一视觉重量，再大就抢标题）；⑨`.skc_marketFavorite` 22×22 命中区 + `z-index:2` + `-On` 用 `state-business-primary` + 焦点环同 `.skc_marketCrumb`（命中区大于图标，因为它是必须可点的控件）；⑩`.skc_marketSkeletonStat` 56×12 + `radius-xs`（与真件三段同节奏）。三条骨架/副行/图形类只在市场页出现，**不碰已安装页签的任何既有类**；`.skc_marketDesc` 由 1 行改 2 行是**改值**（见上表那一行），不算新刻度。
+**新刻度共十二条在用**（编号只增不复用；**⑨ 已退役**——U5 按用户决定撤掉了卡片上的收藏按钮，见 `docs/contracts/decisions.md` 附录 L）：① 网格 `minmax(280px, 1fr)` + `gap:12px`（960px 内容宽正好 3 列、<600px 一行 1 列）；② 卡片竖向排布、`padding` 8 → 14、`align-items:stretch`（column 下 `flex-start` 会让骨架条形段与描述收缩包裹）；**③ 头部行 `.skc_marketHead`**（`align-items:center; gap:12px`，`nowrap` 是 flex 默认——安装四态文案变宽只让标题收缩成省略号，动作位永不换行；原「动作靠右下」随底行作废）；④ 骨架占位 `SkeletonChip` 64×26；⑤ 骨架占位 `SkeletonAction` 64×24（④⑤ 都对齐 `Button size="sm"`，骨架与真件同宽同高）；⑥ 安装 toast 副行 `ToastHint` 12/18 secondary（与元信息行同刻度）；⑦ 三段 `marketStats`：三格轨道恒为 `repeat(3, minmax(0,72px))`、左对齐、`tabular-nums`、**槽位顺序 评分·下载·收藏**，缺值的格留空——**三格固定宽度是三段在任何两张卡上落到同一 x 的唯一办法**，`tabular-nums` 让 `1` 与 `8` 同宽；⑧`.skc_marketSourceMark` 16×16 品牌位图 + `radius-sm`（与标题 14/20 同一视觉重量，再大就抢标题）；⑩`.skc_marketSkeletonStat` 56×12 + `radius-xs`（与真件三段同节奏）；**⑪** `.skc_marketBody` 6px 节奏；**⑫** `.skc_marketTags`/`Tag` 19px 描边 chip（`border-l2` 令牌，零色值；单条 `max-width:100%` + 省略，长 topic 撑不宽卡片）；**⑬** `.skc_marketSkeletonTag` 48×19（与真件同盒）。骨架/副行/图形/标签类只在市场页出现，**不碰已安装页签的任何既有类**；`.skc_marketDesc` 由 1 行改 2 行是**改值**（见上表那一行），不算新刻度。
 
 三条不可协商的纪律：
 

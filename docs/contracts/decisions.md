@@ -142,6 +142,20 @@
 
 ---
 
+## 附录 L 市场卡片重排（U5，2026-11-09）
+
+> 用户看完 U2 真机截图说「和我想的不一样」，给了一张 646×360 的草图；用户原话「具体的间距等情况应该是你来定的，这个只是我画的一个草图」。逐行结构见 `.agents/work/wip/U5-card-relayout.md`。
+
+| # | 待定说法 | 实际（证据 / 算式） | 处理 |
+| --- | --- | --- | --- |
+| L-1 | 安装按钮放哪 | 草图画在头部右侧；U2 把它放在底行右下（新刻度 ③ 的来源） | **头部右侧**：`.skc_marketCardEnd` 整块搬进 `.skc_marketHead`，**类名与 `z-index:1` 都不动**（改名要动 7 处，且会丢掉「浮在点击层之上」的唯一 grep 锚点），只删 `align-self:flex-end`。头部 `align-items:center`（与已安装行同配方）+ `nowrap`（flex 默认）：安装四态 ≈52/64/78/52px，变宽只让标题收缩成省略号。标题行 `align-self:flex-start` + `max-width:100%` + **`flex-wrap:nowrap`**、标题 `flex:0 1 auto` + `min-width:0`：品牌图**紧跟标题**（只隔 8px gap），长标题自己省略——`flex:1` 会把品牌图推到文本块最右端，与草图不符。`wrap` 同样不行：换行容器先按 flex base size 分行，收缩只在行内生效，超长标题会先把品牌图挤到**第二行**（实测 `skillhub:tencent-adm:tencent-docs` 与 `skillhub:beatra-ai:beatra` 两张卡：标题行高 20px → 44px、标题占满 162px），改 `nowrap` 后长标题在行内省略、品牌图留在第一行 |
+| L-2 | 三段顺序 | 草图 `★ 5.0 · ↓ 1135万 · 🔖 101` | `MARKET_STAT_SLOTS` 与 `statSegments` 字面量都改成 `rating·downloads·saves`；**槽位仍恒三格**，所以对齐（x 逐格相等）与「缺段留空」都不受影响；ClawHub 只有下载 ⇒ 渲染成「空 / 下载 / 空」 |
+| L-3 | 标签从哪来、要不要转小写 | SkillHub `subCategories: [{key, name}]`（`dev-god` = 代码生成 / Bug 修复 / 后端开发，实测正好三枚）；ClawHub `topics: string[]`（`buzzmark` = social-media / content-scheduling / linkedin / instagram / mcp，混着 `Marketing`、`Email`）。**ClawHub 的 `tags` 是 `{latest: version}`，不是标签** | SkillHub 取 `.name` 且**保留大小写**；ClawHub 取前 3 并**转小写**（同源内 kebab 与 Title Case 混排，统一才像一套；不做 title-case，否则 `mcp`→`Mcp`）。≤3 条、单条 ≤24 字符、同值去重、缺 = `[]` |
+| L-4 | 空标签行的卡片高度 | 同屏不混源；SkillHub 少数条目 `subCategories` 为空 | **空数组整行不渲染**：占位会让「有标签」与「没标签」无法区分，且是谎报；差的一行由 grid 的 `stretch` 补成底部空白，验收① 管的是 x 不是 y |
+| L-5 | 卡片上的收藏开关 | 用户决定：「本版不要收藏开关，只显示上游收藏数」 | 拆**客户端写侧**（卡片按钮 / `marketFavoriteToggle·Ok·Fail` / `api.marketFavorite` / toast 的 `favorite-failed` / 4 个 `market.favorite*` 键 / `BookmarkMark`）；**后端一条不删**（store / 路由 / `bootstrap` 两键 / 两个 `error.E_FAVORITE_*` 文案），**读侧 `favorites` + `marketFavoritesLoaded` 也留**（M8 接回 UI 时零 Host 改动）。K80 退役、号不复用 |
+
+---
+
 ## 验收
 
 每条登记都必须能指出来源（PRD 原文 / 宿主读数 / 队长决策 / 测试用例），没有一条是「因为我觉得」。登记与实现不符时，先改实现或先改登记，不允许两边并存。

@@ -1,6 +1,6 @@
 /**
  * The market card's marks: the two sources' own brand images, and the three glyphs the
- * figures and the bookmark toggle are drawn with.
+ * card's figures are drawn with.
  *
  * The two images are bitmaps on purpose: the user asked for the sources' own icons, and a
  * hand-traced single-colour path would be a lookalike rather than the mark. They travel as
@@ -13,8 +13,8 @@
  * The three glyphs are drawn here rather than taken from the primitives because the
  * primitives ship no star and no bookmark (only a "like" pair), and a single-colour path
  * keeps their weight consistent with each other. Their size is the stylesheet's business
- * (`.skc_marketStat > svg` / `.skc_marketFavorite > svg`), so no component here carries a
- * width, a height or a colour: the stroke and fill are always `currentColor`.
+ * (`.skc_marketStat > svg`), so no component here carries a width, a height or a colour:
+ * the stroke and fill are always `currentColor`.
  */
 import { cn } from './styles.js';
 
@@ -96,23 +96,4 @@ export function StatMark({ slot }) {
     );
   }
   return null;
-}
-
-/**
- * The bookmark on the save button: outlined when not saved, solid when saved.
- * @param {{filled?: boolean}} props - whether this card is saved.
- * @returns {import('react').ReactElement} the glyph.
- */
-export function BookmarkMark({ filled = false }) {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path
-        d="M4.5 2.5h7v11L8 10.6 4.5 13.5z"
-        fill={filled ? 'currentColor' : 'none'}
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
 }
