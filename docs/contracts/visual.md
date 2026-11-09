@@ -151,9 +151,18 @@
 .skc_cards{ flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; display: flex }
 .skc_card{ border-radius: var(--dsw-radius-xl); min-width: 0; margin: 0 -8px }
 .skc_cardHead{ align-items: center; gap: 14px; padding: 8px; display: flex }
+/* .cardIcon —— 容器逐字回归 [PM-CSS]（边框、圆角、尺寸、盒模型都是宿主的）；
+   `background` / `background-clip` / `color` / `font-*` 是本插件新增的**内容层**：
+   底与字色由行内 `--skc-avatar-bg` / `--skc-avatar-ink` 传入（见 A.5 下方注），
+   两个 fallback 供骨架态与缺值兜底。`background-clip: padding-box` 不可省：
+   宿主边框是半透明的（`.5px` `border-l3`），不裁到 padding box 就会被粉彩底盖掉 */
 .skc_cardIcon{
+  box-sizing: border-box;
   border: .5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-lg);
-  width: 48px; height: 48px; color: var(--dsw-alias-label-secondary); flex: none;
+  width: 48px; height: 48px; flex: none;
+  background: var(--skc-avatar-bg, transparent); background-clip: padding-box;
+  color: var(--skc-avatar-ink, var(--dsw-alias-label-secondary));
+  font-size: 26px; font-weight: 500; line-height: 1; text-transform: uppercase; user-select: none;
   justify-content: center; align-items: center; display: inline-flex;
 }
 .skc_cardMain{ flex-direction: column; flex: 1; gap: 4px; min-width: 0; display: flex }
@@ -171,6 +180,14 @@
 ```
 
 > **不实现** `.cardLink:hover` / `:active`（宿主行是链接，我们的行不可点击，见附录 B-4）。行高恒 64px（48 图标 + 8×2 padding）。
+
+头像的两种颜色**不走样式表常量，走行内自定义属性**：`row.jsx` 渲染
+`<span class="skc_cardIcon" style="--skc-avatar-bg:…;--skc-avatar-ink:…">首字母</span>`，
+本规则用 `var()` 取值——同一套规则因此能画十二种颜色，且不新增类名、不动容器样式。
+色板（12 组 `{bg, ink}`，色相 30° 等分，字母对比度 4.95–6.62）与「技能名 → 色板下标」的
+FNV-1a 散列在 `src/client/avatar.js`；
+字母取名字里第一个 `\p{L}` 或 `\p{N}` 并大写（中文取首字），空名回落 `#`。
+头像纯装饰（`aria-hidden`），读屏只念名字；**色板不随主题变化**，深色模式沿用同一套粉彩底。
 
 ## A.6 开关位、软链只读标记、骨架
 
@@ -204,7 +221,12 @@
 .skc_skeletonHeading{ width: 48px }
 .skc_skeletonTitle{ width: min(144px, 60%) }
 .skc_skeletonDescription{ width: min(280px, 85%) }
-.skc_skeletonIcon{ border-color: #0000 }        /* 唯一保留的透明字面量，宿主原文 */
+/* 骨架图标：`border-color: #0000` 是宿主原文（唯一保留的透明字面量）。
+   `background` / `background-clip` 是本面板补的（[PM-CSS] 里没有）：`.skc_cardIcon`
+   现在画 `--skc-avatar-bg` 的粉彩色块，骨架态必须保持灰色、且灰底与头像一样裁到
+   padding box（宿主边框半透明）；这两条排在 `.skc_skeletonFill` 之后，规则顺序被改动
+   也漏不出彩色块 */
+.skc_skeletonIcon{ border-color: #0000; background: var(--dsw-alias-bg-skeleton); background-clip: padding-box }
 .skc_skeletonActions{ width: calc(36px + var(--skc-toggle-gap) + var(--skc-progress-size)); height: 20px }
 ```
 
@@ -279,7 +301,7 @@
 | 区标题 | 14px / 22px / 500 | `.skc_groupTitle` |
 | 列表 gap / 行外扩 | 2px / `margin:0 -8px` | `.skc_cards` / `.skc_card` |
 | 行内 gap / padding | 14px / 8px → 行高 64px | `.skc_cardHead` |
-| 图标 | 48×48，`.5px` `border-l3`，`radius-lg` | `.skc_cardIcon` |
+| 图标 | 外框 48×48、底色 47×47（`background-clip: padding-box`），`.5px` `border-l3`，`radius-lg`（16px）；26px/500 大写首字母居中；12 组粉彩色板按技能名散列（对比度 4.95–6.62） | `.skc_cardIcon`（色板与散列见 `src/client/avatar.js`） |
 | 名称 / 描述 | 14/20/500 · 13/18 tertiary 单行 | `.skc_cardTitle` / `.skc_cardDesc` |
 | 开关 | 36×20（`Switch`），左侧预留 14px + 8px | `.skc_bundleToggle` |
 | 软链标记 | 高 18px，padding 0 6px，11/18，`bg-layer-3`，图标 12px | `.skc_roTag` |
@@ -288,6 +310,8 @@
 | 错误行 | `StateDot state="error"` + 13/20 tertiary 文字 + `role="alert"` + outline 重试按钮 | `.skc_failure`（宿主结构） |
 | 行内失败原因 | 12px / 18px / error 色 / `pre-wrap` | `.skc_reason` |
 
-> **固定尺寸 + 边框的盒子必须显式写 `box-sizing: border-box`**（宿主那套 CSS 是逐条声明的，没有全局 reset）。
-> 漏写的后果：`.skc_cardIcon` 的 48×48 被 0.5px 边框撑到 50px，行高从 64px 变成 66px —— 2026-11-09 真机验收实测，
-> 修法是给该规则补一行 `box-sizing: border-box`（锚点：`src/client/styles.js` 的 `.skc_cardIcon`，回归见 `test/styles.test.mjs`）。
+> **固定尺寸的盒子必须显式写 `box-sizing: border-box`**（宿主那套 CSS 是逐条声明的，没有全局 reset）。
+> 2026-11-09 真机验收量到过 50×50 / 行高 66px：`.skc_cardIcon` 带 0.5px 边框、又是 content-box，盒子被撑大了 2px。
+> 该规则现在**逐字回归宿主原件**（边框回来、圆角用 `radius-lg`），所以 `box-sizing: border-box` 比以往更必要：
+> 少了它，48px 会立刻变成 50px、行高 66px
+> （锚点：`src/client/styles.js` 的 `.skc_cardIcon`，回归见 `test/styles.test.mjs`）。

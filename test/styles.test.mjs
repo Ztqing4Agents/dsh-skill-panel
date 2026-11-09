@@ -78,11 +78,132 @@ test('样式表覆盖设计里点名的每一个挂点类', () => {
   }
 });
 
+test('A.5 图标：容器逐字回归宿主，内容层是 26/500 大写首字母', () => {
+  const body = ruleBody(capturedCss(), '.skc_cardIcon');
+  assert.match(body, /(?:^|;)\s*box-sizing\s*:\s*border-box/, 'box-sizing 必须显式写（无全局 reset，边框会把图标撑成 50×50）');
+  assert.match(body, /(?:^|;)\s*width\s*:\s*48px/, '宽 48px');
+  assert.match(body, /(?:^|;)\s*height\s*:\s*48px/, '高 48px');
+  assert.match(
+    body,
+    /(?:^|;)\s*border\s*:\s*\.5px\s+solid\s+var\(--dsw-alias-border-l3\)/,
+    '边框是宿主原样：.5px solid border-l3（头像不改变图标容器的边框）',
+  );
+  assert.match(
+    body,
+    /(?:^|;)\s*border-radius\s*:\s*var\(--dsw-radius-lg\)/,
+    '圆角走宿主令牌 radius-lg（不硬编码 px，也不自造圆角）',
+  );
+  assert.equal(/border-radius\s*:\s*\d/.test(body), false, '圆角里没有硬编码的 px');
+  assert.match(
+    body,
+    /(?:^|;)\s*background\s*:\s*var\(--skc-avatar-bg,\s*transparent\)/,
+    '底色取行内变量 --skc-avatar-bg，带 transparent fallback（骨架复用同一个类）',
+  );
+  assert.match(
+    body,
+    /(?:^|;)\s*background-clip\s*:\s*padding-box/,
+    'background-clip: padding-box —— 宿主的 .5px 边框是半透明的，不裁到 padding box 就会被粉彩底盖掉',
+  );
+  assert.match(
+    body,
+    /(?:^|;)\s*color\s*:\s*var\(--skc-avatar-ink,\s*var\(--dsw-alias-label-secondary\)\)/,
+    '字母色取行内变量 --skc-avatar-ink，回落到宿主 secondary 色',
+  );
+  assert.match(body, /(?:^|;)\s*font-size\s*:\s*26px/, '字母 26px');
+  assert.match(body, /(?:^|;)\s*font-weight\s*:\s*500/, '字重 500');
+  assert.match(body, /(?:^|;)\s*text-transform\s*:\s*uppercase/, '大写');
+  assert.match(body, /(?:^|;)\s*line-height\s*:\s*1(?![\d.])/, '行高 1，字母在 48px 盒里垂直居中');
+  assert.match(body, /(?:^|;)\s*display\s*:\s*inline-flex/, '盒模型是 inline-flex');
+  assert.match(body, /(?:^|;)\s*justify-content\s*:\s*center/, '水平居中');
+  assert.match(body, /(?:^|;)\s*align-items\s*:\s*center/, '垂直居中');
+  assert.match(body, /(?:^|;)\s*flex\s*:\s*none/, '不参与伸缩');
+});
+
+test('A.5/A.9 48px 是「含边框」的外框：border-box + .5px 边框 + padding-box 底色，三者缺一就变样', () => {
+  const body = ruleBody(capturedCss(), '.skc_cardIcon');
+  assert.match(body, /(?:^|;)\s*box-sizing\s*:\s*border-box/, 'border-box：48px 含边框，否则 48 + .5×2 会撑成 49');
+  assert.match(body, /(?:^|;)\s*border\s*:\s*\.5px\s+solid\b/, '.5px 边框在盒内（宿主原样，不是描边在外的 outline）');
+  assert.match(body, /(?:^|;)\s*background-clip\s*:\s*padding-box/, '底色裁到 padding-box：绘画区 47px，半透明边框不被粉彩盖住');
+  assert.equal(
+    /(?:^|;)\s*border-(?:width|style|color|top|right|bottom|left)\s*:/.test(body),
+    false,
+    '没有 border-* 长写覆盖 border 简写（简写是唯一真源，否则 .5px / solid / 颜色可以被悄悄改掉）',
+  );
+  assert.equal(/outline\s*:/.test(body), false, '没有 outline：边框不是画在盒外的');
+});
+
+test('A.5 容器逐字回归宿主：宿主那九条声明一条不少、一条没改值', () => {
+  // The host rule (EX/dsh-client-ui-plugin-manager, .w6M7KW_cardIcon) has exactly these
+  // nine declarations. Ours keeps all of them with the host's own values; the only
+  // change is `color`, which becomes the fallback inside `--skc-avatar-ink`.
+  const body = ruleBody(capturedCss(), '.skc_cardIcon');
+  const host = {
+    border: /(?:^|;)\s*border\s*:\s*\.5px\s+solid\s+var\(--dsw-alias-border-l3\)/,
+    'border-radius': /(?:^|;)\s*border-radius\s*:\s*var\(--dsw-radius-lg\)/,
+    width: /(?:^|;)\s*width\s*:\s*48px/,
+    height: /(?:^|;)\s*height\s*:\s*48px/,
+    color: /(?:^|;)\s*color\s*:\s*var\(--skc-avatar-ink,\s*var\(--dsw-alias-label-secondary\)\)/,
+    flex: /(?:^|;)\s*flex\s*:\s*none/,
+    'justify-content': /(?:^|;)\s*justify-content\s*:\s*center/,
+    'align-items': /(?:^|;)\s*align-items\s*:\s*center/,
+    display: /(?:^|;)\s*display\s*:\s*inline-flex/,
+  };
+  for (const [property, pattern] of Object.entries(host)) {
+    assert.match(body, pattern, `宿主的 ${property} 声明还在、值没变`);
+  }
+  assert.equal((body.match(/(?:^|;)\s*color\s*:/g) ?? []).length, 1, 'color 只有一条（宿主值作 fallback，不是另起一条覆盖）');
+});
+
+test('A.5/A.6 样式表里没有调色板：唯一的颜色字面量是宿主原文的透明边框色', () => {
+  const css = capturedCss();
+  const literals = [...new Set([...css.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((match) => match[0].toLowerCase()))];
+  assert.deepEqual(literals, ['#0000'], '12 组色板只在 src/client/avatar.js，样式表只有宿主那条 border-color:#0000');
+  assert.equal(/#[0-9a-fA-F]{6}\b/.test(css), false, '样式表里没有任何六位 hex 色值');
+  assert.equal(/rgb\(|hsl\(/.test(css), false, '也没有 rgb()/hsl() 颜色');
+});
+
+test('A.5 头像的两个颜色只由行内变量给，样式表不自己声明 --skc-avatar-*', () => {
+  const css = capturedCss();
+  assert.equal(/--skc-avatar-[a-z-]+\s*:/.test(css), false, '样式表只 var() 读取，赋值在 row.jsx 的行内 style');
+  assert.equal(/--dsw-[a-z0-9-]+\s*:/.test(css), false, '也没有同名 --dsw-* 自造变量（宿主令牌由主题提供）');
+  const body = ruleBody(css, '.skc_cardIcon');
+  assert.equal(body.includes('--skc-avatar-'), true, '规则体确实用到行内变量');
+});
+
+test('A.6 骨架图标自带灰底：排在 .skc_cardIcon 与 .skc_skeletonFill 之后，且不读头像变量', () => {
+  const css = capturedCss();
+  const body = ruleBody(css, '.skc_skeletonIcon');
+  assert.match(body, /(?:^|;)\s*background\s*:\s*var\(--dsw-alias-bg-skeleton\)/, '骨架图标自己的底色是灰的');
+  assert.match(body, /(?:^|;)\s*background-clip\s*:\s*padding-box/, '灰底同样裁到 padding box（与头像同一条理由）');
+  assert.match(body, /(?:^|;)\s*border-color\s*:\s*#0000/, '宿主原文的 border-color:#0000 仍在（透明度不靠改边框宽度实现）');
+  assert.equal(body.includes('--skc-avatar-'), false, '骨架不读头像变量，加载态不会出现彩色块');
+  const cardIcon = css.indexOf('.skc_cardIcon{');
+  const skeletonFill = css.indexOf('.skc_skeletonFill{');
+  const skeletonIcon = css.indexOf('.skc_skeletonIcon{');
+  assert.ok(skeletonFill !== -1 && cardIcon !== -1, '两个来源规则都在');
+  assert.ok(skeletonIcon > cardIcon, '.skc_skeletonIcon 排在 .skc_cardIcon 之后（同权重下后者胜出）');
+  assert.ok(skeletonIcon > skeletonFill, '.skc_skeletonIcon 排在 .skc_skeletonFill 之后（顺序被改动也漏不出粉彩）');
+});
+
 test('样式表遵守 reduced-motion 与响应式断点', () => {
   const css = capturedCss();
   assert.ok(css.includes('prefers-reduced-motion'), '有 reduced-motion 分支');
   assert.ok(css.includes('width <= 767px'), '有窄屏断点（容器查询/媒体查询）');
 });
+
+/**
+ * The declaration body of one rule, by selector.
+ * @param {string} css - the stylesheet text.
+ * @param {string} selector - e.g. `.skc_cardIcon`.
+ * @returns {string} the text between `{` and the first `}`.
+ */
+function ruleBody(css, selector) {
+  const start = css.indexOf(`${selector}{`);
+  assert.notEqual(start, -1, `样式表里有 ${selector} 的规则`);
+  const end = css.indexOf('}', start);
+  assert.notEqual(end, -1, `${selector} 的规则体闭合`);
+  return css.slice(start + selector.length + 1, end);
+}
 
 /**
  * Capture the stylesheet text by letting `injectStyles` write into a fake document.

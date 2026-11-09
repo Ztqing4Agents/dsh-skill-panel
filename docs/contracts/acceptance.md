@@ -71,7 +71,7 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | --- | --- | --- | --- |
 | A1 | 打开面板，对照本机 5 条真实样本 | 三分区归属 5/5 命中 | 自动：K6 |
 | A2 | 造一个手写目录 + 一个假 `clawhub-a--b` 空目录 + 一个软链，刷新 | 手写 → 本地；空 `clawhub-a--b` → 已安装（中置信）；软链 → 本地 | 自动：K6 + K11 + K12 |
-| A3 | 停用本地技能后 `git diff` 该 `SKILL.md` | 只多 `disable-model-invocation: true` 一行，其余字节（含 CRLF/BOM/注释）不变 | 自动：K7 + K8 + K9 |
+| A3 | 停用本地技能后 `git diff` 该 `SKILL.md` | 只有 `disable-model-invocation` 这一行变成 `true`（原无该键时表现为多一行，原为 `false` 时只换值），其余字节（含 CRLF/BOM/注释）不变；**字节总数不是判据**（`false`→`true` 少 1 字节） | 自动：K7 + K8 + K9 |
 | A4 | 停用后重启 DSH | 面板仍显示为停用 | 真机抽检 1 次（磁盘是唯一真源，重启读的就是同一字节） |
 | A5 | 把 `provider-toggles.json` 改成非法 JSON | 面板正常打开、全部显示为启用、不报错 | 自动：K15 |
 | A6 | 读取期制造权限不足 | 首次失败 → 原位错误 + 重试；有缓存 → 列表保留 + toast | 自动：K24 + 真机注入 |

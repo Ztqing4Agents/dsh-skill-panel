@@ -132,7 +132,10 @@ const CSS = `
 .skc_cardIcon{
   box-sizing: border-box;
   border: .5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-lg);
-  width: 48px; height: 48px; color: var(--dsw-alias-label-secondary); flex: none;
+  width: 48px; height: 48px; flex: none;
+  background: var(--skc-avatar-bg, transparent); background-clip: padding-box;
+  color: var(--skc-avatar-ink, var(--dsw-alias-label-secondary));
+  font-size: 26px; font-weight: 500; line-height: 1; text-transform: uppercase; user-select: none;
   justify-content: center; align-items: center; display: inline-flex;
 }
 .skc_cardMain{ flex-direction: column; flex: 1; gap: 4px; min-width: 0; display: flex }
@@ -173,7 +176,13 @@ const CSS = `
 .skc_skeletonHeading{ width: 48px }
 .skc_skeletonTitle{ width: min(144px, 60%) }
 .skc_skeletonDescription{ width: min(280px, 85%) }
-.skc_skeletonIcon{ border-color: #0000 }
+/* the skeleton must not inherit the avatar tile: keep its background grey on its own rule,
+   so a reordering of this stylesheet cannot let --skc-avatar-bg through. background-clip
+   matches .skc_cardIcon: the host border is translucent, the fill must stay under it. */
+.skc_skeletonIcon{
+  border-color: #0000;
+  background: var(--dsw-alias-bg-skeleton); background-clip: padding-box;
+}
 .skc_skeletonActions{ width: calc(36px + var(--skc-toggle-gap) + var(--skc-progress-size)); height: 20px }
 
 /* empty, failure, inline reason, footer */

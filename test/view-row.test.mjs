@@ -10,6 +10,7 @@ import test, { before } from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import { avatarOf } from '../src/client/avatar.js';
 import { loadClientModules, zhTranslator } from './helpers/ssr.mjs';
 
 /** Bundled row module. */
@@ -60,6 +61,34 @@ test('K22 行的四个部件齐备：图标、名称、描述、右侧控件', (
   assert.ok(html.includes('class="skc_cardTitle">ui-design<'), '有技能名');
   assert.ok(html.includes('Comprehensive UI design skill.'), '有描述');
   assert.ok(html.includes('class="skc_cardEnd"'), '有右侧控件位');
+});
+
+test('K22 图标位是首字母头像：一个字母 + 两个色板变量 + aria-hidden', () => {
+  const html = render(row({ name: 'docx' }));
+  const icon = /<span class="skc_cardIcon" style="([^"]*)" aria-hidden="true">([^<]*)<\/span>/.exec(html);
+  assert.ok(icon !== null, '图标位由 skc_cardIcon、行内两个变量、aria-hidden 与字母组成');
+  const [, style, letter] = icon;
+  const tile = avatarOf('docx');
+  assert.equal(style, `--skc-avatar-bg:${tile.bg};--skc-avatar-ink:${tile.ink}`, '色块与字母色是 avatarOf(名字) 的两个值');
+  assert.equal(letter, 'D', '字母是名字首字母并大写');
+  assert.equal([...letter].length, 1, '只画一个字符，不拼缩写');
+  assert.equal(html.includes('<svg'), false, '图标位里不再有宿主字形（图标是纯文字）');
+});
+
+test('K22 头像按名字走：换个名字就换字母与色块，中文名取首字', () => {
+  const first = /style="([^"]*)" aria-hidden="true">([^<]*)</.exec(render(row({ name: 'agent-a' })));
+  const second = /style="([^"]*)" aria-hidden="true">([^<]*)</.exec(render(row({ name: 'agent-b' })));
+  const chinese = /style="([^"]*)" aria-hidden="true">([^<]*)</.exec(render(row({ name: '技能发现' })));
+  assert.equal(first[2], 'A', '字母跟随名字');
+  assert.equal(second[2], 'A', '两个名字都以 A 开头');
+  assert.notEqual(second[1], first[1], '首字母相同、色块不同（色取决于整个名字，不是按首字母上色）');
+  assert.equal(chinese[2], '技', '中文名取首字');
+});
+
+test('K22 displayName 不参与头像：字母与颜色仍由机器名决定', () => {
+  const shown = /style="([^"]*)" aria-hidden="true">([^<]*)</.exec(render(row({ name: 'docx', displayName: 'Word 文档' })));
+  const bare = /style="([^"]*)" aria-hidden="true">([^<]*)</.exec(render(row({ name: 'docx' })));
+  assert.deepEqual([shown[1], shown[2]], [bare[1], bare[2]], 'displayName 只进 title，不进头像');
 });
 
 test('displayName 只作为 title 出现，不替换显示名', () => {

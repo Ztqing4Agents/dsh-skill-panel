@@ -328,7 +328,10 @@ var CSS = `
 .skc_cardIcon{
   box-sizing: border-box;
   border: .5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-lg);
-  width: 48px; height: 48px; color: var(--dsw-alias-label-secondary); flex: none;
+  width: 48px; height: 48px; flex: none;
+  background: var(--skc-avatar-bg, transparent); background-clip: padding-box;
+  color: var(--skc-avatar-ink, var(--dsw-alias-label-secondary));
+  font-size: 26px; font-weight: 500; line-height: 1; text-transform: uppercase; user-select: none;
   justify-content: center; align-items: center; display: inline-flex;
 }
 .skc_cardMain{ flex-direction: column; flex: 1; gap: 4px; min-width: 0; display: flex }
@@ -369,7 +372,13 @@ var CSS = `
 .skc_skeletonHeading{ width: 48px }
 .skc_skeletonTitle{ width: min(144px, 60%) }
 .skc_skeletonDescription{ width: min(280px, 85%) }
-.skc_skeletonIcon{ border-color: #0000 }
+/* the skeleton must not inherit the avatar tile: keep its background grey on its own rule,
+   so a reordering of this stylesheet cannot let --skc-avatar-bg through. background-clip
+   matches .skc_cardIcon: the host border is translucent, the fill must stay under it. */
+.skc_skeletonIcon{
+  border-color: #0000;
+  background: var(--dsw-alias-bg-skeleton); background-clip: padding-box;
+}
 .skc_skeletonActions{ width: calc(36px + var(--skc-toggle-gap) + var(--skc-progress-size)); height: 20px }
 
 /* empty, failure, inline reason, footer */
@@ -621,6 +630,46 @@ function ListSkeleton({ label }) {
 // src/client/row.jsx
 var import_dsh_client_ui_primitives = require("@deepseek-ai/dsh-client-ui-primitives");
 
+// src/client/avatar.js
+var SKC_AVATAR_TONES = Object.freeze([
+  { bg: "#FFDEDB", ink: "#BC2015" },
+  { bg: "#FFF0DB", ink: "#935A10" },
+  { bg: "#FDFFDB", ink: "#6C730D" },
+  { bg: "#EBFFDB", ink: "#3C7A0E" },
+  { bg: "#DBFFDE", ink: "#0E7C15" },
+  { bg: "#DBFFF0", ink: "#0E7A4B" },
+  { bg: "#DBFDFF", ink: "#0E757C" },
+  { bg: "#DBEBFF", ink: "#1560C1" },
+  { bg: "#DEDBFF", ink: "#2719E6" },
+  { bg: "#F0DBFF", ink: "#8919DF" },
+  { bg: "#FFDBFD", ink: "#AC13A2" },
+  { bg: "#FFDBEB", ink: "#B8145B" }
+]);
+var FNV_OFFSET_BASIS = 2166136261;
+var FNV_PRIME = 16777619;
+var FALLBACK_LETTER = "#";
+function hashName(text) {
+  let hash = FNV_OFFSET_BASIS;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, FNV_PRIME);
+  }
+  return hash >>> 0;
+}
+function initialOf(name) {
+  if (typeof name !== "string") return FALLBACK_LETTER;
+  const letter = /[\p{L}\p{N}]/u.exec(name);
+  if (letter !== null) return letter[0].toUpperCase();
+  const other = /\S/u.exec(name);
+  if (other !== null) return other[0].toUpperCase();
+  return FALLBACK_LETTER;
+}
+function avatarOf(name) {
+  const index = hashName(typeof name === "string" ? name : "") % SKC_AVATAR_TONES.length;
+  const tone = SKC_AVATAR_TONES[index];
+  return { letter: initialOf(name), bg: tone.bg, ink: tone.ink };
+}
+
 // src/client/model.js
 var TAB_INSTALLED = "installed";
 var TAB_MARKET = "market";
@@ -678,7 +727,6 @@ function reasonText(code, reason, t) {
 
 // src/client/row.jsx
 var import_jsx_runtime2 = require("react/jsx-runtime");
-var GLYPH_SIZE = 36;
 function ReadonlyTag({ row, t }) {
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: cn("roTag"), title: t("row.symlinkTitle", { path: row.realPath ?? "" }), children: [
     /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_dsh_client_ui_primitives.IconLinkOutlineRegular, { size: 12, "aria-hidden": "true" }),
@@ -707,11 +755,20 @@ function SkillRow({ row, t, rows, onToggle }) {
   const key = rowKey(row);
   const view = rowViewState(row, rows);
   const reason = rows?.get?.(key)?.reason ?? null;
+  const avatar = avatarOf(row.name);
   const mode = switchMode(row);
   const end = mode === null ? row.readonlyReason === "symlink" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(ReadonlyTag, { row, t }) : null : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(EnableSwitch, { row, t, pending: isPending(rows, key), onToggle });
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("li", { className: cn("card"), "data-skc-row": key, "data-skc-state": view, children: [
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: cn("cardHead"), children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: cn("cardIcon"), "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_dsh_client_ui_primitives.IconSkillOutlineRegular, { size: GLYPH_SIZE }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+        "span",
+        {
+          className: cn("cardIcon"),
+          style: { "--skc-avatar-bg": avatar.bg, "--skc-avatar-ink": avatar.ink },
+          "aria-hidden": "true",
+          children: avatar.letter
+        }
+      ),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: cn("cardMain"), children: [
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: cn("titleRow"), children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: cn("cardTitle"), title: row.displayName ?? void 0, children: row.name }) }),
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: cn("cardDesc"), title: row.description, children: row.description })

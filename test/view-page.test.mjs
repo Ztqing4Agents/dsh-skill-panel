@@ -16,6 +16,7 @@ import test, { before } from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import { avatarOf } from '../src/client/avatar.js';
 import { createStore } from '../src/client/state.js';
 import { loadClientModules, zhTranslator } from './helpers/ssr.mjs';
 
@@ -98,6 +99,19 @@ function matches(html, pattern) {
   return [...html.matchAll(pattern)].map((match) => match[1]);
 }
 
+/**
+ * The markup of one row, by its identity key, so assertions about a row cannot
+ * accidentally read a sibling's attributes.
+ * @param {string} html - the rendered page.
+ * @param {string} key - `data-skc-row` value, e.g. `filesystem#ui-design`.
+ * @returns {string} the row's own markup.
+ */
+function rowMarkup(html, key) {
+  const found = new RegExp(`<li class="skc_card" data-skc-row="${key}"[\\s\\S]*?</li>`).exec(html);
+  assert.ok(found !== null, `页面上有 ${key} 这一行`);
+  return found[0];
+}
+
 test('K23 三个分区的标题按内置/本地/已安装顺序出现', () => {
   const html = renderPage();
   const titles = matches(html, /class="skc_groupTitle">([^<]+)</g);
@@ -122,12 +136,32 @@ test('K23 空分区仍渲染区标题与空态文案', () => {
 
 test('K22 行结构：图标 + 名称 + 描述 + 右侧控件', () => {
   const html = renderPage();
-  assert.ok(html.includes('class="skc_cardIcon"'), '行有图标位');
-  assert.ok(html.includes('data-icon="skill"'), '图标位里是技能字形');
-  assert.ok(html.includes('class="skc_cardTitle">ui-design<'), '行有名称');
-  assert.ok(html.includes('class="skc_cardDesc" title="A local skill."'), '行有描述，且 title 也是描述');
-  assert.ok(html.includes('class="skc_cardEnd"'), '行有右侧控件位');
-  assert.ok(html.includes('class="skc_cardMain"'), '名称与描述在中间列');
+  const rowHtml = rowMarkup(html, 'filesystem#ui-design');
+  // The icon is a letter avatar, so the assertion looks at its *shape* - the two inline
+  // palette properties, one uppercased letter, `aria-hidden` - and not merely at the
+  // class name. A host glyph or an empty tile would keep `skc_cardIcon` and still be a
+  // regression; these four facts would not survive it.
+  const icon = /<span class="skc_cardIcon" style="([^"]*)" aria-hidden="true">([^<]*)<\/span>/.exec(rowHtml);
+  assert.ok(icon !== null, '图标位是「色板变量 + aria-hidden + 字母」的 span');
+  const [, style, letter] = icon;
+  const expected = avatarOf('ui-design');
+  assert.equal(style, `--skc-avatar-bg:${expected.bg};--skc-avatar-ink:${expected.ink}`, '色块与字母色来自 avatarOf(名字)');
+  assert.equal(letter, 'U', '图标里是名字的大写首字母');
+  assert.equal([...letter].length, 1, '图标里只有一个字符');
+  assert.equal(rowHtml.includes('data-icon='), false, '不再渲染宿主通用技能字形');
+  assert.ok(rowHtml.includes('class="skc_cardTitle">ui-design<'), '行有名称');
+  assert.ok(rowHtml.includes('class="skc_cardDesc" title="A local skill."'), '行有描述，且 title 也是描述');
+  assert.ok(rowHtml.includes('class="skc_cardEnd"'), '行有右侧控件位');
+  assert.ok(rowHtml.includes('class="skc_cardMain"'), '名称与描述在中间列');
+});
+
+test('K22 每行的头像按自己的名字取色，不是整表一个色', () => {
+  const html = renderPage();
+  const tiles = matches(html, /style="--skc-avatar-bg:([^;]+);--skc-avatar-ink:[^"]+"/g);
+  assert.equal(tiles.length, 4, '四条假技能各有一个头像');
+  assert.equal(new Set(tiles).size, 4, '四条名字拿到四种色块（常量色或按首字母上色都会撞色）');
+  const letters = matches(html, /aria-hidden="true">([^<]*)<\/span>/g);
+  assert.deepEqual(letters, ['O', 'D', 'H', 'U'], '字母跟随各自名字（office / dev-docs-standards / hand-written / ui-design）');
 });
 
 test('K22 可写行的右侧是 role=switch 的开关，aria-label 为「启用 <name>」', () => {

@@ -1,18 +1,20 @@
 /**
  * One skill row: icon, name, description, and the one control the row owns.
  *
+ * The icon is a letter avatar (`avatar.js`): the name's first letter on a pastel tile
+ * whose colour is derived from the name, so rows are told apart before they are read.
+ * It is decoration only - `aria-hidden`, because the name sits right next to it.
+ *
  * The row itself is not clickable - there is no detail view in this version, and a
  * hover highlight on something that does not open anything is a lie about what a
  * click will do. A symlinked skill renders a static read-only marker in the switch's
  * seat instead of a switch, because this panel never writes through a symlink.
  */
-import { StateDot, Switch, IconLinkOutlineRegular, IconSkillOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives';
+import { StateDot, Switch, IconLinkOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives';
 
+import { avatarOf } from './avatar.js';
 import { cn } from './styles.js';
 import { isPending, rowKey, rowViewState, switchMode } from './model.js';
-
-/** The glyph size the host uses inside a 48px card icon. */
-const GLYPH_SIZE = 36;
 
 /**
  * The static marker a symlinked skill carries.
@@ -63,6 +65,7 @@ export function SkillRow({ row, t, rows, onToggle }) {
   const key = rowKey(row);
   const view = rowViewState(row, rows);
   const reason = rows?.get?.(key)?.reason ?? null;
+  const avatar = avatarOf(row.name);
   const mode = switchMode(row);
   const end = mode === null
     ? (row.readonlyReason === 'symlink' ? <ReadonlyTag row={row} t={t} /> : null)
@@ -70,8 +73,12 @@ export function SkillRow({ row, t, rows, onToggle }) {
   return (
     <li className={cn('card')} data-skc-row={key} data-skc-state={view}>
       <div className={cn('cardHead')}>
-        <span className={cn('cardIcon')} aria-hidden="true">
-          <IconSkillOutlineRegular size={GLYPH_SIZE} />
+        <span
+          className={cn('cardIcon')}
+          style={{ '--skc-avatar-bg': avatar.bg, '--skc-avatar-ink': avatar.ink }}
+          aria-hidden="true"
+        >
+          {avatar.letter}
         </span>
         <div className={cn('cardMain')}>
           <div className={cn('titleRow')}>

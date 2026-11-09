@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- 技能图标改为首字母彩色头像：48px 圆角色块 + 技能名首字母，色块颜色由技能名稳定决定（12 组粉彩色板，按色相 30° 等分，字母对比度全部 ≥4.5:1，同名恒同色），深色模式沿用同一套粉彩底；图标容器仍是宿主原样式与边框。此前所有技能共用同一个灰色描边图标。
+
 ### Fixed
 
 - 技能行的图标与行高不再被边框撑大 2px：图标回到 48×48，行高回到 64px。

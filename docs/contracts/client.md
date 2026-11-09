@@ -46,6 +46,13 @@ ClientPlugin.apply(ctx)
 | `skc_empty` / `skc_failure` / `skc_status` / `skc_reason` | 同上 | 空 / 错 / 状态 / 行内原因 |
 | `skc_addGroup` / `skc_addPrimary` / `skc_addMore` / `skc_addButton` | 同上 | `＋ 添加技能 ⌄`（P0 禁用态） |
 
+`.skc_cardIcon` 的**容器是宿主 `.cardIcon` 原样式**（`.5px` `border-l3` 描边、`radius-lg` 圆角、48×48、`border-box`），
+不随头像需求改动；变化只在内容层：宿主画通用技能图标，本面板画首字母。
+颜色不是样式表常量，而是 `avatar.js` 的 12 组色板（色相 30° 等分，字母对比度 4.95–6.62）经 `row.jsx`
+以 `--skc-avatar-bg` / `--skc-avatar-ink` 行内传入（刻度见 `docs/contracts/visual.md` A.5）；
+`background-clip: padding-box` 保证粉彩底不盖住半透明描边。骨架复用同一个类，由 `.skc_skeletonIcon`
+自己再写灰色底，加载态不出现彩色块、也不出现字母。
+
 ---
 
 ---
@@ -139,7 +146,7 @@ ClientPlugin.apply(ctx)
 
 ## 8.5 样式字面量单点
 
-尺寸与颜色字面量只允许出现在 `src/client/styles.js`；其它组件文件不得写颜色/尺寸（`size={11|13}` 这类图标尺寸除外）。
+尺寸与颜色字面量只允许出现在 `src/client/styles.js`（样式）与 `src/client/avatar.js`（12 组头像色板，全仓库仅此两处色值）；其它组件文件不得写颜色/尺寸（`size={11|13}` 这类图标尺寸除外）。
 锚点：`test/styles.test.mjs`；把刻度搬进组件时那条用例先红。
 
 ---

@@ -273,9 +273,12 @@ ledger.readAll() ─────────────────┘   （R5�
 | 失败 toast | `Toast` | `{text, icon, holdMs?, onDone}` |
 | 进行中/错误指示 | `StateDot` | `{state ∈ {ongoing, error, idle}, size?}` |
 | 侧栏行图标 | `IconSkillOutlineRegular` | `{size}` |
-| 行图标 / ⓘ / 刷新 / 箭头 / 软链标记 / 警告 | `IconSkillOutlineRegular`、`IconInfoOutlineRegular`(11)、`IconRefreshOutlineRegular`(13)、`IconChevronDownOutlineRegular`、`IconLinkOutlineRegular`、`IconWarningOutlineRegular` | `{size, "aria-hidden"?}` |
+| ⓘ / 刷新 / 箭头 / 软链标记 / 警告 | `IconInfoOutlineRegular`(11)、`IconRefreshOutlineRegular`(13)、`IconChevronDownOutlineRegular`、`IconLinkOutlineRegular`、`IconWarningOutlineRegular` | `{size, "aria-hidden"?}` |
 
 依据：`EX/dsh-client-ui-plugin-manager/lib/client.js`（SegmentedTabs / Switch / Button / Tooltip / StateDot / Toast 的真实调用点，见 §3.3 各条引注）；导出名在 `SHELL/index-BgUyXZcc.js` 中存在（如 `IconSkillOutlineRegular`、`IconLinkOutlineRegular`、`StateDot`、`Toast`）。
+
+行图标（`.skc_cardIcon`）**不取 primitives**：它是首字母头像（技能名首字母 + 按名字散列的粉彩色块），
+色板与散列在 `src/client/avatar.js`，刻度见 `docs/contracts/visual.md` A.5 / A.9。
 
 ---
 
@@ -323,8 +326,9 @@ ledger.readAll() ─────────────────┘   （R5�
 | `src/client/api.js` | `SkillCenterApi`：`list()` / `toggle({name,path,enabled})` / `toggleProvider({provider,name,enabled})`；文档相对 URL；把 `{code,data,message}` 归一成 `ApiError{code}` |
 | `src/client/state.js` | 模块级 store（`createStore` 形状：`getSnapshot`/`subscribe`/`actions`）：`tab` / `payload` / `status` / `error` / `rows` / `notice` |
 | `src/client/model.js` | **纯函数**：`toGroups(payload)`、`statusLine(counts, t)`、`rowViewState(row, rows)`、`isPending(rows, key)`、`groupEmptyKey(key)` |
+| `src/client/avatar.js` | **纯函数（无 React）**：`SKC_AVATAR_TONES`（12 组 `{bg, ink}` 粉彩，色相 30° 等分）+ `avatarOf(name)`（首个 `\p{L}`/`\p{N}` 大写字母 + FNV-1a 散列选色），node 可直接测 |
 | `src/client/page.jsx` | 页面组件：`page` → `pageBody` → `pageBar`(header) + 两个 `tabPanel`；骨架/空/错/页脚的组装 |
-| `src/client/row.jsx` | `SkillRow`（图标/标题/描述/`cardEnd`）、`EnableSwitch`（`bundleToggle` + `toggleProgress` + primitives `Switch`）、`ReadonlyTag`（软链只读标记） |
+| `src/client/row.jsx` | `SkillRow`（首字母头像/标题/描述/`cardEnd`）、`EnableSwitch`（`bundleToggle` + `toggleProgress` + primitives `Switch`）、`ReadonlyTag`（软链只读标记） |
 | `src/client/skeleton.jsx` | 加载态：区标题占位 + 4 行骨架卡（规格见 `docs/contracts/visual.md` A.6） |
 | `src/client/header-scroll.js` | `attachHeader(bar)`（克隆量测 + 观测）+ **纯函数** `interpolateParts(parts, offset)` |
 | `src/client/styles.js` | 单一 CSS 字符串（`docs/contracts/visual.md` 的全文）+ `injectStyles()`（按 `data-plugin-css` 去重） |

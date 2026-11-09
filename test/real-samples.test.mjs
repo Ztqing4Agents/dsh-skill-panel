@@ -21,7 +21,7 @@ import { readLedger } from '../lib/ledger.js';
 import { scanUserSkills } from '../lib/scan.js';
 import { setDisableModelInvocation } from '../lib/frontmatter.js';
 import { ROOT } from './helpers/ssr.mjs';
-import { countBareLf, sampleTree } from './helpers/tree.mjs';
+import { countBareLf, linesOf, sampleTree } from './helpers/tree.mjs';
 
 /**
  * The skills root of this machine, or null when it is absent.
@@ -47,6 +47,49 @@ async function catalogueOf(skillsRoot, dshHome) {
   const catalog = mergeCatalog({ scanned, registry: [], ledger, skillsRoot });
   const byName = new Map(catalog.groups.flatMap((group) => group.skills).map((row) => [row.name, row]));
   return { catalog, byName, scanned };
+}
+
+/** The one frontmatter key the switch writes. */
+const SWITCH_KEY = 'disable-model-invocation';
+
+/**
+ * Assert the A3 invariant on one rewrite: exactly the switch line changed, it reads
+ * `true`, and every line ending is still CRLF.
+ *
+ * A byte-count direction is deliberately *not* part of it. The live sample already
+ * carries the key as `false`, so enabling it replaces five bytes with four and the file
+ * shrinks by one; "at least one byte more" was an assumption about the sample that the
+ * sample no longer satisfies, not a property of the writer. What the writer exists to
+ * preserve - the line endings and every other line's bytes - is asserted line by line.
+ * @param {Buffer} before - the sample's original bytes.
+ * @param {{changed: boolean, next: Buffer}} rewrite - the writer's result.
+ * @returns {void}
+ */
+function assertOnlySwitchLineChanged(before, rewrite) {
+  const after = rewrite.next;
+  assert.equal(rewrite.changed, true, '改写确实发生');
+  assert.equal(countBareLf(after), 0, '改写后仍然没有裸换行（CRLF 没有被洗成 LF）');
+  const beforeLines = linesOf(before);
+  const afterLines = linesOf(after);
+  const withoutSwitch = (lines) => lines.filter((line) => !line.startsWith(`${SWITCH_KEY}: `));
+  assert.deepEqual(
+    withoutSwitch(afterLines),
+    withoutSwitch(beforeLines),
+    '除开关那一行外，其余行逐行不变（注释、间距、正文都在）',
+  );
+  const switchLines = afterLines.filter((line) => line.startsWith(`${SWITCH_KEY}: `));
+  assert.equal(switchLines.length, 1, '开关只有一条');
+  assert.match(
+    switchLines[0],
+    new RegExp(`^${SWITCH_KEY}: true(\\s+#.*)?$`),
+    '开关写成 true（原样本若带行内注释则原样保留，见 K9）',
+  );
+  const beforeHadSwitch = beforeLines.some((line) => line.startsWith(`${SWITCH_KEY}: `));
+  assert.equal(
+    afterLines.length - beforeLines.length,
+    beforeHadSwitch ? 0 : 1,
+    beforeHadSwitch ? '原样本已有该键：只换值，行数不变' : '原样本没有该键：正好插一行',
+  );
 }
 
 /** The expected verdict for each of the five samples. */
@@ -130,7 +173,7 @@ test('A1 软链样本给出的真实路径指向本机 git 仓库（而不是技
   assert.ok(row.realPath.endsWith(join('Agents', 'Skills', 'dev-docs-standards', 'SKILL.md')), 'realPath 指向 ~/Documents/Agents/Skills 下的仓库');
 });
 
-test('A3 真实 CRLF 样本改写后行尾不变、只多一行（无该样本时用 CRLF fixture）', async (t) => {
+test('A3 真实 CRLF 样本改写后行尾不变、只改开关键一行（无该样本时用 CRLF fixture）', async (t) => {
   const real = realSkillsRoot();
   const crlfFile = real === null ? null : join(real, 'indiv-guipi--find-skills', 'SKILL.md');
   const hasRealCrlf = crlfFile !== null && existsSync(crlfFile);
@@ -139,13 +182,35 @@ test('A3 真实 CRLF 样本改写后行尾不变、只多一行（无该样本�
   const before = await readFile(file);
   assert.equal(countBareLf(before), 0, '样本本身没有裸换行');
   const rewrite = setDisableModelInvocation(before, true);
-  const after = rewrite.next;
-  assert.equal(countBareLf(after), 0, '改写后仍然没有裸换行');
-  const added = after.length - before.length;
-  assert.equal(added > 0, true, '至少多出一个字节');
-  assert.equal(added % 2, 0, '增加的字节数是 CRLF 的整数倍');
-  const again = setDisableModelInvocation(after, true);
+  // The live sample may already carry the key as `false`: enabling it then *shrinks*
+  // the file by a byte. Byte count is not the invariant; the line endings and every
+  // other line's bytes are. The helper is shared with the mutant guard below, so this
+  // test cannot drift away from "what a regression looks like".
+  assertOnlySwitchLineChanged(before, rewrite);
+  const again = setDisableModelInvocation(rewrite.next, true);
   assert.equal(again.changed, false, '重复写入不改字节');
+});
+
+test('A3 反例守卫：CRLF 被洗成 LF、开关没被改写、或顺带改了别的行，都会被 A3 的断言抓住', () => {
+  const before = Buffer.from('---\r\nname: x\r\ndisable-model-invocation: false\r\n---\r\nbody\r\n', 'utf8');
+  const rewritten = setDisableModelInvocation(before, true);
+  assertOnlySwitchLineChanged(before, rewritten);
+  const text = before.toString('utf8');
+  assert.throws(
+    () => assertOnlySwitchLineChanged(before, { changed: true, next: Buffer.from(text.replaceAll('\r\n', '\n'), 'utf8') }),
+    /裸换行/,
+    '只写回时把 CRLF 洗成 LF ⇒ 必须红',
+  );
+  assert.throws(
+    () => assertOnlySwitchLineChanged(before, { changed: false, next: before }),
+    /改写确实发生/,
+    '该字段根本没被改写 ⇒ 必须红',
+  );
+  assert.throws(
+    () => assertOnlySwitchLineChanged(before, { changed: true, next: Buffer.from(text.replace('name: x', 'name: y'), 'utf8') }),
+    /其余行逐行不变/,
+    '顺带改了别的行 ⇒ 必须红',
+  );
 });
 
 test('KI-2 回归：真机 ui-design 的行描述是三句完整正文，末尾一个换行', async (t) => {

@@ -59,6 +59,14 @@ test('骨架条总数是 9（1 + 4×2），且不少于设计要求的 4 条', (
   assert.ok(count >= 4, '不少于设计笔误里写的 4 条');
 });
 
+test('A.6 骨架图标是空盒子：不画字母，也不带头像的两个颜色变量', () => {
+  const html = render();
+  const emptyIcons = [...html.matchAll(/<span class="skc_cardIcon skc_skeletonFill skc_skeletonIcon"><\/span>/g)];
+  assert.equal(emptyIcons.length, 4, '四张卡片各有图标位，且图标位里没有任何子节点（不会漏出字母）');
+  assert.equal(html.includes('--skc-avatar-'), false, '骨架不带头像颜色变量（底色由 .skc_skeletonIcon 的规则给）');
+  assert.equal(/skc_skeletonIcon"[^>]*>[^<]/.test(html), false, '骨架图标里没有文字，加载态不会画字母');
+});
+
 test('装饰部分对读屏隐藏，只有 status 会被播报', () => {
   const html = render();
   assert.equal(matches(html, /aria-hidden="true"/g).length, 2, '分区标题与卡片列表都 aria-hidden');
