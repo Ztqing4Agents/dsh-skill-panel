@@ -15,6 +15,7 @@ import assert from 'node:assert/strict';
 import test, { before } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import ReactCjs from 'react';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -36,6 +37,53 @@ before(async () => {
   css = capturedCss();
   t = await zhTranslator();
 });
+
+/**
+ * Render a component through React's hook dispatcher, so `useState` works without a DOM.
+ *
+ * Same harness the market-view tests use: two state slots are enough for `useIconState`
+ * (failed URL, loaded URL), and `render()` re-runs the component against the slots so a
+ * handler can be fired between renders.
+ * @param {Function} component - the component to drive.
+ * @param {object} initialProps - props of the first render.
+ * @returns {{render: (nextProps?: object) => object}} the harness.
+ */
+function mountHooks(component, initialProps) {
+  const slots = [];
+  const internals = ReactCjs.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+  const holder = internals.ReactCurrentDispatcher;
+  const previous = holder.current;
+  let props = initialProps;
+  const render = (nextProps) => {
+    if (nextProps !== undefined) props = nextProps;
+    let index = 0;
+    holder.current = {
+      useEffect: () => {},
+      useState(initial) {
+        const at = index;
+        index += 1;
+        if (!(at in slots)) slots[at] = typeof initial === 'function' ? initial() : initial;
+        const set = (next) => {
+          slots[at] = typeof next === 'function' ? next(slots[at]) : next;
+        };
+        return [slots[at], set];
+      },
+    };
+    try {
+      return component(props);
+    } finally {
+      holder.current = previous;
+    }
+  };
+  return { render };
+}
+
+/**
+ * The non-null children of one rendered tile, flattened.
+ * @param {{props: {children: unknown}}} node - a rendered element.
+ * @returns {unknown[]} the children that actually render.
+ */
+const kidsOf = (node) => [node.props.children].flat().filter((child) => child !== null && child !== undefined);
 
 /** One installed row. */
 function row(overrides = {}) {
@@ -95,20 +143,47 @@ function ruleBody(source, selector) {
   return source.slice(start + selector.length + 1, source.indexOf('}', start));
 }
 
-test('K68 传 `iconUrl` ⇒ 盒内有 `<img class="skc_marketIconImg">`，且没有新增可点区域', () => {
-  const html = render({ iconUrl: 'api/dsh-skill-center/market/lucide?name=zap' });
-  assert.equal(/<img[^>]*class="[^"]*skc_marketIconImg/.test(html), true, '盒里画的是图');
-  assert.equal(html.includes('src="api/dsh-skill-center/market/lucide?name=zap"'), true, 'src 就是传进来的地址');
-  assert.equal(/alt=""/.test(html), true, '装饰性图片 alt 为空');
-  assert.equal(/aria-hidden="true"/.test(html), true, '瓦片整体 aria-hidden（名字在旁边）');
+test('K68 传 `iconUrl` ⇒ 首帧探测图 + 字母，onLoad 后可见图；始终没有新增可点区域', () => {
+  const url = 'api/dsh-skill-center/market/lucide?name=zap';
+  // R8：任何一帧都不空。首帧 = [隐藏探测图, 字母]；探测图加载完成后才是可见图。
+  const mounted = mountHooks(modules.iconTile.IconTile, { iconUrl: url, title: 'ui-design' });
+  const first = mounted.render();
+  const firstKids = kidsOf(first);
+  assert.equal(firstKids.length, 2, '首帧两个子节点：探测图 + 字母');
+  const [probe, letter] = firstKids;
+  assert.equal(probe.type, 'img', '第一个是探测图');
+  assert.equal(probe.props.src, url, 'src 就是传进来的地址');
+  assert.equal(probe.props.loading, 'eager', '探测图 eager（否则隐藏图永不加载）');
+  assert.equal(probe.props.style.display, 'none', '探测图不可见');
+  assert.equal(probe.props.className, undefined, '探测图不带可见类');
+  assert.equal(letter, 'U', '同帧画字母（这一帧不空）');
+  assert.equal(first.props['aria-hidden'], 'true', '瓦片整体 aria-hidden（名字在旁边）');
 
-  // 唯一控件仍是右侧开关（AGENTS.md 规则 9）
+  probe.props.onLoad();
+  const second = mounted.render();
+  const secondKids = kidsOf(second);
+  assert.equal(secondKids.length, 1, 'onLoad 之后只剩一个子节点');
+  const visible = secondKids[0];
+  assert.equal(visible.type, 'img', '是图片节点');
+  assert.match(visible.props.className, /\bskc_marketIconImg\b/, '可见图用市场刻度里的类');
+  assert.equal(visible.props.src, url, '与探测图同 src（所以只发一次请求）');
+  assert.equal(visible.props.alt, '', '装饰性图片 alt 为空');
+
+  // 可点区域零新增：整行只有一个交互元素，瓦片不带任何可点/可聚焦手段
+  const html = render({ iconUrl: url });
   assert.equal(/<a\b/.test(html), false, '没有 <a>');
   assert.equal(/<button[^>]*role="switch"|<input[^>]*type="checkbox"|role="switch"/.test(html), true, '开关还在');
   const clickable = html.match(/<(?:button|a|input)\b/g) ?? [];
   assert.equal(clickable.length, 1, `整行只有一个可交互元素（实测 ${clickable.length}：${clickable.join(',')}）`);
   assert.equal(/tabindex=/i.test(html), false, '没有 tabindex（瓦片不可聚焦）');
-  assert.equal(/onclick=/i.test(html), false, '没有内联 onclick');
+  for (const handler of ['onclick', 'onmousedown', 'onpointerdown', 'onkeydown']) {
+    assert.equal(new RegExp(`${handler}=`, 'i').test(html), false, `没有内联 ${handler}`);
+  }
+  // 探测图本身也不是可点区域（它是 <img alt="">，没有 role/tabindex）
+  const ssr = render({ iconUrl: url });
+  const imgs = ssr.match(/<img\b[^>]*>/g) ?? [];
+  assert.equal(imgs.length, 1, 'SSR 首帧只有那张探测图');
+  assert.equal(/role=|tabindex=/i.test(imgs[0]), false, '探测图没有 role/tabindex');
 });
 
 test('K68 不传 `iconUrl` ⇒ 与改动前的字母瓦片逐字节相同', () => {
@@ -162,7 +237,88 @@ test('K68 客户端源码里没有第二条上色/画图路径（视觉单元只
   assert.equal(rowText.includes('IconTile'), true, '行用的是共用单元');
   assert.equal(/avatarOf\(/.test(rowText), false, '行不再自己算首字母/颜色');
   assert.equal(/cardIcon/.test(rowText.split('\n').filter((line) => !line.trim().startsWith('//') && !line.trim().startsWith('*')).join('\n')), false, '行里没有手写 .skc_cardIcon 类名');
-  assert.equal(/tileElement\(|useIconFailure\(/.test(cardText), true, '市场卡片调同一对函数');
+  assert.equal(/tileElement\(|useIconState\(/.test(cardText), true, '市场卡片调同一对函数');
+  assert.equal(/useIconFailure/.test(cardText), false, '旧名字已经不存在（改名后不留别名）');
   assert.equal(/IconTile/.test(cardText.replace(/\/\*[\s\S]*?\*\//g, '')), false, '市场卡片不套 IconTile（避免多一层组件）');
-  assert.equal(/export function tileElement/.test(tileText) && /export function useIconFailure/.test(tileText), true, '两个导出都在');
+  assert.equal(/export function tileElement/.test(tileText) && /export function useIconState/.test(tileText), true, '两个导出都在（tileElement + useIconState）');
+  assert.equal(/useIconFailure/.test(tileText), false, '旧名字已经不存在');
+});
+
+test('K70 任何一帧都不空：首帧字母、onLoad 只剩可见图、onError 只剩字母', () => {
+  const url = 'api/dsh-skill-center/market/clawhub-icon?hash=' + 'ab'.repeat(32);
+  /**
+   * Whether one rendered tile shows *something*: a letter, or a visible image.
+   * @param {{props: object}} node - rendered tile.
+   * @returns {boolean} true when the tile has content this frame.
+   */
+  const hasContent = (node) => {
+    const kids = kidsOf(node);
+    const letter = kids.find((child) => typeof child === 'string' && child !== '');
+    const visible = kids.find((child) => typeof child === 'object' && child.type === 'img' && /skc_marketIconImg/.test(String(child.props.className)));
+    return letter !== undefined || visible !== undefined;
+  };
+
+  const mounted = mountHooks(modules.iconTile.IconTile, { iconUrl: url, title: 'dev-god' });
+
+  // 1) 首帧：字母在（探测图不可见），瓦片不空
+  const first = mounted.render();
+  assert.equal(hasContent(first), true, '首帧不空');
+  const [probe, letter] = kidsOf(first);
+  assert.equal(letter, 'D', '首帧画的是字母');
+  assert.equal(probe.props.style.display, 'none', '同帧的探测图不可见 —— 所以看上去不是空盒子');
+  assert.equal(/skc_marketIconImg/.test(String(probe.props.className)), false, '探测图不带可见类');
+
+  // 2) onLoad：只剩可见图，字母消失
+  probe.props.onLoad();
+  const loaded = mounted.render();
+  const loadedKids = kidsOf(loaded);
+  assert.equal(hasContent(loaded), true, 'onLoad 之后不空');
+  assert.equal(loadedKids.length, 1, '只剩一个子节点');
+  assert.equal(loadedKids.some((child) => typeof child === 'string'), false, '字母消失');
+  assert.match(String(loadedKids[0].props.className), /skc_marketIconImg/, '剩下的是可见图');
+
+  // 3) 换到另一个 URL 并 404：只剩字母，<img> 消失，仍然不空
+  const broken = 'api/dsh-skill-center/market/lucide?name=nope';
+  const probing = mounted.render({ iconUrl: broken, title: 'dev-god' });
+  const [probe2, letter2] = kidsOf(probing);
+  assert.equal(letter2, 'D', '新 URL 探测期间字母仍在');
+  probe2.props.onError();
+  const failed = mounted.render();
+  const failedKids = kidsOf(failed);
+  assert.equal(hasContent(failed), true, '失败之后不空');
+  assert.deepEqual(failedKids, ['D'], '只剩字母');
+  assert.equal(JSON.stringify(failed).includes('"img"'), false, '没有任何 <img>');
+
+  // 4) 没有 URL：与改动前逐字节相同（只有一个字母，连探测图都没有）
+  const bare = renderToStaticMarkup(createElement(modules.iconTile.IconTile, { iconUrl: null, title: 'dev-god' }));
+  const empty = renderToStaticMarkup(createElement(modules.iconTile.IconTile, { iconUrl: '', title: 'dev-god' }));
+  assert.equal(bare, empty, 'null 与空串等价');
+  assert.equal(bare.includes('<img'), false, '没有探测图、没有可见图');
+  assert.match(bare, />D</, '只有字母');
+  assert.equal(bare, renderToStaticMarkup(createElement(modules.iconTile.IconTile, { title: 'dev-god' })), '省略 iconUrl 也一样（默认 null）');
+});
+
+test('K70 探测图与可见图同 src：只发一次请求；容器四条几何逐字未变', () => {
+  const url = 'api/dsh-skill-center/market/lucide?name=brain';
+  const mounted = mountHooks(modules.iconTile.IconTile, { iconUrl: url, title: 'shieldcortex' });
+  const first = mounted.render();
+  const [probe] = kidsOf(first);
+  probe.props.onLoad();
+  const second = mounted.render();
+  const [visible] = kidsOf(second);
+  assert.equal(probe.props.src, visible.props.src, '探测图与可见图逐字同 src —— 这就是「只发一次请求」的结构保证');
+  assert.equal(probe.props.loading, 'eager', '探测图 eager');
+  assert.equal(visible.props.loading, 'lazy', '可见图 lazy');
+  assert.equal(probe.props.style.display, 'none', '探测图 display:none');
+
+  // 容器：R5 定下的四条一个字节都没动（K68 的第 4 条用例守六条声明，这里只点名几何）
+  const icon = ruleBody(css, '.skc_cardIcon');
+  const facts = icon.split(';').map((part) => part.trim()).filter(Boolean);
+  assert.equal(facts.includes('width: 48px'), true, '宽 48px');
+  assert.equal(facts.includes('height: 48px'), true, '高 48px');
+  assert.equal(facts.includes('border-radius: var(--dsw-radius-lg)'), true, '圆角 radius-lg（16px）');
+  assert.equal(facts.includes('border: .5px solid var(--dsw-alias-border-l3)'), true, '0.5px 宿主描边');
+  assert.equal(facts.includes('background-clip: padding-box'), true, 'padding-box 裁切');
+  // 探测图不额外占位：它没有新 class，也没有新规则
+  assert.equal(/skc_cardIconProbe|skc_probe/.test(css), false, '样式表里没有为探测图新增类');
 });

@@ -132,7 +132,7 @@ icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安�
 4. 组件只读 props（`store/api/t`）写 `store.actions`，不直接 `fetch`；只有滚动位置恢复与触底预取读 DOM，且都在 `useEffect` 里（字符串渲染不触发）。
 5. **来源只有一个**：来源菜单就是 `SkillHub` 与 `ClawHub` 两项，默认 `skillhub`，没有「全部来源」；因此不存在「两源同屏」「部分源失败提示条」这两种中间态——当前源失败即整页错误态（可重试）。分类行只在当前源发布分类时出现（ClawHub 直接隐藏），选中的分类也不会跨源。
 6. **分类 chip 带数量**：`全部` 用 `bootstrap.total`，各分类用 `categories[].count`；`count` 为 `null` 时数字位整段不渲染（不写 0、不写破折号），`countsOk:false` 时所有数字位都不出现。格式是 `Intl.NumberFormat(undefined, {notation:'compact'})`（运行时默认语言，`try/catch` 兜底成原数字），样式见 §8.5。
-7. **头像只有两态**（卡片、详情头、确认弹窗共用一个 `MarketIcon`）：取值顺序 **`item.iconUrl` → `market.icons[marketKeyOf(item)]` → `null`**（`iconUrlOf()`，纯函数），拿到非空字符串就画图（`<img>` + `skc_marketIconImg`、`alt=""`、`loading="lazy"`、`referrerPolicy="no-referrer"`），否则画首字母；**图片 `onError` 也回落首字母**，任何情况下都不留空白方块。ClawHub 的图标是**后到的**：列表先给 `iconUrl:null`，页面渲染完成后由 `market/icons` 批量补齐，所以同一张卡会先字母、后换图。
+7. **头像只有两态**（卡片、详情头、确认弹窗共用一个 `MarketIcon`）：**瓦片任何时候都不空**——URL 有值但还没 `onload` 时画字母 + 一张 `display:none` + `loading="eager"` 的探测图（同 `src`/同 `referrerPolicy`），图片只在 `onload` 之后才换成可见的 `<img class="skc_marketIconImg">`；探测图与可见图同一个 URL，浏览器只发一次请求（实测 `display:none` 的 eager 图会加载并触发 `onload`，`loading="lazy"` 的不会）。取值顺序 **`item.iconUrl` → `market.icons[marketKeyOf(item)]` → `null`**（`iconUrlOf()`，纯函数），拿到非空字符串就画图（`<img>` + `skc_marketIconImg`、`alt=""`、`loading="lazy"`、`referrerPolicy="no-referrer"`），否则画首字母；**图片 `onError` 也回落首字母**，任何情况下都不留空白方块。ClawHub 的图标是**后到的**：列表先给 `iconUrl:null`，页面渲染完成后由 `market/icons` 批量补齐，所以同一张卡会先字母、后换图。
 8. **图标补齐不阻塞渲染**：`market/list` 回来后先画卡片，再由面板 effect 把「ClawHub + 无图标 + 本会话没问过」的条目打包（≤24）调 `market/icons`；**同一 id 只问一次**（`iconsTried` 同时记正负结果），请求失败静默保持字母；切来源 / 搜索 / 刷新**不清**已拿到的图标，只有 `marketReload()` 清。图片是 `.skc_cardIcon` 的 flex 子项、只填满内容盒，所以宿主那条 `.5px` 描边始终压在图片之上；头像盒既有声明（48×48 / `border .5px` / `radius-lg` / `background-clip: padding-box` / 粉彩底）一字不改。
 
 ### 3.9.3 store action（`src/client/state.js`）
@@ -200,7 +200,7 @@ icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安�
 | 先播种 | `iconSeeds(market)`：列表里 `iconUrl` 非空、且 `icons` 还没有该键的条目 → `marketIconsSeeded()`（**不碰 `iconsTried`**）。effect 里播种后直接 `return`，写缓存会再触发一轮 effect，那一轮才走网络——幂等，不会死循环 |
 | 选谁 | `iconBatch(payload, market)`：市场半边 = `iconCandidates()`（ClawHub / 无图 / 没问过）；已安装半边 = `row.upstream !== null` + `icons` 为空 + `iconsTried` 未命中 + `sourceId ∈ MARKET_SOURCE_IDS`；**`owner`/`slug` 必须是非空字符串（坏三元组跳过，不让整批 400）**；每源 ≤12、总 ≤24、按 key 去重（市场条目先） |
 | 身份 | `Row.upstream = {sourceId, owner, slug} \| null`（Host 从 `_meta.json` 带出）；`null` ⇒ 该行永远是字母瓦片，不按名字猜 |
-| 视觉单元 | `icon-tile.jsx`：`tileElement()`（无 hook，返回瓦片元素）+ `useIconFailure()`（按 URL 记失败）；`IconTile` 是组件形态，`MarketIcon` 解析 URL 后调同一对函数。`.skc_cardIcon` 与 `.skc_marketIconImg` 声明零改动 |
+| 视觉单元 | `icon-tile.jsx`：`tileElement()`（无 hook，返回瓦片元素）+ `useIconState()`（按 URL 记 loaded/failed，未 loaded 时返回探测图 URL）；`IconTile` 是组件形态，`MarketIcon` 解析 URL 后调同一对函数。`.skc_cardIcon` 与 `.skc_marketIconImg` 声明零改动 |
 | 失败 | 单条 → `null`；整批失败 → `marketIconsAttempted` 记 tried，不重试、不弹 toast、不写行内原因 |
 | 失效 | 切页签不动 · 已安装页签刷新不动 · `marketReload()` 清空（一次性、下一批自愈）· 安装成功后不动（新技能与市场条目同键）· 新会话清空（不落盘） |
 

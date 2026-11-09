@@ -15,7 +15,7 @@
  */
 import { Button, StateDot, Tag } from '@deepseek-ai/dsh-client-ui-primitives';
 
-import { tileElement, useIconFailure } from './icon-tile.jsx';
+import { tileElement, useIconState } from './icon-tile.jsx';
 import { cn } from './styles.js';
 import { iconUrlOf, installViewOf, marketKeyOf, metaSegments, sourceLabelOf } from './market-model.js';
 
@@ -67,7 +67,7 @@ export function InstallAction({ item, market, t, size = 'sm', className, onInsta
 /**
  * The market's avatar tile: the shared tile, with the URL resolved from the item.
  *
- * It calls `tileElement` / `useIconFailure` instead of rendering `<IconTile/>` so that a
+ * It calls `tileElement` / `useIconState` instead of rendering `<IconTile/>` so that a
  * caller looking at this component's own output sees the tile itself, not a component
  * element - the drawing and the failure state still have exactly one implementation.
  * @param {{item: object, title: string, market: object, className?: string}} props - the
@@ -77,8 +77,7 @@ export function InstallAction({ item, market, t, size = 'sm', className, onInsta
  */
 export function MarketIcon({ item, title, market, className }) {
   const iconUrl = iconUrlOf(item, market);
-  const { showIcon, onError } = useIconFailure(iconUrl);
-  return tileElement({ iconUrl, title, className }, showIcon, onError);
+  return tileElement({ iconUrl, title, className }, useIconState(iconUrl));
 }
 
 /**

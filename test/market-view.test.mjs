@@ -83,6 +83,16 @@ function mountHooks(component, initialProps) {
   return { render };
 }
 
+/**
+ * The non-null children of one rendered tile, flattened.
+ *
+ * `tileElement` always emits two slots (probe, then letter-or-visible-image), so the first
+ * frame is an array and a settled frame may carry a `null` in the probe slot.
+ * @param {{props: {children: unknown}}} node - a rendered element.
+ * @returns {unknown[]} the children that actually render.
+ */
+const kidsOf = (node) => [node.props.children].flat().filter((child) => child !== null && child !== undefined);
+
 /** The letter tile the avatar palette gives a title. */
 const LETTER = (title) => title.trim().charAt(0).toUpperCase();
 
@@ -689,25 +699,51 @@ test('K56 图标用 object-fit: contain（宽幅 logo 不裁切），市场块�
 
 const ICON_URL = 'https://cdn.skillhub.cn/skill-icons/ake/dev-god.png';
 
-test('K52 ① iconUrl 有效：内容盒里渲染 <img>，属性齐全、外层盒子一个字节没变', () => {
-  const html = renderToStaticMarkup(createElement(card.MarketIcon, {
-    item: { iconUrl: ICON_URL },
-    title: 'Dev God',
-  }));
-  assert.ok(html.includes(`src="${ICON_URL}"`), 'src 原样（不做改写、不加参数）');
-  assert.ok(html.includes('class="skc_marketIconImg"'), '图片用市场刻度里的 skc_marketIconImg');
-  assert.ok(html.includes('alt=""'), '装饰图 alt 为空（标题已经在旁边）');
-  assert.ok(html.includes('loading="lazy"'), '懒加载：一屏 24 张图不能一次性拉满');
-  assert.ok(html.includes('decoding="async"'), '异步解码');
-  // React 18 的 SSR 把这条属性原样写成驼峰，别照着 JSX 的写法去比。
-  assert.ok(html.includes('referrerPolicy="no-referrer"'), '不带 referrer（第三方 CDN）');
-  // 只校验「包含」而不是拼死整串：本轮实测这里会多一个 `skc_undefined`（`cn` 不过滤
-  // undefined，见报告 KI-R3-1）。它没有对应规则、纯属 DOM 噪音，属 cosmetic，不该被
-  // 断言固化成契约——修掉之后也不用改这条。
-  assert.match(html, /class="skc_cardIcon(?: skc_undefined)?"/, '外层仍是已安装页签那个 48px 盒子');
-  assert.ok(html.includes('--skc-avatar-bg'), '字母头像的两个变量照旧写在外层（回落时才有底色）');
-  assert.ok(html.includes('aria-hidden="true"'), '整个瓦片对读屏隐藏');
-  assert.equal(html.includes('>D<'), false, '有图时不画字母');
+test('K52 ① iconUrl 有效：首帧是「隐藏探测图 + 字母」，onLoad 之后同帧换成可见图', () => {
+  // R8：瓦片在图标下载期间**不许空**。结构变成
+  //   [隐藏探测图(display:none, eager), 字母]  --onLoad-->  [可见图(skc_marketIconImg, lazy)]
+  // 探测图与可见图同 src，所以整条链路只发一次请求。
+  const mounted = mountHooks(card.MarketIcon, { item: { iconUrl: ICON_URL }, title: 'Dev God' });
+  const first = mounted.render();
+  assert.equal(first.type, 'span', '外层还是那一个盒子');
+  assert.match(first.props.className, /\bskc_cardIcon\b/, '外层仍是已安装页签那个 48px 盒子');
+  assert.ok(first.props.style['--skc-avatar-bg'], '字母头像的两个变量照旧写在外层（回落时才有底色）');
+  assert.equal(first.props['aria-hidden'], 'true', '整个瓦片对读屏隐藏');
+
+  const children = first.props.children;
+  assert.equal(Array.isArray(children), true, '首帧两个子节点：探测图 + 字母');
+  const [probe, letter] = children;
+  assert.equal(probe.type, 'img', '第一个子节点是探测图');
+  assert.equal(probe.props.src, ICON_URL, 'src 原样（不做改写、不加参数）');
+  assert.equal(probe.props.loading, 'eager', '探测图必须 eager：display:none + lazy 在 Chromium 里根本不加载');
+  assert.deepEqual(probe.props.style, { display: 'none' }, '探测图不可见');
+  assert.equal(probe.props.className, undefined, '探测图不带可见类（skc_marketIconImg 只给真正显示的那张）');
+  assert.equal(probe.props.alt, '', '装饰图 alt 为空');
+  assert.equal(typeof probe.props.onLoad, 'function', '加载成功要能切到可见图');
+  assert.equal(typeof probe.props.onError, 'function', '加载失败要能回落字母');
+  assert.equal(letter, 'D', '同帧仍然画首字母 —— 这一帧不空');
+
+  // SSR 也是同一形态（它不会触发 onload）：markup 里既有探测图也有字母
+  const ssr = renderToStaticMarkup(createElement(card.MarketIcon, { item: { iconUrl: ICON_URL }, title: 'Dev God' }));
+  assert.ok(ssr.includes(`src="${ICON_URL}"`), 'SSR 也先放探测图');
+  assert.match(ssr, /style="display:none"|style="display: none"/, 'SSR 里探测图是隐藏的');
+  assert.ok(ssr.includes('>D<'), 'SSR 首帧有字母');
+  assert.equal(ssr.includes('skc_marketIconImg'), false, 'SSR 首帧还没有可见图');
+
+  // 探测图加载完成 ⇒ 同一帧换成可见图，字母退场
+  probe.props.onLoad();
+  const second = mounted.render();
+  const secondKids = [second.props.children].flat();
+  const images = secondKids.filter((child) => child !== null && typeof child === 'object' && child.type === 'img');
+  assert.equal(images.length, 1, '只剩一张图（探测图退场）');
+  const visible = images[0];
+  assert.match(visible.props.className, /\bskc_marketIconImg\b/, '可见图用市场刻度里的类');
+  assert.equal(visible.props.src, ICON_URL, '与探测图同 src（因此只发过一次请求）');
+  assert.equal(visible.props.loading, 'lazy', '可见图仍可懒加载');
+  assert.equal(visible.props.decoding, 'async', '异步解码');
+  assert.equal(visible.props.referrerPolicy, 'no-referrer', '不带 referrer（第三方 CDN）');
+  assert.equal(secondKids.includes('D'), false, '有图之后不再画字母');
+  assert.match(second.props.className, /\bskc_cardIcon\b/, '盒子没换（几何不跳）');
 });
 
 test('K52 ① 填满内容盒的四条声明在样式表里（0.5px 描边仍压在图上方）', async () => {
@@ -744,32 +780,50 @@ test('K52 ② iconUrl 为 null：回落首字母头像，没有 <img> 也没有�
   }
 });
 
-test('K52 ③ 同一实例遇到 404：onError 之后仍回落首字母，且换一张图能重新尝试', () => {
+test('K52 ③ 同一实例：onLoad 出图，换 URL 后 404 回落字母，换第三张仍能重新尝试', () => {
   const mounted = mountHooks(card.MarketIcon, { item: { iconUrl: ICON_URL }, title: 'Dev God' });
 
   const first = mounted.render();
-  assert.equal(first.type, 'span', '第一次渲染外层是 span');
-  assert.match(first.props.className, /\bskc_cardIcon\b/, '外层盒子');
-  const img = first.props.children;
-  assert.equal(img.type, 'img', '第一次渲染的内容是 <img>');
-  assert.equal(img.props.src, ICON_URL, 'src 就是 iconUrl');
-  assert.equal(typeof img.props.onError, 'function', '图片挂了要有 onError 兜底');
+  const [probe, letter] = first.props.children;
+  assert.equal(letter, 'D', '首帧字母在（不空）');
+  probe.props.onLoad();
+  const loaded = mounted.render();
+  const shown = [loaded.props.children].flat().find((child) => child !== null && typeof child === 'object' && child.type === 'img');
+  assert.match(shown.props.className, /\bskc_marketIconImg\b/, 'onLoad 之后是可见图');
 
-  // 模拟浏览器加载失败
-  img.props.onError();
-
-  const second = mounted.render();
-  assert.equal(second.props.children, 'D', 'onError 之后画的是首字母，不是空白');
-  assert.notEqual(second.props.children, '', '内容非空（空瓦片比字母更糟）');
-  assert.match(second.props.className, /\bskc_cardIcon\b/, '盒子不变（几何不会跳）');
-  assert.equal(second.props.style['--skc-avatar-bg'], first.props.style['--skc-avatar-bg'], '底色与失败前一致');
-  assert.equal(JSON.stringify(second).includes('<img'), false, '这一步没有再渲染 img');
-
-  // 同一实例换到另一张图：失败记录是按 URL 记的，所以新图有自己的一次机会
+  // 同一实例换到另一张图：探测 → 失败 → 只剩字母（字母从头到尾都在，不会出现空瓦片）
   const other = 'https://cdn.skillhub.cn/skill-icons/other/next.png';
-  const third = mounted.render({ item: { iconUrl: other }, title: 'Dev God' });
-  assert.equal(third.props.children.type, 'img', '换 URL 后重新尝试渲染图片');
-  assert.equal(third.props.children.props.src, other, '用的是新 URL');
+  const second = mounted.render({ item: { iconUrl: other }, title: 'Dev God' });
+  const [probe2, letter2] = second.props.children;
+  assert.equal(probe2.type, 'img', '换 URL 后重新探测');
+  assert.equal(probe2.props.src, other, '用的是新 URL');
+  assert.equal(letter2, 'D', '探测期间字母仍在');
+  probe2.props.onError();
+  const failed = mounted.render();
+  const failedKids = kidsOf(failed);
+  assert.deepEqual(failedKids, ['D'], 'onError 之后只剩首字母，不是空白');
+  assert.notEqual(failedKids[0], '', '内容非空（空瓦片比字母更糟）');
+  assert.match(failed.props.className, /\bskc_cardIcon\b/, '盒子不变（几何不会跳）');
+  assert.equal(failed.props.style['--skc-avatar-bg'], first.props.style['--skc-avatar-bg'], '底色与失败前一致');
+  assert.equal(JSON.stringify(failed).includes('<img'), false, '这一步没有再渲染 img');
+
+  // 第三张（没见过的）URL：新图有自己的一次机会
+  const thirdUrl = 'https://cdn.skillhub.cn/skill-icons/third/three.png';
+  const third = mounted.render({ item: { iconUrl: thirdUrl }, title: 'Dev God' });
+  const [probe3, letter3] = third.props.children;
+  assert.equal(probe3.type, 'img', '没见过的 URL 重新探测');
+  assert.equal(probe3.props.src, thirdUrl, 'src 是新地址');
+  assert.equal(letter3, 'D', '探测期间字母仍在');
+  probe3.props.onLoad();
+  const again = mounted.render();
+  const againImg = kidsOf(again).find((child) => typeof child === 'object' && child.type === 'img');
+  assert.match(againImg.props.className, /\bskc_marketIconImg\b/, '再次 onLoad 仍然能显示');
+
+  // 换回一张**已经加载过**的 URL：组件记得它，直接给可见图（不再探测、不再发请求）
+  const back = mounted.render({ item: { iconUrl: thirdUrl }, title: 'Dev God' });
+  const backKids = kidsOf(back);
+  assert.equal(backKids.filter((child) => typeof child === 'object' && child.type === 'img').length, 1, '已加载过的 URL 只渲染一次');
+  assert.match(backKids[0].props.className, /\bskc_marketIconImg\b/, '直接是可见图');
 });
 
 test('K52 三态在卡片/详情/确认弹窗里都走同一个组件（同一张图不会一处有一处没有）', () => {
@@ -781,7 +835,10 @@ test('K52 三态在卡片/详情/确认弹窗里都走同一个组件（同一�
       merged: [withIcon],
     });
   });
-  assert.ok(cardHtml.includes('class="skc_marketIconImg"'), '卡片上画的是图片');
+  // SSR 不会触发 onload，所以三处都是「隐藏探测图 + 字母」形态；可见图形态由 K52 ①/K70
+  // 用 hooks harness 驱动 onLoad 后再断言。这里要的是「三处用的是同一个视觉单元」。
+  const probeForm = (html) => html.includes(`src="${ICON_URL}"`) && /style="display:none"|style="display: none"/.test(html) && html.includes('>D<');
+  assert.equal(probeForm(cardHtml), true, '卡片上是探测图 + 字母');
 
   const detailHtml = renderMarket((store) => {
     store.actions.marketDetailOpen(withIcon);
@@ -796,7 +853,7 @@ test('K52 三态在卡片/详情/确认弹窗里都走同一个组件（同一�
       filesComplete: true,
     });
   });
-  assert.ok(detailHtml.includes('class="skc_marketIconImg"'), '详情头也是同一张图');
+  assert.equal(probeForm(detailHtml), true, '详情头也是同一形态（同一个组件）');
 
   const confirmHtml = renderMarket((store) => {
     store.actions.marketPageAppended({
@@ -805,7 +862,7 @@ test('K52 三态在卡片/详情/确认弹窗里都走同一个组件（同一�
     });
     store.actions.marketInstallConfirm('skillhub:ake:dev-god');
   });
-  assert.ok(confirmHtml.includes('class="skc_marketIconImg"'), '确认弹窗也一致');
+  assert.equal(probeForm(confirmHtml), true, '确认弹窗也一致');
 
   const bare = item({ id: 'clawhub:ake:plain' });
   bare.sourceId = 'clawhub';
@@ -816,6 +873,7 @@ test('K52 三态在卡片/详情/确认弹窗里都走同一个组件（同一�
       merged: [bare],
     });
   });
-  assert.equal(plainHtml.includes('skc_marketIconImg'), false, 'ClawHub 的卡片不出现 img');
+  assert.equal(plainHtml.includes('skc_marketIconImg'), false, 'ClawHub 的卡片不出现可见图');
+  assert.equal(plainHtml.includes('<img'), false, '连探测图都没有（没有 URL 就没有探测）');
   assert.match(plainHtml, /class="skc_cardIcon(?: skc_undefined)?"/, '仍然是同一个盒子画字母');
 });
