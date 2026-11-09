@@ -210,6 +210,7 @@ ClawHub 的**目录、详情、安装包**三条链路都由 SkillHub 的镜像�
 | `.skc_marketSelect` / `Label` | `max-width:240px; font-weight:500` / `text-overflow:ellipsis; white-space:nowrap; overflow:hidden` | `.marketButton` / `.marketName`，**唯一偏离**：去掉宿主的 `margin-left:-8px`（它把工具栏 `gap:8px` 吃掉，搜索框与来源菜单贴成 0、有词时清空按钮也贴上去）；两个菜单同带此类，理由见 `docs/contracts/decisions.md` 附录 K |
 | `.skc_marketChips` | `flex-wrap:wrap; align-items:center; gap:6px; display:flex` | `.categories` |
 | `.skc_marketScope` | `color:var(--dsw-alias-label-tertiary); margin:0; font-size:13px; line-height:20px` | `.muted` |
+| `.skc_marketMore` | `align-self:center` | **新刻度**：列表页脚（「没有更多了」与「加载失败，点此重试」两处 `<p>`），取自面板里那两处的既有实现——U10 之前一直没登记 |
 | `.skc_marketLoadMore` | `align-items:center; justify-content:center; gap:6px; padding-top:8px; display:flex; color:var(--dsw-alias-label-tertiary); font-size:12px; line-height:18px` | **新刻度**：列表底部的「正在加载更多」一行（圆点 + 文案）。U10 之前它是工具栏的第 4 个子元素，出现时把搜索框挤窄 21px（13px 圆点 + 8px gap）——真机量到空态 739px、无圆点 760px |
 | `.skc_marketNotice` | `border-radius:var(--dsw-radius-md); background:var(--dsw-alias-state-warn-tertiary); align-items:flex-start; gap:8px; margin:0; padding:10px 12px; font-size:12px; line-height:18px; display:flex` | `.notice` |
 | `.skc_marketGrid` | `display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px; margin:0; padding:0; list-style:none` | **新刻度** |

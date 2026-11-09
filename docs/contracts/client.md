@@ -248,7 +248,7 @@ icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安�
 - `client/src/**` 与 `lib/**` **不得出现 CJK 字面量**（`check:i18n` 强制）；界面文案一律 `t('key')`。
 - 占位符用 `{name}`（宿主同款：`t('partToggle', { name: title })`）。
 - 入口标题**只允许**通过 `panel.label` 表达：改名 = 改 `locale/*.json` 的 `panel.label` + `meta.title`，代码零改动（这是「不硬编码中文」的可验收形态）。两处都要改的理由：`meta.title` 是插件列表里的显示名（`PROF/*/locale/zh.json` 四家都是 `{meta:{title,description}}`），`panel.label` 是侧栏行标题。`check-i18n` 会校验两者都存在。
-- 市场面沿用两族键：`market.*`（61 个 → **66 个**）与 `error.E_*`（11 个 → **13 个**），全字典 111 → **118**；**`market.placeholder` 已删除**（市场页签不再是占位文案）。下表有几行把同族的新键合并成一行，这是为了守住 400 行上限（`check-docs` 的 R11），键与值逐条列出、语义不变。
+- 市场面沿用两族键：`market.*`（61 个 → **65 个**）与 `error.E_*`（11 个 → **13 个**），全字典 111 → **117**；**`market.placeholder` 已删除**（市场页签不再是占位文案）。下表有几行把同族的新键合并成一行，这是为了守住 400 行上限（`check-docs` 的 R11），键与值逐条列出、语义不变。
 - 键表（P0 全集 + 市场轮；`zh` 值逐字来自 `PRD` §3.3.5 与本设计）：
 
 | key | zh |
@@ -281,7 +281,6 @@ icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安�
 | `market.searchLabel` | 搜索技能 |
 | `market.searchPlaceholder` | 搜索技能… |
 | `market.clearSearch` | 清除搜索 |
-| `market.searching` | 正在搜索（**U10 起无消费者**：工具栏那条圆点播报已删，键留着备用，不动键数） |
 | `market.sourceLabel` | 来源 |
 | `market.source.all` | 所有来源 |
 | `market.source.skillhub` | SkillHub |

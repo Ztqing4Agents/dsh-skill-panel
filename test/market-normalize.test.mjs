@@ -582,6 +582,28 @@ test('K95 身份轴：按上游行折叠（community / enterprise → skillhub�
   for (const row of [{ ...base, source: 'community' }, { ...base, source: 'enterprise' }, { ...base, source: 'clawhub' }]) {
     assert.equal(SOURCE_IDS.has(fromMirrorRow(row).sourceId), true, `${row.source} 折出来的身份必须在白名单里`);
   }
+
+  // M9: a row with no owner anywhere is dropped, not shown as a card that fails on click.
+  // `marketId()` would produce `skillhub::<slug>`, which the detail/install routes reject.
+  const ownerless = { slug: 'ghost', name: 'Ghost', source: 'community' };
+  assert.equal(fromMirrorRow(ownerless), null, '三种 owner 来源全空 ⇒ 丢条目');
+  assert.equal(
+    fromMirrorRow({ ...ownerless, namespace: { handle: '   ' }, ownerHandle: '', owner: { handle: '' } }),
+    null,
+    '空白串也不算 owner',
+  );
+  // …while every shape the upstream really uses still identifies the row.
+  const viaNamespace = fromMirrorRow({ ...ownerless, namespace: { handle: 'indiv-ake' } });
+  assert.equal(viaNamespace.owner, 'indiv-ake', 'namespace.handle 是第一位');
+  assert.equal(viaNamespace.id, 'skillhub:indiv-ake:ghost', 'id 拼得出来');
+  const viaOwnerHandle = fromMirrorRow({ ...ownerless, ownerHandle: 'ake' });
+  assert.equal(viaOwnerHandle.owner, 'ake', '只有 ownerHandle 也认');
+  assert.equal(viaOwnerHandle.id, 'skillhub:ake:ghost', 'id 用 ownerHandle 拼');
+  const viaOwner = fromMirrorRow({ ...ownerless, owner: { handle: 'ake-h' } });
+  assert.equal(viaOwner.owner, 'ake-h', '只有 owner.handle 也认');
+  assert.equal(viaOwner.id, 'skillhub:ake-h:ghost', 'id 用 owner.handle 拼');
+  // The ClawHub side has always dropped these; the fold is what makes both sides agree.
+  assert.equal(fromMirrorRow({ slug: 'ghost', source: 'clawhub' }), null, 'ClawHub 无 owner 仍丢');
 });
 
 test('K95 all 档是混排：一批行折出两种身份，键仍按行而不是按档', async () => {
@@ -612,5 +634,57 @@ test('K95 all 档是混排：一批行折出两种身份，键仍按行而不是
     single.map((item) => item.id),
     ['skillhub:ake:dev-god', 'skillhub:acme:corp-tool'],
     'all 与 skillhub 两档下，同一条技能键逐字相同（已安装记录不用迁移）',
+  );
+});
+
+test('K95 折叠守卫的边界：空白 owner / 空 handle 也算「没有 owner」，但别名来源仍能出键', async () => {
+  const base = { source: 'community', slug: 'ghost', name: 'Ghost' };
+
+  // Whitespace is not an owner: it trims to nothing and would build `skillhub:   :ghost`,
+  // a key nothing downstream can resolve.
+  for (const raw of [
+    { ...base, namespace: { handle: '   ' } },
+    { ...base, namespace: {}, ownerHandle: '  ', owner: { handle: '\t' } },
+    { ...base, namespace: {}, ownerHandle: '', owner: { handle: '' } },
+    { ...base, namespace: {}, ownerHandle: '   ' },
+  ]) {
+    assert.equal(fromMirrorRow(raw), null, `${JSON.stringify(raw)} ⇒ 丢条目（空白不算身份）`);
+  }
+
+  // The two alias shapes the SkillHub catalogue actually publishes still build keys:
+  // `ownerHandle` on bare rows, `owner.handle` on nested ones.
+  assert.equal(fromMirrorRow({ ...base, ownerHandle: 'ake' }).id, 'skillhub:ake:ghost', 'ownerHandle ⇒ 键用它');
+  assert.equal(
+    fromMirrorRow({ ...base, owner: { handle: 'bob' } }).id,
+    'skillhub:bob:ghost',
+    'owner.handle ⇒ 键用它',
+  );
+  // A namespace wins over the aliases when both are present (the mirror's own filing).
+  assert.equal(
+    fromMirrorRow({ ...base, namespace: { handle: 'ns' }, ownerHandle: 'ake' }).id,
+    'skillhub:ns:ghost',
+    'namespace.handle 优先',
+  );
+
+  // The detail normaliser is out of scope on purpose: it is fed a payload the route already
+  // addresses by `ref`, and the fold is the only place a list row loses its identity.
+  const detail = fromSkillhubDetail({ skill: { slug: 'ghost', displayName: 'Ghost', description: '' } });
+  assert.notEqual(detail, null, '同一条数据在详情路径上仍返回对象（守卫不越界）');
+  assert.equal(detail.owner, null, '详情路径的 owner 仍为空（这一轮没动它）');
+});
+
+test('K95 all 混排里一条坏行不打断整页：其余行照出，末页判定也不受影响', () => {
+  const rows = [
+    { source: 'community', slug: 'a', name: 'A', namespace: { handle: 'ake' } },
+    { source: 'community', slug: 'ghost', name: 'Ghost', namespace: {} },
+    { source: 'clawhub', slug: 'b', name: 'B', upstream_owner_login: 'ivangdavila' },
+    { source: 'enterprise', slug: 'c', name: 'C', namespace: { handle: 'acme' } },
+    { source: 'bogus', slug: 'd', name: 'D', namespace: { handle: 'ake' } },
+  ];
+  const folded = rows.map((row) => fromMirrorRow(row)).filter(Boolean);
+  assert.deepEqual(
+    folded.map((entry) => entry.id),
+    ['skillhub:ake:a', 'clawhub:ivangdavila:b', 'skillhub:acme:c'],
+    '坏行只丢自己，前后行照常出（3 出来、2 丢掉）',
   );
 });

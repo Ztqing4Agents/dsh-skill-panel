@@ -318,3 +318,19 @@ test('K94 范围轴到得上游 URL：all 一个 source 参数都不发，skillh
     assert.equal(run.urls[0].searchParams.get('order'), 'desc', `${sort} ⇒ order=desc`);
   }
 });
+
+test('K95 折叠丢行不改末页判定：坏行只少一张卡，不缩页、不提前收尾', async () => {
+  // 24 rows, three of them unidentifiable (no owner anywhere). `nextPage` reads the raw
+  // count and the upstream total, never the post-normalisation length - a page that lost
+  // rows must not look like the end of the list.
+  const rows = Array.from({ length: 24 }, (unused, index) => mirrorRow(`s${index}`));
+  rows[3] = mirrorRow('ghost-a', { namespace: {}, upstream_owner_login: '   ' });
+  rows[9] = mirrorRow('ghost-b', { namespace: {}, upstream_owner_login: '' });
+  rows[20] = mirrorRow('ghost-c', { namespace: { handle: '  ' }, upstream_owner_login: '  ' });
+  const { io } = mirrorIo({ rows, total: 240 });
+
+  const page = await clawhubSource.list({ ...CLAW_QUERY, limit: 24 }, io);
+  assert.equal(page.items.length, 21, '24 行里 3 行没有身份 ⇒ 21 张卡');
+  assert.equal(page.total, 240, '上游总数原样透传（不因为丢行而变小）');
+  assert.notEqual(page.next, null, '满页且没到总数 ⇒ 还有下一页（丢掉的行不是末页信号）');
+});
