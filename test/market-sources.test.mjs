@@ -51,7 +51,7 @@ test('K42 counts 只在有分类表的源上存在，且返回形状固定', () 
   assert.equal(clawhub.counts, undefined, 'ClawHub 没有分类表，也就没有 counts');
 });
 
-test('K42 能力对照与 §7.2 一致：SkillHub 有分类表、ClawHub 没有且是整包', () => {
+test('K42 能力对照与 §7.2 一致：两源都逐文件取包，只有 SkillHub 有分类表', () => {
   assert.deepEqual(descriptors().map((entry) => entry.id), ['skillhub', 'clawhub'], '描述符顺序同注册表');
   const [skillhub, clawhub] = descriptors();
   assert.deepEqual(skillhub, {
@@ -64,8 +64,8 @@ test('K42 能力对照与 §7.2 一致：SkillHub 有分类表、ClawHub 没有�
     id: 'clawhub',
     labelKey: 'market.source.clawhub',
     hasCategories: false,
-    packageKind: 'zip',
-  }, 'ClawHub 无分类表、整包 zip');
+    packageKind: 'files',
+  }, 'ClawHub 无分类表；U7 起包也走镜像的 /files 清单，与 SkillHub 同形');
   assert.deepEqual(descriptorsOf([]), [], '空数组 ⇒ 空描述符');
   assert.deepEqual(descriptorsOf(undefined), [], '非数组 ⇒ 空描述符（界面拿到空也不会崩）');
 });
@@ -192,9 +192,16 @@ test('K87 末页只看 total 与空页：丢条目造成的短页仍然给下一
   assert.equal(empty.next, null, '真空页 ⇒ 末页（total 再大也不翻）');
   assert.equal(empty.items.length, 0, '没有条目');
 
-  const unknownTotal = await clawhubSource.list(CLAW_QUERY, mirrorIo({ rows: [mirrorRow('a')] }).io);
-  assert.notEqual(unknownTotal.next, null, 'total 缺失时不拿本页条数当末页信号（宁可多翻一页）');
-  assert.equal(unknownTotal.total, null, 'total 缺失就是 null');
+  // U7 unified the rule: with a real total it is the authority (short pages above), and only
+  // when the upstream refuses to report one does a short page have to stand in for it.
+  const unknownShort = await clawhubSource.list(CLAW_QUERY, mirrorIo({ rows: [mirrorRow('a')] }).io);
+  assert.equal(unknownShort.next, null, 'total 缺失 + 本页不满 ⇒ 只能按条数收尾（没有更好的信号）');
+  assert.equal(unknownShort.total, null, 'total 缺失就是 null');
+  const unknownFull = await clawhubSource.list(
+    { ...CLAW_QUERY, limit: 1 },
+    mirrorIo({ rows: [mirrorRow('a')] }).io,
+  );
+  assert.notEqual(unknownFull.next, null, 'total 缺失但本页满 ⇒ 继续翻（不提前截断）');
 });
 
 test('K87 游标与失败：非本源游标报 E_BAD_QUERY，坏载荷报 E_SOURCE_BAD_RESPONSE', async () => {
@@ -234,10 +241,11 @@ test('K87 search 复用同一个镜像端点并带上 keyword（因此能翻页�
 test('K87 镜像的 total 只认数字，分类原样透传，第二页的游标接着排', async () => {
   // A string total is "no total": the end-of-list rule must not compare a string to a number
   // (`'9' >= 4` is true by coercion, which would cut the list short after one page).
-  const stringTotal = mirrorIo({ rows: [mirrorRow('a')], total: /** @type {any} */ ('9') });
+  const fullPage = [mirrorRow('a'), mirrorRow('b'), mirrorRow('c'), mirrorRow('d')];
+  const stringTotal = mirrorIo({ rows: fullPage, total: /** @type {any} */ ('9') });
   const page = await clawhubSource.list(CLAW_QUERY, stringTotal.io);
   assert.equal(page.total, null, '非数字的 total 不透传');
-  assert.notEqual(page.next, null, '也不拿它判末页（只按空页/真实 total 判）');
+  assert.notEqual(page.next, null, '字符串 total 不参与比较（本页满 ⇒ 继续翻，绝不因为 `\'9\' >= 4` 截断）');
 
   const categorised = mirrorIo({ rows: [mirrorRow('a')], total: 63381 });
   await clawhubSource.list({ ...CLAW_QUERY, category: 'dev-tools' }, categorised.io);

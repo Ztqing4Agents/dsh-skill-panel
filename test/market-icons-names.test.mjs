@@ -23,23 +23,41 @@ const SOURCES = [
     source: skillhubSource,
     reset: resetSkillhubIconCache,
     key: (owner, slug) => `skillhub:${owner}:${slug}`,
-    body: (slug, facts) => ({ skill: { slug, ...facts } }),
+    // SkillHub answers a detail payload; its owner *is* the namespace.
+    reply: (slug, facts) => ({ skill: { slug, displayName: facts.displayName, iconUrl: facts.icon } }),
   },
   {
     name: 'clawhub',
     source: clawhubSource,
     reset: resetIconCache,
     key: (owner, slug) => `clawhub:${owner}:${slug}`,
-    body: (slug, facts) => ({ skill: { slug, ...facts } }),
+    // ClawHub is answered by the mirror's *list*: the row carries both facts, and the
+    // namespace it lives in has nothing to do with the owner we matched on.
+    reply: (slug, facts) => ({
+      data: {
+        total: 1,
+        skills: [{
+          slug,
+          name: facts.displayName,
+          iconUrl: facts.icon,
+          upstream_owner_login: 'ake',
+          namespace: { handle: `clawhub_${'ake'}` },
+        }],
+      },
+    }),
   },
 ];
 
 /**
- * A fake upstream whose detail answers are driven by slug.
+ * A fake upstream whose answers are driven by slug.
+ *
+ * The slug is read from the path (SkillHub's detail endpoint) or from the `keyword`
+ * parameter (ClawHub's lookup), so one fake serves both shapes.
  * @param {Record<string, {displayName?: unknown, icon?: unknown}>} details - per slug facts.
+ * @param {(slug: string, facts: object) => object} reply - the body shape for one source.
  * @returns {{io: {getJson: Function}, calls: string[]}} the io and the slugs asked for.
  */
-function fakeIo(details) {
+function fakeIo(details, reply) {
   const calls = [];
   return {
     calls,
@@ -51,10 +69,10 @@ function fakeIo(details) {
        */
       async getJson(url) {
         const parsed = new URL(String(url));
-        const slug = decodeURIComponent(parsed.pathname.split('/').at(-1));
+        const slug = parsed.searchParams.get('keyword')
+          ?? decodeURIComponent(parsed.pathname.split('/').at(-1));
         calls.push(slug);
-        const facts = details[slug] ?? {};
-        return { skill: { slug, displayName: facts.displayName, icon: facts.icon, iconUrl: facts.icon } };
+        return reply(slug, details[slug] ?? {});
       },
     },
   };
@@ -71,7 +89,7 @@ for (const entry of SOURCES) {
       number: { displayName: 42, icon: null },
       object: { displayName: { text: 'x' }, icon: null },
       both: { displayName: 'Both Skill', icon: 'https://cdn.example.com/both.png' },
-    });
+    }, entry.reply);
     const refs = ['titled', 'plain', 'empty', 'spaced', 'number', 'object', 'both'].map((slug) => ({ owner: 'ake', slug }));
     const { icons, names } = await entry.source.icons(refs, io);
 
@@ -98,14 +116,14 @@ for (const entry of SOURCES) {
     entry.reset();
     let at = 1_000_000;
     const clock = () => at;
-    const first = fakeIo({ dev: { displayName: 'Dev Pro', icon: 'https://cdn.example.com/dev.png' } });
+    const first = fakeIo({ dev: { displayName: 'Dev Pro', icon: 'https://cdn.example.com/dev.png' } }, entry.reply);
     const one = await entry.source.icons([{ owner: 'ake', slug: 'dev' }], first.io, { now: clock });
     assert.equal(one.icons[entry.key('ake', 'dev')], 'https://cdn.example.com/dev.png', '第一次拿到图');
     assert.equal(one.names[entry.key('ake', 'dev')], 'Dev Pro', '第一次拿到标题');
     assert.equal(first.calls.length, 1, '一条 detail 同时出两个值（没有第二条请求）');
 
     at += 60 * 1000;
-    const second = fakeIo({ dev: { displayName: 'Changed Name', icon: 'https://cdn.example.com/other.png' } });
+    const second = fakeIo({ dev: { displayName: 'Changed Name', icon: 'https://cdn.example.com/other.png' } }, entry.reply);
     const two = await entry.source.icons([{ owner: 'ake', slug: 'dev' }], second.io, { now: clock });
     assert.equal(second.calls.length, 0, '缓存命中 ⇒ 一个上游请求都不发');
     assert.equal(two.icons[entry.key('ake', 'dev')], 'https://cdn.example.com/dev.png', '图是缓存里那张');
@@ -113,7 +131,7 @@ for (const entry of SOURCES) {
 
     // `?refresh=1` 会调 reset：图标与标题一起清空
     entry.reset();
-    const third = fakeIo({ dev: { displayName: 'Changed Name', icon: 'https://cdn.example.com/other.png' } });
+    const third = fakeIo({ dev: { displayName: 'Changed Name', icon: 'https://cdn.example.com/other.png' } }, entry.reply);
     const three = await entry.source.icons([{ owner: 'ake', slug: 'dev' }], third.io, { now: clock });
     assert.equal(third.calls.length, 1, '清缓存后重新问一条');
     assert.equal(three.icons[entry.key('ake', 'dev')], 'https://cdn.example.com/other.png', '图标换成新的');

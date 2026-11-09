@@ -91,7 +91,10 @@ const lines = (f) => textOf(f).split('\n');
 const testModules = (() => {
   try {
     const out = execFileSync('git', ['-C', ROOT, 'ls-files', '-z', '--', 'test'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-    return out.split('\0').filter((f) => f.endsWith('.mjs'));
+    // Same rule as `listMarkdown`: git keeps listing a file deleted from the worktree until
+    // the deletion is committed, and reading it here would crash the gate instead of
+    // reporting on the tree that actually exists.
+    return out.split('\0').filter((f) => f.endsWith('.mjs')).filter((f) => existsSync(join(ROOT, f)));
   } catch {
     return [];
   }

@@ -5,10 +5,10 @@
  * route that merges a fresh scan of $DSH_HOME/skills with the skill registry and
  * the install ledgers, one write route that rewrites the `disable-model-invocation`
  * field of a local SKILL.md byte for byte, one write route for the panel-owned
- * provider toggle store, one health route, and the nine market routes (bootstrap,
- * list, detail, installed map, install, batched icons, the two proxied image
- * endpoints, and the local favourites write) that talk to the two upstream sources
- * through lib/market/upstream.js.
+ * provider toggle store, one health route, and the seven market routes (bootstrap,
+ * list, detail, installed map, install, batched icons and the local favourites
+ * write) that talk to the one upstream (the SkillHub mirror) through
+ * lib/market/upstream.js.
  *
  * The browser half (./client) renders the sidebar entry and the global page; the
  * two halves meet only at the JSON envelope below.

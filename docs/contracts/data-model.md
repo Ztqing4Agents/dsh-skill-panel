@@ -169,7 +169,7 @@ identityKey(provider: string, name: string): string // `${provider || ''}#${name
 
 isSafeRelativePath(value: string): boolean
 // 真: 'SKILL.md' | 'references/a.md' | '.gitignore'    假: '' | '/abs' | '../x' | 'a/../b' | 'a\\b' | 'C:x' | 'a//b' | 段长 >100 | 整体 >240
-// 用途：zip 条目与安装清单的唯一路径闸（市场侧，见 §3.8）
+// 用途：安装清单的唯一路径闸（市场侧，见 §3.8）
 
 isUpstreamIdentity(sourceId: string, owner: string, slug: string): boolean
 // 三段同时过 UPSTREAM_SOURCE_ID / UPSTREAM_OWNER / UPSTREAM_SLUG，且都不含 '..'；`market/query.js` 的上游白名单就是这三个常量的别名（一处定义两处消费，别抄第二份）
@@ -315,7 +315,7 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
   "owner": "ake",                    // 上游；缺失 null
   "slug": "dev-god",                 // 上游；缺失 null
   "displayName": "编程大神.Skill",   // 上游；缺则回落 slug，再缺为空串
-  "iconUrl": "https://…png | api/…/market/lucide?name=zap",  // 四种形态，见不变式 6
+  "iconUrl": "https://…png | null",                          // 两种形态，见不变式 6
   "summary": "≤ 400 字符单行",        // 上游；超长截断，缺失为空串
   "author": "阿客实验室",             // 上游；三级回落，全缺 null
   "version": "1.2.4",                // 上游；**缺失如实 null**（ClawHub 搜索结果必为 null）
@@ -323,7 +323,7 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
   "saves": 99, "score": 100000, "tags": ["代码生成", "Bug 修复"],   // 上游 stars/score（缺失 null，绝不补 0；**ClawHub 由镜像提供，不再恒 null**）/ subCategories.name 或 topics 前 3（≤3 条、单条 ≤24 字符、**缺 = []**）
   "updatedAt": 1794205858796,        // 上游；epoch 毫秒，只用于排序，**不上屏**
   "category": "dev-programming",     // 上游；仅 SkillHub 有，ClawHub 恒 null
-  "packageKind": "files"             // 本地算：'files' | 'zip'
+  "packageKind": "files"             // 本地算：当前两源恒 'files'（'zip' 已于 U7 退役）
 }
 ```
 
@@ -337,7 +337,7 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
   "nameValid": true,                          // isSkillName(declaredName)
   "installTo": "/Users/…/.dsh/skills/dev-god", // nameValid ? join(skillsRoot, declaredName) : skillsRoot
   "files": [{ "path": "SKILL.md", "size": 7953 }], // 清单顺序；sha256 不下发
-  "filesComplete": true                        // zip 读不全时为 false
+  "filesComplete": true                        // 'files' 形态恒 true（zip 读不全的 false 分支已于 U7 退役）
 }
 ```
 
@@ -350,20 +350,20 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
 3. `installTo` 在 `nameValid === false` 时等于 `skillsRoot` 本身（不吃掉最后一级目录名），界面据此显示「不能安装」。
 4. `overview` 不含 frontmatter 分隔行与 `name:`/`description:` 头字段。
 5. 卡片与详情**不显示任何时间**：`updatedAt` 只影响顺序。
-6. `iconUrl` 只有四种合法形态：① 绝对 `https:`（可解析即接受，**不做 host/path 白名单**——SkillHub 两个图床都是逐技能真图）；② `lucide:FileText` → 我方文档相对路径 `api/dsh-skill-center/market/lucide?name=file-text`；③ ClawHub 上传图标 `/api/v1/skill-icons/<64hex>` → `api/dsh-skill-center/market/clawhub-icon?hash=<64hex>`；④ `null`。②③ 是**同源代理路径**，不带前导 `/`：GUI 走 `<base href="./">`，根绝对 `/api/…` 会在子路径部署下逃出前缀；直连那两类图标也不行——`lucide` 是图标名不是地址，ClawHub 的图带 `sandbox` CSP，页内当 `<img>` 一律 `onerror`。`http:`、`//host/x`、未知站内路径、裸词、空值与非字符串归 `null`；`null` 与**加载失败**都是「回落首字母头像」，破图由浏览器侧 `onError` 兜住。
+6. `iconUrl` 只有两种合法形态：① 绝对 `https:`（可解析即接受，**不做 host/path 白名单**——两个图床都是逐技能真图）；② `null`。`http:`、相对路径、空值与非字符串归 `null`；`null` 与**加载失败**都是「回落首字母头像」，破图由浏览器侧 `onError` 兜住。`lucide:FileText` 与 `/api/v1/skill-icons/<64hex>` 两种旧形态随 `clawhub.ai` 与两条代理路由于 U7 退场。
 
 #### 3.8.2 `lib/market/normalize.js` 与 `mergeBatches` 的纯函数契约
 
 ```js
 // lib/market/normalize.js —— 无 I/O、无时钟
 textOrNull(value): string|null / numberOrNull(value): number|null / finiteOrNull(value): number|null / timestampOrNull(value): number|null / mirrorOwnerOf(raw): string|null   // 空串与不可解析 → null；numberOrNull 取整、finiteOrNull 不截断（score 是连续分）；mirrorOwnerOf 取原生 ClawHub owner（upstream_owner_login → 剥 clawhub_ → null）
-clampLine(value, max) / clampBlock(value, max): string / tagListOf(value, 'name'|'topic'): string[]   // 单行折叠 / 保留换行，超长截断 / 标签：≤3 条、去重、topic 转小写
+clampLine(value, max) / clampBlock(value, max): string / tagListOf(value): string[]   // 单行折叠 / 保留换行，超长截断 / 标签：≤3 条、取 subCategories[].name、去重、保留大小写
 marketId(sourceId, owner, slug): string    // `${sourceId}:${owner ?? ''}:${slug ?? ''}`
 marketItem(fields): MarketItem              // 字段补齐（上表）
 fromSkillhubListItem(raw, packageKind?): MarketItem|null
 fromSkillhubDetail(raw, packageKind?): MarketItem|null
 fromClawhubMirrorItem(raw, packageKind?): MarketItem|null   // 镜像条目：复用 fromSkillhubListItem 的字段读取，owner 取 upstream_owner_login，id 重拼，version 过 versionLike
-fromClawhubDetail(raw, packageKind?): MarketItem|null        // clawhub.ai 详情（detail() 用）
+fromClawhubMirrorDetail(raw, owner): MarketItem|null        // 镜像详情：字段同 SkillHub，身份用调用方解析出的原生 owner（detail() 用）
 overviewOf(sourceText, fallback?): string   // stripFrontmatter → 正文；空则回落 fallback
 declaredNameOf(sourceText): string / nameIsValid(name): boolean   // 声明名，及其是否合文法
 sortByUpdatedDesc(items): MarketItem[]      // 新的降序数组；null 时间排最后，相等时保持原序

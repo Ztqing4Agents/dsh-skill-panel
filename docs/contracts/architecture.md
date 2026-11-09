@@ -316,7 +316,7 @@ ledger.readAll() ─────────────────┘   （R5�
 | `lib/registry.js` | `snapshotRegistry(ctx.skills, cwd)` + `rankOfSummary(summary)`（= 先按 `source`/`provider` 映射成 level，再调 `classify.rankOf(level)`；映射表见 1.4.3） |
 | `lib/classify.js` | **纯函数核心**：`rankOf(level)`、`classifySkill(input)`、`mergeCatalog({scanned, registry, ledger})`、`buildGroups()` |
 | `lib/provider-toggles.js` | 自有存储 `$DSH_HOME/dsh-skill-center/provider-toggles.json`：`deserialize`/`serialize`/`read`/`setEnabled`（原子写、损坏降级） |
-| `lib/routes.js` | `makeRoutes(ctx, deps) → WebRoute[]`：`list` / `toggle` / `provider-toggle` / `health` 四条本地面 exact 路由 + 市场面 9 条（含两条图片端点 `market/lucide` / `market/clawhub-icon`、批量图标 `market/icons` 与本地收藏写 `market/favorite`）+ 围栏 + 身份校验 |
+| `lib/routes.js` | `makeRoutes(ctx, deps) → WebRoute[]`：`list` / `toggle` / `provider-toggle` / `health` 四条本地面 exact 路由 + 市场面 7 条（批量图标 `market/icons` 与本地收藏写 `market/favorite` 在内；两条图片端点已于 U7 退场）+ 围栏 + 身份校验 |
 | `lib/market/`（市场面） | 源适配器、上游客户端、ZIP 读取、安装链路与两份自有存储（台账 / 收藏），共 11 个文件；本表不展开，逐个职责见 `docs/contracts/market.md` 附录 G |
 
 ### 2.3 Client 半部源码（`src/client/`，ESM + JSX，esbuild 打包）
@@ -385,7 +385,7 @@ react-dom                              ^18.2.0
 
 依据：`PROF/@michengai/dsh-skills-manager/package.json` 与 `PROF/@linxin666/dsh-client-ui-skill-explorer/package.json` 的 peer 集合（我们只取真正用到的子集），版本区间取本机实测可用的 `0.2.2-rc.1` 系列。
 
-市场面同样**不新增任何 dependency / devDependency**：`node:https`、`node:zlib`、`node:crypto`、`node:fs/promises` 都是 node 内置，zip 读取器自己写（`lib/market/zip.js`）。
+市场面同样**不新增任何 dependency / devDependency**：`node:https`、`node:crypto`、`node:fs/promises` 都是 node 内置；U7 之后没有 zip 读取器（zip 读取模块随 `package:'zip'` 一起退役）。
 
 ---
 

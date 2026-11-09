@@ -185,7 +185,7 @@ async function mount(options = {}) {
       const names = {};
       for (const ref of refs) {
         const key = `clawhub:${ref.owner}:${ref.slug}`;
-        icons[key] = ref.slug.startsWith('has-icon') ? 'api/dsh-skill-center/market/lucide?name=zap' : null;
+        icons[key] = ref.slug.startsWith('has-icon') ? 'https://cdn.example.com/zap.png' : null;
         names[key] = ref.slug.startsWith('has-icon') ? `Claw ${ref.slug}` : null;
       }
       return { icons, names };
@@ -195,35 +195,6 @@ async function mount(options = {}) {
   const sourceById = (id) => sources.find((source) => source.id === id);
   const store = createStore({ dshHome: dir, skillsRoot, now: NOW });
   const installer = createInstaller({ skillsRoot, io: {}, sourceById, store, now: NOW });
-  const lucideCalls = [];
-  const lucide = options.lucide ?? {
-    /**
-     * Answer one icon lookup.
-     * @param {string} name - icon slug.
-     * @returns {Promise<Buffer|null>} the SVG, or null.
-     */
-    async get(name) {
-      lucideCalls.push(name);
-      return name === 'zap' || name === 'file-text' ? Buffer.from(SVG_TEXT) : null;
-    },
-  };
-  const clawhubIconCalls = [];
-  const clawhubIcon = options.clawhubIcon ?? {
-    /**
-     * Answer one uploaded-icon lookup.
-     * @param {string} hash - 64 hex characters.
-     * @returns {Promise<{bytes: Buffer, contentType: string}|null>} the image, or null.
-     */
-    async get(hash) {
-      clawhubIconCalls.push(hash);
-      if (hash === 'f'.repeat(64)) return { bytes: Buffer.from(SVG_TEXT), contentType: 'image/svg+xml' };
-      if (hash === 'e'.repeat(64)) return { bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47]), contentType: 'image/png' };
-      return null;
-    },
-    reset() {
-      resets.push('clawhub-icon-reset');
-    },
-  };
   // The bookmark store is a real file under the temp home, wrapped so a test can count
   // calls: "fenced before the store" is a property of the route, not of the file.
   const favoritesCalls = [];
@@ -256,8 +227,6 @@ async function mount(options = {}) {
       store,
       favorites,
       installer,
-      lucide,
-      clawhubIcon,
       skillsRoot,
       resetIconCache: () => resets.push('reset'),
     },
@@ -267,8 +236,6 @@ async function mount(options = {}) {
     dshHome: dir,
     skillsRoot,
     sources,
-    lucideCalls,
-    clawhubIconCalls,
     skillhubIconCalls,
     iconCalls,
     resets,
@@ -760,56 +727,9 @@ test('K53 bootstrap 对「没有 counts 能力的源」与脏数字的处理', a
   }
 });
 
-test('K58 lucide 代理路由：命中回 SVG（不走信封），非法/缺失 name 400，未知名字裸 404', async () => {
+test('bootstrap 的 ?refresh=1 仍会清图标缓存（U7 之后两条代理路由已删，这条只守 refresh）', async () => {
   const mounted = await mount();
   try {
-    const route = mounted.byPath[ROUTES.marketLucide];
-    assert.notEqual(route, undefined, '第十条路由存在');
-
-    const hit = await callRoute(route, { headers: LOOPBACK_HEADERS, url: `${ROUTES.marketLucide}?name=zap` });
-    assert.equal(hit.status, 200, '命中 200');
-    assert.equal(hit.headers['content-type'], 'image/svg+xml', '图片类型，不是 JSON');
-    assert.equal(hit.headers['cache-control'], 'public, max-age=604800', '一周缓存（图标不会变）');
-    assert.equal(Number(hit.headers['content-length']), Buffer.byteLength(SVG_TEXT), 'content-length 与实际字节一致');
-    assert.equal(hit.body, SVG_TEXT, 'body 就是 SVG 原文');
-    assert.equal(hit.json, null, '不走信封（`<img>` 读不了信封）');
-    assert.deepEqual(mounted.lucideCalls, ['zap'], '名字原样交给代理');
-
-    for (const url of [ROUTES.marketLucide, `${ROUTES.marketLucide}?name=`, `${ROUTES.marketLucide}?name=../etc`, `${ROUTES.marketLucide}?name=Zap`]) {
-      const bad = await callRoute(route, { headers: LOOPBACK_HEADERS, url });
-      assert.equal(bad.status, 400, `${url} ⇒ 400`);
-      assert.equal(bad.json.code, 'E_BAD_QUERY', '400 是信封里的 E_BAD_QUERY');
-      assert.equal(bad.json.data, null, '失败信封 data 为 null（市场面例外）');
-    }
-
-    const missing = await callRoute(route, { headers: LOOPBACK_HEADERS, url: `${ROUTES.marketLucide}?name=nope` });
-    assert.equal(missing.status, 404, '没有这个图标 ⇒ 404');
-    assert.equal(missing.body, '', '裸 404：空 body，不是信封');
-    assert.equal(missing.headers['cache-control'], 'no-store', '404 不缓存');
-    assert.equal(String(missing.headers['content-length']), '0', 'content-length 0');
-    assert.equal(missing.headers['content-type'], undefined, '连 content-type 都不给');
-  } finally {
-    await mounted.close();
-  }
-});
-
-test('K58 代理路由的围栏：只认 GET、只认 loopback；bootstrap 的 ?refresh=1 会清图标缓存', async () => {
-  const mounted = await mount();
-  try {
-    const route = mounted.byPath[ROUTES.marketLucide];
-    for (const method of ['POST', 'PUT', 'DELETE', 'HEAD']) {
-      const wrong = await callRoute(route, { method, headers: LOOPBACK_HEADERS, url: `${ROUTES.marketLucide}?name=zap` });
-      assert.equal(wrong.status, 405, `${method} ⇒ 405`);
-      assert.equal(wrong.json.code, 'E_METHOD', '错方法用 E_METHOD');
-    }
-    const foreign = await callRoute(route, {
-      headers: { host: 'evil.example.com' },
-      remoteAddress: '203.0.113.9',
-      url: `${ROUTES.marketLucide}?name=zap`,
-    });
-    assert.equal(foreign.status, 403, '非本机请求 403');
-    assert.deepEqual(mounted.lucideCalls, [], '被拒的请求一次都没有碰到代理');
-
     assert.deepEqual(mounted.resets, [], '还没有清过缓存');
     await callRoute(mounted.byPath[ROUTES.marketBootstrap], { headers: LOOPBACK_HEADERS, url: `${ROUTES.marketBootstrap}?refresh=1` });
     assert.deepEqual(mounted.resets, ['reset'], '?refresh=1 清一次图标缓存（调试用）');
@@ -844,7 +764,7 @@ test('K57 POST market/icons：批量语义（≤24、去重、按请求顺序、
       ['clawhub:o:has-icon-one', 'clawhub:o:plain'],
       '键按请求顺序排列，重复项已去重',
     );
-    assert.equal(good.json.data.icons['clawhub:o:has-icon-one'], 'api/dsh-skill-center/market/lucide?name=zap', '有图标的那条');
+    assert.equal(good.json.data.icons['clawhub:o:has-icon-one'], 'https://cdn.example.com/zap.png', '有图标的那条');
     assert.equal(good.json.data.icons['clawhub:o:plain'], null, '没有图标的那条是 null，不是缺键');
     assert.equal(good.json.data.names['clawhub:o:has-icon-one'], 'Claw has-icon-one', '标题也回来了');
     assert.equal(good.json.data.names['clawhub:o:plain'], null, '没有标题的那条是 null（键在）');
@@ -897,58 +817,6 @@ test('K57 POST market/icons：批量语义（≤24、去重、按请求顺序、
   }
 });
 
-test('K60 clawhub-icon 代理路由：200 图片（不透传上游 CSP）+ 400 非法 hash + 裸 404', async () => {
-  const mounted = await mount();
-  try {
-    const route = mounted.byPath[ROUTES.marketClawhubIcon];
-    const svgHash = 'f'.repeat(64);
-    const ok200 = await callRoute(route, { headers: LOOPBACK_HEADERS, url: `${ROUTES.marketClawhubIcon}?hash=${svgHash}` });
-    assert.equal(ok200.status, 200, '命中 200');
-    assert.equal(ok200.headers['content-type'], 'image/svg+xml', '按上游类型发');
-    assert.equal(ok200.headers['cache-control'], 'public, max-age=3600', '浏览器可存 1 小时');
-    assert.equal(ok200.headers['x-content-type-options'], 'nosniff', 'nosniff');
-    assert.equal(ok200.headers['content-security-policy'], "default-src 'none'", '我方 CSP 收紧到 default-src none');
-    assert.equal(/sandbox/.test(String(ok200.headers['content-security-policy'])), false, '不透传上游那个 sandbox CSP');
-    assert.equal(Number(ok200.headers['content-length']), Buffer.byteLength(SVG_TEXT), 'content-length 与实际字节一致');
-    assert.equal(ok200.body, SVG_TEXT, 'body 就是图片字节');
-    assert.equal(ok200.json, null, '不走信封');
-
-    const png = await callRoute(route, { headers: LOOPBACK_HEADERS, url: `${ROUTES.marketClawhubIcon}?hash=${'e'.repeat(64)}` });
-    assert.equal(png.status, 200, 'png 也能转发');
-    assert.equal(png.headers['content-type'], 'image/png', '类型按上游');
-
-    for (const url of [ROUTES.marketClawhubIcon, `${ROUTES.marketClawhubIcon}?hash=`, `${ROUTES.marketClawhubIcon}?hash=abc`, `${ROUTES.marketClawhubIcon}?hash=${'A'.repeat(64)}`, `${ROUTES.marketClawhubIcon}?hash=../etc/passwd`]) {
-      const bad = await callRoute(route, { headers: LOOPBACK_HEADERS, url });
-      assert.equal(bad.status, 400, `${url} ⇒ 400`);
-      assert.equal(bad.json.code, 'E_BAD_QUERY', '400 是信封里的 E_BAD_QUERY');
-    }
-
-    const missing = await callRoute(route, { headers: LOOPBACK_HEADERS, url: `${ROUTES.marketClawhubIcon}?hash=${'1'.repeat(64)}` });
-    assert.equal(missing.status, 404, '上游没有这张图 ⇒ 404');
-    assert.equal(missing.body, '', '裸 404：空 body');
-    assert.equal(missing.headers['cache-control'], 'no-store', '404 不缓存');
-    assert.equal(String(missing.headers['content-length']), '0', 'content-length 0');
-    assert.equal(missing.headers['content-type'], undefined, '连 content-type 都不给');
-
-    for (const method of ['POST', 'PUT', 'HEAD']) {
-      const wrong = await callRoute(route, { method, headers: LOOPBACK_HEADERS, url: `${ROUTES.marketClawhubIcon}?hash=${svgHash}` });
-      assert.equal(wrong.status, 405, `${method} ⇒ 405`);
-    }
-    const foreign = await callRoute(route, {
-      headers: { host: 'evil.example.com' },
-      remoteAddress: '203.0.113.9',
-      url: `${ROUTES.marketClawhubIcon}?hash=${svgHash}`,
-    });
-    assert.equal(foreign.status, 403, '非本机 403');
-
-    assert.equal(mounted.clawhubIconCalls.filter((hash) => hash === svgHash).length, 1, '被拒的请求没有碰代理');
-    await callRoute(route, { headers: LOOPBACK_HEADERS, url: `${ROUTES.marketClawhubIcon}?hash=${svgHash}&refresh=1` });
-    assert.deepEqual(mounted.resets, ['clawhub-icon-reset'], '?refresh=1 清一次缓存');
-  } finally {
-    await mounted.close();
-  }
-});
-
 test('K64 POST market/icons 收 per-item source：混合批次两源都在、按请求顺序、顶层 source 作缺省', async () => {
   const mounted = await mount();
   try {
@@ -971,7 +839,7 @@ test('K64 POST market/icons 收 per-item source：混合批次两源都在、按
     );
     assert.deepEqual(Object.keys(response.json.data), ['icons', 'names'], 'K64 的 data 也是两张图');
     assert.equal(response.json.data.icons['skillhub:ake:has-icon-hub'], 'https://cdn.skillhub.example/icon.png', 'SkillHub 那条取到图');
-    assert.equal(response.json.data.icons['clawhub:awspace:has-icon-one'], 'api/dsh-skill-center/market/lucide?name=zap', 'ClawHub 那条照旧');
+    assert.equal(response.json.data.icons['clawhub:awspace:has-icon-one'], 'https://cdn.example.com/zap.png', 'ClawHub 那条照旧');
     assert.equal(response.json.data.icons['skillhub:ake:plain-hub'], null, 'SkillHub 没图 ⇒ null');
     assert.deepEqual(mounted.skillhubIconCalls[0], ['ake:has-icon-hub', 'ake:plain-hub'], '每个源只看到自己那几条（重复项已去掉）');
     assert.deepEqual(mounted.iconCalls[0], [{ owner: 'awspace', slug: 'has-icon-one' }, { owner: 'awspace', slug: 'plain' }], 'ClawHub 同样');
@@ -1064,7 +932,7 @@ test('K66 单源失败不连坐：SkillHub 整体抛错 ⇒ 200、skillhub 键�
       response.json.data.icons,
       {
         'skillhub:ake:has-icon-hub': null,
-        'clawhub:awspace:has-icon-one': 'api/dsh-skill-center/market/lucide?name=zap',
+        'clawhub:awspace:has-icon-one': 'https://cdn.example.com/zap.png',
         'skillhub:ake:plain-hub': null,
       },
       '失败的源全 null，另一个照常',
@@ -1094,7 +962,7 @@ test('K76 market/favorite 的围栏：只认 POST，只认 loopback，被挡下�
   const mounted = await mount();
   try {
     const route = mounted.byPath[ROUTES.marketFavorite];
-    assert.equal(typeof route, 'object', '第 13 条路由已注册');
+    assert.equal(typeof route, 'object', '收藏路由已注册');
 
     const wrongMethod = await callRoute(route, { method: 'GET', headers: LOOPBACK_HEADERS });
     assert.equal(wrongMethod.status, 405, 'GET ⇒ 405');

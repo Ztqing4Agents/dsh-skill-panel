@@ -193,13 +193,12 @@ const codeOnly = (text) => text
   .replace(/\/\*[\s\S]*?\*\//g, ' ')
   .replace(/(^|[^:'"\\])\/\/[^\n]*/g, '$1');
 
-test('K41 上游 origin 的边界：浏览器半部零 URL，Host 半部只许三条常量认 origin', async () => {
-  // R6 起 `normalize.js` 退休了 `https://clawhub.ai` 基址：两个真实图标形态现在都由本插件
-  // 代理（`lucide` / `clawhub-icon`），归一化只拼文档相对路径，不再需要知道任何 origin。
+test('K41 上游 origin 的边界：市场面只有一个 origin，浏览器半部零 URL', async () => {
+  // U7 之后 `clawhub.ai` 整条退场：目录、详情与安装包都来自 SkillHub 的镜像接口，所以
   //   · `src/client/**` **一个 URL 都没有**（浏览器半部零直连）；
-  //   · `lib/market/**` 里认上游主机的文件恰好三个，常量恰好三条：两个适配器的 `ORIGIN`
-  //     + `upstream.js` 里钉版的 jsDelivr CDN 与 ClawHub icons 基址（唯一出口）；
-  //   · `normalize.js` **零 origin**，且它产出的图标地址都是文档相对的。
+  //   · `lib/market/**` 里认上游主机的文件恰好两个、常量恰好两条：`mirror.js` 的 `ORIGIN`
+  //     （唯一出口）与 `upstream.js` 的 `REDIRECT_HOST`（COS 桶白名单，302 用）；
+  //   · `normalize.js` **零 origin**，两个适配器只 import 那份 `ORIGIN`，不各写一份。
   const dir = join(ROOT, 'src', 'client');
   const files = (await readdir(dir)).filter((name) => /\.(js|jsx)$/.test(name));
   assert.equal(files.length > 10, true, '确实扫到了客户端源码');
@@ -209,21 +208,20 @@ test('K41 上游 origin 的边界：浏览器半部零 URL，Host 半部只许�
   assert.deepEqual(offenders, [], `客户端源码里一个 URL 都没有（发现：${offenders.join(', ')}）`);
   for (const host of ['clawhub.ai', 'skillhub.cn', 'jsdelivr', 'cloudcache', 'myqcloud']) {
     const hits = [...sources].filter(([, text]) => text.includes(host)).map(([name]) => name);
-    assert.deepEqual(hits, [], `客户端代码不提 ${host}（图标代理也是文档相对路径）`);
+    assert.deepEqual(hits, [], `客户端代码不提 ${host}`);
   }
 
-  // Host 半部：递归扫 lib/market，把「认识上游主机」的文件列出来。
+  // Host half: walk lib/market and list every file that knows an upstream host.
   const libDir = join(ROOT, 'lib', 'market');
   const HOSTS = /api\.skillhub\.cn|clawhub\.ai|jsdelivr|myqcloud/;
   const withOrigin = [];
   const originLines = [];
-  const walk = async (dir, prefix) => {
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
-      const full = join(dir, entry.name);
+  const walk = async (walkDir, prefix) => {
+    for (const entry of await readdir(walkDir, { withFileTypes: true })) {
+      const full = join(walkDir, entry.name);
       if (entry.isDirectory()) await walk(full, `${prefix}${entry.name}/`);
       else if (entry.name.endsWith('.js')) {
-        // 同样先剥注释：`normalize.js` 的文档注释会拿 `…cos.accelerate.myqcloud.com` 当例子
-        // 解释「什么不是图标地址」，那是散文，不是代码里的 origin。
+        // Strip comments first: a doc sentence may name a host as an example.
         const text = codeOnly(await readFile(full, 'utf8'));
         if (!HOSTS.test(text)) continue;
         withOrigin.push(`${prefix}${entry.name}`);
@@ -234,37 +232,28 @@ test('K41 上游 origin 的边界：浏览器半部零 URL，Host 半部只许�
   await walk(libDir, '');
   assert.deepEqual(
     withOrigin.sort(),
-    ['sources/clawhub.js', 'sources/skillhub.js', 'upstream.js'],
-    '认上游主机的地方恰好三个文件（多一个就是越界）',
+    ['sources/mirror.js', 'upstream.js'],
+    '认上游主机的地方恰好两个文件（多一个就是越界）',
   );
-  assert.equal(withOrigin.includes('normalize.js'), false, '归一化零 origin（R6 退休了 ClawHub 基址）');
-  for (const name of ['install.js', 'zip.js', 'query.js', 'errors.js', 'store.js', 'ledger.js', 'favorites.js']) {
-    assert.equal(withOrigin.includes(name), false, `${name} 不认识任何上游主机`);
+  for (const name of ['normalize.js', 'sources/skillhub.js', 'sources/clawhub.js', 'sources/index.js']) {
+    assert.equal(withOrigin.includes(name), false, `${name} 自己不写 origin（只 import mirror.js 的）`);
   }
-  // 五条：两个适配器 `ORIGIN` + 出口的 `LUCIDE_CDN` / `CLAWHUB_ICON_ORIGIN` + 下载重定向白名单
-  // `REDIRECT_HOST`（COS 桶后缀，早于本轮就有）。写死条数，第六处一出现就红。
-  assert.equal(originLines.length, 5, `认上游主机的常量恰好五条，实测 ${originLines.join(', ')}`);
+  // Two: the one ORIGIN and the redirect whitelist. A third appears ⇒ red.
+  assert.equal(originLines.length, 2, `认上游主机的常量恰好两条，实测 ${originLines.join(', ')}`);
 
-  // 各自形状：适配器是导出的 ORIGIN；出口是钉版 CDN 与 icons 基址（不许 latest、不许浮动路径）。
-  const skillhubText = await readFile(join(libDir, 'sources', 'skillhub.js'), 'utf8');
-  const clawhubText = await readFile(join(libDir, 'sources', 'clawhub.js'), 'utf8');
-  const normalizeText = await readFile(join(libDir, 'normalize.js'), 'utf8');
+  const mirrorText = await readFile(join(libDir, 'sources', 'mirror.js'), 'utf8');
   const upstreamText = await readFile(join(libDir, 'upstream.js'), 'utf8');
-  assert.match(skillhubText, /export const ORIGIN = 'https:\/\/api\.skillhub\.cn'/, 'SkillHub 的 origin 是导出常量');
-  assert.match(clawhubText, /export const ORIGIN = 'https:\/\/clawhub\.ai'/, 'ClawHub 的 origin 是导出常量');
-  assert.match(upstreamText, /LUCIDE_CDN = 'https:\/\/cdn\.jsdelivr\.net\/npm\/lucide-static@\d+\.\d+\.\d+\/icons'/, 'CDN 常量钉死版本号（不许 latest）');
-  assert.match(upstreamText, /CLAWHUB_ICON_ORIGIN = 'https:\/\/clawhub\.ai\/api\/v1\/skill-icons'/, '上传图标基址是导出常量');
+  const normalizeText = await readFile(join(libDir, 'normalize.js'), 'utf8');
+  assert.match(mirrorText, /export const ORIGIN = 'https:\/\/api\.skillhub\.cn'/, '唯一的 origin 是导出常量');
   assert.match(upstreamText, /REDIRECT_HOST = \/\^\[a-z0-9-\]\+\\\.cos\\\.accelerate\\\.myqcloud\\\.com\$\//, '下载重定向白名单仍在（COS 桶后缀）');
-  assert.equal(/lucide-static@latest/.test(upstreamText), false, '没有 latest 这种浮动版本');
   assert.equal(/https?:\/\//.test(normalizeText), false, 'normalize.js 里连一个 URL 都没有');
   assert.equal(/getJson|getBytes|fetch\(/.test(normalizeText), false, '归一化自己不发任何请求');
-  // 图标地址是文档相对路径：带前导斜杠会在 <base href="./"> 下逃出部署前缀。
-  const { lucideProxyUrl, clawhubIconProxyUrl } = await import('../lib/market/normalize.js');
-  const hash = 'a'.repeat(64);
-  for (const url of [lucideProxyUrl('zap'), clawhubIconProxyUrl(hash)]) {
-    assert.equal(url.startsWith('api/dsh-skill-center/market/'), true, `${url} 是文档相对路径`);
-    assert.equal(/^https?:|^\//.test(url), false, `${url} 不带 origin 也不带前导斜杠`);
+  // The retired half must be gone from the code, not just unused.
+  for (const gone of ['lucide', 'skill-icons', 'jsdelivr', 'clawhub.ai']) {
+    assert.equal(upstreamText.includes(gone), false, `upstream.js 里不再有 ${gone}`);
   }
+  const { lucideProxyUrl } = await import('../lib/market/normalize.js').catch(() => ({}));
+  assert.equal(lucideProxyUrl, undefined, '图标代理 URL 构造器已随路由删除');
 });
 
 test('K41 包依赖仍然是空的：市场面没有引入第三方库', async () => {
@@ -464,30 +453,29 @@ test('K85 客户端一行都不许提到收藏写入口：连 ROUTES 的字面�
   assert.equal(styles.includes('marketFavoriteOn'), false, '已收藏态的 -On 类也一并消失');
 });
 
-test('K89 图标管道与分类开关不回归：三条路由、icons()、caps、计数各就各位', async () => {
-  // U6 moved the catalogue to the mirror; none of this may move with it. An installed row
-  // still has an identity and nothing else, so `icons()` and its two proxies are the only
-  // way its tile and upstream title exist at all - deleting them would be a silent loss.
+test('K89 图标管道与分类开关不回归：market/icons、icons()、caps、计数各就各位', async () => {
+  // U7 deleted the two image-proxy routes; `market/icons` and `icons()` stay, because an
+  // installed row still has an identity and nothing else - they are the only way its tile
+  // and upstream title exist at all.
   const { clawhubSource } = await import('../lib/market/sources/clawhub.js');
   assert.equal(typeof clawhubSource.icons, 'function', 'clawhubSource.icons 仍是函数');
 
   const { ROUTES } = await import('../lib/routes.js');
-  for (const name of ['marketIcons', 'marketClawhubIcon', 'marketLucide']) {
-    assert.equal(typeof ROUTES[name], 'string', `${name} 这条路由仍在`);
-  }
-  assert.equal(Object.keys(ROUTES).length, 13, '路由仍是 13 条（4 本地 + 9 市场）');
+  assert.equal(typeof ROUTES.marketIcons, 'string', 'market/icons 这条路由仍在');
+  assert.equal(ROUTES.marketLucide, undefined, 'market/lucide 已删除（U7）');
+  assert.equal(ROUTES.marketClawhubIcon, undefined, 'market/clawhub-icon 已删除（U7）');
+  assert.equal(Object.keys(ROUTES).length, 11, '路由 11 条（4 本地 + 7 市场）');
   const indexText = await readFile(join(ROOT, 'index.js'), 'utf8');
   assert.match(indexText, /import \{ makeRoutes \} from '\.\/lib\/routes\.js'/, 'index.js 仍从 routes.js 取路由表');
   assert.match(indexText, /makeRoutes\(ctx, \{/, '仍然一次装配、逐条 register');
   const { makeRoutes } = await import('../lib/routes.js');
-  assert.equal(typeof makeRoutes, 'function', '装配函数导出着（路由条数由 K76 逐条断言）');
+  assert.equal(typeof makeRoutes, 'function', '装配函数导出着（路由条数由 routes.test 逐条断言）');
 
-  // Caps: categories stays OFF. Turning it on would paint SkillHub's per-category counts and
-  // total onto the ClawHub tab (63,381 vs the real ~4,000), which is worse than no number.
+  // Caps: categories stays OFF for ClawHub; the package shape is now 'files' for both.
   const { descriptors } = await import('../lib/market/sources/index.js');
   const clawhub = descriptors().find((entry) => entry.id === 'clawhub');
-  assert.equal(clawhub.hasCategories, false, 'caps.categories 本轮不翻（分类与计数留给 U7）');
-  assert.equal(clawhub.packageKind, 'zip', '包型仍是 zip');
+  assert.equal(clawhub.hasCategories, false, 'caps.categories 本轮不翻（分类与计数留给 U8）');
+  assert.equal(clawhub.packageKind, 'files', '包形态改成逐文件清单（U7）');
   const skillhub = descriptors().find((entry) => entry.id === 'skillhub');
   assert.equal(skillhub.hasCategories, true, 'SkillHub 的分类表不受影响');
 
@@ -497,12 +485,52 @@ test('K89 图标管道与分类开关不回归：三条路由、icons()、caps�
   assert.match(routesText, /countsOk: counted\.ok === true/, 'countsOk 语义未变');
 });
 
-test('K89 镜像 origin 不在 clawhub.js 里重复声明（K41 的「三条常量」靠这条维持）', async () => {
-  // Importing SkillHub's ORIGIN is a hard requirement, not a style choice: a second literal
-  // would make the "exactly three files know an upstream host" assertion in K41 vacuous.
-  const text = await readFile(join(ROOT, 'lib', 'market', 'sources', 'clawhub.js'), 'utf8');
-  const code = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  assert.equal(code.includes('api.skillhub.cn'), false, 'clawhub.js 里没有镜像主机字面量');
-  assert.match(code, /import \{ ORIGIN as SKILLHUB_ORIGIN \} from '\.\/skillhub\.js'/, '镜像 origin 从 skillhub.js 导入');
-  assert.match(code, /export const ORIGIN = 'https:\/\/clawhub\.ai'/, '自己那半边的 origin 仍是导出常量');
+
+test('K93 单源退场：lib 与 client 里没有 clawhub.ai，退役的模块与路由全为零引用', async () => {
+  const libDir = join(ROOT, 'lib');
+  const clientDir = join(ROOT, 'src', 'client');
+
+  /** Every .js/.jsx file under one directory, recursively. */
+  const collect = async (dir, prefix = '') => {
+    const out = [];
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) out.push(...await collect(full, `${prefix}${entry.name}/`));
+      else if (/\.(js|jsx)$/.test(entry.name)) out.push([`${prefix}${entry.name}`, await readFile(full, 'utf8')]);
+    }
+    return out;
+  };
+
+  const hostFiles = await collect(libDir);
+  const clientFiles = await collect(clientDir);
+  // `index.js` is the entry, not under lib/: the rule covers the whole Host half.
+  const entryText = await readFile(join(ROOT, 'index.js'), 'utf8');
+  for (const [name, text] of [...hostFiles, ...clientFiles, ['index.js', entryText]]) {
+    assert.equal(text.includes('clawhub.ai'), false, `${name} 里没有 clawhub.ai（U7 之后只有一个上游）`);
+  }
+
+  // Retired modules and factories: nothing may reference them any more.
+  const all = [...hostFiles, ...clientFiles].map(([, text]) => text).join('\n');
+  for (const gone of [
+    'readZipEntries', 'readZipEntry', 'ZIP_LIMITS',
+    'createLucideIcons', 'createClawhubIconProxy', 'isLucideName', 'isClawhubIconHash',
+    'LUCIDE_CDN', 'CLAWHUB_ICON_ORIGIN', 'lucideProxyUrl', 'lucideNameOf', 'clawhubIconUrl',
+    'fromClawhubDetail',
+  ]) {
+    assert.equal(all.includes(gone), false, `${gone} 已随 U7 删除，不能还有引用`);
+  }
+  assert.equal(existsSync(join(libDir, 'market', 'zip.js')), false, 'zip 读取模块已删除');
+
+  // Routes: eleven, and neither proxy is among them.
+  const indexText = await readFile(join(ROOT, 'index.js'), 'utf8');
+  const routesText = await readFile(join(ROOT, 'lib', 'routes.js'), 'utf8');
+  assert.equal(routesText.includes('market/lucide'), false, '路由表里没有 lucide 代理');
+  assert.equal(routesText.includes('market/clawhub-icon'), false, '路由表里没有 clawhub-icon 代理');
+  assert.match(indexText, /seven market routes/, 'index.js 的头注说的是七条市场路由');
+  const { ROUTES } = await import('../lib/routes.js');
+  assert.equal(Object.keys(ROUTES).length, 11, '路由 11 条');
+
+  // Both sources report the same package shape.
+  const { descriptors } = await import('../lib/market/sources/index.js');
+  assert.deepEqual(descriptors().map((entry) => entry.packageKind), ['files', 'files'], '两源都是逐文件清单');
 });

@@ -12,9 +12,9 @@
 
 ## 3.3 Host 路由清单
 
-十三条 **exact** 路由（`kind:'exact'`，`ctx.webServer.register(route)` 返回 disposer；重复注册同路径会抛错，见 `EX/dsh-host-webserver/README.md`「Registering routes」）。本地面 4 条（下表 #1–#4），市场面 9 条见 §3.7。
+十一条 **exact** 路由（`kind:'exact'`，`ctx.webServer.register(route)` 返回 disposer；重复注册同路径会抛错，见 `EX/dsh-host-webserver/README.md`「Registering routes」）。本地面 4 条（下表 #1–#4），市场面 7 条见 §3.7。
 
-统一信封（§8.1）：成功 `200 {code:'OK', data, message:''}`；失败 `4xx/5xx {code:'E_…', data:null, message}`。唯一例外是市场面的两个图片端点 `market/lucide`（#10）与 `market/clawhub-icon`（#12）：它们回图片字节，不回信封。
+统一信封（§8.1）：成功 `200 {code:'OK', data, message:''}`；失败 `4xx/5xx {code:'E_…', data:null, message}`。**没有例外**：U7 之后市场面的两条图片代理路由（`market/lucide` 与 `market/clawhub-icon`）随 `clawhub.ai` 一起退场，图标改为上游绝对 `https` 直连（`decisions.md` 附录 N 的 N-11），所以每条路由都回信封。
 
 | # | 方法 + 路径 | 入参 | 出参 `data` | 错误码 |
 | --- | --- | --- | --- | --- |
@@ -153,7 +153,7 @@ return concat(bom, block, body.subarray(block.end))   // 其余字节一个不�
 
 市场面 9 条 **exact** 路由，前缀 `/api/dsh-skill-center/market/*`。它们与 #1–#4 **共用同一个 `guard()`**（loopback 围栏 → 方法），共用 `writeJson` 的 `{code,data,message}` 信封与 `no-store`，但**不共用 `collect()`**：本地扫描是磁盘面，市场是网络面，混在一起会让「市场超时」连累「已安装」页签。
 
-#### 3.7.1 九条路由
+#### 3.7.1 七条路由
 
 | # | 方法 + 路径 | 入参 | 出参 `data` | 错误码（全量） |
 | --- | --- | --- | --- | --- |
@@ -162,15 +162,11 @@ return concat(bom, block, body.subarray(block.end))   // 其余字节一个不�
 | 7 | `GET /api/dsh-skill-center/market/detail` | `source`（必填）、`owner`、`slug`（必填）、`version`（可选） | `MarketDetail`（§3.8.1） | 同 #6 |
 | 8 | `GET /api/dsh-skill-center/market/installed` | 无 | `{items:{[id]:{name,version,path,exists:boolean}}, readable:boolean}` | `403`、`405`、`500 E_INTERNAL` |
 | 9 | `POST /api/dsh-skill-center/market/install` | `{source, owner, slug, version?}`（`objectOnly`，≤ 64 KiB；**没有 path / files / name 字段**） | `{name, path, version, source, owner, slug, files:number, bytes:number}` | `403`、`405`、`400 E_BAD_REQUEST`、`400 E_BAD_QUERY`、`409 E_ALREADY_INSTALLED`、`422 E_SKILL_NAME_INVALID`、`422 E_PACKAGE_INVALID`、`429 E_INSTALL_BUSY`、`502 E_DOWNLOAD_FAILED`、`502 E_SOURCE_BAD_RESPONSE`、`503 E_SOURCE_UNAVAILABLE`、`504 E_SOURCE_TIMEOUT`、`500 E_INSTALL_IO`、`500 E_INTERNAL` |
-| 10 | `GET /api/dsh-skill-center/market/lucide?name=<kebab>` | `name` 白名单 `^[a-z0-9]+(?:-[a-z0-9]+){0,5}$` | **SVG 字节，不走信封**（见下） | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_QUERY`（`name` 缺/不合白名单）、`404`（无此图标或 CDN 不可用，空 body） |
 | 11 | `POST /api/dsh-skill-center/market/icons` | body `{items:[{source?, owner, slug}], source?}`：`items` ≤ **24**，每条 `source`/`owner`/`slug` 走 §3.7.3 的上游白名单；`source` 逐条给，顶层 `source` 只是**兼容默认值**（item 优先，详见 §3.7.5） | `{icons:{'<source>:<owner>:<slug>': iconUrl\|null}, names:{同键→上游标题\|null}}`——两图的**键集合与顺序逐键相同**，缺名也是「键在、值 `null`」 | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_REQUEST`（`items` 缺失/为空/超 24）、`400 E_BAD_QUERY`（标识符不合白名单，或 `source` 未注册）、`500 E_INTERNAL`。单条失败只让该项 `null`，**单源失败只让该源 `null`**，整体仍 `200` |
-| 12 | `GET /api/dsh-skill-center/market/clawhub-icon?hash=<64hex>` | `hash` 白名单 `^[a-f0-9]{64}$`；`?refresh=1` 清缓存 | **图片字节，不走信封**（见下） | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_QUERY`（hash 不合白名单）、`404`（上游无此图或不可用，空 body） |
 | 13 | `POST /api/dsh-skill-center/market/favorite` | `{source, owner, slug, favorited:boolean}`（`objectOnly`，≤ 64 KiB；**没有 id / path / version 生效位**） | `{favorites:string[], favorited:boolean}`（权威全量列表，最新在前；`favorited` 是实际生效的状态） | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_REQUEST`（body 非对象 / `favorited` 非布尔）、`400 E_BAD_QUERY`（身份不合白名单或源未注册）、`409 E_FAVORITE_FULL`、`500 E_FAVORITE_IO`、`500 E_INTERNAL` |
 
-**#10 与 #12 是本插件仅有的两个非信封路由**：`<img>` 读不了 `{code,data,message}`，所以它们直接回图片字节，并统一补 `X-Content-Type-Options: nosniff` 与 `Content-Security-Policy: default-src 'none'`（**不透传上游的 CSP**）；命不中或上游不可用一律 `404` 空 body（不回 HTML，也不回信封），让浏览器的 `onError` 把卡片退回首字母头像。
+**表里的 `#` 是历史编号，不重排也不复用**：`#10 market/lucide` 与 `#12 market/clawhub-icon` 已于 U7 随 `clawhub.ai` 退场（`decisions.md` 附录 N 的 N-11），所以编号在 9 与 11、11 与 13 之间各有一个空位。**现在没有任何非信封路由**：图标是上游绝对 `https`，由浏览器 `<img>` 直连，`onError` 退回首字母头像。
 
-- **#10 `market/lucide`**：上游是**钉版本**的 `https://cdn.jsdelivr.net/npm/lucide-static@1.70.0/icons/<name>.svg`（不用 `latest`：上游改名会让整类图标静默消失），5s / 32 KB / 必须 `image/svg+xml`，`max-age=604800`；进程内 1 小时缓存，未命中只记 60 秒。
-- **#12 `market/clawhub-icon`**：上游 `https://clawhub.ai/api/v1/skill-icons/<hash>` 的字节**原样转发**（`Content-Type` 按上游，实测 `image/svg+xml`，也放行 `image/png`），5s / 256 KB，`max-age=3600`；1 小时命中缓存 / 60 秒未命中缓存。这条存在的唯一理由是**上游那几个响应带 `content-security-policy: … sandbox`**，同样字节在页内当 `<img>` 一律 `onerror`（走 `blob:` 却能正常光栅化），只有本机重发一次才画得出来。
 
 body 上限沿用 `MAX_BODY_BYTES = 65536`：install 的请求体只有 4 个短字符串，64 KiB 是「有人乱发」的护栏，不是功能需要。#13 的 body 里**没有 id / path**：收藏键由 Host 用 `marketId(source, owner, slug)` 重拼（同 `normalize.js`、同 #9），所以一个请求无法指认不属于任何源的键，多余字段（如 `version`）一律忽略。
 
@@ -194,9 +190,8 @@ install 出参里两个数字的口径**不一样，别混**：`files` 是**落�
 | 分类表 | 6s，失败静默降级 | `skillhub.categories()` |
 | 分类计数 | 单项 **6s**、整体 **10s** 预算、并发 **6**、10 分钟缓存；任一项失败只让该 `count:null`（`countsOk:false`），不影响 bootstrap 的 200 | `skillhub.counts()` |
 | 批量图标 · SkillHub（#11） | 每条一次 detail（**不带 `version`**，实测 0.26s）、并发 **6**、整批 **6s**、单条 **5s**；正向 10 分钟 / 负向 60 秒，键 `skillhub:<owner>:<slug>` | `skillhub.icons()` |
-| 批量图标 · ClawHub（#11） | 每条一次 detail、并发 **4**、整批 **6s**（与 SkillHub **各自计时、互不挤占**）、单条 **5s**；正向 10 分钟 / 负向 60 秒，键 `clawhub:<owner>:<slug>` | `clawhub.icons()` |
-| 批量图标 · 清缓存 | `bootstrap?refresh=1` 同时清两源的图标缓存（以及两个图片代理的缓存）。**列表与搜索从不等图标** | `resetIconCache()` |
-| ClawHub 图标代理（#12） | 单张 5s、256 KB 上限；1 小时命中 / 60 秒未命中缓存，`?refresh=1` 清空；并发受上游闸约束（同源 3） | `createClawhubIconProxy()` |
+| 批量图标 · ClawHub（#11） | 每条一次 `GET /api/skills?keyword=<slug>&pageSize=20&source=clawhub`（列表行同时带图与标题）、并发 **6**、整批 **6s**（与 SkillHub **各自计时、互不挤占**）、单条 **5s**；正向 10 分钟 / 负向 60 秒，键 `clawhub:<owner>:<slug>` | `clawhub.icons()` |
+| 批量图标 · 清缓存 | `bootstrap?refresh=1` 同时清两源的图标缓存。**列表与搜索从不等图标** | `resetIconCache()` |
 | 安装整包 | **120s** 总预算（每次取文件前检查 deadline） | `install.js` |
 | 安装单文件 | 30s | `upstream.getBytes({timeoutMs})` |
 | 上游并发 | 全局 6、单 origin 3（`upstream.js` 的两道计数闸） | 一次扇出 = 每源 1 个 |
@@ -286,11 +281,11 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 
 #### 3.7.5 `market/icons` 的双源分发
 
-一条端点覆盖两个源：已安装行只有身份、没有市场列表载荷，而两个源的图标查询方式不同（SkillHub 的列表自带 `iconUrl`，ClawHub 只有详情有）。
+一条端点覆盖两个源：已安装行只有身份、没有市场列表载荷，而两个源的图标查询方式差一次请求（SkillHub 的 owner 就是 namespace，一次 detail；ClawHub 得先按 `keyword=<slug>` 找到那一行，见 §7.8 第 2 条）。
 
 - **能力**：`MarketSource.icons?(refs, io, {now})` 是**可选能力**。有 `icons` 的源按自己的并发/预算/缓存实现；没有该能力的源，它的条目在本批里全部 `null`（不进错误分支）。今天 `skillhub` 与 `clawhub` 都有。
 - **分发**：路由把 `items` 按 `source` 分组，**各组并行**发起，两源各自计时（各 6s），所以混合批次 ≈ `max(两源耗时)`，不是相加。
-- **出参**：`data` 是 `{icons, names}` 两张同键图。`names[key]` 是**上游标题**（SkillHub 的 `data.skill.displayName`、ClawHub 的 `skill.displayName`），与图标同一条 detail 请求带出，**零额外请求**；归一规则与图标一致（非空字符串才收，否则 `null`）。
+- **出参**：`data` 是 `{icons, names}` 两张同键图。`names[key]` 是**上游标题**（SkillHub 的 `data.skill.displayName`、ClawHub 列表行的 `name`），与图标同一条请求带出，**零额外请求**；归一规则与图标一致（非空字符串才收，否则 `null`）。
 - **回填**：先把各源结果收进一张 `Map`，再按 `items` **原序**逐条写进 `icons` 与 `names`——并发完成顺序不影响出参顺序，两次相同请求逐字节可比；两图的键序列由同一个循环产出，**逐键相同**（缺名是 `null` 不是缺键），客户端可遍历一张、索引另一张。
 - **失败隔离**：一个源整体失败（超时、域名不可达、适配器抛错）只让**该源**的条目 `null`（图标与标题一起），另一个源照常返回；`200` 不变。**任何图标失败都不升级成路由错误**，标题失败同理——标题缺失只是显示 slug，不是错误。
 - **`source` 的优先级**：每条的 `source` 优先；缺省时用顶层 `source`（这是**兼容默认值**，旧页面握旧 `client.js` 时只会发 `{source:'clawhub', items:[{owner,slug}]}`，保留它等于「永不为此 400」）。两者都缺 ⇒ 该条 `source` 为空 ⇒ 不合白名单 ⇒ `400 E_BAD_QUERY`。
@@ -337,7 +332,7 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 
 ## 8.6 市场错误码
 
-市场面 9 条路由的 `E_*` 全集。HTTP status 与 `code` 双写，规则同 §8.1；`message` 仍是给开发者看的英文短句，界面文案由客户端按 `code` 取 i18n 键。两个图片端点（#10/#12）只报 `400 E_BAD_QUERY` 与裸 `404`（非信封）；#11 用 `E_BAD_REQUEST` 表示「形状不对」，用 `E_BAD_QUERY` 表示「这个源没有图标可补」。
+市场面 7 条路由的 `E_*` 全集。HTTP status 与 `code` 双写，规则同 §8.1；`message` 仍是给开发者看的英文短句，界面文案由客户端按 `code` 取 i18n 键。#11 用 `E_BAD_REQUEST` 表示「形状不对」，用 `E_BAD_QUERY` 表示「这个源没有图标可补」。
 
 | code | HTTP | 含义 | 前端表现 |
 | --- | --- | --- | --- |

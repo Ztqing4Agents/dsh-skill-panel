@@ -124,7 +124,7 @@ test('K67 跳过：已有图标 / 已问过 / 未知源 / 没有身份 / owner-s
       installedRow('fresh-row', { sourceId: 'skillhub' }),
     ],
     icons: {
-      'clawhub:awspace:already': 'api/dsh-skill-center/market/lucide?name=zap',
+      'clawhub:awspace:already': 'https://cdn.example.com/zap.png',
       'skillhub:ake:has-icon': 'https://cdn.skillhub.cn/x.png',
     },
     iconsTried: {

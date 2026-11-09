@@ -7,8 +7,9 @@
  *
  * U6: ClawHub's catalogue now arrives through the SkillHub mirror, so the ClawHub list and
  * search mappings were deleted and `fromClawhubMirrorItem` took their place (it reuses the
- * SkillHub field reading - the mirror *is* SkillHub's API). `fromClawhubDetail` stayed: the
- * detail view still comes from `clawhub.ai`.
+ * SkillHub field reading - the mirror *is* SkillHub's API). Since U7 the detail payload comes
+ * from the same mirror, so that mapping is `fromClawhubMirrorDetail(raw, owner)`: the fields
+ * are SkillHub's, and only the identity is ClawHub's.
  *
  * Fixtures here are *shaped like the real responses* but synthetic: the real endpoints
  * change, and a test that quotes a live payload breaks when they do. What must not
@@ -24,7 +25,7 @@ import {
   clampLine,
   declaredNameOf,
   finiteOrNull,
-  fromClawhubDetail,
+  fromClawhubMirrorDetail,
   fromClawhubMirrorItem,
   fromSkillhubDetail,
   fromSkillhubListItem,
@@ -139,29 +140,47 @@ test('K31 SkillHub 详情：stats/latestVersion 落在正确字段上，形不�
   assert.equal(fromSkillhubListItem('text'), null, '非对象一律 null（形状不符由适配器报 502）');
 });
 
-test('K31 ClawHub 详情：packageKind 是 zip，图标与分类由镜像在适配器里补', () => {
-  const fromDetail = fromClawhubDetail({
-    skill: { slug: 'design', displayName: 'Design', summary: 'S', stats: { downloads: 9 }, updatedAt: 1762000000001 },
+test('K31 ClawHub 详情：字段同 SkillHub，身份用调用方解析出的原生 owner', () => {
+  const body = {
+    skill: {
+      slug: 'design',
+      displayName: 'Design',
+      summary: 'S',
+      iconUrl: 'https://cloudcache.tencent-cloud.com/qcloud/ui/x.png',
+      category: 'design',
+      stats: { downloads: 9, stars: 4 },
+      updatedAt: 1762000000001,
+    },
     latestVersion: { version: '1.0.2' },
-    owner: { handle: 'ivangdavila', displayName: 'Ivan' },
-  });
+    // The mirror files a ClawHub skill under *its* namespace, which is not our identity.
+    namespace: { handle: 'indiv-design' },
+  };
+  const fromDetail = fromClawhubMirrorDetail(body, 'ivangdavila');
   assertItemShape(fromDetail, 'clawhub detail');
-  assert.equal(fromDetail.id, 'clawhub:ivangdavila:design', '详情也能拼出 id');
-  assert.equal(fromDetail.packageKind, 'zip', 'ClawHub 整包 zip');
+  assert.equal(fromDetail.id, 'clawhub:ivangdavila:design', 'id 用调用方给的原生 owner 拼');
+  assert.equal(fromDetail.owner, 'ivangdavila', '不是镜像的 namespace');
+  assert.equal(fromDetail.packageKind, 'files', 'U7 起包形态是清单');
   assert.equal(fromDetail.downloads, 9, 'downloads 取 skill.stats.downloads');
+  assert.equal(fromDetail.saves, 4, '收藏数同字段读得到');
+  assert.equal(fromDetail.iconUrl, 'https://cloudcache.tencent-cloud.com/qcloud/ui/x.png', '图标直接来自镜像');
+  assert.equal(fromDetail.category, 'design', '分类也来自镜像');
   assert.equal(fromDetail.version, '1.0.2', 'version 取 latestVersion.version');
-  assert.equal(fromDetail.iconUrl, null, '详情端点没有图片地址（镜像那一次覆盖在适配器里做）');
-  assert.equal(fromDetail.category, null, '详情端点没有分类（同上）');
-  assert.equal(fromDetail.saves, null, '详情端点没有 stars（同上）');
+
+  assert.equal(fromClawhubMirrorDetail(body, null), null, 'owner 缺失 ⇒ null（拼不出身份）');
+  assert.equal(fromClawhubMirrorDetail({ skill: 'x' }, 'ake'), null, 'skill 不是对象 ⇒ null');
 });
 
-test('K31 已删除的两个 ClawHub 映射不再导出：catalogue 只走镜像，没有第二条形状', async () => {
+test('K31 已删除的映射与图标构造函数不再导出：两源只有镜像一种形状', async () => {
   const module = await import('../lib/market/normalize.js');
-  for (const gone of ['fromClawhubListItem', 'fromClawhubSearchItem', 'slugFromUrl']) {
-    assert.equal(gone in module, false, `${gone} 已随 clawhub.ai 列表/搜索下线（U6）`);
+  for (const gone of [
+    'fromClawhubListItem', 'fromClawhubSearchItem', 'slugFromUrl',
+    'fromClawhubDetail', 'clawhubIconUrl', 'lucideProxyUrl', 'lucideNameOf',
+    'CLAWHUB_ICON_PROXY_PATH', 'LUCIDE_PROXY_PATH',
+  ]) {
+    assert.equal(gone in module, false, `${gone} 已退场（U6 的 clawhub.ai 列表 / U7 的 zip 与图标代理）`);
   }
-  assert.equal(typeof module.fromClawhubMirrorItem, 'function', '替代它的是镜像映射');
-  assert.equal(typeof module.fromClawhubDetail, 'function', '详情映射仍在（detail() 还在用）');
+  assert.equal(typeof module.fromClawhubMirrorItem, 'function', '列表行映射仍在');
+  assert.equal(typeof module.fromClawhubMirrorDetail, 'function', '详情映射仍在（detail() 用）');
 });
 
 test('K31 skillhubIconUrl 只要求「绝对 https 且能解析」：两个图床都收，其余一律 null', () => {
@@ -299,12 +318,14 @@ test('K78 SkillHub 的 stars/score 两个取数位：raw 优先，stats 兜底�
   assert.equal(detail.score, 95757.41562195931, '详情的 score 两处都读得到');
 });
 
-test('K78 ClawHub 的收藏与评分来自镜像：详情端点仍是 null，镜像条目照收', () => {
-  // The detail payload has never carried stars or a score; the mirror row does, and that is
-  // the only reason a ClawHub card can show those two figures at all (U6).
-  const detail = fromClawhubDetail({ skill: { slug: 'design', stars: 5, score: 9 }, stats: { stars: 5, score: 9 } });
-  assert.equal(detail.saves, null, 'clawhub.ai 详情不报 stars：映射不猜');
-  assert.equal(detail.score, null, '同上（这个端点没有评分）');
+test('K78 收藏数两端都有，评分只有列表行有（详情页的 score 由适配器补）', () => {
+  // U7 moved the detail payload to the mirror too, so `stats.stars` now reaches `saves`.
+  // `score` is still absent (the mirror's stats stop at
+  // {comments, downloads, installs, stars, versions}); `detail()` fills it from the row it
+  // already looked up for the namespace (market.md §7.8 rule 3).
+  const detail = fromClawhubMirrorDetail({ skill: { slug: 'design' }, stats: { stars: 5 } }, 'design');
+  assert.equal(detail.saves, 5, '详情端点的 stars 就是收藏数');
+  assert.equal(detail.score, null, '详情端点没有评分：映射不猜（由适配器补）');
 
   const mirror = fromClawhubMirrorItem({
     slug: 'design',
@@ -354,21 +375,6 @@ test('K82 tags：SkillHub 取 subCategories[].name 且保留大小写', () => {
   assert.deepEqual(byKeyOnly.tags, [], '只有 key 没有 name ⇒ 不拿 key 顶替');
 });
 
-test('K82 tags：ClawHub 的 topics 取前 3、转小写、去重；tags:{latest} 不是标签', () => {
-  // Since U6 a ClawHub *card* takes its labels from the mirror's `subCategories[].name`
-  // (Chinese names, case kept - the SkillHub reading). The `topic` reading survives on the
-  // one path that still speaks to clawhub.ai: the detail payload.
-  const detail = (topics, extra = {}) => fromClawhubDetail({ skill: { slug: 'buzzmark', topics, ...extra } });
-
-  assert.deepEqual(
-    detail(['social-media', 'Marketing', 'linkedin', 'instagram', 'mcp']).tags,
-    ['social-media', 'marketing', 'linkedin'],
-    '前 3 且转小写（不做 title-case）',
-  );
-  assert.deepEqual(detail(['Marketing', 'marketing', 'MCP']).tags, ['marketing', 'mcp'], '归一后同值只留一条');
-  assert.deepEqual(detail(undefined, { tags: { latest: '2.0.0' } }).tags, [], 'tags 是 {latest: version}，不是标签清单');
-});
-
 test('K82 tags 的边界：≤24 字符截断、丢空与畸形、非数组 ⇒ []、恒不是 null', () => {
   const long = 'x'.repeat(40);
   const item = fromSkillhubListItem({
@@ -400,10 +406,10 @@ test('K82 tags：详情与列表同形，两源详情的兜底路径都覆盖', 
   });
   assert.deepEqual(skillhubDetail.tags, ['代码生成'], 'SkillHub 详情取 skill.subCategories');
 
-  const clawhubDetail = fromClawhubDetail({
-    skill: { slug: 'buzzmark', topics: ['Marketing'] },
-  });
-  assert.deepEqual(clawhubDetail.tags, ['marketing'], 'ClawHub 详情取 skill.topics 并转小写');
+  const clawhubDetail = fromClawhubMirrorDetail({
+    skill: { slug: 'buzzmark', subCategories: [{ key: 'design', name: 'Design' }, { key: 'api', name: 'API 调用' }] },
+  }, 'ake');
+  assert.deepEqual(clawhubDetail.tags, ['Design', 'API 调用'], 'ClawHub 详情也取 subCategories[].name 并保留大小写');
 
   // The mirror's labels ride the SkillHub mapping: `subCategories[].name`, case kept.
   const mirror = fromClawhubMirrorItem({
@@ -415,15 +421,20 @@ test('K82 tags：详情与列表同形，两源详情的兜底路径都覆盖', 
 });
 
 test('K82 标签的脏输入：大写、连字符、非字符串元素、去重发生在截断之后', () => {
-  const mixed = fromClawhubDetail({
-    skill: { slug: 'buzzmark', topics: ['MCP', 'Social-Media', 42, null, { name: 'nope' }, '', '   ', 'LinkedIn'] },
-  });
-  assert.deepEqual(mixed.tags, ['mcp', 'social-media', 'linkedin'], '大写转小写、连字符原样、畸形元素逐条丢');
+  const mixed = fromClawhubMirrorDetail({
+    skill: {
+      slug: 'buzzmark',
+      subCategories: [{ name: 'MCP' }, { name: 'Social-Media' }, 42, null, { key: 'no-name' }, { name: '' }, { name: '   ' }, { name: 'LinkedIn' }],
+    },
+  }, 'ake');
+  assert.deepEqual(mixed.tags, ['MCP', 'Social-Media', 'LinkedIn'], '保留大小写、连字符原样、畸形元素逐条丢');
 
   // Two topics that only differ after the 24-character cut are the same chip once clamped.
   const longA = `${'k'.repeat(30)}-alpha`;
   const longB = `${'k'.repeat(30)}-beta`;
-  const collapsed = fromClawhubDetail({ skill: { slug: 'x', topics: [longA, longB, 'tail'] } });
+  const collapsed = fromClawhubMirrorDetail({
+    skill: { slug: 'x', subCategories: [{ name: longA }, { name: longB }, { name: 'tail' }] },
+  }, 'ake');
   assert.equal(collapsed.tags.length, 2, '截断后同值的两条合并成一条');
   assert.equal(collapsed.tags[0].length, 24, '每条仍 ≤24 字符');
   assert.equal(collapsed.tags[1], 'tail', '去重后把后面的好条目补上来');
@@ -451,11 +462,13 @@ test('K82 详情的两层兜底：skill 上没有就用响应的顶层，空数�
   });
   assert.deepEqual(emptyStaysEmpty.tags, [], '空数组不是「缺失」：不再回落顶层（?? 的语义）');
 
-  const clawSkill = fromClawhubDetail({ skill: { slug: 'buzzmark', topics: ['MCP', 'Marketing'] } });
-  assert.deepEqual(clawSkill.tags, ['mcp', 'marketing'], '详情取 skill.topics，再转小写');
+  const clawSkill = fromClawhubMirrorDetail({
+    skill: { slug: 'buzzmark', subCategories: [{ name: 'MCP' }, { name: 'Marketing' }] },
+  }, 'ake');
+  assert.deepEqual(clawSkill.tags, ['MCP', 'Marketing'], '详情取 skill.subCategories，保留大小写');
 
-  const clawTop = fromClawhubDetail({ skill: { slug: 'y' }, topics: ['MCP'] });
-  assert.deepEqual(clawTop.tags, ['mcp'], 'skill 上没有 topics 时回落响应顶层的 topics');
+  const clawTop = fromClawhubMirrorDetail({ skill: { slug: 'y' }, subCategories: [{ name: 'MCP' }] }, 'ake');
+  assert.deepEqual(clawTop.tags, ['MCP'], 'skill 上没有 subCategories 时回落响应顶层的');
 });
 
 test('K86 镜像条目：owner 取 upstream_owner_login，id / 包型 / 版本 / 图标按契约', () => {
@@ -478,7 +491,7 @@ test('K86 镜像条目：owner 取 upstream_owner_login，id / 包型 / 版本 /
   assert.equal(item.sourceId, 'clawhub', '源是 clawhub（虽然走 SkillHub 的形状）');
   assert.equal(item.owner, 'pskoett', '原生的 upstream_owner_login 优先于 namespace.handle');
   assert.equal(item.id, 'clawhub:pskoett:cad-viewer', 'id 与 marketKeyOf / 图标缓存键逐字相同');
-  assert.equal(item.packageKind, 'zip', '包型恒 zip（包仍来自 clawhub.ai）');
+  assert.equal(item.packageKind, 'files', '包型恒 files（U7 起包走镜像的清单）');
   assert.equal(item.downloads, 50034, '下载数不再是 null');
   assert.equal(item.saves, 12, '收藏数来自镜像的 stars');
   assert.equal(item.score, 80000, '评分原料来自镜像');

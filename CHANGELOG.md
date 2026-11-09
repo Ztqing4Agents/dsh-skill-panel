@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- ClawHub 的**详情与安装**也改由 SkillHub 镜像提供：一条上游、一套口径，卡片与详情不再有两套下载量；安装改成逐文件下载（与 SkillHub 同一条链路），装进去的文件就是镜像清单里的文件。
+- ClawHub 的**版本号以镜像为准**（卡片 / 详情 / 安装三处一致）。镜像可能比 ClawHub 官方慢一版；要装官方最新版请用 ClawHub 官网。
+
+### Removed
+
+- 两个图标代理路由随 ClawHub 官方接口一起退场（`market/lucide` 与 `market/clawhub-icon`，路由 13 → 11）。卡片与已安装行的图标改由上游图片地址直连，观感不变。
+
 - ClawHub 的目录改由 SkillHub 镜像提供：卡片从此有**下载量、收藏数、评分**（与 skillhub.cn 的 ClawHub 页同口径），也能带出上游图标与分类；搜索结果同样能翻页了（此前只能翻一页）。
 - ClawHub 卡片的版本号改为**只认 semver**（实测镜像给的是 `3.0.24` 这种真版本号，照常显示；像 id 的串会被挡掉）。**它可能比详情页旧一点**——镜像的版本会有滞后（实测同一条技能 3.0.24 vs 4.0.5）；安装不受影响，永远装 `clawhub.ai` 上的最新版本。
 - ClawHub 详情页的数字与卡片**同源**：详情会额外问一次镜像，所以「卡片 1,258,479 / 详情 4,347」这种矛盾不会出现；镜像临时不可用时详情退回 clawhub.ai 自己的数字。

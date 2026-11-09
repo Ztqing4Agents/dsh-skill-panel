@@ -43,13 +43,13 @@ test('K61 取值优先级：item.iconUrl 先，market.icons 次，都没有就�
   const plain = item('plain');
   assert.equal(iconUrlOf(plain, marketWith([])), null, '两边都没有 ⇒ null（落首字母瓦片）');
   assert.equal(
-    iconUrlOf(plain, marketWith([], { icons: { 'clawhub:acme:plain': 'api/dsh-skill-center/market/lucide?name=zap' } })),
-    'api/dsh-skill-center/market/lucide?name=zap',
+    iconUrlOf(plain, marketWith([], { icons: { 'clawhub:acme:plain': 'https://cdn.example.com/zap.png' } })),
+    'https://cdn.example.com/zap.png',
     '列表没带、批量补到了 ⇒ 用补到的那张',
   );
   const own = item('own', { iconUrl: 'https://cdn.example.com/own.png' });
   assert.equal(
-    iconUrlOf(own, marketWith([], { icons: { 'clawhub:acme:own': 'api/dsh-skill-center/market/lucide?name=zap' } })),
+    iconUrlOf(own, marketWith([], { icons: { 'clawhub:acme:own': 'https://cdn.example.com/zap.png' } })),
     'https://cdn.example.com/own.png',
     '列表自带的优先于批量补的（不覆盖已知答案）',
   );
@@ -71,7 +71,7 @@ test('K61 候选挑选：只挑 clawhub + 没图标 + 没问过 + owner/slug 齐
     item('empty-slug', { slug: '', id: 'clawhub:acme:' }),
   ];
   const market = marketWith(items, {
-    icons: { 'clawhub:acme:a': 'api/dsh-skill-center/market/lucide?name=zap' },
+    icons: { 'clawhub:acme:a': 'https://cdn.example.com/zap.png' },
     iconsTried: { 'clawhub:acme:already-tried': true },
   });
   const picked = iconCandidates(market);
@@ -104,11 +104,11 @@ test('K61 marketIconsReady：补到的写进 icons，null 也记 tried（同一 
   store.actions.marketPageAppended({ pages: [], merged: [item('one'), item('two'), item('three')] });
 
   store.actions.marketIconsReady({
-    'clawhub:acme:one': 'api/dsh-skill-center/market/lucide?name=zap',
+    'clawhub:acme:one': 'https://cdn.example.com/zap.png',
     'clawhub:acme:two': null,
   });
   const after = store.getSnapshot().market;
-  assert.equal(after.icons['clawhub:acme:one'], 'api/dsh-skill-center/market/lucide?name=zap', '有图标的写进 icons');
+  assert.equal(after.icons['clawhub:acme:one'], 'https://cdn.example.com/zap.png', '有图标的写进 icons');
   assert.equal(Object.hasOwn(after.icons, 'clawhub:acme:two'), false, 'null 不写进 icons（不留空值）');
   assert.deepEqual(
     after.iconsTried,
@@ -150,7 +150,7 @@ test('K61 marketReload 清空 icons 与 tried；切来源/搜索/追加页保留
   const store = createStore();
   store.actions.marketPageAppended({ pages: [], merged: [item('one'), item('two')] });
   store.actions.marketIconsReady({
-    'clawhub:acme:one': 'api/dsh-skill-center/market/lucide?name=zap',
+    'clawhub:acme:one': 'https://cdn.example.com/zap.png',
     'clawhub:acme:two': null,
   });
 
@@ -201,7 +201,7 @@ test('K69 iconSeeds：市场条目自带的 `iconUrl` 播进缓存，空值不�
   // 幂等：已经有该键（无论图是哪来的）就不再播
   const seeded = marketWith([withIcon], { icons: { 'clawhub:acme:one': 'https://storage.example.com/one.png' } });
   assert.equal(iconSeeds(seeded), null, '缓存里已有同键 ⇒ 不重复播种');
-  const other = marketWith([withIcon], { icons: { 'clawhub:acme:one': 'api/dsh-skill-center/market/lucide?name=zap' } });
+  const other = marketWith([withIcon], { icons: { 'clawhub:acme:one': 'https://cdn.example.com/zap.png' } });
   assert.equal(iconSeeds(other), null, '缓存里有别的值也算已有（播种不许改它）');
   // 已 tried 但没值：仍然可以播（tried 只挡「再问一次」，不挡「本地已经有答案」）
   const triedOnly = marketWith([withIcon], { iconsTried: { 'clawhub:acme:one': true } });

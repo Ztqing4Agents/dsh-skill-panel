@@ -23,7 +23,7 @@ npm test             # node --test test/（测试由 QA 维护）
 | 路由表、写盘、错误码 | `docs/contracts/routes.md` | §3.3 §3.4 §8.1 |
 | 前端组件、状态机、命名与 i18n | `docs/contracts/client.md` | §3.5 §3.6 §8.2–§8.5 |
 | 调用流程与未定事项 | `docs/contracts/flows.md` | §4 §5 |
-| 验收口径、夹具、用例编号 K1–K89 | `docs/contracts/acceptance.md` | 附录 D.5（K28–K61 K75–K78 K82–K89）、D.6（K62–K74） |
+| 验收口径、夹具、用例编号 K1–K93 | `docs/contracts/acceptance.md` | 附录 D.5（K28–K61 K75–K78 K82–K93）、D.6（K62–K74） |
 | 决策登记（偏离 / 更正 / 假设） | `docs/contracts/decisions.md` | 附录 B |
 | 页面视觉刻度（px、令牌、`skc_` 类名、收拢顺序） | `docs/contracts/visual.md` | A.1–A.9 |
 | 技能市场（源适配器、数据流、市场刻度、安装链路） | `docs/contracts/market.md` | §7 附录 F 附录 G（路由见 `routes.md` §3.7 §8.6） |
@@ -33,7 +33,7 @@ npm test             # node --test test/（测试由 QA 维护）
 | 过去是什么、为什么这么定 | `git log`（`git log -S`） | 仓库里没有 `archive/`，历史交 git |
 | 现在卡在哪、还剩什么没验 | `.agents/work/BOARD.md` | 本地看板（列约定在文件头，过程产物在 wip/ 与 scratch/），不入库 |
 
-契约按**编号分区**：`§x.y` 与 `附录 X.n` 在全仓库唯一，正文里看到编号就按上表定位；编号是 `test/*.test.mjs` 头注的锚点（K1–K89），**不许重排或复用**（K80 已退役，号不复用）。
+契约按**编号分区**：`§x.y` 与 `附录 X.n` 在全仓库唯一，正文里看到编号就按上表定位；编号是 `test/*.test.mjs` 头注的锚点（K1–K93），**不许重排或复用**（K33 / K58 / K60 / K80 已退役，号不复用）。
 
 **新知识写哪**：可 grep 的断言 → 契约；不能做错的事 → 本文件「硬约束」；用户可感知的变化 → `CHANGELOG`；还没做的事 → 看板；**没定型的探索结论**才进项目记忆。文档里不放过程（PRD、测试报告、设计图）——已移出，见 commit `a8141eb`。
 
@@ -41,12 +41,12 @@ npm test             # node --test test/（测试由 QA 维护）
 
 | 路径 | 是什么 |
 | --- | --- |
-| `index.js` | Host 半部入口：解析 `dshHome`/`skillsRoot`，注册 13 条路由（本地面 4 + 市场面 9） |
+| `index.js` | Host 半部入口：解析 `dshHome`/`skillsRoot`，注册 11 条路由（本地面 4 + 市场面 7） |
 | `lib/classify.js` | **纯函数核心**：`rankOf` / `classifySkill` / `mergeCatalog` / `buildGroups`。改判据只改这里 |
 | `lib/scan.js`、`lib/ledger.js` | 唯一碰盘的读取模块（自扫描 / 安装台账） |
 | `lib/frontmatter.js` | 字节级改写器（CRLF/BOM/注释保真）+ 读侧解析器（含块标量 `>`/`\|`） |
 | `lib/write-skill.js` | 指纹 → 临时文件 → fsync → rename → 回读校验 → 回滚 |
-| `lib/routes.js` | 13 条 exact 路由（本地面 4 + 市场面 9），共用一个 `guard()` |
+| `lib/routes.js` | 11 条 exact 路由（本地面 4 + 市场面 7），共用一个 `guard()` |
 | `src/client/**` → `client.js` | 源码 20 个文件（市场页 8 个为 `market-*`，`icon-tile.jsx`/`avatar.js` 是共用视觉单元；纯逻辑模块不含 JSX，node 可直接测）；`client.js` 是**构建产物、入库、不要手改** |
 | `lib/market/**`、`src/client/` 的 `market-*` 文件 | 市场半部：源适配器、安装链路、市场页组件（清单见 `docs/contracts/market.md` 附录 G） |
 | `locale/{zh,en}.json` | 唯一文案真源 |
@@ -82,14 +82,14 @@ npm test             # node --test test/（测试由 QA 维护）
     `register` 前会把它滤掉，不进运行时字典；**不要**把 `meta` 改成 `"meta.title"` 扁平键，
     那会让插件列表里的名字掉回包名。`npm run check:i18n` 与 `test/i18n.test.mjs` 双向守这条。
 13. **浏览器半部不直连上游**：SkillHub 没有 `access-control-allow-origin`，两源一律走 Host 代理（`lib/market/upstream.js` 是唯一出口）；`src/client/**` 里出现 `fetch('https://api.skillhub.cn…')` 即返工。
-14. **安装只写清单里的文件**：不执行包内脚本、不跟随包内符号链接、不写包外路径；任一步失败必须删掉 `.skc-install-*` 临时目录，`skills/<name>` 与自有台账要么都有、要么都没有（唯一例外：台账写失败时目录保留并报 `E_INSTALL_IO`，见 `docs/contracts/routes.md` §3.7）。
+14. **安装只写清单里的文件**：不执行包内脚本、不跟随包内符号链接、不写包外路径；任一步失败必须删掉 `.skc-install-*` 临时目录，`skills/<name>` 与自有台账要么都有、要么都没有（唯一例外：台账写失败时目录保留并报 `E_INSTALL_IO`，见 `docs/contracts/routes.md` §3.7）。`files` 形态下**空清单 / 无 `SKILL.md` / 路径不安全**三态一律 `E_PACKAGE_INVALID`——镜像单源之后这是唯一的包闸。
 
 ## 四处容易踩的真机坑
 
 - **`SkillSummary` 不暴露 `rank`**：`lib/registry.js` 用 `source`/`provider` 反推档位（表见 `docs/contracts/architecture.md` §1.4.3）；加新来源先补表，否则同名裁决会错。
 - **frontmatter 写入与读侧是两套规则**：`setDisableModelInvocation` 只做字节手术、只替换一行；`parseFrontmatter` 只负责读（含块标量，见 `docs/contracts/data-model.md` §3.2.4）。改一侧不影响另一侧；QA 踩过 `description: >`。
 - **宿主 primitives 来自浏览器 seed**，node 里 import 不到：测组件先映射（`docs/contracts/acceptance.md` 附录 D.1 的 L3 层）；`useSyncExternalStore` 必须带第三个参数，否则 SSR 直接抛。
-- **ClawHub 的目录来自 SkillHub 镜像、安装包只来自 `clawhub.ai`**：镜像按 `data.total` 判末页（**归一化会丢条目，短页 ≠ 末页**，不看本页条数）；镜像的 `version` 只上屏、`plan()` 恒向 `clawhub.ai` 解析真实版本；镜像的包**不完整**（实测有 0 文件的条目），安装只许走 `clawhub.ai`；`tags.latest` 仍是版本 id 不是版本号。
+- **市场面只有一个上游（`api.skillhub.cn`）**：ClawHub 的目录 / 详情 / 安装包全走镜像的 `source=clawhub`，`clawhub.ai` 已退场；末页判定两档：**有 `data.total` 只看总数**（`page*limit >= total`，归一化会丢条目，所以**短页 ≠ 末页**）；**没有 `total` 才退回「短页即末页」**；`namespace` 不能猜（认领过的没有 `clawhub_` 前缀），一律 `keyword=<slug>` 列表查询按 `slug`+`upstream_owner_login` 双匹配；安装只认 `/files` 清单，空清单 / 无 `SKILL.md` / 路径不安全 ⇒ `E_PACKAGE_INVALID`。
 
 ## 改完自检
 
