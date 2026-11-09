@@ -6,4 +6,3 @@ test/.tmp/
 !test/fixtures/**/.DS_Store
 .agents/memory/
 .agents/work/
-.agents/scratch/

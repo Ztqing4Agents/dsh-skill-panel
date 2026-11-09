@@ -9,7 +9,8 @@ npm run build        # src/client/** → client.js（esbuild，产物入库）
 npm run check:i18n   # zh/en 键集一致 + 入口键存在 + lib/ 与 src/ 无 CJK 字面量
 npm run check:client # 重打一次与 client.js 逐字节比对 + 装载形状 + exports["./client"]
 npm run check:docs   # 文档门禁：白名单/头注/章节/锚点/引用/零行号（脚本自测见 test/docs-gate）
-npm run check        # 上面三个
+npm run check:board  # 看板格式与依据锚点（无 .agents/work/ 时跳过）
+npm run check        # 上面四个
 npm test             # node --test test/（测试由 QA 维护）
 ```
 
@@ -30,7 +31,7 @@ npm test             # node --test test/（测试由 QA 维护）
 | 使用者能感知什么、怎么装、有哪些已知限制 | `README.md` | 只写使用者视角 |
 | 升级时我要注意什么 | `CHANGELOG.md` | 记行为变化与迁移，不记改过哪些文件 |
 | 过去是什么、为什么这么定 | `git log`（`git log -S`） | 仓库里没有 `archive/`，历史交 git |
-| 现在卡在哪、还剩什么没验 | `.agents/work/BOARD.md` | 本地看板，不入库 |
+| 现在卡在哪、还剩什么没验 | `.agents/work/BOARD.md` | 本地看板（列约定在文件头，过程产物在 wip/ 与 scratch/），不入库 |
 
 契约按**编号分区**：`§x.y` 与 `附录 X.n` 在全仓库唯一，正文里看到编号就按上表定位；编号是 `test/*.test.mjs` 头注的锚点（K1–K74），**不许重排或复用**。
 
@@ -94,5 +95,5 @@ npm test             # node --test test/（测试由 QA 维护）
 
 ```bash
 node scripts/build-client.mjs && node scripts/check-client.mjs && node scripts/check-i18n.mjs \
-  && node scripts/check-docs.mjs && node --check index.js && node --check client.js && node --check lib/*.js
+  && node scripts/check-docs.mjs && node scripts/check-board.mjs && node --check index.js && node --check client.js && node --check lib/*.js
 ```

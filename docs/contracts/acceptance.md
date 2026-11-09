@@ -110,7 +110,7 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | **K47** | 详情往返不丢已加载页数 | 两页已加载 + 打开详情再返回 | 返回后 `items` / `cursors` / `pages` 不变、`scrollTop` 留在 store、卡片数不退回第一页 | L3 · `test/market-view.test.mjs` |
 | **K48** | 已安装页签零回归 | 两个页签各渲染一次 | 已安装页签有状态行与「添加技能」、不挂市场面板、行仍不可点（K22 照旧）；市场页签反之 | L3 · `test/market-view.test.mjs` |
 | **K49** | 页头刷新按页签分工 | 市场加载中 / 空闲两种状态 | 市场加载中刷新按钮 `aria-busy="true"` + `disabled` + 进行中指示；空闲时换成刷新图标；已安装面不受影响 | L3 · `test/market-view.test.mjs` |
-| **K50** | 真机：双源卡片与深色 | 隔离 `DSH_HOME` + 真机 host + 无头 Chrome | 市场页签出双源卡片、来源 Tag 与分类 chips 正常；浅色与深色各截一张，令牌全部解析（无透明边框 / 看不见的文字） | L4 · 真机抽查（截图在 `.agents/scratch/`） |
+| **K50** | 真机：双源卡片与深色 | 隔离 `DSH_HOME` + 真机 host + 无头 Chrome | 市场页签出双源卡片、来源 Tag 与分类 chips 正常；浅色与深色各截一张，令牌全部解析（无透明边框 / 看不见的文字） | L4 · 真机抽查（截图在 `.agents/work/scratch/`） |
 | **K51** | 真机：装一个真实技能 + 断网降级 | 同一个隔离实例 | 确认弹窗 → 安装成功 toast 给路径 → `DSH_HOME/skills/<name>` 出现 `SKILL.md` 与 `_meta.json` → 刷新已安装页签后出现在「已安装技能」组；把上游域名黑洞后市场页签报错而**已安装页签照常** | L4 · 真机抽查（A 级端到端判据） |
 | **K52** | 市场头像三态（`MarketIcon`） | 有效 `iconUrl` / `null` / 404 三种 + 卡片·详情·确认弹窗三处 | ① 有效 → `<img class="skc_marketIconImg">`，`src` 原样、`alt=""`、`loading=lazy`、`decoding=async`、`referrerPolicy=no-referrer`；样式里 `width/height:100%` + `object-fit`（取值见 K56）+ 同心内圆角，`.skc_cardIcon` 的 48px 盒与 0.5px 描边一字未动 ② `null` / 非字符串 → 首字母头像，无 `<img>`、无空瓦片 ③ **同一实例遇到 404**（`onError` 触发）→ 回落首字母、盒子几何不变；失败按 URL 记，换一张图能重新尝试；卡片 / 详情头 / 确认弹窗三处同一组件，同一条目不会一处有图一处没图 | L3 · `test/market-view.test.mjs` |
 | **K53** | 分类计数（chips 的数字从哪来） | 假 io（13 个 `pageSize=1` 请求）+ 路由级假适配器 | 适配器：恰好 13 个请求（每类一次 + 「全部」一次）、并发 ≤ 6、10 分钟缓存且**不完整的一轮不进缓存**、单项失败/超预算 ⇒ 该项 `null`、`data.total` 缺失不猜 0、`resetCountCache` 可清；路由：`categories[].count` 与 `total` 逐项透传、`countsOk` 反映齐不齐、计数失败仍 200 且列表可用、非整数/字符串一律 `null` | L1 + L2 · `test/market-counts.test.mjs` + `test/market-routes.test.mjs` |
@@ -123,7 +123,7 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | **K60** | ClawHub 上传图标代理（第 12 条 exact） | 假代理 + 假字节客户端 + 路由层 | hash 白名单（非 64 位小写 hex ⇒ `400 E_BAD_QUERY` 信封）；命中 → `200` + 按上游 `image/svg+xml`／`image/png` + `cache-control: public, max-age=3600` + `x-content-type-options: nosniff` + `content-security-policy: default-src 'none'`（**断言不透传上游的 `sandbox`**）+ `content-length` 一致 + **不走信封**；不存在/上游失败 → **裸 404 空 body + `no-store`**；只放行 svg/png（`text/html` 等一律当没有）；5s、256 KiB、1h 命中 / 60s 未命中缓存、`?refresh=1` 清；只认 GET 与 loopback | L1 + L2 · `test/market-clawhub-icon.test.mjs` + `test/market-routes.test.mjs` |
 | **K61** | 客户端渐进补齐（先字母后换图） | `market-model.js` 纯函数 + 真 store | 取值优先级 `item.iconUrl` → `market.icons[id]` → null（空串按「无」）；`iconCandidates` 只挑「ClawHub + 没图标 + 没问过 + owner/slug 齐全」，默认 ≤24、顺序随列表；`marketIconsReady` 只把非空值写进 `icons` 但**每个 id 都记 `iconsTried`（null 也记）**；`marketIconsAttempted` 整批失败只记 tried、`icons`／分页态／列表态一动不动；`marketReload` 清空 `icons`+`iconsTried`，而切来源/搜索/追加页保留已拿到的图标；空 batch 不改状态对象 | L1 · `test/market-icons-client.test.mjs` |
 
-**红绿口径**（Round 9 终态）：K28–K49 与 K52–K74 全部绿（`node --test test/` 573/573）；K50 / K51 不进 `npm test`（要像素级命中、滚动容器与真实上游），由 agent 驱动无头浏览器在隔离 `DSH_HOME` 上验，最近一次为 Round 7（已安装图标与市场同步轮）复验：K50/K51 20 步 + R7 真机七条 13 步 + 11 步全通过。证据与截图见 `.agents/work/test-report-market-installed-icons.md`。
+**红绿口径**（Round 9 终态）：K28–K49 与 K52–K74 全部绿（`node --test test/` 573/573）；K50 / K51 不进 `npm test`（要像素级命中、滚动容器与真实上游），由 agent 驱动无头浏览器在隔离 `DSH_HOME` 上验，最近一次为 Round 7（已安装图标与市场同步轮）复验：K50/K51 20 步 + R7 真机七条 13 步 + 11 步全通过。证据与截图见 `.agents/work/scratch/test-report-market-installed-icons.md`。
 
 ---
 

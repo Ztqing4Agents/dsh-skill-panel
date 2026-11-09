@@ -27,7 +27,8 @@
     "check:client": "node scripts/check-client.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
     "check:docs": "node scripts/check-docs.mjs",
-    "check": "npm run check:i18n && npm run check:client && npm run check:docs",
+    "check:board": "node scripts/check-board.mjs",
+    "check": "npm run check:i18n && npm run check:client && npm run check:docs && npm run check:board",
     "test": "node --test test/"
   },
   "dsh": {
