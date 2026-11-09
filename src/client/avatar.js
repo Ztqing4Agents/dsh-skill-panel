@@ -1,37 +1,41 @@
 /**
- * The letter avatar: a skill's first letter on a pastel tile.
+ * The letter avatar: a skill's first letter on a tinted tile, aligned with skillhub.cn.
  *
  * A skill has no artwork of its own, so it gets the "app icon" treatment instead: one
- * uppercase initial, centred, on a 48px tile with a large corner radius. The colour
- * is derived from the name, which makes a row recognisable long before it is read.
+ * uppercase initial, centred, on the host's 48px tile. The colour is derived from the
+ * name, which makes a row recognisable long before it is read.
  *
- * Two properties are load-bearing:
- *   1. the palette does not follow the theme. The twelve pairs below are pastel tiles
- *      with a darker letter of the same hue, and they are used verbatim in light and
- *      dark mode alike - a tile that inverted would stop being the same tile, and the
- *      look being copied keeps its pastels in both themes. The hues are quantised to
- *      30 degrees apart and every letter clears 4.5:1 against its own tile.
- *   2. the tile is a pure function of the name. FNV-1a over the name's code units
+ * Three properties are load-bearing:
+ *   1. the six pairs below are transcribed value-for-value from the tiles skillhub.cn
+ *      draws for entries without an icon (measured off the live site: six pairs across
+ *      hundreds of rows, no seventh appeared in 25 screens of scrolling). Each tile is
+ *      its accent colour at 10-12% alpha with the accent itself as the letter - except
+ *      the sky pair, whose 12% bed is deliberately not the letter's value. They are used
+ *      verbatim and never follow the theme.
+ *   2. contrast is a deliberate trade: these letters sit at roughly 2-3:1 against their
+ *      own tile, below the 4.5:1 the previous twelve-tone pastel palette held. That is
+ *      the point of this change - matching the site the user compares us against - so the
+ *      old rule was retired rather than satisfied (see `docs/contracts/decisions.md`
+ *      appendix H).
+ *   3. the tile is a pure function of the name. FNV-1a over the name's code units
  *      (case sensitive, no clock, no randomness, no insertion order) means the same
  *      skill keeps the same colour in every session and on every machine.
  *
  * No React, no DOM: node can import this module and test it directly.
  */
 
-/** The twelve pastel tiles, 30 degrees of hue apart. `bg` is the tile, `ink` is the letter. */
+/**
+ * The six tiles, copied from skillhub.cn. `bg` is the tile (10-12% accent), `ink` the letter.
+ * The sky pair is the one whose bed and letter are not the same value: that is what the
+ * site does, so that is what we do.
+ */
 export const SKC_AVATAR_TONES = Object.freeze([
-  { bg: '#FFDEDB', ink: '#BC2015' },
-  { bg: '#FFF0DB', ink: '#935A10' },
-  { bg: '#FDFFDB', ink: '#6C730D' },
-  { bg: '#EBFFDB', ink: '#3C7A0E' },
-  { bg: '#DBFFDE', ink: '#0E7C15' },
-  { bg: '#DBFFF0', ink: '#0E7A4B' },
-  { bg: '#DBFDFF', ink: '#0E757C' },
-  { bg: '#DBEBFF', ink: '#1560C1' },
-  { bg: '#DEDBFF', ink: '#2719E6' },
-  { bg: '#F0DBFF', ink: '#8919DF' },
-  { bg: '#FFDBFD', ink: '#AC13A2' },
-  { bg: '#FFDBEB', ink: '#B8145B' },
+  { bg: 'rgba(255, 45, 85, .1)', ink: '#FF2D55' },
+  { bg: 'rgba(255, 149, 0, .1)', ink: '#FF9500' },
+  { bg: 'rgba(90, 200, 250, .12)', ink: '#32ADE6' },
+  { bg: 'rgba(175, 82, 222, .1)', ink: '#AF52DE' },
+  { bg: 'rgba(52, 199, 89, .1)', ink: '#34C759' },
+  { bg: 'rgba(0, 122, 255, .1)', ink: '#007AFF' },
 ]);
 
 /** FNV-1a 32-bit offset basis. */

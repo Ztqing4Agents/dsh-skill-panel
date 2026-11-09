@@ -14,12 +14,12 @@ import { FactsTable } from './market-detail.jsx';
 
 /**
  * Render the install confirmation.
- * @param {{item: object, detail: object|null, t: Function, onCancel: Function,
+ * @param {{item: object, detail: object|null, market: object, t: Function, onCancel: Function,
  *   onConfirm: Function}} props - the item being installed, its detail when it is already
- *   loaded, translate, and the two handlers.
+ *   loaded, the market state (for progressively fetched icons), translate, and the two handlers.
  * @returns {import('react').ReactElement} the dialog.
  */
-export function MarketConfirm({ item, detail, t, onCancel, onConfirm }) {
+export function MarketConfirm({ item, detail, market, t, onCancel, onConfirm }) {
   const title = item?.displayName || item?.slug || '';
   const data = detail?.status === 'ready' ? detail.data : null;
   const installTo = typeof data?.installTo === 'string' && data.installTo !== '' ? data.installTo : null;
@@ -56,7 +56,7 @@ export function MarketConfirm({ item, detail, t, onCancel, onConfirm }) {
     >
       <div className={cn('marketConfirmBody')}>
         <div className={cn('marketConfirmHead')}>
-          <MarketIcon item={item} title={title} />
+          <MarketIcon item={item} title={title} market={market} />
           <div className={cn('marketMain')}>
             <div className={cn('marketTitleRow')}>
               <span className={cn('marketDetailTitle')}>{title}</span>

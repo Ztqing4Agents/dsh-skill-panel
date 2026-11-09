@@ -44,7 +44,7 @@
 
 四条铁律（破一条就会在「加第三个源」时漏东西）：
 
-1. **适配器不碰 `fetch`、不碰文件系统、不碰时钟。** 网络只经注入的 `io`（`{getJson, getBytes}`，由 `lib/market/upstream.js` 的 `createUpstream()` 产出），时间只经 `options.now`。QA 用假 `io` 就能跑通整条链路，不必起服务器。
+1. **适配器不碰 `fetch`、不碰文件系统、不碰时钟。** 网络只经注入的 `io`（`{getJson, getBytes}`，由 `lib/market/upstream.js` 的 `createUpstream()` 产出），时间只经 `options.now`（`categories` / `counts` / `icons` 三个可选方法都收它，缺省回落 `Date.now`，测试可注入假时钟）。QA 用假 `io` 就能跑通整条链路，不必起服务器。
 2. **适配器只输出归一化后的形状，字段兜底统一在 `normalize.js`。** 每个适配器只提供 `toItem` 需要的映射；跨源字段一律由 `lib/market/normalize.js` 兜底（缺字段 = `null`，绝不写 `0`/`''` 假装有值）。
 3. **适配器不知道「来源筛选」「跨源合并顺序」「分页大小」。** 它只接受 `ListQuery` 并返回 `{items, next, total}`；`next` 是它自己的不透明游标（`null` = 没有下一页）。
 4. **安装只认清单。** `plan()` 返回的 `files[{path, size, sha256|null}]` 是唯一合法的取文件集合；客户端永远不传文件路径，`install` 的请求体只有 `{source, owner, slug, version}`。
@@ -62,9 +62,11 @@
 | `categories` | `GET /api/v1/categories`，滤 `pay-skill`，10 分钟内存缓存 | 无（`caps.categories = false`） |
 | `caps` | `{search:true, paged:true, categories:true, package:'files'}` | `{search:true, paged:true, categories:false, package:'zip'}` |
 | `total` | 上游 `data.total`（数字） | 恒 `null` |
-| 图标 | `iconUrl`：实测前 100 条约 **八成**有图（COS 的 `/skill-icons/uploads/…` 与 `cloudcache.tencent-cloud.com` 的 `other_external_resource/…` **两者都是该技能自己的图**），其余为空 ⇒ **绝对 `https:` 即接受，不做 host/path 白名单** | `icon`/`iconUrl` **没有图片地址**：列表项字段缺失，搜索偶尔给 Lucide 图标 token（`lucide:Zap`），`/api/v1/skill-icons/*` 一律 404 ⇒ 恒 `null` |
+| 图标 | `iconUrl`：实测前 100 条约 **八成**有图（COS 的 `/skill-icons/uploads/…` 与 `cloudcache.tencent-cloud.com` 的 `other_external_resource/…` **两者都是该技能自己的图**），其余为空 ⇒ **绝对 `https:` 即接受，不做 host/path 白名单**。列表阶段直接带出，无需二次请求 | **列表端点没有 `icon` 字段**（实测 49 条 0 条有此键），**详情端点有**：`/api/v1/skill-icons/<64 位 hex>` 或 `lucide:<Name>` 或 `null`。实测 35 条里只有 2 条有图（1 上传 / 1 lucide），故列表阶段一律 `null`，由 `POST /market/icons` 渐进补；两种真形状都转成**我方代理 URL**（见 §7.5） |
+| 图标补齐 | —— | **列表不再等图标**（ClawHub 详情单条实测 2.27–3.02s，等它等于每页白等 1–3s）。改由 `POST /market/icons` 渐进补齐：≤24 条、并发 4、整批 6s、单条 5s、正向 10min / 负向 60s 缓存，键 `clawhub:<owner>:<slug>`；失败只让该条 `null`，**绝不抛** |
 | 计数 | `counts`：13 次 `GET /api/skills?page=1&pageSize=1(&category=)` 取 `data.total`（12 个分类 + 1 个「全部」），并发 6、单项 6s、整体 10s 预算、10 分钟缓存；**每个 `count` 是该过滤条件的独立总数，不保证 12 类相加等于 `total`**（实测差几十条，上游按请求时刻统计、且一条技能可归属多个分类），界面不得用「合计」校验它 | 无 |
-| 一次 `list` 的上游请求数 | 1 | 1 |
+| 一次 `list` 的上游请求数 | 1 | 1（**不再为图标额外请求**） |
+| 一次 `POST icons` 的上游请求数 | 0（SkillHub 的图标随列表下发） | 每条一次详情，≤24 次，6s 整批预算内 |
 | 一次 `detail` 的上游请求数 | 3（详情 + 清单 + `SKILL.md`） | 2（详情 + zip） |
 | 一次 `bootstrap` 的上游请求数 | 冷缓存 **14**（分类表 1 + 计数 13），10 分钟内 0 | 0（不参与 bootstrap） |
 
@@ -104,7 +106,7 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 | `owner` | 上游 | SkillHub `namespace.handle`（实测含下划线）／ClawHub `ownerHandle` |
 | `slug` | 上游 | ClawHub 搜索结果缺 slug 时取 `canonicalUrl` 的最后一段 |
 | `displayName` | 上游 | `name`／`displayName`；缺则回落 `slug`，再缺为空串 |
-| `iconUrl` | 上游 | **绝对 `https:` 即接受**（可解析、非空），不做 host/path 白名单——上游两个图床都是逐技能的真图；`http:`、相对路径、空值与非字符串归 `null`；ClawHub 恒 `null`（给的是 lucide token，不是图片地址）。`null` 与**加载失败**都是「回落首字母头像」，破图由浏览器侧 `onError` 兜住 |
+| `iconUrl` | 上游 / 本地算 | 四种合法形态：① **绝对 `https:`**（SkillHub 两个图床都算，不做 host/path 白名单；`http:` 与非字符串归 `null`）；② `lucide:<Name>` → 我方文档相对路径 `api/dsh-skill-center/market/lucide?name=<kebab>`（`FileText`→`file-text`，#10 是唯一实现）；③ ClawHub 上传图标 `/api/v1/skill-icons/<64hex>` → `api/dsh-skill-center/market/clawhub-icon?hash=<64hex>`（#12）；④ `null`。其余（`//host/x`、未知站内路径、裸词、空值）归 `null`。`null` 与**加载失败**都是「回落首字母头像」，破图由浏览器侧 `onError` 兜住 |
 | `summary` | 上游 | 折叠成一行、≤ 400 字符（超长截断） |
 | `author` | 上游 | 三级回落：`publisher.name/displayName` → `namespace.displayName` → `owner` |
 | `version` | 上游 | **缺失如实为 `null`**（ClawHub 搜索结果必为 `null`，因为该端点不给版本号） |
@@ -126,6 +128,21 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 5. `updatedAt` 只影响排序：卡片、详情、事实表**都不显示任何时间**。
 
 ---
+
+### 7.5 图标管道（两段式，列表永不等图标）
+
+图标分两段拿，**任何列表路径都不许等第二段**：
+
+1. **随列表拿**：SkillHub 的 `iconUrl` 就在列表条目里，直接用。
+2. **渐进补齐**：ClawHub 的列表没有 `icon`（实测 49 条 0 条有此键），只有详情有，而详情单条实测 **2.27–3.02s** —— 等它等于每页白等 1–3s，且实测 35 条里只补得出 2 条。所以列表阶段 ClawHub 的 `iconUrl` 一律 `null`，客户端渲染出一页卡片后，把这一页的 `{owner, slug}` 打一次 `POST /market/icons`（≤ 24 条），拿回 `{'clawhub:<owner>:<slug>': iconUrl|null}` 自己 patch 卡片。
+
+补齐的账：并发 **4**、整批 **6s** 预算、单条 **5s**；超预算的条目返回 `null`（卡片保持首字母头像），整批仍 `200`；单条失败只让该项 `null`，**绝不 5xx**。缓存键 `clawhub:<owner>:<slug>`，正向 10 分钟、负向 60 秒（负向短，上游补上图标后能很快看见）；命中不打上游。`bootstrap?refresh=1` 清空整份图标缓存。
+
+### 7.6 图片端点（非信封响应的两条）
+
+`market/lucide`（#10）与 `market/clawhub-icon`（#12）是插件里仅有的不回 `{code,data,message}` 的路由：`<img>` 读不了信封。两者都回**裸图片字节** + `X-Content-Type-Options: nosniff` + `Content-Security-Policy: default-src 'none'`（**不透传上游 CSP**），未命中或上游不可用一律 `404` 空 body。浏览器侧只需要一个 `<img onError>`：这条 URL 失效就退回首字母头像，不必区分「本来没图」和「取不到」。
+
+必须代理而不是直连的理由：ClawHub 的上传图标响应头带 `content-security-policy: … sandbox`，同样字节在页内当 `<img>` 一律 `onerror`（走 `blob:` 却能正常光栅化）；Lucide 给的则根本不是图片地址，而是图标名。
 
 ## 附录 F 市场视觉刻度
 
@@ -173,7 +190,7 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 
 卡片**无描边**：描边只出现在头像框上；卡面靠 `radius-xl` + hover 底色表达可点性（依据见 `docs/contracts/decisions.md` 附录 E）。
 
-**头像位的两种内容**：`iconUrl !== null` 时头像盒里渲染 `<img src={iconUrl}>`——占满盒子（`width:100%; height:100%`）、`object-fit:contain`（图标常带透明边或非正方形，`cover` 会裁掉形状）、圆角 `calc(var(--dsw-radius-lg) - .5px)` 即落在 0.5px 描边**内侧**（与既有 `background-clip:padding-box` 是同一套几何，改错会在描边处露出 1px 白边）；`iconUrl === null` 与**图片加载失败**（`onError`，按 URL 记录、不重试）都回落 `avatar.js` 的首字母头像。两种内容共用同一个 48×48 盒子，切换**不改变**行高、节距与网格列宽——「有图标」只是换盒内内容，不新增容器。
+**头像位的两种内容**：`iconUrl !== null` 时头像盒里渲染 `<img src={iconUrl}>`——占满盒子（`width:100%; height:100%`）、`object-fit:contain`（图标常带透明边或非正方形，`cover` 会裁掉形状）、圆角 `calc(var(--dsw-radius-lg) - .5px)` 即落在 0.5px 描边**内侧**（与既有 `background-clip:padding-box` 是同一套几何，改错会在描边处露出 1px 白边）；`iconUrl === null` 与**图片加载失败**（`onError`，按 URL 记录、不重试）都回落 `avatar.js` 的首字母头像。两种内容共用同一个 48×48 盒子，切换**不改变**行高、节距与网格列宽——「有图标」只是换盒内内容，不新增容器。ClawHub 的 `lucide:` 代理 SVG 与它自己的 `/skill-icons/…` SVG 也走同一个 `<img>`：`stroke="currentColor"` 在图片文档里落到默认黑色，压在粉彩头像底上深浅两主题都可见，不需要为图标另加一套着色逻辑。
 
 ---
 

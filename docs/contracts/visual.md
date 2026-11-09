@@ -184,11 +184,27 @@
 
 头像的两种颜色**不走样式表常量，走行内自定义属性**：`row.jsx` 渲染
 `<span class="skc_cardIcon" style="--skc-avatar-bg:…;--skc-avatar-ink:…">首字母</span>`，
-本规则用 `var()` 取值——同一套规则因此能画十二种颜色，且不新增类名、不动容器样式。
-色板（12 组 `{bg, ink}`，色相 30° 等分，字母对比度 4.95–6.62）与「技能名 → 色板下标」的
-FNV-1a 散列在 `src/client/avatar.js`；
+本规则用 `var()` 取值——同一套规则因此能画六种颜色，且不新增类名、不动容器样式。
+色板与「技能名 → 色板下标」的 FNV-1a 散列在 `src/client/avatar.js`；
 字母取名字里第一个 `\p{L}` 或 `\p{N}` 并大写（中文取首字），空名回落 `#`。
-头像纯装饰（`aria-hidden`），读屏只念名字；**色板不随主题变化**，深色模式沿用同一套粉彩底。
+头像纯装饰（`aria-hidden`），读屏只念名字；**色板不随主题变化**，深浅两套主题用的是同六个固定值。
+
+**配色与排印对齐 skillhub.cn（2026-11-09 用户要求「除圆角外都对齐」）**，六组是站点实测值，
+不是我们选的：底色是该 accent 的 10%（天空那组 12%），字色是该 accent 的实色——
+
+| # | `--skc-avatar-bg` | `--skc-avatar-ink` |
+| --- | --- | --- |
+| 1 | `rgba(255, 45, 85, .1)` | `#FF2D55` |
+| 2 | `rgba(255, 149, 0, .1)` | `#FF9500` |
+| 3 | `rgba(90, 200, 250, .12)` | `#32ADE6` |
+| 4 | `rgba(175, 82, 222, .1)` | `#AF52DE` |
+| 5 | `rgba(52, 199, 89, .1)` | `#34C759` |
+| 6 | `rgba(0, 122, 255, .1)` | `#007AFF` |
+
+字号与字重按站点 14/40 的比例投到 48px 盒：**17px / 700**（舍入自 16.8）。站点瓦片本身是 40×40、
+圆角 8px；**我们只保留自己的 48×48 与 `radius-lg`（16px）**——用户明确「除了圆角外，其他都对齐」。
+⚠️ **对比度判据已主动放弃**：这六组的字母对底色约 2–3:1，低于原「≥4.5:1」，这是对齐站点换来的
+（登记在 `docs/contracts/decisions.md` 附录 H），不要再按 4.5:1 去「修」它。
 
 ## A.6 开关位、软链只读标记、骨架
 
@@ -302,7 +318,7 @@ FNV-1a 散列在 `src/client/avatar.js`；
 | 区标题 | 14px / 22px / 500 | `.skc_groupTitle` |
 | 列表 gap / 行外扩 | 2px / `margin:0 -8px` | `.skc_cards` / `.skc_card` |
 | 行内 gap / padding | 14px / 8px → 行高 64px | `.skc_cardHead` |
-| 图标 | 外框 48×48、底色 47×47（`background-clip: padding-box`），`.5px` `border-l3`，`radius-lg`（16px）；26px/500 大写首字母居中；12 组粉彩色板按技能名散列（对比度 4.95–6.62） | `.skc_cardIcon`（色板与散列见 `src/client/avatar.js`） |
+| 图标 | 外框 48×48、底色 47×47（`background-clip: padding-box`），`.5px` `border-l3`，`radius-lg`（16px）；**17px / 700** 大写首字母居中；**6 组** accent 10%（天空 12%）底 + accent 实色字按技能名散列，对齐 skillhub.cn，**字母对比度约 2–3:1（刻意放弃原 ≥4.5:1）** | `.skc_cardIcon`（色板与散列见 `src/client/avatar.js`，理由见 A.5 与 `decisions.md` 附录 H） |
 | 名称 / 描述 | 14/20/500 · 13/18 tertiary 单行 | `.skc_cardTitle` / `.skc_cardDesc` |
 | 开关 | 36×20（`Switch`），左侧预留 14px + 8px | `.skc_bundleToggle` |
 | 软链标记 | 高 18px，padding 0 6px，11/18，`bg-layer-3`，图标 12px | `.skc_roTag` |

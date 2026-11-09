@@ -150,35 +150,87 @@ test('K41 市场块不新增颜色字面量：色值只来自宿主令牌与 ava
   assert.ok(tokenUses > 20, `市场块用的宿主令牌足够多（实际 ${tokenUses} 处）`);
 });
 
-test('K41 浏览器半部不直连上游：src/client/** 里没有两个源的 origin', async () => {
+/**
+ * Drop block and line comments, so a rule about *code* is not tripped by a doc sentence.
+ * @param {string} text - source text.
+ * @returns {string} the same text without comments.
+ */
+const codeOnly = (text) => text
+  .replace(/\/\*[\s\S]*?\*\//g, ' ')
+  .replace(/(^|[^:'"\\])\/\/[^\n]*/g, '$1');
+
+test('K41 上游 origin 的边界：浏览器半部零 URL，Host 半部只许三条常量认 origin', async () => {
+  // R6 起 `normalize.js` 退休了 `https://clawhub.ai` 基址：两个真实图标形态现在都由本插件
+  // 代理（`lucide` / `clawhub-icon`），归一化只拼文档相对路径，不再需要知道任何 origin。
+  //   · `src/client/**` **一个 URL 都没有**（浏览器半部零直连）；
+  //   · `lib/market/**` 里认上游主机的文件恰好三个，常量恰好三条：两个适配器的 `ORIGIN`
+  //     + `upstream.js` 里钉版的 jsDelivr CDN 与 ClawHub icons 基址（唯一出口）；
+  //   · `normalize.js` **零 origin**，且它产出的图标地址都是文档相对的。
   const dir = join(ROOT, 'src', 'client');
   const files = (await readdir(dir)).filter((name) => /\.(js|jsx)$/.test(name));
   assert.equal(files.length > 10, true, '确实扫到了客户端源码');
-  const offenders = [];
-  for (const name of files) {
-    const text = await readFile(join(dir, name), 'utf8');
-    if (/api\.skillhub\.cn|clawhub\.ai/.test(text)) offenders.push(name);
+  const sources = new Map();
+  for (const name of files) sources.set(name, codeOnly(await readFile(join(dir, name), 'utf8')));
+  const offenders = [...sources].filter(([, text]) => /https?:\/\//.test(text)).map(([name]) => name);
+  assert.deepEqual(offenders, [], `客户端源码里一个 URL 都没有（发现：${offenders.join(', ')}）`);
+  for (const host of ['clawhub.ai', 'skillhub.cn', 'jsdelivr', 'cloudcache', 'myqcloud']) {
+    const hits = [...sources].filter(([, text]) => text.includes(host)).map(([name]) => name);
+    assert.deepEqual(hits, [], `客户端代码不提 ${host}（图标代理也是文档相对路径）`);
   }
-  assert.deepEqual(offenders, [], `客户端源码里没有上游 origin（发现：${offenders.join(', ')}）`);
 
-  // 递归扫 lib/market：两个 origin 分别住在 sources/skillhub.js 与 sources/clawhub.js。
+  // Host 半部：递归扫 lib/market，把「认识上游主机」的文件列出来。
   const libDir = join(ROOT, 'lib', 'market');
+  const HOSTS = /api\.skillhub\.cn|clawhub\.ai|jsdelivr|myqcloud/;
   const withOrigin = [];
+  const originLines = [];
   const walk = async (dir, prefix) => {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
       const full = join(dir, entry.name);
       if (entry.isDirectory()) await walk(full, `${prefix}${entry.name}/`);
       else if (entry.name.endsWith('.js')) {
-        const text = await readFile(full, 'utf8');
-        if (/api\.skillhub\.cn|clawhub\.ai/.test(text)) withOrigin.push(`${prefix}${entry.name}`);
+        // 同样先剥注释：`normalize.js` 的文档注释会拿 `…cos.accelerate.myqcloud.com` 当例子
+        // 解释「什么不是图标地址」，那是散文，不是代码里的 origin。
+        const text = codeOnly(await readFile(full, 'utf8'));
+        if (!HOSTS.test(text)) continue;
+        withOrigin.push(`${prefix}${entry.name}`);
+        for (const line of text.split('\n')) if (HOSTS.test(line)) originLines.push(`${prefix}${entry.name}`);
       }
     }
   };
   await walk(libDir, '');
-  assert.equal(withOrigin.length > 0, true, '上游 origin 出现在 Host 半部（否则这条断言等于没测）');
-  assert.equal(withOrigin.includes('install.js'), false, '安装编排本身不认识任何 origin');
-  assert.equal(withOrigin.includes('zip.js'), false, 'zip 读取器不认识任何 origin');
-  assert.equal(withOrigin.includes('normalize.js'), false, '归一化不认识任何 origin');
+  assert.deepEqual(
+    withOrigin.sort(),
+    ['sources/clawhub.js', 'sources/skillhub.js', 'upstream.js'],
+    '认上游主机的地方恰好三个文件（多一个就是越界）',
+  );
+  assert.equal(withOrigin.includes('normalize.js'), false, '归一化零 origin（R6 退休了 ClawHub 基址）');
+  for (const name of ['install.js', 'zip.js', 'query.js', 'errors.js', 'store.js', 'ledger.js']) {
+    assert.equal(withOrigin.includes(name), false, `${name} 不认识任何上游主机`);
+  }
+  // 五条：两个适配器 `ORIGIN` + 出口的 `LUCIDE_CDN` / `CLAWHUB_ICON_ORIGIN` + 下载重定向白名单
+  // `REDIRECT_HOST`（COS 桶后缀，早于本轮就有）。写死条数，第六处一出现就红。
+  assert.equal(originLines.length, 5, `认上游主机的常量恰好五条，实测 ${originLines.join(', ')}`);
+
+  // 各自形状：适配器是导出的 ORIGIN；出口是钉版 CDN 与 icons 基址（不许 latest、不许浮动路径）。
+  const skillhubText = await readFile(join(libDir, 'sources', 'skillhub.js'), 'utf8');
+  const clawhubText = await readFile(join(libDir, 'sources', 'clawhub.js'), 'utf8');
+  const normalizeText = await readFile(join(libDir, 'normalize.js'), 'utf8');
+  const upstreamText = await readFile(join(libDir, 'upstream.js'), 'utf8');
+  assert.match(skillhubText, /export const ORIGIN = 'https:\/\/api\.skillhub\.cn'/, 'SkillHub 的 origin 是导出常量');
+  assert.match(clawhubText, /export const ORIGIN = 'https:\/\/clawhub\.ai'/, 'ClawHub 的 origin 是导出常量');
+  assert.match(upstreamText, /LUCIDE_CDN = 'https:\/\/cdn\.jsdelivr\.net\/npm\/lucide-static@\d+\.\d+\.\d+\/icons'/, 'CDN 常量钉死版本号（不许 latest）');
+  assert.match(upstreamText, /CLAWHUB_ICON_ORIGIN = 'https:\/\/clawhub\.ai\/api\/v1\/skill-icons'/, '上传图标基址是导出常量');
+  assert.match(upstreamText, /REDIRECT_HOST = \/\^\[a-z0-9-\]\+\\\.cos\\\.accelerate\\\.myqcloud\\\.com\$\//, '下载重定向白名单仍在（COS 桶后缀）');
+  assert.equal(/lucide-static@latest/.test(upstreamText), false, '没有 latest 这种浮动版本');
+  assert.equal(/https?:\/\//.test(normalizeText), false, 'normalize.js 里连一个 URL 都没有');
+  assert.equal(/getJson|getBytes|fetch\(/.test(normalizeText), false, '归一化自己不发任何请求');
+  // 图标地址是文档相对路径：带前导斜杠会在 <base href="./"> 下逃出部署前缀。
+  const { lucideProxyUrl, clawhubIconProxyUrl } = await import('../lib/market/normalize.js');
+  const hash = 'a'.repeat(64);
+  for (const url of [lucideProxyUrl('zap'), clawhubIconProxyUrl(hash)]) {
+    assert.equal(url.startsWith('api/dsh-skill-center/market/'), true, `${url} 是文档相对路径`);
+    assert.equal(/^https?:|^\//.test(url), false, `${url} 不带 origin 也不带前导斜杠`);
+  }
 });
 
 test('K41 包依赖仍然是空的：市场面没有引入第三方库', async () => {

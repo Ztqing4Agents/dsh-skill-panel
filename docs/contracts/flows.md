@@ -182,7 +182,16 @@ sequenceDiagram
     API-->>MP: 单源一页
     MP->>MM: mergeBatches([{sourceId,items}…], {existing})
     MM-->>MP: 按源拼接 / 去重后的列表
-    MP-->>U: 首屏骨架 → 卡片网格
+    MP-->>U: 首屏骨架 → 卡片网格（先画字母头像，不等图标）
+
+    opt 页面上有 ClawHub 条目缺图标（列表/追加渲染完成后，非阻塞）
+        MP->>API: marketIcons({source:'clawhub', items:[{owner,slug}…]}) ≤24 条
+        API->>RT: POST market/icons
+        RT-->>API: { icons: { "clawhub:owner:slug": url|null } }
+        API-->>MP: 每个 id 的 url 或 null
+        MP->>ST: marketIconsReady（null 也记进 iconsTried，同一 id 只问一次）
+        MP-->>U: 有图的卡片把字母换成图；没图的保持字母（失败静默，不弹错）
+    end
 
     alt 该请求 rejected（503/502/504）
         MP->>ST: marketListFailed

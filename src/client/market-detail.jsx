@@ -94,7 +94,7 @@ export function MarketDetail({ detail, market, t, onBack, onRetry, onInstall }) 
         <span>{t('market.detailBack')}</span>
       </button>
       <div className={cn('marketDetailHead')}>
-        <MarketIcon item={item} title={title} />
+        <MarketIcon item={item} title={title} market={market} />
         <div className={cn('marketMain')}>
           <div className={cn('marketTitleRow')}>
             <h3 className={cn('marketDetailTitle')}>{title}</h3>

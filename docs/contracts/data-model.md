@@ -315,7 +315,7 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
   "owner": "ake",                    // 上游；缺失 null
   "slug": "dev-god",                 // 上游；缺失 null
   "displayName": "编程大神.Skill",   // 上游；缺则回落 slug，再缺为空串
-  "iconUrl": "https://…/skill-icons/uploads/…png", // 上游；只收真图标，其余 null（见不变式 6）
+  "iconUrl": "https://…png | api/…/market/lucide?name=zap",  // 四种形态，见不变式 6
   "summary": "≤ 400 字符单行",        // 上游；超长截断，缺失为空串
   "author": "阿客实验室",             // 上游；三级回落，全缺 null
   "version": "1.2.4",                // 上游；**缺失如实 null**（ClawHub 搜索结果必为 null）
@@ -349,7 +349,7 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
 3. `installTo` 在 `nameValid === false` 时等于 `skillsRoot` 本身（不吃掉最后一级目录名），界面据此显示「不能安装」。
 4. `overview` 不含 frontmatter 分隔行与 `name:`/`description:` 头字段。
 5. 卡片与详情**不显示任何时间**：`updatedAt` 只影响顺序。
-6. `iconUrl` 的判据是「**能当图片地址用**」：绝对 `https:` 且 `new URL` 可解析即接受，**不做 host/path 白名单**（上游两个图床 `skillhub-*.cos.accelerate.myqcloud.com/skill-icons/…` 与 `cloudcache.tencent-cloud.com/qcloud/ui/static/other_external_resource/…` 都是逐技能的真图）；`http:`、相对路径、空值与非字符串归 `null`；ClawHub 的 `icon` 是 Lucide 图标 token（`lucide:Zap`）而不是图片地址，恒 `null`。`null` 与**加载失败**都是「回落首字母头像」，破图由浏览器侧 `onError` 兜住。
+6. `iconUrl` 只有四种合法形态：① 绝对 `https:`（可解析即接受，**不做 host/path 白名单**——SkillHub 两个图床都是逐技能真图）；② `lucide:FileText` → 我方文档相对路径 `api/dsh-skill-center/market/lucide?name=file-text`；③ ClawHub 上传图标 `/api/v1/skill-icons/<64hex>` → `api/dsh-skill-center/market/clawhub-icon?hash=<64hex>`；④ `null`。②③ 是**同源代理路径**，不带前导 `/`：GUI 走 `<base href="./">`，根绝对 `/api/…` 会在子路径部署下逃出前缀；直连那两类图标也不行——`lucide` 是图标名不是地址，ClawHub 的图带 `sandbox` CSP，页内当 `<img>` 一律 `onerror`。`http:`、`//host/x`、未知站内路径、裸词、空值与非字符串归 `null`；`null` 与**加载失败**都是「回落首字母头像」，破图由浏览器侧 `onError` 兜住。
 
 #### 3.8.2 `lib/market/normalize.js` 与 `mergeBatches` 的纯函数契约
 

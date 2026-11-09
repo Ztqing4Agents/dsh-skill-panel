@@ -142,7 +142,7 @@ const CSS = `
   width: 48px; height: 48px; flex: none;
   background: var(--skc-avatar-bg, transparent); background-clip: padding-box;
   color: var(--skc-avatar-ink, var(--dsw-alias-label-secondary));
-  font-size: 26px; font-weight: 500; line-height: 1; text-transform: uppercase; user-select: none;
+  font-size: 17px; font-weight: 700; line-height: 1; text-transform: uppercase; user-select: none;
   justify-content: center; align-items: center; display: inline-flex;
 }
 .skc_cardMain{ flex-direction: column; flex: 1; gap: 4px; min-width: 0; display: flex }

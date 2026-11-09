@@ -12,9 +12,9 @@
 
 ## 3.3 Host 路由清单
 
-九条 **exact** 路由（`kind:'exact'`，`ctx.webServer.register(route)` 返回 disposer；重复注册同路径会抛错，见 `EX/dsh-host-webserver/README.md`「Registering routes」）。本地面 4 条（下表 #1–#4），市场面 5 条见 §3.7。
+十二条 **exact** 路由（`kind:'exact'`，`ctx.webServer.register(route)` 返回 disposer；重复注册同路径会抛错，见 `EX/dsh-host-webserver/README.md`「Registering routes」）。本地面 4 条（下表 #1–#4），市场面 8 条见 §3.7。
 
-统一信封（§8.1）：成功 `200 {code:'OK', data, message:''}`；失败 `4xx/5xx {code:'E_…', data:null, message}`。
+统一信封（§8.1）：成功 `200 {code:'OK', data, message:''}`；失败 `4xx/5xx {code:'E_…', data:null, message}`。唯一例外是市场面的两个图片端点 `market/lucide`（#10）与 `market/clawhub-icon`（#12）：它们回图片字节，不回信封。
 
 | # | 方法 + 路径 | 入参 | 出参 `data` | 错误码 |
 | --- | --- | --- | --- | --- |
@@ -148,9 +148,9 @@ return concat(bom, block, body.subarray(block.end))   // 其余字节一个不�
 
 ## 3.7 市场路由清单
 
-市场面 5 条 **exact** 路由，前缀 `/api/dsh-skill-center/market/*`。它们与 #1–#4 **共用同一个 `guard()`**（loopback 围栏 → 方法），共用 `writeJson` 的 `{code,data,message}` 信封与 `no-store`，但**不共用 `collect()`**：本地扫描是磁盘面，市场是网络面，混在一起会让「市场超时」连累「已安装」页签。
+市场面 8 条 **exact** 路由，前缀 `/api/dsh-skill-center/market/*`。它们与 #1–#4 **共用同一个 `guard()`**（loopback 围栏 → 方法），共用 `writeJson` 的 `{code,data,message}` 信封与 `no-store`，但**不共用 `collect()`**：本地扫描是磁盘面，市场是网络面，混在一起会让「市场超时」连累「已安装」页签。
 
-#### 3.7.1 五条路由
+#### 3.7.1 八条路由
 
 | # | 方法 + 路径 | 入参 | 出参 `data` | 错误码（全量） |
 | --- | --- | --- | --- | --- |
@@ -159,6 +159,14 @@ return concat(bom, block, body.subarray(block.end))   // 其余字节一个不�
 | 7 | `GET /api/dsh-skill-center/market/detail` | `source`（必填）、`owner`、`slug`（必填）、`version`（可选） | `MarketDetail`（§3.8.1） | 同 #6 |
 | 8 | `GET /api/dsh-skill-center/market/installed` | 无 | `{items:{[id]:{name,version,path,exists:boolean}}, readable:boolean}` | `403`、`405`、`500 E_INTERNAL` |
 | 9 | `POST /api/dsh-skill-center/market/install` | `{source, owner, slug, version?}`（`objectOnly`，≤ 64 KiB；**没有 path / files / name 字段**） | `{name, path, version, source, owner, slug, files:number, bytes:number}` | `403`、`405`、`400 E_BAD_REQUEST`、`400 E_BAD_QUERY`、`409 E_ALREADY_INSTALLED`、`422 E_SKILL_NAME_INVALID`、`422 E_PACKAGE_INVALID`、`429 E_INSTALL_BUSY`、`502 E_DOWNLOAD_FAILED`、`502 E_SOURCE_BAD_RESPONSE`、`503 E_SOURCE_UNAVAILABLE`、`504 E_SOURCE_TIMEOUT`、`500 E_INSTALL_IO`、`500 E_INTERNAL` |
+| 10 | `GET /api/dsh-skill-center/market/lucide?name=<kebab>` | `name` 白名单 `^[a-z0-9]+(?:-[a-z0-9]+){0,5}$` | **SVG 字节，不走信封**（见下） | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_QUERY`（`name` 缺/不合白名单）、`404`（无此图标或 CDN 不可用，空 body） |
+| 11 | `POST /api/dsh-skill-center/market/icons` | body `{source:'clawhub', items:[{owner,slug}]}`：`items` ≤ 24，`owner`/`slug` 走与 detail 同一套白名单 | `{icons:{'clawhub:<owner>:<slug>': iconUrl\|null}}` | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_REQUEST`（形状/条数/白名单）、`400 E_BAD_QUERY`（`source` 不是 `clawhub`）、`500 E_INTERNAL`。单条详情失败只让该项 `null`，**整体不报错** |
+| 12 | `GET /api/dsh-skill-center/market/clawhub-icon?hash=<64hex>` | `hash` 白名单 `^[a-f0-9]{64}$`；`?refresh=1` 清缓存 | **图片字节，不走信封**（见下） | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_QUERY`（hash 不合白名单）、`404`（上游无此图或不可用，空 body） |
+
+**#10 与 #12 是本插件仅有的两个非信封路由**：`<img>` 读不了 `{code,data,message}`，所以它们直接回图片字节，并统一补 `X-Content-Type-Options: nosniff` 与 `Content-Security-Policy: default-src 'none'`（**不透传上游的 CSP**）；命不中或上游不可用一律 `404` 空 body（不回 HTML，也不回信封），让浏览器的 `onError` 把卡片退回首字母头像。
+
+- **#10 `market/lucide`**：上游是**钉版本**的 `https://cdn.jsdelivr.net/npm/lucide-static@1.70.0/icons/<name>.svg`（不用 `latest`：上游改名会让整类图标静默消失），5s / 32 KB / 必须 `image/svg+xml`，`max-age=604800`；进程内 1 小时缓存，未命中只记 60 秒。
+- **#12 `market/clawhub-icon`**：上游 `https://clawhub.ai/api/v1/skill-icons/<hash>` 的字节**原样转发**（`Content-Type` 按上游，实测 `image/svg+xml`，也放行 `image/png`），5s / 256 KB，`max-age=3600`；1 小时命中缓存 / 60 秒未命中缓存。这条存在的唯一理由是**上游那几个响应带 `content-security-policy: … sandbox`**，同样字节在页内当 `<img>` 一律 `onerror`（走 `blob:` 却能正常光栅化），只有本机重发一次才画得出来。
 
 body 上限沿用 `MAX_BODY_BYTES = 65536`：install 的请求体只有 4 个短字符串，64 KiB 是「有人乱发」的护栏，不是功能需要。
 
@@ -181,6 +189,8 @@ install 出参里两个数字的口径**不一样，别混**：`files` 是**落�
 | 列表 / 搜索 / 详情 | 单源 **10s**（连接 5s + 总 10s） | `upstream.getJson({timeoutMs})` |
 | 分类表 | 6s，失败静默降级 | `skillhub.categories()` |
 | 分类计数 | 单项 **6s**、整体 **10s** 预算、并发 **6**、10 分钟缓存；任一项失败只让该 `count:null`（`countsOk:false`），不影响 bootstrap 的 200 | `skillhub.counts()` |
+| 批量图标（#11） | 一次最多 24 条详情、并发 **4**、整批 **6s** 预算（超预算的条目直接 `null`）、单条 **5s**；正向 10 分钟 / 负向 60 秒缓存，键 `clawhub:<owner>:<slug>`；`bootstrap?refresh=1` 一并清空。**列表与搜索不再等图标** | `clawhub.icons()` |
+| ClawHub 图标代理（#12） | 单张 5s、256 KB 上限；1 小时命中 / 60 秒未命中缓存，`?refresh=1` 清空；并发受上游闸约束（同源 3） | `createClawhubIconProxy()` |
 | 安装整包 | **120s** 总预算（每次取文件前检查 deadline） | `install.js` |
 | 安装单文件 | 30s | `upstream.getBytes({timeoutMs})` |
 | 上游并发 | 全局 6、单 origin 3（`upstream.js` 的两道计数闸） | 一次扇出 = 每源 1 个 |
@@ -297,7 +307,7 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 
 ## 8.6 市场错误码
 
-市场面 5 条路由的 `E_*` 全集。HTTP status 与 `code` 双写，规则同 §8.1；`message` 仍是给开发者看的英文短句，界面文案由客户端按 `code` 取 i18n 键。
+市场面 8 条路由的 `E_*` 全集。HTTP status 与 `code` 双写，规则同 §8.1；`message` 仍是给开发者看的英文短句，界面文案由客户端按 `code` 取 i18n 键。两个图片端点（#10/#12）只报 `400 E_BAD_QUERY` 与裸 `404`（非信封）；#11 用 `E_BAD_REQUEST` 表示「形状不对」，用 `E_BAD_QUERY` 表示「这个源没有图标可补」。
 
 | code | HTTP | 含义 | 前端表现 |
 | --- | --- | --- | --- |

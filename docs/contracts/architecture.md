@@ -316,7 +316,7 @@ ledger.readAll() ─────────────────┘   （R5�
 | `lib/registry.js` | `snapshotRegistry(ctx.skills, cwd)` + `rankOfSummary(summary)`（= 先按 `source`/`provider` 映射成 level，再调 `classify.rankOf(level)`；映射表见 1.4.3） |
 | `lib/classify.js` | **纯函数核心**：`rankOf(level)`、`classifySkill(input)`、`mergeCatalog({scanned, registry, ledger})`、`buildGroups()` |
 | `lib/provider-toggles.js` | 自有存储 `$DSH_HOME/dsh-skill-center/provider-toggles.json`：`deserialize`/`serialize`/`read`/`setEnabled`（原子写、损坏降级） |
-| `lib/routes.js` | `makeRoutes(ctx, deps) → WebRoute[]`：`list` / `toggle` / `provider-toggle` / `health` 四条本地面 exact 路由 + 市场面 5 条 + 围栏 + 身份校验 |
+| `lib/routes.js` | `makeRoutes(ctx, deps) → WebRoute[]`：`list` / `toggle` / `provider-toggle` / `health` 四条本地面 exact 路由 + 市场面 8 条（含两条图片端点 `market/lucide` / `market/clawhub-icon` 与批量图标 `market/icons`）+ 围栏 + 身份校验 |
 | `lib/market/`（市场面） | 源适配器、上游客户端、ZIP 读取、安装链路与自有台账，共 10 个文件；本表不展开，逐个职责见 `docs/contracts/market.md` 附录 G |
 
 ### 2.3 Client 半部源码（`src/client/`，ESM + JSX，esbuild 打包）

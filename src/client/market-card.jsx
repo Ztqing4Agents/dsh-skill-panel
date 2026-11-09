@@ -18,7 +18,7 @@ import { Button, StateDot, Tag } from '@deepseek-ai/dsh-client-ui-primitives';
 
 import { avatarOf } from './avatar.js';
 import { cn } from './styles.js';
-import { installViewOf, marketKeyOf, metaSegments, sourceLabelOf } from './market-model.js';
+import { iconUrlOf, installViewOf, marketKeyOf, metaSegments, sourceLabelOf } from './market-model.js';
 
 /** The action's own label per state; `installing` draws its own seat above. */
 const VIEW_LABELS = {
@@ -71,13 +71,14 @@ export function InstallAction({ item, market, t, size = 'sm', className, onInsta
  * Two states and no third: an upstream icon when `iconUrl` is a non-empty string, the
  * letter tile otherwise. A failed load counts as "no icon" - the tile never stays blank,
  * because a blank square in a list of 24 reads as a broken panel, not as a missing image.
- * @param {{item: object, title: string, className?: string}} props - the market item, its
- *   display title, and an extra class for the wrapper.
+ * @param {{item: object, title: string, market: object, className?: string}} props - the
+ *   market item, its display title, the market state (for progressively fetched icons),
+ *   and an extra class for the wrapper.
  * @returns {import('react').ReactElement} the tile.
  */
-export function MarketIcon({ item, title, className }) {
+export function MarketIcon({ item, title, market, className }) {
   const avatar = avatarOf(title);
-  const iconUrl = typeof item?.iconUrl === 'string' && item.iconUrl !== '' ? item.iconUrl : null;
+  const iconUrl = iconUrlOf(item, market);
   // Keyed by url: a different item's icon gets its own chance to load.
   const [failedUrl, setFailedUrl] = useState(null);
   const showIcon = iconUrl !== null && failedUrl !== iconUrl;
@@ -118,7 +119,7 @@ export function MarketCard({ item, market, t, onOpen, onInstall }) {
     <li className={cn('marketCard')} data-skc-market-id={key}>
       <div className={cn('marketMain')}>
         <div className={cn('marketTitleRow')}>
-          <MarketIcon item={item} title={title} />
+          <MarketIcon item={item} title={title} market={market} />
           <button
             type="button"
             className={cn('marketCardOpen')}

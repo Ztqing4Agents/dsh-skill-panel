@@ -49,7 +49,7 @@ ClientPlugin.apply(ctx)
 
 `.skc_cardIcon` 的**容器是宿主 `.cardIcon` 原样式**（`.5px` `border-l3` 描边、`radius-lg` 圆角、48×48、`border-box`），
 不随头像需求改动；变化只在内容层：宿主画通用技能图标，本面板画首字母。
-颜色不是样式表常量，而是 `avatar.js` 的 12 组色板（色相 30° 等分，字母对比度 4.95–6.62）经 `row.jsx`
+颜色不是样式表常量，而是 `avatar.js` 的 6 组色板（对齐 skillhub.cn 的 accent 10% 底 + 实色字，字母对比度约 2–3:1 是刻意取舍）经 `row.jsx`
 以 `--skc-avatar-bg` / `--skc-avatar-ink` 行内传入（刻度见 `docs/contracts/visual.md` A.5）；
 `background-clip: padding-box` 保证粉彩底不盖住半透明描边。骨架复用同一个类，由 `.skc_skeletonIcon`
 自己再写灰色底，加载态不出现彩色块、也不出现字母。
@@ -80,6 +80,7 @@ market = {
   detail: null | {id, item, status, data, code},  // 内嵌详情三态
   installed / installedReady,                     // 安装台账 × item.id；只读一次
   installs: {[id]: {state, reason?, path?, version?, seq?}},   // 确认/安装中/已安装/失败
+  icons / iconsTried,                             // 渐进补齐的图标 {[id]: url} 与「本会话已问过」{[id]: true}
   installedDirty,                                 // 已安装页签标脏
   scrollTop,                                      // 进详情前记下，返回时恢复
 }
@@ -122,7 +123,7 @@ SkillsPage (page.jsx：页头 + 两个页签)
 MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 ```
 
-七条结构约束：
+八条结构约束：
 
 1. **整卡可点只有一个手段**：标题按钮 `.skc_marketCardOpen::after{inset:0}` 铺满整卡，`.skc_marketCardEnd{z-index:1}` 让安装按钮浮在点击层之上。不做 `<a href>`、不做卡片内的第二个可点区域、不给卡片加行 hover 之外的交互。已安装页签的行一个字节不变。
 2. **详情就地替换网格**（`detail !== null` 时返回详情而不是网格），与宿主的页内详情同构；返回不重拉任何东西。
@@ -130,7 +131,8 @@ MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 4. 组件只读 props（`store/api/t`）写 `store.actions`，不直接 `fetch`；只有滚动位置恢复与触底预取读 DOM，且都在 `useEffect` 里（字符串渲染不触发）。
 5. **来源只有一个**：来源菜单就是 `SkillHub` 与 `ClawHub` 两项，默认 `skillhub`，没有「全部来源」；因此不存在「两源同屏」「部分源失败提示条」这两种中间态——当前源失败即整页错误态（可重试）。分类行只在当前源发布分类时出现（ClawHub 直接隐藏），选中的分类也不会跨源。
 6. **分类 chip 带数量**：`全部` 用 `bootstrap.total`，各分类用 `categories[].count`；`count` 为 `null` 时数字位整段不渲染（不写 0、不写破折号），`countsOk:false` 时所有数字位都不出现。格式是 `Intl.NumberFormat(undefined, {notation:'compact'})`（运行时默认语言，`try/catch` 兜底成原数字），样式见 §8.5。
-7. **头像只有两态**（卡片、详情头、确认弹窗共用一个 `MarketIcon`）：`item.iconUrl` 为非空字符串时画图（`<img>` + `skc_marketIconImg`、`alt=""`、`loading="lazy"`、`referrerPolicy="no-referrer"`），否则画首字母；**图片 `onError` 也回落首字母**，任何情况下都不留空白方块。图片是 `.skc_cardIcon` 的 flex 子项、只填满内容盒，所以宿主那条 `.5px` 描边始终压在图片之上；头像盒既有声明（48×48 / `border .5px` / `radius-lg` / `background-clip: padding-box` / 粉彩底）一字不改。
+7. **头像只有两态**（卡片、详情头、确认弹窗共用一个 `MarketIcon`）：取值顺序 **`item.iconUrl` → `market.icons[marketKeyOf(item)]` → `null`**（`iconUrlOf()`，纯函数），拿到非空字符串就画图（`<img>` + `skc_marketIconImg`、`alt=""`、`loading="lazy"`、`referrerPolicy="no-referrer"`），否则画首字母；**图片 `onError` 也回落首字母**，任何情况下都不留空白方块。ClawHub 的图标是**后到的**：列表先给 `iconUrl:null`，页面渲染完成后由 `market/icons` 批量补齐，所以同一张卡会先字母、后换图。
+8. **图标补齐不阻塞渲染**：`market/list` 回来后先画卡片，再由面板 effect 把「ClawHub + 无图标 + 本会话没问过」的条目打包（≤24）调 `market/icons`；**同一 id 只问一次**（`iconsTried` 同时记正负结果），请求失败静默保持字母；切来源 / 搜索 / 刷新**不清**已拿到的图标，只有 `marketReload()` 清。图片是 `.skc_cardIcon` 的 flex 子项、只填满内容盒，所以宿主那条 `.5px` 描边始终压在图片之上；头像盒既有声明（48×48 / `border .5px` / `radius-lg` / `background-clip: padding-box` / 粉彩底）一字不改。
 
 ### 3.9.3 store action（`src/client/state.js`）
 
@@ -154,6 +156,8 @@ MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 | `marketInstallStart(id)` | id | `state='installing'`（幂等） |
 | `marketInstallOk(id,{name,path,version})` | —— | `installed` + `installed[id]` + `installedDirty` + 推 `notice{kind:'install-ok', name, path, seq}` |
 | `marketInstallFail(id, reason)` | 本地化原因 | `state='failed'` + `reason` |
+| `marketIconsReady(icons)` | `{[id]: url|null}` | 合并进 `icons`（非空才存），每个 id 记进 `iconsTried`（**null 也记**，负结果同样只问一次） |
+| `marketIconsAttempted(ids)` | `string[]` | 批次整体失败：只记 `iconsTried`、不写 `icons`，静默保持字母 |
 | `marketSetScroll(top)` / `marketClearInstalledDirty()` | number / —— | 记滚动位置 / 清脏 |
 
 `notice` 复用既有字段：`refresh-failed`（既有）与 `install-ok`（新增，副行给安装路径），由 `toast.jsx` 按 `kind` 选文案，5 秒后 `dismissNotice(seq)`。
@@ -169,6 +173,7 @@ MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 | `marketDetail({source,owner,slug,version})` | `GET market/detail` | —— |
 | `marketInstalled()` | `GET market/installed` | 形状 `{items, readable}` |
 | `marketInstall({source,owner,slug,version})` | `POST market/install` | body 只有身份，**没有 path/files** |
+| `marketIcons({source,items})` | `POST market/icons` | `items` 是 `{owner,slug}` 数组（**≤24**）；出参 `{icons:{[id]: url|null}}`；只为 ClawHub 调用，失败静默 |
 
 全部走既有 `request()`：文档相对 URL + 信封解包 + `ApiError{code, message, data}`（`data` 是信封里的 `data`，安装失败时用来取冲突路径与声明名）。安装永不自动重试。
 
@@ -344,7 +349,7 @@ MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 
 ## 8.5 样式字面量单点
 
-尺寸与颜色字面量只允许出现在 `src/client/styles.js`（样式）与 `src/client/avatar.js`（12 组头像色板，全仓库仅此两处色值）；其它组件文件不得写颜色/尺寸（`size={11|13}` 这类图标尺寸除外）。
+尺寸与颜色字面量只允许出现在 `src/client/styles.js`（样式）与 `src/client/avatar.js`（6 组头像色板，含 `rgba()` 半透明底与实色字；全仓库仅此两处色值）；其它组件文件不得写颜色/尺寸（`size={11|13}` 这类图标尺寸除外）。
 市场样式同样只进 `styles.js`（类名 `skc_market*`，取值逐条来自 `docs/contracts/market.md` 附录 F）；**市场不新增任何颜色字面量**，也不改 `.skc_cardIcon` 的任何一条声明。上游图标用的 `.skc_marketIconImg` 只有四条声明（`width/height:100%`、`object-fit:contain`、`display:block`、`border-radius:calc(var(--dsw-radius-lg) - .5px)` 同心内圆角），不含色值；`contain` 是因为上游图标尺寸从 256×64 的横版 logo 到 1024×1024 都有，`cover` 会把横版裁成怪形状。
 分类 chip 的数量位用 `.skc_marketChipCount`（`margin-left:4px`、12px/18px、`var(--dsw-alias-label-secondary)`），**不改 chip 的高度与点击面积**，也不新增色值。
 锚点：`test/styles.test.mjs`；把刻度搬进组件时那条用例先红。

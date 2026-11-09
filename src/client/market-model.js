@@ -84,6 +84,47 @@ export function mergeBatches(pages, options = {}) {
 }
 
 /**
+ * The icon to draw for one item: the item's own field first, then whatever the progressive
+ * backfill brought in for the same id (`market.icons`), then nothing - which is the letter
+ * tile. ClawHub ships `iconUrl: null` on the list route and fills it in later.
+ * @param {object} item - a MarketItem (or a detail's item).
+ * @param {object} market - the market sub-state, for the fetched map.
+ * @returns {string|null} an image URL, or null when the tile has no image.
+ */
+export function iconUrlOf(item, market) {
+  const own = typeof item?.iconUrl === 'string' && item.iconUrl !== '' ? item.iconUrl : null;
+  if (own !== null) return own;
+  const fetched = market?.icons?.[marketKeyOf(item)];
+  return typeof fetched === 'string' && fetched !== '' ? fetched : null;
+}
+
+/**
+ * The items whose icon is still worth asking for: ClawHub entries the list route left
+ * empty and this session has not asked about yet. Capped at the route's batch limit.
+ * @param {object} market - the market sub-state.
+ * @param {number} [limit] - batch cap (the route takes at most 24).
+ * @returns {{owner: string, slug: string, id: string}[]} the candidates, in list order.
+ */
+export function iconCandidates(market, limit = 24) {
+  const items = Array.isArray(market?.items) ? market.items : [];
+  const tried = market?.iconsTried ?? {};
+  const picked = [];
+  const seen = new Set();
+  for (const item of items) {
+    if (picked.length >= limit) break;
+    if (item?.sourceId !== 'clawhub') continue;
+    if (iconUrlOf(item, market) !== null) continue;
+    if (typeof item?.owner !== 'string' || typeof item?.slug !== 'string') continue;
+    if (item.owner === '' || item.slug === '') continue;
+    const id = marketKeyOf(item);
+    if (tried[id] === true || seen.has(id)) continue;
+    seen.add(id);
+    picked.push({ owner: item.owner, slug: item.slug, id });
+  }
+  return picked;
+}
+
+/**
  * The meta line's segments, in display order. A missing field is an absent segment,
  * never a zero: a card that claims "0 downloads" is lying about a null.
  * @param {object} item - a MarketItem.

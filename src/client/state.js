@@ -54,6 +54,8 @@ function initialMarket() {
     installed: {},
     installedReady: false,
     installs: {},
+    icons: {},
+    iconsTried: {},
     installedDirty: false,
     scrollTop: 0,
   };
@@ -329,8 +331,46 @@ export function createStore() {
       setMarket({
         items: [],
         detail: null,
+        // A reload is "start over": the icons fetched so far are dropped with the list, so
+        // the new entries get a fresh chance. Filter and keyword changes keep them.
+        icons: {},
+        iconsTried: {},
         ...clearedPaging({ ...state.market, items: [] }),
       });
+    },
+    /**
+     * Fold one batch of progressively fetched icons into the market state.
+     *
+     * Every id in the batch is recorded as tried, including the ones that came back null:
+     * "this entry has no icon" is a result too, and asking again next render would hammer
+     * the route for an answer that cannot change within a session. Icon URLs already held
+     * for other ids survive (switching source or keyword must not lose them).
+     * @param {Record<string, string|null>} icons - icon URL or null, keyed by market id.
+     * @returns {void}
+     */
+    marketIconsReady: (icons) => {
+      const entries = icons !== null && typeof icons === 'object' ? Object.entries(icons) : [];
+      if (entries.length === 0) return;
+      const nextIcons = { ...state.market.icons };
+      const nextTried = { ...state.market.iconsTried };
+      for (const [id, url] of entries) {
+        nextTried[id] = true;
+        if (typeof url === 'string' && url !== '') nextIcons[id] = url;
+      }
+      setMarket({ icons: nextIcons, iconsTried: nextTried });
+    },
+    /**
+     * Mark ids as tried without an icon: the batch itself failed, and a silent retry on
+     * every render is worse than an entry that keeps its letter tile for this session.
+     * @param {string[]} ids - market ids the failed batch covered.
+     * @returns {void}
+     */
+    marketIconsAttempted: (ids) => {
+      const list = Array.isArray(ids) ? ids.filter((id) => typeof id === 'string' && id !== '') : [];
+      if (list.length === 0) return;
+      const nextTried = { ...state.market.iconsTried };
+      for (const id of list) nextTried[id] = true;
+      setMarket({ iconsTried: nextTried });
     },
     /**
      * The page-one request is in flight.

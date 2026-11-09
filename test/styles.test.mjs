@@ -78,7 +78,7 @@ test('样式表覆盖设计里点名的每一个挂点类', () => {
   }
 });
 
-test('A.5 图标：容器逐字回归宿主，内容层是 26/500 大写首字母', () => {
+test('A.5 图标：容器逐字回归宿主，内容层是 17/700 大写首字母', () => {
   const body = ruleBody(capturedCss(), '.skc_cardIcon');
   assert.match(body, /(?:^|;)\s*box-sizing\s*:\s*border-box/, 'box-sizing 必须显式写（无全局 reset，边框会把图标撑成 50×50）');
   assert.match(body, /(?:^|;)\s*width\s*:\s*48px/, '宽 48px');
@@ -109,8 +109,17 @@ test('A.5 图标：容器逐字回归宿主，内容层是 26/500 大写首字�
     /(?:^|;)\s*color\s*:\s*var\(--skc-avatar-ink,\s*var\(--dsw-alias-label-secondary\)\)/,
     '字母色取行内变量 --skc-avatar-ink，回落到宿主 secondary 色',
   );
-  assert.match(body, /(?:^|;)\s*font-size\s*:\s*26px/, '字母 26px');
-  assert.match(body, /(?:^|;)\s*font-weight\s*:\s*500/, '字重 500');
+  // R5：字号字重按站点 14/40 的比例投到 48px 盒（16.8 → 17）。容器那四条一个字节都没动，
+  // 下面单独再把它们锁一遍，防止后人「顺手对齐圆角/尺寸」把宿主容器改坏。
+  assert.match(body, /(?:^|;)\s*font-size\s*:\s*17px/, '字母 17px（站点 14/40 投到 48 的等比）');
+  assert.match(body, /(?:^|;)\s*font-weight\s*:\s*700/, '字重 700');
+  assert.equal(/font-size\s*:\s*(?:26|14)px/.test(body), false, '不是旧的 26px，也不是站点的 14px（盒子不同）');
+  assert.equal(/font-family/.test(body), false, '不引入 Outfit 字体依赖，沿用系统字体栈');
+  // 用户原话「除了圆角外，其他都对齐」——圆角 16px 与 48×48 的容器是本轮**不动**的部分。
+  assert.match(body, /(?:^|;)\s*width\s*:\s*48px\s*;\s*height\s*:\s*48px/, '48×48 一字未动');
+  assert.match(body, /(?:^|;)\s*border-radius\s*:\s*var\(--dsw-radius-lg\)/, '圆角仍是宿主 radius-lg（16px），没有跟着站点改成 8px');
+  assert.match(body, /(?:^|;)\s*border\s*:\s*\.5px\s+solid\s+var\(--dsw-alias-border-l3\)/, '0.5px 描边仍在');
+  assert.match(body, /(?:^|;)\s*background-clip\s*:\s*padding-box/, 'padding-box 裁切仍在（描边不被粉彩盖掉）');
   assert.match(body, /(?:^|;)\s*text-transform\s*:\s*uppercase/, '大写');
   assert.match(body, /(?:^|;)\s*line-height\s*:\s*1(?![\d.])/, '行高 1，字母在 48px 盒里垂直居中');
   assert.match(body, /(?:^|;)\s*display\s*:\s*inline-flex/, '盒模型是 inline-flex');

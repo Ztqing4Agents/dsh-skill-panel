@@ -154,6 +154,22 @@ export class SkillCenterApi {
    * @param {{source: string, owner: string, slug: string, version?: string|null}} ref - the item.
    * @returns {Promise<object>} MarketDetail.
    */
+  /**
+   * Ask the host for the icons the list route could not wait for.
+   * @param {{source: string, items: {owner: string, slug: string}[]}} query - the source and
+   *   up to 24 `{owner, slug}` pairs.
+   * @returns {Promise<{icons: Record<string, string|null>}>} icon URL (or null) keyed by market id.
+   */
+  async marketIcons(query) {
+    return this.request('market/icons', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: query?.source ?? '',
+        items: Array.isArray(query?.items) ? query.items : [],
+      }),
+    });
+  }
   async marketDetail(ref) {
     return this.request(`market/detail${queryString({
       source: ref?.source,

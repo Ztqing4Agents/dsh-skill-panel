@@ -2,7 +2,7 @@
 
 > 类型：规范
 > 读者：验收人（人或 agent）——回答「怎样算通过」
-> 真源：`npm test` 的 497 条用例与 `npm run check` 的三道门；本文件只是它们的分层说明与编号索引
+> 真源：`npm test` 的 525 条用例与 `npm run check` 的三道门；本文件只是它们的分层说明与编号索引
 > 更新触发：新增门禁、改用例编号、改验收口径时同步改本文件（D.3 / D.5 的编号被测试头注锚定，不许重排）
 > 规模上限：400
 
@@ -82,7 +82,7 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 补充验收点：K17–K20 覆盖围栏、方法、body 上限与路由身份校验；K18 是「软链零写入」的验收点（队长决策 2）。
 真机逐项清单（几何、深色模式、页头停靠、标题栏安全区、页面切换、热刷新）见文末「真机才能验证的项」。
 
-### D.5 市场轮用例编号（K28–K56）
+### D.5 市场轮用例编号（K28–K61）
 
 技能市场（双源发现 / 跨源搜索 / 筛选 / 排序 / 懒加载 / 内嵌详情 / 一键安装）的验收编号。K28 接 D.3 的 K27 往后排，全仓库唯一；每一行的「落点」就是跑它的测试文件（或真机），编号也写在该文件的头注里。
 
@@ -101,7 +101,7 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | **K38** | 市场首屏与卡片 | 页面 + 播种 store（骨架 / 卡片 / 三类失败 / 三种空态 / 工具栏） | 骨架 6 卡 6 chip + `role=status`；卡片头像 / 标题锚点 / 来源 Tag / 描述 / 元信息 / 安装按钮；安装四态文案；整页失败 / 追加失败 / 空态各就各位（单源之后不再有「部分源」提示条）；工具栏来源锚点显示当前源（默认 SkillHub，无「全部来源」）；chips 数字位随 `total`/`count` 出现；到底与追加互斥 | L3 · `test/market-view.test.mjs` |
 | **K39** | 内嵌详情与确认弹窗 | 同上 + `marketDetailReady` / `marketInstallConfirm` | 返回面包屑、标题与版本 Tag、事实表六行（未知写「未知」、`installTo` 用 `code`）、概览交给宿主 `MarkdownText`、文件清单配 `fileSizeText`；详情加载 / 失败 / 空概览 / 空文件 / 坏声明名五种；确认弹窗 `role=dialog` + `aria-modal` + 三项事实 + 第三方提示 + 两按钮 | L3 · `test/market-view.test.mjs` |
 | **K40** | 三道门禁与市场刻度 | 仓库本身 | `check:i18n` / `check:client` / `check:docs` 全 exit 0（13 份 0 warn）、`§3.7` `§3.8` `§3.9` `§7` `§8.6` `附录 E` `附录 F` `附录 G` 各恰好一处、`styles.js` 无 `xxxxxx_` 形式的宿主哈希类名、附录 F 的六条新刻度逐条落在 `skc_market*` 上 | 门禁 · `test/market-gates.test.mjs` |
-| **K41** | 三条「不许再犯」 | 源码与产物 | 市场块无颜色字面量、`src/client/**` 不含两个源的 origin、`dependencies` 为空、点击边界按页签划（市场用 `cardOpen`，已安装行仍不是按钮） | 门禁 · `test/market-gates.test.mjs` |
+| **K41** | 三条「不许再犯」+ 上游 origin 的边界 | 源码与产物 | 市场块无颜色字面量、`dependencies` 为空、点击边界按页签划（市场用 `cardOpen`，已安装行仍不是按钮）；**`src/client/**` 代码里一个 URL 都没有**（浏览器半部零直连，注释里提站点名不算）；**`lib/market/**` 里认上游主机的文件恰好三个、常量恰好五条**：两个适配器的 `ORIGIN` + `upstream.js` 的钉版 jsDelivr CDN、ClawHub icons 基址、COS 重定向白名单；**`normalize.js` 零 origin**（图标地址全部是文档相对路径），编排类文件（`install`/`zip`/`query`/`errors`/`store`/`ledger`）零 origin | 门禁 · `test/market-gates.test.mjs` |
 | **K42** | 源注册表与装配 | 注册表本身 + 注入的假 io | 注册顺序 `skillhub → clawhub`、六个函数与 caps 齐备、描述符形状与 §7.2 一致、`makeMarketDeps` 注入 io 时不自建客户端、`dispose` 幂等 | L1 · `test/market-sources.test.mjs` |
 | **K43** | 上游出口与 302 白名单 | 常量 + 手工构造的 `location` | 四个超时与两个字节上限逐条对齐、只跟一跳、只跟 `*.cos.accelerate.myqcloud.com` 的 https、`createUpstream` 的四个键 | L1 · `test/market-upstream.test.mjs` |
 | **K44** | 客户端 api 五个市场方法 | 记录调用的 fetch 桩 | URL 文档相对且带 `market/` 前缀、空参数不发送、`version` 缺省不传、install 正文只有 `source/owner/slug/version`、失败信封的 `data` 交给调用方 | L1 · `test/api.test.mjs` |
@@ -117,8 +117,13 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | **K54** | chips 数量与格式 | `countText` 四态 + `chipList(categories,{total,countsOk})` + 渲染 | `Intl.NumberFormat(undefined,{notation:'compact'})`（中文 `254万` / 英文 `2.5M`）、真实 `0` 照常显示、`null`/非有限/负数 ⇒ 不渲染数字；`没有 total 时「全部」不带数字；`countsOk:false` ⇒ 一个数字都不渲染而 chips 仍可点；数字在 pill 内不换行（真机量高度） | L1 + L3 · `test/market-model.test.mjs` + `test/market-view.test.mjs` |
 | **K55** | 单源：默认 SkillHub、菜单只有真实源 | `queriedSources` / `pagedSources` + 工具栏渲染 | 缺省 `filters.source === 'skillhub'`、`queriedSources` 恒为一个源（`all` 不再是特殊值，按普通 id 处理）、游标为 `null` 才不翻；来源锚点显示 `SkillHub`、全仓无「全部来源」文案、选 ClawHub 时分类行整行消失 | L1 + L3 · `test/market-model.test.mjs` + `test/market-view.test.mjs` |
 | **K56** | 图标 `object-fit: contain`（宽幅 logo 不裁切） | 样式表 + 宽幅图条目 | `.skc_marketIconImg` 的声明逐条等于 `border-radius: calc(var(--dsw-radius-lg) - .5px)` / `width: 100%` / `height: 100%` / `object-fit: contain` / `display: block`（只把 `cover` 换成 `contain`，没顺手加东西）；整个样式表不再出现 `cover`；真机上 256×64 这类宽幅 logo 完整可见且不撑破 48px 盒 | L3 + L4 · `test/market-view.test.mjs` + 真机专项 |
+| **K57** | ClawHub 图标：列表零额外请求 + 批量补齐 | 假 io（列表/搜索/逐条详情）+ 四种 `icon` 形状 + 路由层批量 | 归一四形态：绝对 `https` 原样／`/api/v1/skill-icons/<64hex>` → 文档相对 `api/dsh-skill-center/market/clawhub-icon?hash=…`／`lucide:<Name>` → 文档相对 `…/lucide?name=<kebab>`（PascalCase→kebab）／其余（`http:`、协议相对、未知路径、大写 hash、裸词）⇒ null；**列表与搜索只发一次上游请求**（图标只认载荷自带的 `icon`/`native.skill.icon`，其余留 null）；`POST /market/icons` 批量：≤24、去重、并发 ≤4、整批 6s 与单条 5s 预算、失败条目只 `null`、**键按请求顺序**、缓存正向 10min／负向 60s／`resetIconCache`；非法 `source`/`owner`/`slug` ⇒ `400 E_BAD_QUERY`，空数组/非对象/超过 24 条 ⇒ `400 E_BAD_REQUEST`，只认 POST 与 loopback | L1 + L2 · `test/market-icons.test.mjs` + `test/market-routes.test.mjs` |
+| **K58** | Lucide 图标代理路由（第 10 条 exact） | 假代理 + 假字节客户端 | 命中 → `200` + `image/svg+xml` + `cache-control: public, max-age=604800` + `content-length` 与实际字节一致 + **不走信封**；`name` 缺失/非法 → `400 E_BAD_QUERY` 信封；未知名字 → **裸 404 空 body + `no-store`**；只认 `GET`（错方法 405 `E_METHOD`）、只认 loopback（403 且零代理调用）；常量：钉版 `lucide-static@1.70.0`、5s、32 KiB、1h 命中 / 60s 未命中缓存、只收 `image/svg+xml`、上游失败 ⇒ null 不抛；`bootstrap?refresh=1` 清缓存 | L1 + L2 · `test/market-lucide.test.mjs` + `test/market-routes.test.mjs` |
+| **K59** | 六组色板不随主题走 | `src/client/avatar.js` 与 `styles.js` 源码 | 色板六组是字面量（`rgba()` / `#RRGGBB`），不含 `--dsw-*`、`var()`、`currentColor`、`prefers-color-scheme`，也不读 DOM/计算样式；样式侧只通过 `--skc-avatar-bg` / `--skc-avatar-ink` 两个自定义属性接住，`.skc_cardIcon` 没有深色覆盖、也不自己定义这两个属性；`avatarOf` 传不传主题参数结果相同 | L1 + 门禁 · `test/avatar.test.mjs` |
+| **K60** | ClawHub 上传图标代理（第 12 条 exact） | 假代理 + 假字节客户端 + 路由层 | hash 白名单（非 64 位小写 hex ⇒ `400 E_BAD_QUERY` 信封）；命中 → `200` + 按上游 `image/svg+xml`／`image/png` + `cache-control: public, max-age=3600` + `x-content-type-options: nosniff` + `content-security-policy: default-src 'none'`（**断言不透传上游的 `sandbox`**）+ `content-length` 一致 + **不走信封**；不存在/上游失败 → **裸 404 空 body + `no-store`**；只放行 svg/png（`text/html` 等一律当没有）；5s、256 KiB、1h 命中 / 60s 未命中缓存、`?refresh=1` 清；只认 GET 与 loopback | L1 + L2 · `test/market-clawhub-icon.test.mjs` + `test/market-routes.test.mjs` |
+| **K61** | 客户端渐进补齐（先字母后换图） | `market-model.js` 纯函数 + 真 store | 取值优先级 `item.iconUrl` → `market.icons[id]` → null（空串按「无」）；`iconCandidates` 只挑「ClawHub + 没图标 + 没问过 + owner/slug 齐全」，默认 ≤24、顺序随列表；`marketIconsReady` 只把非空值写进 `icons` 但**每个 id 都记 `iconsTried`（null 也记）**；`marketIconsAttempted` 整批失败只记 tried、`icons`／分页态／列表态一动不动；`marketReload` 清空 `icons`+`iconsTried`，而切来源/搜索/追加页保留已拿到的图标；空 batch 不改状态对象 | L1 · `test/market-icons-client.test.mjs` |
 
-**红绿口径**（Round 4 终态）：K28–K49 与 K52–K56 全部绿（`node --test test/` 497/497）；K50 / K51 不进 `npm test`（要像素级命中、滚动容器与真实上游），由 agent 驱动无头浏览器在隔离 `DSH_HOME` 上验，最近一次为 Round 4（图标覆盖率 / chips 数量 / 宽幅 logo 轮）复验：20 步 + 21 步全通过。证据与截图见 `.agents/work/test-report-market.md`。
+**红绿口径**（Round 6 终态）：K28–K49 与 K52–K61 全部绿（`node --test test/` 525/525）；K50 / K51 不进 `npm test`（要像素级命中、滚动容器与真实上游），由 agent 驱动无头浏览器在隔离 `DSH_HOME` 上验，最近一次为 Round 6（非阻塞图标管道 / 双代理轮）复验：20 步 + 13 步全通过。证据与截图见 `.agents/work/test-report-market.md`。
 
 ---
 
