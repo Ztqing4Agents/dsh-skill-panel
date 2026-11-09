@@ -155,9 +155,7 @@ classDiagram
 
 ## 3.2 纯函数契约（QA 可直接单测）
 
-> 全部为**无 I/O、无 DOM、无时间依赖**的函数。参数/返回值即断言面。
->
-> 市场面**不参与这里的 9 级阶梯**：装出来的目录靠 R5/R6（台账与 `_meta.json` 的 `source`）命中 `installed`，**不加第 10 级**。市场侧的类型与纯函数见 §3.8。
+> 全部为**无 I/O、无 DOM、无时间依赖**的函数。参数/返回值即断言面。市场面**不参与这里的 9 级阶梯**：装出来的目录靠 R5/R6（台账与 `_meta.json` 的 `source`）命中 `installed`，**不加第 10 级**；市场侧的类型与纯函数见 §3.8。
 
 #### 3.2.1 `lib/names.js`
 
@@ -170,9 +168,13 @@ isWithin(root: string, target: string): boolean     // path.relative 结果不�
 identityKey(provider: string, name: string): string // `${provider || ''}#${name}`
 
 isSafeRelativePath(value: string): boolean
-// 真: 'SKILL.md' | 'references/a.md' | '.gitignore'
-// 假: '' | '/abs' | '../x' | 'a/../b' | 'a\\b' | 'C:x' | 'a//b' | 段长 >100 | 整体 >240
+// 真: 'SKILL.md' | 'references/a.md' | '.gitignore'    假: '' | '/abs' | '../x' | 'a/../b' | 'a\\b' | 'C:x' | 'a//b' | 段长 >100 | 整体 >240
 // 用途：zip 条目与安装清单的唯一路径闸（市场侧，见 §3.8）
+
+isUpstreamIdentity(sourceId: string, owner: string, slug: string): boolean
+// 三段同时过 UPSTREAM_SOURCE_ID / UPSTREAM_OWNER / UPSTREAM_SLUG，且都不含 '..'；`market/query.js` 的上游白名单就是这三个常量的别名（一处定义两处消费，别抄第二份）
+// 真: ('skillhub','ake','dev-god')    假: ('nope!','a','b') | ('clawhub','../x','y') | (undefined,…)
+// `ScanCandidate.upstream` 只由 `_meta.json` 的 source/ownerId/slug 过本判据后给出：`ownerId` 语义因写者而异（我们写 handle，ClawHub CLI 写内部 Convex id，后者当 owner 查 404）⇒ 身份只认我们写的记录，**不从目录名反推**、不按名字 join，也不进任何分区判据（不变式见 routes.md §3.3.1）
 ```
 
 #### 3.2.2 `lib/classify.js`
@@ -302,8 +304,6 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
 ---
 
 ## 3.8 市场类型与归一化纯函数
-
-市场面**不进**上面的 9 级阶梯：`classifySkill` 一行不改，装出来的目录靠 `_meta.json` 的 `source`（R6）与自有台账（R5）命中 `installed`。
 
 #### 3.8.1 `MarketItem` / `MarketDetail` / `SourcePage`
 

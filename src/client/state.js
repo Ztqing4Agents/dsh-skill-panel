@@ -339,6 +339,24 @@ export function createStore() {
       });
     },
     /**
+     * Cache icons the list route already answered inline (SkillHub puts `iconUrl` on the
+     * item itself). This is a known answer, not an upstream question, so `iconsTried` is
+     * deliberately left alone - seeding must not claim we asked anyone anything.
+     * @param {Record<string, string>} icons - icon URL keyed by market id; empties ignored.
+     * @returns {void}
+     */
+    marketIconsSeeded: (icons) => {
+      const entries = icons !== null && typeof icons === 'object' ? Object.entries(icons) : [];
+      const usable = entries.filter(([, url]) => typeof url === 'string' && url !== '');
+      if (usable.length === 0) return;
+      const nextIcons = { ...state.market.icons };
+      for (const [id, url] of usable) {
+        if (Object.prototype.hasOwnProperty.call(nextIcons, id)) continue;
+        nextIcons[id] = url;
+      }
+      setMarket({ icons: nextIcons });
+    },
+    /**
      * Fold one batch of progressively fetched icons into the market state.
      *
      * Every id in the batch is recorded as tried, including the ones that came back null:

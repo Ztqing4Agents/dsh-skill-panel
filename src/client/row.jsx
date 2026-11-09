@@ -12,7 +12,7 @@
  */
 import { StateDot, Switch, IconLinkOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives';
 
-import { avatarOf } from './avatar.js';
+import { IconTile } from './icon-tile.jsx';
 import { cn } from './styles.js';
 import { isPending, rowKey, rowViewState, switchMode } from './model.js';
 
@@ -57,15 +57,16 @@ export function EnableSwitch({ row, t, pending, onToggle }) {
 
 /**
  * Render one row of the list.
- * @param {{row: object, t: Function, rows: Map<string, object>, onToggle: Function}} props
- *   the row, the translate function, per-row runtime state, and the switch handler.
+ * @param {{row: object, t: Function, rows: Map<string, object>, onToggle: Function,
+ *   iconUrl?: string|null}} props - the row, the translate function, per-row runtime state,
+ *   the switch handler, and the icon its `upstream` identity resolved to (null when it has
+ *   no identity or no icon - the tile then draws the letter, exactly as before).
  * @returns {import('react').ReactElement} the row.
  */
-export function SkillRow({ row, t, rows, onToggle }) {
+export function SkillRow({ row, t, rows, onToggle, iconUrl = null }) {
   const key = rowKey(row);
   const view = rowViewState(row, rows);
   const reason = rows?.get?.(key)?.reason ?? null;
-  const avatar = avatarOf(row.name);
   const mode = switchMode(row);
   const end = mode === null
     ? (row.readonlyReason === 'symlink' ? <ReadonlyTag row={row} t={t} /> : null)
@@ -73,13 +74,7 @@ export function SkillRow({ row, t, rows, onToggle }) {
   return (
     <li className={cn('card')} data-skc-row={key} data-skc-state={view}>
       <div className={cn('cardHead')}>
-        <span
-          className={cn('cardIcon')}
-          style={{ '--skc-avatar-bg': avatar.bg, '--skc-avatar-ink': avatar.ink }}
-          aria-hidden="true"
-        >
-          {avatar.letter}
-        </span>
+        <IconTile iconUrl={iconUrl} title={row.name} />
         <div className={cn('cardMain')}>
           <div className={cn('titleRow')}>
             <span className={cn('cardTitle')} title={row.displayName ?? undefined}>{row.name}</span>

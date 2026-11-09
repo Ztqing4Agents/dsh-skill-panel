@@ -15,7 +15,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { iconCandidates, iconUrlOf, marketKeyOf } from '../src/client/market-model.js';
+import { iconCandidates, iconSeeds, iconUrlOf, marketKeyOf } from '../src/client/market-model.js';
 import { createStore } from '../src/client/state.js';
 
 /** One normalised market item. */
@@ -173,4 +173,74 @@ test('K61 marketReload 清空 icons 与 tried；切来源/搜索/追加页保留
   assert.deepEqual(store.getSnapshot().market.icons, {}, '刷新清空 icons');
   assert.deepEqual(store.getSnapshot().market.iconsTried, {}, '刷新清空 tried');
   assert.deepEqual(store.getSnapshot().market.items, [], '刷新也清空列表');
+});
+
+test('K69 iconSeeds：市场条目自带的 `iconUrl` 播进缓存，空值不收、已有的键不再播', () => {
+  const withIcon = item('one', { iconUrl: 'https://storage.example.com/one.png' });
+  const blank = item('blank', { iconUrl: '' });
+  const spaced = item('spaced', { iconUrl: '   ' });
+  const missing = item('missing');
+  const number = item('number', { iconUrl: 42 });
+  const nulled = item('nulled', { iconUrl: null });
+
+  const seeds = iconSeeds(marketWith([withIcon, blank, spaced, missing, number, nulled]));
+  // 纯空白（`'   '`）会被当成「有值」：整条图标链路统一用 `!== ''` 判断（`iconUrlOf` /
+  // `marketIconsReady` 同样如此），不额外 trim。真画出来会 404 → `onError` 回落字母，无害；
+  // 这里就当事实记下来。
+  assert.deepEqual(seeds, {
+    'clawhub:acme:one': 'https://storage.example.com/one.png',
+    'clawhub:acme:spaced': '   ',
+  }, '非空字符串（含纯空白）都被播种');
+  // 逐条确认其余空值形态都不收（不是被「只有一条」这件事顺带挡掉的）
+  for (const [label, bad] of [['空串', blank], ['缺键', missing], ['数字', number], ['null', nulled]]) {
+    assert.equal(iconSeeds(marketWith([bad])), null, `${label} ⇒ 不播种`);
+  }
+  assert.equal(iconSeeds(marketWith([])), null, '没有条目 ⇒ null（不是 {}）');
+  assert.equal(iconSeeds(undefined), null, '缺 market 切片 ⇒ null');
+
+  // 幂等：已经有该键（无论图是哪来的）就不再播
+  const seeded = marketWith([withIcon], { icons: { 'clawhub:acme:one': 'https://storage.example.com/one.png' } });
+  assert.equal(iconSeeds(seeded), null, '缓存里已有同键 ⇒ 不重复播种');
+  const other = marketWith([withIcon], { icons: { 'clawhub:acme:one': 'api/dsh-skill-center/market/lucide?name=zap' } });
+  assert.equal(iconSeeds(other), null, '缓存里有别的值也算已有（播种不许改它）');
+  // 已 tried 但没值：仍然可以播（tried 只挡「再问一次」，不挡「本地已经有答案」）
+  const triedOnly = marketWith([withIcon], { iconsTried: { 'clawhub:acme:one': true } });
+  assert.deepEqual(iconSeeds(triedOnly), { 'clawhub:acme:one': 'https://storage.example.com/one.png' }, 'tried 不挡播种');
+  // 无身份/无 id 的条目按 `marketKeyOf` 兜底拼键，不抛
+  const synthetic = { sourceId: 'skillhub', owner: 'ake', slug: 'dev-god', iconUrl: 'https://storage.example.com/x.png' };
+  assert.deepEqual(iconSeeds(marketWith([synthetic])), { 'skillhub:ake:dev-god': 'https://storage.example.com/x.png' }, '没有 id 时按源/作者/名拼键');
+});
+
+test('K69 marketIconsSeeded：只补 icons、不写 tried、不覆盖已有值、空输入不改状态', () => {
+  const store = createStore();
+  store.actions.marketPageAppended({ pages: [], merged: [item('one'), item('two')] });
+  store.actions.marketIconsSeeded({
+    'clawhub:acme:one': 'https://storage.example.com/one.png',
+    'clawhub:acme:two': 'https://storage.example.com/two.png',
+  });
+  const after = store.getSnapshot().market;
+  assert.deepEqual(after.icons, {
+    'clawhub:acme:one': 'https://storage.example.com/one.png',
+    'clawhub:acme:two': 'https://storage.example.com/two.png',
+  }, '两条都进了会话缓存');
+  assert.deepEqual(after.iconsTried, {}, '播种**不写** iconsTried（它不是「问过」）');
+  assert.deepEqual(iconCandidates(after), [], '播种之后同一个 id 不再进批量候选');
+  assert.equal(iconSeeds(after), null, '播种后 iconSeeds 无事可做 ⇒ 幂等');
+
+  // 不覆盖已有值：已有的键保留原值
+  store.actions.marketIconsSeeded({
+    'clawhub:acme:one': 'https://storage.example.com/other.png',
+    'clawhub:acme:three': 'https://storage.example.com/three.png',
+  });
+  const merged = store.getSnapshot().market;
+  assert.equal(merged.icons['clawhub:acme:one'], 'https://storage.example.com/one.png', '已有的键不被覆盖');
+  assert.equal(merged.icons['clawhub:acme:three'], 'https://storage.example.com/three.png', '新键照常补上');
+  assert.deepEqual(merged.iconsTried, {}, '第二次播种也不写 tried');
+
+  // 空/坏输入不改状态对象（不产生无意义的 render）
+  const before = store.getSnapshot().market;
+  for (const bad of [null, undefined, {}, { a: null }, { a: '' }, { a: 42 }, 'nope', []]) {
+    store.actions.marketIconsSeeded(bad);
+    assert.equal(store.getSnapshot().market, before, `${JSON.stringify(bad)} ⇒ 不改状态`);
+  }
 });

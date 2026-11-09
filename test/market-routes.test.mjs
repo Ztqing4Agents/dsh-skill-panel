@@ -153,6 +153,17 @@ async function mount(options = {}) {
   const skillsRoot = join(dir, 'skills');
   await mkdir(skillsRoot, { recursive: true });
   const skillhub = options.skillhub ?? adapter({ id: 'skillhub', categories: [{ key: 'dev-tools', name: '开发工具', nameEn: 'Dev tools' }] });
+  const skillhubIconCalls = [];
+  if (skillhub.icons === undefined) {
+    skillhub.icons = options.skillhubIcons ?? (async (refs) => {
+      skillhubIconCalls.push(refs.map((ref) => `${ref.owner}:${ref.slug}`));
+      const out = {};
+      for (const ref of refs) {
+        out[`skillhub:${ref.owner}:${ref.slug}`] = ref.slug.startsWith('has-icon') ? 'https://cdn.skillhub.example/icon.png' : null;
+      }
+      return out;
+    });
+  }
   const resets = [];
   const iconCalls = [];
   const clawhub = options.clawhub ?? adapter({ id: 'clawhub', packageKind: 'zip' });
@@ -225,6 +236,7 @@ async function mount(options = {}) {
     sources,
     lucideCalls,
     clawhubIconCalls,
+    skillhubIconCalls,
     iconCalls,
     resets,
     storeFile: storeFile(dir),
@@ -805,7 +817,7 @@ test('K57 POST market/icons：批量语义（≤24、去重、按请求顺序、
     assert.equal(capped.json.code, 'E_BAD_REQUEST', '条数越界是 E_BAD_REQUEST');
 
     const cases = [
-      [{ source: 'skillhub', items: [{ owner: 'o', slug: 's' }] }, 'E_BAD_QUERY', '只为 clawhub 服务'],
+      [{ source: 'nope', items: [{ owner: 'o', slug: 's' }] }, 'E_BAD_QUERY', '未注册的源'],
       [{ source: 'clawhub', items: [] }, 'E_BAD_REQUEST', '空数组'],
       [{ source: 'clawhub' }, 'E_BAD_REQUEST', '没有 items'],
       [{ source: 'clawhub', items: [{ owner: 'o' }] }, 'E_BAD_QUERY', '缺 slug'],
@@ -817,6 +829,15 @@ test('K57 POST market/icons：批量语义（≤24、去重、按请求顺序、
       assert.equal(bad.status, 400, `${why} ⇒ 400`);
       assert.equal(bad.json.code, code, `${why} ⇒ ${code}`);
     }
+    // R7：SkillHub 现在是合法源（已安装行也要图），混合批次见 K64。
+    const skillhubBatch = await callRoute(route, {
+      method: 'POST',
+      headers: LOOPBACK_HEADERS,
+      body: JSON.stringify({ source: 'skillhub', items: [{ owner: 'ake', slug: 'has-icon-skill' }] }),
+    });
+    assert.equal(skillhubBatch.status, 200, 'SkillHub 批次 ⇒ 200（不再被当成未注册源）');
+    assert.deepEqual(Object.keys(skillhubBatch.json.data.icons), ['skillhub:ake:has-icon-skill'], '键带源前缀');
+
     const notJson = await callRoute(route, { method: 'POST', headers: LOOPBACK_HEADERS, body: 'not json' });
     assert.equal(notJson.status, 400, '非 JSON ⇒ 400');
     assert.equal(notJson.json.code, 'E_BAD_REQUEST', '非 JSON 是 E_BAD_REQUEST');
@@ -883,6 +904,131 @@ test('K60 clawhub-icon 代理路由：200 图片（不透传上游 CSP）+ 400 �
     assert.equal(mounted.clawhubIconCalls.filter((hash) => hash === svgHash).length, 1, '被拒的请求没有碰代理');
     await callRoute(route, { headers: LOOPBACK_HEADERS, url: `${ROUTES.marketClawhubIcon}?hash=${svgHash}&refresh=1` });
     assert.deepEqual(mounted.resets, ['clawhub-icon-reset'], '?refresh=1 清一次缓存');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K64 POST market/icons 收 per-item source：混合批次两源都在、按请求顺序、顶层 source 作缺省', async () => {
+  const mounted = await mount();
+  try {
+    const route = mounted.byPath[ROUTES.marketIcons];
+    const mixed = JSON.stringify({
+      items: [
+        { source: 'skillhub', owner: 'ake', slug: 'has-icon-hub' },
+        { source: 'clawhub', owner: 'awspace', slug: 'has-icon-one' },
+        { source: 'skillhub', owner: 'ake', slug: 'plain-hub' },
+        { source: 'clawhub', owner: 'awspace', slug: 'plain' },
+        { source: 'skillhub', owner: 'ake', slug: 'has-icon-hub' },
+      ],
+    });
+    const response = await callRoute(route, { method: 'POST', headers: LOOPBACK_HEADERS, body: mixed });
+    assert.equal(response.status, 200, '混合批次 200');
+    assert.deepEqual(
+      Object.keys(response.json.data.icons),
+      ['skillhub:ake:has-icon-hub', 'clawhub:awspace:has-icon-one', 'skillhub:ake:plain-hub', 'clawhub:awspace:plain'],
+      '两源的键都在，按请求顺序，完整键去重（重复的 skillhub 条目只出现一次）',
+    );
+    assert.equal(response.json.data.icons['skillhub:ake:has-icon-hub'], 'https://cdn.skillhub.example/icon.png', 'SkillHub 那条取到图');
+    assert.equal(response.json.data.icons['clawhub:awspace:has-icon-one'], 'api/dsh-skill-center/market/lucide?name=zap', 'ClawHub 那条照旧');
+    assert.equal(response.json.data.icons['skillhub:ake:plain-hub'], null, 'SkillHub 没图 ⇒ null');
+    assert.deepEqual(mounted.skillhubIconCalls[0], ['ake:has-icon-hub', 'ake:plain-hub'], '每个源只看到自己那几条（重复项已去掉）');
+    assert.deepEqual(mounted.iconCalls[0], [{ owner: 'awspace', slug: 'has-icon-one' }, { owner: 'awspace', slug: 'plain' }], 'ClawHub 同样');
+
+    // 顶层 source 作为缺省值：条目不带 source 时用它
+    const fallback = await callRoute(route, {
+      method: 'POST',
+      headers: LOOPBACK_HEADERS,
+      body: JSON.stringify({ source: 'skillhub', items: [{ owner: 'ake', slug: 'has-icon-hub' }] }),
+    });
+    assert.equal(fallback.status, 200, '顶层 source 生效');
+    assert.equal(fallback.json.data.icons['skillhub:ake:has-icon-hub'], 'https://cdn.skillhub.example/icon.png', '缺省值走 skillhub');
+
+    // item 覆盖顶层：同一批里两种来源都能各按自己的来
+    const override = await callRoute(route, {
+      method: 'POST',
+      headers: LOOPBACK_HEADERS,
+      body: JSON.stringify({
+        source: 'clawhub',
+        items: [{ owner: 'ake', slug: 'has-icon-hub', source: 'skillhub' }, { owner: 'awspace', slug: 'has-icon-one' }],
+      }),
+    });
+    assert.equal(override.status, 200, 'item 覆盖顶层 200');
+    assert.deepEqual(
+      Object.keys(override.json.data.icons),
+      ['skillhub:ake:has-icon-hub', 'clawhub:awspace:has-icon-one'],
+      'item 的 source 赢，缺省值补另一条',
+    );
+
+    // 未注册源 ⇒ 400 E_BAD_QUERY（不管在顶层还是在条目上）
+    for (const payload of [
+      { source: 'nope', items: [{ owner: 'a', slug: 'b' }] },
+      { items: [{ source: 'nope', owner: 'a', slug: 'b' }] },
+      { source: 'clawhub', items: [{ source: 'nope', owner: 'a', slug: 'b' }] },
+    ]) {
+      const bad = await callRoute(route, { method: 'POST', headers: LOOPBACK_HEADERS, body: JSON.stringify(payload) });
+      assert.equal(bad.status, 400, `${JSON.stringify(payload).slice(0, 40)} ⇒ 400`);
+      assert.equal(bad.json.code, 'E_BAD_QUERY', '未注册源是 E_BAD_QUERY（不是形状错误）');
+    }
+
+    // KI-R7-1 的现场：只要有一条 owner/slug 不合规，整批 400 ⇒ 客户端 catch 后把**整批**记成
+    // tried（这一批里的好条目也一起失去图标）。Host 的 isUpstreamIdentity 目前保证不会发出这种
+    // 请求（K62 钉住），所以这是纵深防御缺口，不是线上故障；已报 Engineer。
+    const poisoned = await callRoute(route, {
+      method: 'POST',
+      headers: LOOPBACK_HEADERS,
+      body: JSON.stringify({
+        items: [
+          { source: 'skillhub', owner: 'ake', slug: 'has-icon-hub' },
+          { source: 'skillhub', owner: '', slug: 'x' },
+        ],
+      }),
+    });
+    assert.equal(poisoned.status, 400, '一条坏条目 ⇒ 整批 400（好条目也拿不到图）');
+    assert.equal(poisoned.json.code, 'E_BAD_QUERY', '坏条目是 E_BAD_QUERY');
+
+    // > 24 条是形状问题 ⇒ E_BAD_REQUEST（合计口径，不分源）
+    const tooMany = JSON.stringify({
+      items: Array.from({ length: 25 }, (_, index) => ({ source: index % 2 === 0 ? 'skillhub' : 'clawhub', owner: 'o', slug: `s-${index}` })),
+    });
+    const capped = await callRoute(route, { method: 'POST', headers: LOOPBACK_HEADERS, body: tooMany });
+    assert.equal(capped.status, 400, '25 条（两源混合）⇒ 400');
+    assert.equal(capped.json.code, 'E_BAD_REQUEST', '合计 24 的上限是形状问题');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K66 单源失败不连坐：SkillHub 整体抛错 ⇒ 200、skillhub 键全 null、clawhub 键照常有值', async () => {
+  const mounted = await mount({
+    skillhubIcons: async () => {
+      throw new Error('skillhub is down');
+    },
+  });
+  try {
+    const route = mounted.byPath[ROUTES.marketIcons];
+    const response = await callRoute(route, {
+      method: 'POST',
+      headers: LOOPBACK_HEADERS,
+      body: JSON.stringify({
+        items: [
+          { source: 'skillhub', owner: 'ake', slug: 'has-icon-hub' },
+          { source: 'clawhub', owner: 'awspace', slug: 'has-icon-one' },
+          { source: 'skillhub', owner: 'ake', slug: 'plain-hub' },
+        ],
+      }),
+    });
+    assert.equal(response.status, 200, '一个源挂了仍然 200（图标是装饰，不升级成路由错误）');
+    assert.deepEqual(
+      response.json.data.icons,
+      {
+        'skillhub:ake:has-icon-hub': null,
+        'clawhub:awspace:has-icon-one': 'api/dsh-skill-center/market/lucide?name=zap',
+        'skillhub:ake:plain-hub': null,
+      },
+      '失败的源全 null，另一个照常',
+    );
+    assert.equal(response.json.code, 'OK', '信封仍是 OK');
   } finally {
     await mounted.close();
   }

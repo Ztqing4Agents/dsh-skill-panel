@@ -57,11 +57,14 @@ body 上限 **64 KiB**（`readBoundedJson(req, 65536)`；超过即 `400`，不 d
   "realPath": null,                 // 仅软链行给值：realpath(entry)/SKILL.md，用于 tooltip 显示指向
   "enabled": true,                  // = !disable-model-invocation
   "writable": true,                 // false ⇒ 客户端不渲染开关
-  "readonlyReason": null            // 'symlink' | 'provider-store' | 'no-file'
+  "readonlyReason": null,           // 'symlink' | 'provider-store' | 'no-file'
+  "upstream": { "sourceId": "clawhub", "owner": "awspace", "slug": "pdf" }  // 或 null：上游身份，见下
 }
 ```
 
 不变式：`writable === false ⇔ readonlyReason !== null`；`partition === 'builtin'` ⇒ `readonlyReason ∈ {'provider-store','no-file'}` 且 `symlink === false`；`symlink === true` ⇒ `path === null && realPath !== null && writable === false && readonlyReason === 'symlink'`；`symlink === false` ⇒ `realPath === null`。
+
+`upstream` 是**展示字段**，不是判据：它只用于去市场取图标（`marketKeyOf(upstream)` = `source:owner:slug`，与市场条目 id、台账键逐字相同），**从不进入 `classifySkill`**。三条硬规矩：① 只由 `_meta.json` 的 `source`/`ownerId`/`slug` 三件套（过 `isUpstreamIdentity`）给出，其余一律 `null`；② registry 胜出的行（`partition === 'builtin'`）**恒 `null`**（它没有 `_meta.json`，也无 `path`）；③ 不变式 `upstream !== null ⇒ rule ∈ {'R4','R5','R6'}`（有 `_meta.json.source` 的行只可能落在软链、台账或来源元数据这三条判据上）。`sourceId` 在这里只做**形状**校验，是不是已注册的源由客户端按 `MARKET_SOURCE_IDS` 兜最后一道——本地磁盘面不该依赖市场注册表。
 
 > 软链的 **realpath 解析**发生在扫描层（`lib/scan.js` 对每个条目先 `lstat` 判软链，再 `realpathSync(entry)` 得到真实目录，取 `<realDir>/SKILL.md`）。它只用于**显示**（`row.symlinkTitle` 的 `{path}` 占位），不参与任何写入决策 —— 写入路径根本不存在，见 3.3.2 ②。
 
@@ -160,7 +163,7 @@ return concat(bom, block, body.subarray(block.end))   // 其余字节一个不�
 | 8 | `GET /api/dsh-skill-center/market/installed` | 无 | `{items:{[id]:{name,version,path,exists:boolean}}, readable:boolean}` | `403`、`405`、`500 E_INTERNAL` |
 | 9 | `POST /api/dsh-skill-center/market/install` | `{source, owner, slug, version?}`（`objectOnly`，≤ 64 KiB；**没有 path / files / name 字段**） | `{name, path, version, source, owner, slug, files:number, bytes:number}` | `403`、`405`、`400 E_BAD_REQUEST`、`400 E_BAD_QUERY`、`409 E_ALREADY_INSTALLED`、`422 E_SKILL_NAME_INVALID`、`422 E_PACKAGE_INVALID`、`429 E_INSTALL_BUSY`、`502 E_DOWNLOAD_FAILED`、`502 E_SOURCE_BAD_RESPONSE`、`503 E_SOURCE_UNAVAILABLE`、`504 E_SOURCE_TIMEOUT`、`500 E_INSTALL_IO`、`500 E_INTERNAL` |
 | 10 | `GET /api/dsh-skill-center/market/lucide?name=<kebab>` | `name` 白名单 `^[a-z0-9]+(?:-[a-z0-9]+){0,5}$` | **SVG 字节，不走信封**（见下） | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_QUERY`（`name` 缺/不合白名单）、`404`（无此图标或 CDN 不可用，空 body） |
-| 11 | `POST /api/dsh-skill-center/market/icons` | body `{source:'clawhub', items:[{owner,slug}]}`：`items` ≤ 24，`owner`/`slug` 走与 detail 同一套白名单 | `{icons:{'clawhub:<owner>:<slug>': iconUrl\|null}}` | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_REQUEST`（形状/条数/白名单）、`400 E_BAD_QUERY`（`source` 不是 `clawhub`）、`500 E_INTERNAL`。单条详情失败只让该项 `null`，**整体不报错** |
+| 11 | `POST /api/dsh-skill-center/market/icons` | body `{items:[{source?, owner, slug}], source?}`：`items` ≤ **24**，每条 `source`/`owner`/`slug` 走 §3.7.3 的上游白名单；`source` 逐条给，顶层 `source` 只是**兼容默认值**（item 优先，详见 §3.7.5） | `{icons:{'<source>:<owner>:<slug>': iconUrl\|null}}`——**形状不变**，键按请求顺序 | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_REQUEST`（`items` 缺失/为空/超 24）、`400 E_BAD_QUERY`（标识符不合白名单，或 `source` 未注册）、`500 E_INTERNAL`。单条失败只让该项 `null`，**单源失败只让该源 `null`**，整体仍 `200` |
 | 12 | `GET /api/dsh-skill-center/market/clawhub-icon?hash=<64hex>` | `hash` 白名单 `^[a-f0-9]{64}$`；`?refresh=1` 清缓存 | **图片字节，不走信封**（见下） | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_QUERY`（hash 不合白名单）、`404`（上游无此图或不可用，空 body） |
 
 **#10 与 #12 是本插件仅有的两个非信封路由**：`<img>` 读不了 `{code,data,message}`，所以它们直接回图片字节，并统一补 `X-Content-Type-Options: nosniff` 与 `Content-Security-Policy: default-src 'none'`（**不透传上游的 CSP**）；命不中或上游不可用一律 `404` 空 body（不回 HTML，也不回信封），让浏览器的 `onError` 把卡片退回首字母头像。
@@ -189,7 +192,9 @@ install 出参里两个数字的口径**不一样，别混**：`files` 是**落�
 | 列表 / 搜索 / 详情 | 单源 **10s**（连接 5s + 总 10s） | `upstream.getJson({timeoutMs})` |
 | 分类表 | 6s，失败静默降级 | `skillhub.categories()` |
 | 分类计数 | 单项 **6s**、整体 **10s** 预算、并发 **6**、10 分钟缓存；任一项失败只让该 `count:null`（`countsOk:false`），不影响 bootstrap 的 200 | `skillhub.counts()` |
-| 批量图标（#11） | 一次最多 24 条详情、并发 **4**、整批 **6s** 预算（超预算的条目直接 `null`）、单条 **5s**；正向 10 分钟 / 负向 60 秒缓存，键 `clawhub:<owner>:<slug>`；`bootstrap?refresh=1` 一并清空。**列表与搜索不再等图标** | `clawhub.icons()` |
+| 批量图标 · SkillHub（#11） | 每条一次 detail（**不带 `version`**，实测 0.26s）、并发 **6**、整批 **6s**、单条 **5s**；正向 10 分钟 / 负向 60 秒，键 `skillhub:<owner>:<slug>` | `skillhub.icons()` |
+| 批量图标 · ClawHub（#11） | 每条一次 detail、并发 **4**、整批 **6s**（与 SkillHub **各自计时、互不挤占**）、单条 **5s**；正向 10 分钟 / 负向 60 秒，键 `clawhub:<owner>:<slug>` | `clawhub.icons()` |
+| 批量图标 · 清缓存 | `bootstrap?refresh=1` 同时清两源的图标缓存（以及两个图片代理的缓存）。**列表与搜索从不等图标** | `resetIconCache()` |
 | ClawHub 图标代理（#12） | 单张 5s、256 KB 上限；1 小时命中 / 60 秒未命中缓存，`?refresh=1` 清空；并发受上游闸约束（同源 3） | `createClawhubIconProxy()` |
 | 安装整包 | **120s** 总预算（每次取文件前检查 deadline） | `install.js` |
 | 安装单文件 | 30s | `upstream.getBytes({timeoutMs})` |
@@ -275,6 +280,20 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 自有台账 `$DSH_HOME/dsh-skill-center/installed.json` 的形状是 `{version:1, installs:[{source,owner,slug,name,version,installedAt,files,bytes}]}`：`installs[].name` 正是 `lib/ledger.js` 的 `own-record` 读取器要找的字段（`installs[].files` / `bytes` 与 install 出参同口径）。因此装完的技能必然命中 R5，`lib/classify.js` 一行不改。
 
 包内容的安全边界（逐条）：条目数 ≤ 200；单文件 ≤ 5 MiB；解压总量 ≤ 20 MiB；压缩体 ≤ 40 MiB；路径过 `isSafeRelativePath`；**符号链接条目直接拒绝整包**（不「跳过该条目」）；加密条目拒绝；压缩方法只接受 `0`（store）与 `8`（deflate）；可执行位一律不保留（目录 0755、文件 0644）；**永不执行**包内任何文件；只写清单里列出的 `path`。
+
+---
+
+#### 3.7.5 `market/icons` 的双源分发
+
+一条端点覆盖两个源：已安装行只有身份、没有市场列表载荷，而两个源的图标查询方式不同（SkillHub 的列表自带 `iconUrl`，ClawHub 只有详情有）。
+
+- **能力**：`MarketSource.icons?(refs, io, {now})` 是**可选能力**。有 `icons` 的源按自己的并发/预算/缓存实现；没有该能力的源，它的条目在本批里全部 `null`（不进错误分支）。今天 `skillhub` 与 `clawhub` 都有。
+- **分发**：路由把 `items` 按 `source` 分组，**各组并行**发起，两源各自计时（各 6s），所以混合批次 ≈ `max(两源耗时)`，不是相加。
+- **回填**：先把各源结果收进一张 `Map`，再按 `items` **原序**逐条写进 `icons`——并发完成顺序不影响出参顺序，两次相同请求逐字节可比。
+- **失败隔离**：一个源整体失败（超时、域名不可达、适配器抛错）只让**该源**的条目 `null`，另一个源照常返回；`200` 不变。**任何图标失败都不升级成路由错误**。
+- **`source` 的优先级**：每条的 `source` 优先；缺省时用顶层 `source`（这是**兼容默认值**，旧页面握旧 `client.js` 时只会发 `{source:'clawhub', items:[{owner,slug}]}`，保留它等于「永不为此 400」）。两者都缺 ⇒ 该条 `source` 为空 ⇒ 不合白名单 ⇒ `400 E_BAD_QUERY`。
+- **每源每批 12** 是**客户端的选批口径**（`ICON_PER_SOURCE_LIMIT`），不是服务端上限：服务端只认 §3.7.1 #11 的合计 ≤ 24，因此一条 24 条的 ClawHub 批次（旧客户端的合法请求）**依然被接受**。客户端两侧各取 12 的理由是「一个慢源不许吃掉整批额度」。
+- **不新增端点**：已安装行与市场卡片共用这一条；`market/installed`（#7）**不返回图标**，也不为图标加请求。
 
 ---
 

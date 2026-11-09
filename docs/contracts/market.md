@@ -37,6 +37,8 @@
  * @property {(plan: SourcePlan, path: string, io: UpstreamIo) => Promise<Buffer>} fetchFile
  * @property {(io: UpstreamIo, options: {now: () => number, refresh?: boolean}) => Promise<{items: Category[]}>} [categories]
  * @property {(io: UpstreamIo, options: {now: () => number, refresh?: boolean}) => Promise<{counts: Record<string, number|null>, total: number|null, ok: boolean}>} [counts]
+ * @property {(refs: {owner: string, slug: string}[], io: UpstreamIo, options: {now?: () => number}) =>
+ *   Promise<Record<string, string|null>>} [icons]  // 批量图标：键 `sourceId:owner:slug`，值同 MarketItem.iconUrl
  */
 ```
 
@@ -63,10 +65,10 @@
 | `caps` | `{search:true, paged:true, categories:true, package:'files'}` | `{search:true, paged:true, categories:false, package:'zip'}` |
 | `total` | 上游 `data.total`（数字） | 恒 `null` |
 | 图标 | `iconUrl`：实测前 100 条约 **八成**有图（COS 的 `/skill-icons/uploads/…` 与 `cloudcache.tencent-cloud.com` 的 `other_external_resource/…` **两者都是该技能自己的图**），其余为空 ⇒ **绝对 `https:` 即接受，不做 host/path 白名单**。列表阶段直接带出，无需二次请求 | **列表端点没有 `icon` 字段**（实测 49 条 0 条有此键），**详情端点有**：`/api/v1/skill-icons/<64 位 hex>` 或 `lucide:<Name>` 或 `null`。实测 35 条里只有 2 条有图（1 上传 / 1 lucide），故列表阶段一律 `null`，由 `POST /market/icons` 渐进补；两种真形状都转成**我方代理 URL**（见 §7.5） |
-| 图标补齐 | —— | **列表不再等图标**（ClawHub 详情单条实测 2.27–3.02s，等它等于每页白等 1–3s）。改由 `POST /market/icons` 渐进补齐：≤24 条、并发 4、整批 6s、单条 5s、正向 10min / 负向 60s 缓存，键 `clawhub:<owner>:<slug>`；失败只让该条 `null`，**绝不抛** |
+| 图标补齐 | 市场列表**自带** `iconUrl`；已安装行只有身份 ⇒ 走一次 detail 单查（见 §7.5 第 3 段） | **列表不再等图标**（ClawHub 详情单条实测 2.27–3.02s，等它等于每页白等 1–3s）。改由 `POST /market/icons` 渐进补齐：≤24 条、并发 4、整批 6s、单条 5s、正向 10min / 负向 60s 缓存，键 `clawhub:<owner>:<slug>`；失败只让该条 `null`，**绝不抛** |
 | 计数 | `counts`：13 次 `GET /api/skills?page=1&pageSize=1(&category=)` 取 `data.total`（12 个分类 + 1 个「全部」），并发 6、单项 6s、整体 10s 预算、10 分钟缓存；**每个 `count` 是该过滤条件的独立总数，不保证 12 类相加等于 `total`**（实测差几十条，上游按请求时刻统计、且一条技能可归属多个分类），界面不得用「合计」校验它 | 无 |
 | 一次 `list` 的上游请求数 | 1 | 1（**不再为图标额外请求**） |
-| 一次 `POST icons` 的上游请求数 | 0（SkillHub 的图标随列表下发） | 每条一次详情，≤24 次，6s 整批预算内 |
+| 一次 `POST icons` 的上游请求数 | 每条一次 detail（**不带 `version`**，实测 0.26s），并发 6，6s 整批预算内 | 每条一次详情，并发 4，6s 整批预算内 |
 | 一次 `detail` 的上游请求数 | 3（详情 + 清单 + `SKILL.md`） | 2（详情 + zip） |
 | 一次 `bootstrap` 的上游请求数 | 冷缓存 **14**（分类表 1 + 计数 13），10 分钟内 0 | 0（不参与 bootstrap） |
 
@@ -129,14 +131,18 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 
 ---
 
-### 7.5 图标管道（两段式，列表永不等图标）
+### 7.5 图标管道（三段式，列表永不等后两段）
 
-图标分两段拿，**任何列表路径都不许等第二段**：
+图标分三段拿，**任何列表路径都不许等后两段**：
 
 1. **随列表拿**：SkillHub 的 `iconUrl` 就在列表条目里，直接用。
 2. **渐进补齐**：ClawHub 的列表没有 `icon`（实测 49 条 0 条有此键），只有详情有，而详情单条实测 **2.27–3.02s** —— 等它等于每页白等 1–3s，且实测 35 条里只补得出 2 条。所以列表阶段 ClawHub 的 `iconUrl` 一律 `null`，客户端渲染出一页卡片后，把这一页的 `{owner, slug}` 打一次 `POST /market/icons`（≤ 24 条），拿回 `{'clawhub:<owner>:<slug>': iconUrl|null}` 自己 patch 卡片。
 
-补齐的账：并发 **4**、整批 **6s** 预算、单条 **5s**；超预算的条目返回 `null`（卡片保持首字母头像），整批仍 `200`；单条失败只让该项 `null`，**绝不 5xx**。缓存键 `clawhub:<owner>:<slug>`，正向 10 分钟、负向 60 秒（负向短，上游补上图标后能很快看见）；命中不打上游。`bootstrap?refresh=1` 清空整份图标缓存。
+3. **已安装行按身份单查**：已安装行手上只有 `_meta.json` 的身份（`Row.upstream`），没有市场列表载荷，所以 SkillHub 那一侧也要一条通道：`skillhub.icons()` 走**同一条 detail** `GET /api/v1/skills/<slug>?namespace=<owner>`（**不带 `version`**——图标是技能级的，还能吃上游 CDN 缓存），只读 `skill.iconUrl`，**不拉清单、不拉 `SKILL.md`**（那会变成 3 次请求）。实测单条 **0.26s**，12 条 / 并发 6 ≈ 0.6s。
+
+两源共用 `POST /market/icons`（§3.7.5），各自计时、各自缓存：SkillHub 并发 **6** / 单条 **5s**、ClawHub 并发 **4** / 单条 **5s**，**每源各自 6s 预算**（混合批次 ≈ `max(两源)`，不是相加）；超预算的条目返回 `null`（卡片保持首字母头像），整批仍 `200`；单条失败只让该项 `null`，一个源整体失败只让该源 `null`，**绝不 5xx**。缓存键 `skillhub:<owner>:<slug>` / `clawhub:<owner>:<slug>`，正向 10 分钟、负向 60 秒（负向短，上游补上图标后能很快看见）；命中不打上游。`bootstrap?refresh=1` 清空全部图标缓存。
+
+**一个诚实的量化**：一本 24 条的 ClawHub 批次在 6s 内只补得出约 8–10 条（4 并发 × 2.7s/条），其余 `null` 且本会话不再问；已安装行通常是个位数，命中率反而更高。
 
 ### 7.6 图片端点（非信封响应的两条）
 
@@ -205,8 +211,8 @@ Host 半部（`lib/market/`，纯 node ESM，无构建）：
 | `lib/market/normalize.js` | 两源原始条目 → `MarketItem`、`overviewOf`/`declaredNameOf` 派生、`sortByUpdatedDesc`；「缺 = null」的唯一落点 |
 | `lib/market/errors.js` | `MarketError{code,message,detail}`、`code → HTTP status` 表、`asMarketError` 兜底 |
 | `lib/market/sources/index.js` | 源注册表（`SOURCES` / `getSource` / `descriptors` / `descriptorsOf`）与 `makeMarketDeps`（装配 io / store / installer，供 `index.js` 注入路由） |
-| `lib/market/sources/skillhub.js` | SkillHub 适配器：`list/search/detail/plan/fetchFile/categories` + 分类表 10 分钟缓存 |
-| `lib/market/sources/clawhub.js` | ClawHub 适配器：`list/search/detail/plan/fetchFile`；`skill.description` 即 `SKILL.md` 全文，zip 一包一次 |
+| `lib/market/sources/skillhub.js` | SkillHub 适配器：`list/search/detail/plan/fetchFile/categories/counts/icons` + 分类表与图标缓存各 10 分钟 |
+| `lib/market/sources/clawhub.js` | ClawHub 适配器：`list/search/detail/plan/fetchFile/icons`；`skill.description` 即 `SKILL.md` 全文，zip 一包一次 |
 | `lib/market/zip.js` | 最小 ZIP 读取器（EOCD → 中央目录 → local header；`store`/`deflate`；zip-slip/符号链接/加密/条目数与体积上限；CRC32） |
 | `lib/market/install.js` | 安装编排：解析名字 → 冲突检测 → 临时目录 → 逐文件校验写入 → 原子 rename → 台账 → 失败清理（唯一 `rm -rf` 处） |
 | `lib/market/store.js` | 自有台账 `$DSH_HOME/dsh-skill-center/installed.json` 的读/写（临时文件 + fsync + rename；损坏降级为空；形状与 `lib/ledger.js` 的 `own-record` 兼容） |

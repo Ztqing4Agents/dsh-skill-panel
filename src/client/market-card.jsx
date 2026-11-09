@@ -13,10 +13,9 @@
  * item carries a real icon it is drawn inside that box and the letter is only what is
  * left when there is none - see `MarketIcon`.
  */
-import { useState } from 'react';
 import { Button, StateDot, Tag } from '@deepseek-ai/dsh-client-ui-primitives';
 
-import { avatarOf } from './avatar.js';
+import { tileElement, useIconFailure } from './icon-tile.jsx';
 import { cn } from './styles.js';
 import { iconUrlOf, installViewOf, marketKeyOf, metaSegments, sourceLabelOf } from './market-model.js';
 
@@ -66,41 +65,20 @@ export function InstallAction({ item, market, t, size = 'sm', className, onInsta
 }
 
 /**
- * The avatar tile, shared by the card, the detail head and the confirm dialog.
+ * The market's avatar tile: the shared tile, with the URL resolved from the item.
  *
- * Two states and no third: an upstream icon when `iconUrl` is a non-empty string, the
- * letter tile otherwise. A failed load counts as "no icon" - the tile never stays blank,
- * because a blank square in a list of 24 reads as a broken panel, not as a missing image.
+ * It calls `tileElement` / `useIconFailure` instead of rendering `<IconTile/>` so that a
+ * caller looking at this component's own output sees the tile itself, not a component
+ * element - the drawing and the failure state still have exactly one implementation.
  * @param {{item: object, title: string, market: object, className?: string}} props - the
  *   market item, its display title, the market state (for progressively fetched icons),
- *   and an extra class for the wrapper.
+ *   and an extra class for the box.
  * @returns {import('react').ReactElement} the tile.
  */
 export function MarketIcon({ item, title, market, className }) {
-  const avatar = avatarOf(title);
   const iconUrl = iconUrlOf(item, market);
-  // Keyed by url: a different item's icon gets its own chance to load.
-  const [failedUrl, setFailedUrl] = useState(null);
-  const showIcon = iconUrl !== null && failedUrl !== iconUrl;
-  return (
-    <span
-      className={cn('cardIcon', className)}
-      style={{ '--skc-avatar-bg': avatar.bg, '--skc-avatar-ink': avatar.ink }}
-      aria-hidden="true"
-    >
-      {showIcon ? (
-        <img
-          className={cn('marketIconImg')}
-          src={iconUrl}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          referrerPolicy="no-referrer"
-          onError={() => setFailedUrl(iconUrl)}
-        />
-      ) : avatar.letter}
-    </span>
-  );
+  const { showIcon, onError } = useIconFailure(iconUrl);
+  return tileElement({ iconUrl, title, className }, showIcon, onError);
 }
 
 /**

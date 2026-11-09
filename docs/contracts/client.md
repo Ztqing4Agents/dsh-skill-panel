@@ -80,7 +80,7 @@ market = {
   detail: null | {id, item, status, data, code},  // 内嵌详情三态
   installed / installedReady,                     // 安装台账 × item.id；只读一次
   installs: {[id]: {state, reason?, path?, version?, seq?}},   // 确认/安装中/已安装/失败
-  icons / iconsTried,                             // 渐进补齐的图标 {[id]: url} 与「本会话已问过」{[id]: true}
+  icons / iconsTried,                             // 图标缓存 {[key]: url} 与「本会话已问过」{[key]: true}；两个消费者共用（市场条目 + 已装行的 upstream）
   installedDirty,                                 // 已安装页签标脏
   scrollTop,                                      // 进详情前记下，返回时恢复
 }
@@ -117,10 +117,11 @@ SkillsPage (page.jsx：页头 + 两个页签)
 └─ tabPanel(market) → MarketPanel (market-panel.jsx)
     ├─ MarketFilters (market-filters.jsx)：Input(250ms 防抖) / Menu(来源 = SkillHub｜ClawHub) / Menu(排序) / Pill(分类 chips + 数量)
     ├─ 首屏骨架｜整页错误态（当前源失败）｜空态
-    ├─ ul.skc_marketGrid → MarketCard (market-card.jsx) × N（尾部 3 张骨架；头像位是 MarketIcon）
+    ├─ ul.skc_marketGrid → MarketCard (market-card.jsx) × N（尾部 3 张骨架；头像位是 MarketIcon → tileElement）
     ├─ MarketDetail (market-detail.jsx)：面包屑 + 头 + 事实表 + 概览 + 文件
     └─ MarketConfirm (market-confirm.jsx)：Modal（width:min(480px,100vw - 32px)）
 MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
+icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安装行共用的视觉单元）
 ```
 
 八条结构约束：
@@ -156,6 +157,7 @@ MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 | `marketInstallStart(id)` | id | `state='installing'`（幂等） |
 | `marketInstallOk(id,{name,path,version})` | —— | `installed` + `installed[id]` + `installedDirty` + 推 `notice{kind:'install-ok', name, path, seq}` |
 | `marketInstallFail(id, reason)` | 本地化原因 | `state='failed'` + `reason` |
+| `marketIconsSeeded(icons)` | `{[id]: url}` | 只合并进 `icons`（已有键不覆盖），**不写 `iconsTried`**：列表内联的图标是已知答案，不是一次上游提问 |
 | `marketIconsReady(icons)` | `{[id]: url|null}` | 合并进 `icons`（非空才存），每个 id 记进 `iconsTried`（**null 也记**，负结果同样只问一次） |
 | `marketIconsAttempted(ids)` | `string[]` | 批次整体失败：只记 `iconsTried`、不写 `icons`，静默保持字母 |
 | `marketSetScroll(top)` / `marketClearInstalledDirty()` | number / —— | 记滚动位置 / 清脏 |
@@ -173,7 +175,7 @@ MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 | `marketDetail({source,owner,slug,version})` | `GET market/detail` | —— |
 | `marketInstalled()` | `GET market/installed` | 形状 `{items, readable}` |
 | `marketInstall({source,owner,slug,version})` | `POST market/install` | body 只有身份，**没有 path/files** |
-| `marketIcons({source,items})` | `POST market/icons` | `items` 是 `{owner,slug}` 数组（**≤24**）；出参 `{icons:{[id]: url|null}}`；只为 ClawHub 调用，失败静默 |
+| `marketIcons({items})` | `POST market/icons` | `items` 是 **`{source,owner,slug}`** 数组（每源 ≤12、合计 **≤24**，一批可混两源）；出参 `{icons:{[key]: url|null}}`；失败静默 |
 
 全部走既有 `request()`：文档相对 URL + 信封解包 + `ApiError{code, message, data}`（`data` 是信封里的 `data`，安装失败时用来取冲突路径与声明名）。安装永不自动重试。
 
@@ -182,6 +184,26 @@ MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 「返回市场」必须逐项恢复，且**不重拉**：`items` 与 `pages` 不动、`filters` 与 `keyword` 不动、`scrollTop` 写回滚动容器、`detail` 置 `null`。列表顺序同样不动——顺序就是各源各自的分页顺序，客户端不二次排序（见 §8.4）。这是结构保证（状态在 store 里），不是补丁：面板卸载/重挂都不影响。
 
 市场用例（K28–K51）与 PRD 的 A1–A17 对照见 `docs/contracts/acceptance.md` 的附录 D.5（由 QA 落地）。
+
+### 3.9.6 已安装行的图标解析
+
+已安装行与市场卡片共用 `market.icons`（键都是 `source:owner:slug`）。切到已安装页签时**分两种情况**，别写成笼统的「立刻」：
+
+| 情况 | 表现 | 为什么 |
+| --- | --- | --- |
+| `market.icons[key]` **已有值** | **零请求**换成市场那张图 | ClawHub 条目本来就先进这个缓存；SkillHub 条目的内联 `iconUrl` 由 `iconSeeds()` 在列表到达时**播种**进来（不写 `iconsTried`，因为那是「问过上游」的账，种子是已知答案）。所以「从市场装 `dev-god` → 切已安装」是 0 次请求 |
+| `market.icons[key]` **没有值** | 先字母瓦片，**一个批次后**换图 | 该行属于「有身份但本会话没问过」，由 `iconBatch` 收进下一批；混源批次可能被较慢的源拖到数秒（实测首个图标 7.5s，见下） |
+
+| 事项 | 口径 |
+| --- | --- |
+| 循环在哪 | `page.jsx`（面板打开期间恒挂载），**不在** `market-panel.jsx`：两个 tabpanel 互斥挂载且已安装是默认页签，循环留在市场面板里就跑不到已安装 |
+| 先播种 | `iconSeeds(market)`：列表里 `iconUrl` 非空、且 `icons` 还没有该键的条目 → `marketIconsSeeded()`（**不碰 `iconsTried`**）。effect 里播种后直接 `return`，写缓存会再触发一轮 effect，那一轮才走网络——幂等，不会死循环 |
+| 选谁 | `iconBatch(payload, market)`：市场半边 = `iconCandidates()`（ClawHub / 无图 / 没问过）；已安装半边 = `row.upstream !== null` + `icons` 为空 + `iconsTried` 未命中 + `sourceId ∈ MARKET_SOURCE_IDS`；**`owner`/`slug` 必须是非空字符串（坏三元组跳过，不让整批 400）**；每源 ≤12、总 ≤24、按 key 去重（市场条目先） |
+| 身份 | `Row.upstream = {sourceId, owner, slug} \| null`（Host 从 `_meta.json` 带出）；`null` ⇒ 该行永远是字母瓦片，不按名字猜 |
+| 视觉单元 | `icon-tile.jsx`：`tileElement()`（无 hook，返回瓦片元素）+ `useIconFailure()`（按 URL 记失败）；`IconTile` 是组件形态，`MarketIcon` 解析 URL 后调同一对函数。`.skc_cardIcon` 与 `.skc_marketIconImg` 声明零改动 |
+| 失败 | 单条 → `null`；整批失败 → `marketIconsAttempted` 记 tried，不重试、不弹 toast、不写行内原因 |
+| 失效 | 切页签不动 · 已安装页签刷新不动 · `marketReload()` 清空（一次性、下一批自愈）· 安装成功后不动（新技能与市场条目同键）· 新会话清空（不落盘） |
+
 
 
 ---

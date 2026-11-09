@@ -40,6 +40,7 @@ const SOURCES = {
   api: 'api.js',
   header: 'header-scroll.js',
   card: 'market-card.jsx',
+  iconTile: 'icon-tile.jsx',
   detail: 'market-detail.jsx',
 };
 

@@ -19,6 +19,7 @@ import {
 
 import { cn } from './styles.js';
 import { attachHeader } from './header-scroll.js';
+import { iconBatch, iconSeeds, iconUrlFor, marketKeyOf } from './market-model.js';
 import { MarketPanel } from './market-panel.jsx';
 import { ListSkeleton } from './skeleton.jsx';
 import { SkillRow } from './row.jsx';
@@ -101,6 +102,48 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
     void load('initial');
   }, [load, state.tab, store]);
 
+  // One icon loop for both tabs. It lives here rather than in `MarketPanel` because the
+  // two tab panels are mounted exclusively and the installed tab is the default: a loop
+  // inside the market panel would never run for someone who opens the panel and stays on
+  // the installed list. One selector (`iconBatch`) and one in-flight flag mean the same
+  // identity can never be asked for twice at once.
+  const iconsInFlight = useRef(false);
+  useEffect(() => {
+    // Seed first, ask later. SkillHub ships its icons inside the list payload, so the
+    // market cards never needed a request - but an installed row reads the cache, and
+    // nothing used to move the inline URLs into it (a mixed batch then took 7.5s to draw
+    // an icon the page already had). Seeding is local, so it returns before the network
+    // step; writing the cache re-runs this effect, and *that* pass is the network one.
+    // It cannot loop: the seeded keys are skipped by `iconSeeds` from then on.
+    const seeds = iconSeeds(state.market);
+    if (seeds !== null) {
+      store.actions.marketIconsSeeded(seeds);
+      return;
+    }
+    if (iconsInFlight.current) return;
+    const batch = iconBatch(state.payload, state.market);
+    if (batch.length === 0) return;
+    iconsInFlight.current = true;
+    void (async () => {
+      try {
+        const data = await api.marketIcons({
+          items: batch.map((entry) => ({ source: entry.sourceId, owner: entry.owner, slug: entry.slug })),
+        });
+        const icons = {};
+        for (const entry of batch) {
+          const url = data?.icons?.[entry.key];
+          icons[entry.key] = typeof url === 'string' && url !== '' ? url : null;
+        }
+        store.actions.marketIconsReady(icons);
+      } catch {
+        // Silent by design: the tiles keep their letters, nothing is announced.
+        store.actions.marketIconsAttempted(batch.map((entry) => entry.key));
+      } finally {
+        iconsInFlight.current = false;
+      }
+    })();
+  }, [api, state.payload, state.market.icons, state.market.iconsTried, store]);
+
   const onToggle = useCallback(async (row, enabled) => {
     const key = rowKey(row);
     store.actions.pending(key);
@@ -127,6 +170,12 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
   // market's first page above.
   const marketBusy = !showsInstalled && state.market.listStatus === 'loading';
 
+  // An installed row's icon comes from its `_meta.json` identity (Host puts the triple on
+  // the row); rows without one - hand-copied, or written by another tool - keep the letter.
+  const rowIconUrl = (row) => (row?.upstream === null || row?.upstream === undefined
+    ? null
+    : iconUrlFor(marketKeyOf(row.upstream), state.market));
+
   const renderGroup = (group) => (
     <section className={cn('group')} data-skc-group={group.key} key={group.key}>
       <div className={cn('groupHead')}>
@@ -137,7 +186,14 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
         : (
           <ul className={cn('cards')}>
             {group.skills.map((row) => (
-              <SkillRow key={rowKey(row)} row={row} t={t} rows={state.rows} onToggle={onToggle} />
+              <SkillRow
+                key={rowKey(row)}
+                row={row}
+                t={t}
+                rows={state.rows}
+                onToggle={onToggle}
+                iconUrl={rowIconUrl(row)}
+              />
             ))}
           </ul>
         )}

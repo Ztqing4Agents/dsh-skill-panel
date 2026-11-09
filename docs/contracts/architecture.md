@@ -306,13 +306,13 @@ ledger.readAll() ─────────────────┘   （R5�
 
 | 文件 | 职责 |
 | --- | --- |
-| `lib/names.js` | `isSkillName()`（`^[a-z0-9]+(?:-[a-z0-9]+)*$`）、`isAbsoluteSkillFile()`、`isWithin(root, path)`、`identityKey(provider,name)` |
+| `lib/names.js` | `isSkillName()`（`^[a-z0-9]+(?:-[a-z0-9]+)*$`）、`isAbsoluteSkillFile()`、`isWithin(root, path)`、`identityKey(provider,name)`、上游身份三段正则 + `isUpstreamIdentity(sourceId, owner, slug)`（市场路由的白名单也取这三个常量） |
 | `lib/loopback.js` | loopback 围栏纯函数：`isLoopbackAddress` / `isLoopbackHostname` / `isProxiedRequest` / `isLoopbackRequest(req)` |
 | `lib/http.js` | `readJsonBody(req, {maxBytes, objectOnly})`、`asJsonObject`、`writeJson(res, status, body)`、`ok()/fail()` 信封 |
 | `lib/frontmatter.js` | `parseFrontmatter(text)`、`stripFrontmatter(text)`、`setDisableModelInvocation(bytes, disabled)`（**字节级纯函数**） |
 | `lib/write-skill.js` | 指纹 → 临时文件 → fsync → rename → 回读校验 → 失败回滚（`writeDisableFlag(path, disabled)`） |
 | `lib/ledger.js` | R5 四个台账的只读解析（`installed.json` / `repositories.json` / `.skills-lock.json` / 自有记录），全部损坏降级 |
-| `lib/scan.js` | 扫描 `$DSH_HOME/skills`（跳过 `.system`、点文件、非技能条目）；产出 `ScanCandidate[]`（含 `symlink`/`realPath`） |
+| `lib/scan.js` | 扫描 `$DSH_HOME/skills`（跳过 `.system`、点文件、非技能条目）；产出 `ScanCandidate[]`（含 `symlink`/`realPath`、`upstream` 身份三元组） |
 | `lib/registry.js` | `snapshotRegistry(ctx.skills, cwd)` + `rankOfSummary(summary)`（= 先按 `source`/`provider` 映射成 level，再调 `classify.rankOf(level)`；映射表见 1.4.3） |
 | `lib/classify.js` | **纯函数核心**：`rankOf(level)`、`classifySkill(input)`、`mergeCatalog({scanned, registry, ledger})`、`buildGroups()` |
 | `lib/provider-toggles.js` | 自有存储 `$DSH_HOME/dsh-skill-center/provider-toggles.json`：`deserialize`/`serialize`/`read`/`setEnabled`（原子写、损坏降级） |

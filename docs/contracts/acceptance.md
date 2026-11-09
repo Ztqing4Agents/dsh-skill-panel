@@ -2,7 +2,7 @@
 
 > 类型：规范
 > 读者：验收人（人或 agent）——回答「怎样算通过」
-> 真源：`npm test` 的 525 条用例与 `npm run check` 的三道门；本文件只是它们的分层说明与编号索引
+> 真源：`npm test` 的 553 条用例与 `npm run check` 的三道门；本文件只是它们的分层说明与编号索引
 > 更新触发：新增门禁、改用例编号、改验收口径时同步改本文件（D.3 / D.5 的编号被测试头注锚定，不许重排）
 > 规模上限：400
 
@@ -123,7 +123,24 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | **K60** | ClawHub 上传图标代理（第 12 条 exact） | 假代理 + 假字节客户端 + 路由层 | hash 白名单（非 64 位小写 hex ⇒ `400 E_BAD_QUERY` 信封）；命中 → `200` + 按上游 `image/svg+xml`／`image/png` + `cache-control: public, max-age=3600` + `x-content-type-options: nosniff` + `content-security-policy: default-src 'none'`（**断言不透传上游的 `sandbox`**）+ `content-length` 一致 + **不走信封**；不存在/上游失败 → **裸 404 空 body + `no-store`**；只放行 svg/png（`text/html` 等一律当没有）；5s、256 KiB、1h 命中 / 60s 未命中缓存、`?refresh=1` 清；只认 GET 与 loopback | L1 + L2 · `test/market-clawhub-icon.test.mjs` + `test/market-routes.test.mjs` |
 | **K61** | 客户端渐进补齐（先字母后换图） | `market-model.js` 纯函数 + 真 store | 取值优先级 `item.iconUrl` → `market.icons[id]` → null（空串按「无」）；`iconCandidates` 只挑「ClawHub + 没图标 + 没问过 + owner/slug 齐全」，默认 ≤24、顺序随列表；`marketIconsReady` 只把非空值写进 `icons` 但**每个 id 都记 `iconsTried`（null 也记）**；`marketIconsAttempted` 整批失败只记 tried、`icons`／分页态／列表态一动不动；`marketReload` 清空 `icons`+`iconsTried`，而切来源/搜索/追加页保留已拿到的图标；空 batch 不改状态对象 | L1 · `test/market-icons-client.test.mjs` |
 
-**红绿口径**（Round 6 终态）：K28–K49 与 K52–K61 全部绿（`node --test test/` 525/525）；K50 / K51 不进 `npm test`（要像素级命中、滚动容器与真实上游），由 agent 驱动无头浏览器在隔离 `DSH_HOME` 上验，最近一次为 Round 6（非阻塞图标管道 / 双代理轮）复验：20 步 + 13 步全通过。证据与截图见 `.agents/work/test-report-market.md`。
+**红绿口径**（Round 7 终态）：K28–K49 与 K52–K69 全部绿（`node --test test/` 553/553）；K50 / K51 不进 `npm test`（要像素级命中、滚动容器与真实上游），由 agent 驱动无头浏览器在隔离 `DSH_HOME` 上验，最近一次为 Round 7（已安装图标与市场同步轮）复验：K50/K51 20 步 + R7 真机七条 13 步 + 11 步全通过。证据与截图见 `.agents/work/test-report-market-installed-icons.md`。
+
+---
+
+### D.6 已安装行图标用例编号（K62–K69）
+
+已安装行的图标与市场卡片共用一条端点、一套缓存、一个视觉单元（`icon-tile.jsx`）。这一组用例守的是「身份只从 `_meta.json` 来、判据零改动、失败不升级」三条线；设计见 `docs/contracts/client.md` §3.9.6 与 `routes.md` §3.3.1 / §3.7.5。
+
+| 编号 | 目标 | 断言 | 层 |
+| --- | --- | --- | --- |
+| **K62** | 身份透出：`ScanCandidate.upstream` | 我们写的 `_meta.json`（`source`+`ownerId`+`slug` 齐备）⇒ `upstream` 三元组逐字等于文件里的值且只有三个键；缺 `source`（外来记录 / Convex id）⇒ `null`；`owner:'../../x'`、`slug:'../etc'`、`a..b`、大写 `source`、`owner` 是数字、缺 `slug`、超长 ⇒ `null`（形状闸）；只有 `_skillhub_meta.json` ⇒ `null`（但 `metaSource` 仍为真）；`_meta.json` 是坏 JSON ⇒ `null` 且扫描不挂；真实 handle（含 `.` `_` `-`）与 slug 仍可信；`isUpstreamIdentity` 本体逐条（`..` 即使过字符类也拒） | L2 · `test/scan-upstream.test.mjs` |
+| **K63** | R1–R7 判据零回归 | 九条判据各一条 fixture：加 `upstream` 前后 `partition`/`rule`/`confidence`/`evidence` 逐字段相同；**管线全表 32 组**（`mergeCatalog` 里 symlink×ledgerHit×metaSource×metaRelease×有身份）里 `upstream !== null ⇒ rule ∈ {R4,R5,R6}`（R4 落 local、R5/R6 落 installed）；身份单独存在（无任何元数据事实）时规则停在 R8/R9，不许把行抬进已安装；注册表胜出的行（14 组 provider×rank）恒 `upstream === null` | L1 · `test/classify-upstream.test.mjs` |
+| **K64** | `POST icons` 收 per-item source | 混合批次（skillhub+clawhub）⇒ 两源的键都在、**按请求顺序**、完整键 `source:owner:slug` 去重；每源只看到自己那几条；顶层 `source` 作缺省值生效、item 覆盖它；未注册源（顶层或条目上）⇒ `400 E_BAD_QUERY`；合计 >24 ⇒ `400 E_BAD_REQUEST`；一条坏条目会让整批 400（KI-R7-1 的现场，Host 侧目前由 K62 保证不会发出） | L2 · `test/market-routes.test.mjs` |
+| **K65** | SkillHub `icons()` | 每条 1 次 detail、`namespace`=owner、**不带 `version`**；并发 ≤6；键按请求顺序；正向 10min / 负向 60s 缓存，命中不打上游、`resetSkillhubIconCache()` 清空；单条失败只 `null`、空 owner/slug 不发请求；`iconUrl` 只收绝对 `https`（`http:`/相对/协议相对/数字/对象/空串/空白 ⇒ null）；整批 6s 预算耗尽后剩余条目 `null` 且结果齐全 | L1 · `test/market-icons-skillhub.test.mjs` |
+| **K66** | 单源失败不连坐 | SkillHub 适配器整体抛错 ⇒ 仍 `200`、`code:'OK'`、skillhub 的键全 `null`、clawhub 的键照常有值、键序不变 | L2 · `test/market-routes.test.mjs` |
+| **K67** | `iconBatch` 选择器 | 市场条目先于已装行、按 `source:owner:slug` 去重；每源 ≤12、总 ≤24；未知源/无身份/空 owner-slug 之外的各种跳过（已有 `icons`、`iconsTried` 命中、市场条目自带 `iconUrl`）逐条生效；两源各算各的额度；空/坏输入不抛。**注**：客户端不校验 owner/slug 非空（Host 已保证形状，见 KI-R7-1） | L1 · `test/market-icons-batch.test.mjs` |
+| **K68** | 渲染与容器零回归 | `SkillRow` 传 `iconUrl` ⇒ 盒内有 `<img class="skc_marketIconImg">`、`alt=""`、整行**只有一个**可交互元素、无 `<a>`/无 `tabindex`/无内联 `onclick`；不传（或空串）⇒ 与改动前的字母瓦片逐字节相同、且等于 `IconTile` 的字母形态；`MarketIcon` 与 `IconTile` 对同一 `iconUrl` 输出逐字节相同；`.skc_cardIcon` 六条容器声明（`box-sizing`/48×48/`.5px`/`radius-lg`/`padding-box`）与 `.skc_marketIconImg` 五条声明逐字未变；客户端只有一套上色/画图路径 | L3 · `test/view-icon-tile.test.mjs` |
+| **K69** | 图标播种（`iconSeeds` / `marketIconsSeeded`） | `iconSeeds(market)`：只收 `iconUrl` 是非空字符串的市场条目，产出 `{[source:owner:slug]: url}`；空串/缺键/非字符串 ⇒ 不收；`market.icons` 已有该键 ⇒ 不再播（幂等：连调第二次返回 `null`，且缓存里已有的值不被覆盖）；`iconsTried` **不挡**播种；无任何可播种项 ⇒ `null`（不是 `{}`）。`marketIconsSeeded(icons)`：只写 `icons`、**不写 `iconsTried`**、不覆盖已有键、空/坏输入不改状态对象 | L1 · `test/market-icons-client.test.mjs` |
 
 ---
 

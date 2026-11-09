@@ -155,18 +155,25 @@ export class SkillCenterApi {
    * @returns {Promise<object>} MarketDetail.
    */
   /**
-   * Ask the host for the icons the list route could not wait for.
-   * @param {{source: string, items: {owner: string, slug: string}[]}} query - the source and
-   *   up to 24 `{owner, slug}` pairs.
-   * @returns {Promise<{icons: Record<string, string|null>}>} icon URL (or null) keyed by market id.
+   * Ask the host for the icons of a batch of identities.
+   *
+   * `source` travels per item: one batch may mix the two sources, and the route groups
+   * them itself (at most 12 per source, 24 in total).
+   * @param {{items: {source: string, owner: string, slug: string}[]}} query - the batch.
+   * @returns {Promise<{icons: Record<string, string|null>}>} icon URL (or null) keyed by
+   *   `source:owner:slug`.
    */
   async marketIcons(query) {
+    const items = Array.isArray(query?.items) ? query.items : [];
     return this.request('market/icons', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        source: query?.source ?? '',
-        items: Array.isArray(query?.items) ? query.items : [],
+        items: items.map((item) => ({
+          source: item?.source ?? '',
+          owner: item?.owner ?? '',
+          slug: item?.slug ?? '',
+        })),
       }),
     });
   }

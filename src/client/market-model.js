@@ -19,6 +19,13 @@ export const MARKET_FALLBACK_SOURCES = Object.freeze([
 /** Source ids that publish no category table even before `bootstrap` says so. */
 const NO_CATEGORY_SOURCES = new Set(['clawhub']);
 
+/** The sources whose icons this client knows how to fetch (an installed row's identity). */
+export const MARKET_SOURCE_IDS = Object.freeze(['skillhub', 'clawhub']);
+
+/** Per-source and total caps of one `market/icons` batch (the route's own limits). */
+const ICONS_PER_SOURCE = 12;
+const ICONS_PER_BATCH = 24;
+
 /** The source the market opens on: the menu lists the real sources only, with no "all". */
 export const MARKET_DEFAULT_SOURCE = 'skillhub';
 
@@ -94,8 +101,23 @@ export function mergeBatches(pages, options = {}) {
 export function iconUrlOf(item, market) {
   const own = typeof item?.iconUrl === 'string' && item.iconUrl !== '' ? item.iconUrl : null;
   if (own !== null) return own;
-  const fetched = market?.icons?.[marketKeyOf(item)];
-  return typeof fetched === 'string' && fetched !== '' ? fetched : null;
+  return iconUrlFor(marketKeyOf(item), market);
+}
+
+/**
+ * The icon cached for one identity key (`source:owner:slug`), or null.
+ *
+ * The key space is shared by both consumers - market entries use `item.id`, installed rows
+ * use their `upstream` triple - so a skill fetched once shows its icon on both surfaces
+ * without a second request and without a second cache.
+ * @param {string} key - a `marketKeyOf()` product.
+ * @param {object} market - the market sub-state.
+ * @returns {string|null} the cached URL, or null when there is none.
+ */
+export function iconUrlFor(key, market) {
+  if (typeof key !== 'string' || key === '') return null;
+  const cached = market?.icons?.[key];
+  return typeof cached === 'string' && cached !== '' ? cached : null;
 }
 
 /**
@@ -120,6 +142,94 @@ export function iconCandidates(market, limit = 24) {
     if (tried[id] === true || seen.has(id)) continue;
     seen.add(id);
     picked.push({ owner: item.owner, slug: item.slug, id });
+  }
+  return picked;
+}
+
+/**
+ * Icons the list route already answered inline, reshaped into the cache's key space.
+ *
+ * SkillHub puts `iconUrl` straight on the list item, so the card can draw it without any
+ * extra request - but the installed row only looks at `market.icons[key]`, and the two
+ * used to have no path between them: installing a SkillHub skill meant asking upstream for
+ * an icon the browser had been holding all along (measured 7.5s for one mixed batch).
+ * Seeding closes that path without a request.
+ *
+ * A seed is a *known answer*, not "we asked upstream": it deliberately does not touch
+ * `iconsTried`, which stays the ledger of upstream questions.
+ * @param {object} market - the market sub-state.
+ * @returns {Record<string, string>|null} `{[key]: url}` to seed, or null when there is
+ *   nothing new (already cached entries are skipped instead of rewritten every render).
+ */
+export function iconSeeds(market) {
+  const items = Array.isArray(market?.items) ? market.items : [];
+  const seeds = {};
+  let count = 0;
+  for (const item of items) {
+    if (typeof item?.iconUrl !== 'string' || item.iconUrl === '') continue;
+    const key = marketKeyOf(item);
+    if (iconUrlFor(key, market) !== null) continue;
+    seeds[key] = item.iconUrl;
+    count += 1;
+  }
+  return count === 0 ? null : seeds;
+}
+
+/**
+ * The one selector both surfaces feed: which icons to ask for next.
+ *
+ * Two halves, market first (a market entry that still has no icon is the case the list
+ * route could not answer, and it carries the fuller record):
+ *   - the market list's own candidates (`iconCandidates`, ClawHub only), tagged with
+ *     their source id;
+ *   - installed rows whose `_meta.json` gave them an identity this client can resolve,
+ *     that have no cached icon yet, and that this session has not asked about.
+ * Deduplicated by key (first appearance wins), capped at 12 per source and 24 in total -
+ * the same limits the route enforces, so a full batch is never rejected.
+ * @param {object|null} payload - the installed-list payload (`{groups}`), or null.
+ * @param {object} market - the market sub-state.
+ * @returns {{key: string, sourceId: string, owner: string, slug: string}[]} the batch.
+ */
+export function iconBatch(payload, market) {
+  const picked = [];
+  const seen = new Set();
+  const perSource = new Map();
+  const room = () => picked.length < ICONS_PER_BATCH;
+  const take = (entry) => {
+    if (!room() || seen.has(entry.key)) return false;
+    if (!MARKET_SOURCE_IDS.includes(entry.sourceId)) return false;
+    // One malformed triple would make the route reject the whole batch (its parameters are
+    // validated per request), so a bad entry is skipped here instead of taking the good
+    // ones down with it.
+    if (typeof entry.owner !== 'string' || entry.owner === '') return false;
+    if (typeof entry.slug !== 'string' || entry.slug === '') return false;
+    const used = perSource.get(entry.sourceId) ?? 0;
+    if (used >= ICONS_PER_SOURCE) return false;
+    seen.add(entry.key);
+    perSource.set(entry.sourceId, used + 1);
+    picked.push(entry);
+    return true;
+  };
+
+  for (const candidate of iconCandidates(market, ICONS_PER_BATCH)) {
+    if (!room()) break;
+    take({ key: candidate.id, sourceId: 'clawhub', owner: candidate.owner, slug: candidate.slug });
+  }
+
+  const groups = Array.isArray(payload?.groups) ? payload.groups : [];
+  const tried = market?.iconsTried ?? {};
+  for (const group of groups) {
+    if (!room()) break;
+    const rows = Array.isArray(group?.skills) ? group.skills : [];
+    for (const row of rows) {
+      if (!room()) break;
+      const upstream = row?.upstream ?? null;
+      if (upstream === null) continue;
+      if (!MARKET_SOURCE_IDS.includes(upstream.sourceId)) continue;
+      const key = marketKeyOf(upstream);
+      if (tried[key] === true || iconUrlFor(key, market) !== null) continue;
+      take({ key, sourceId: upstream.sourceId, owner: upstream.owner, slug: upstream.slug });
+    }
   }
   return picked;
 }

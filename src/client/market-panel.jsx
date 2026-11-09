@@ -20,7 +20,6 @@ import {
   MARKET_FALLBACK_SOURCES,
   MARKET_PAGE_SIZE,
   emptyKindOf,
-  iconCandidates,
   mergeBatches,
   marketKeyOf,
   pagedSources,
@@ -205,38 +204,6 @@ export function MarketPanel({ store, api, t }) {
       store.actions.marketSetScroll(lastScroll.current);
     };
   }, [detailOpen, loadMore, store]);
-
-  // ClawHub's own icons only arrive after the list does (the upstream detail call costs
-  // 2.3-3s per entry, so `market/list` stopped waiting for them). Each finished render
-  // asks for the ones still missing, at most once per item per session - "no icon" is an
-  // answer too, and a failed batch stays quiet rather than retrying on every render.
-  const iconsInFlight = useRef(false);
-  useEffect(() => {
-    if (iconsInFlight.current) return;
-    const current = store.getSnapshot().market;
-    const candidates = iconCandidates(current);
-    if (candidates.length === 0) return;
-    iconsInFlight.current = true;
-    void (async () => {
-      try {
-        const data = await api.marketIcons({
-          source: 'clawhub',
-          items: candidates.map((candidate) => ({ owner: candidate.owner, slug: candidate.slug })),
-        });
-        const icons = {};
-        for (const candidate of candidates) {
-          const url = data?.icons?.[candidate.id];
-          icons[candidate.id] = typeof url === 'string' && url !== '' ? url : null;
-        }
-        store.actions.marketIconsReady(icons);
-      } catch {
-        // Silent by design: the tiles keep their letters, nothing is announced.
-        store.actions.marketIconsAttempted(candidates.map((candidate) => candidate.id));
-      } finally {
-        iconsInFlight.current = false;
-      }
-    })();
-  }, [api, market.items, market.icons, market.iconsTried, store]);
 
   /** Load one item's detail into the store. @param {object} item - the market item. @returns {Promise<void>} */
   const loadDetail = useCallback(async (item) => {
