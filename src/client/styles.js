@@ -236,11 +236,19 @@ const CSS = `
 }
 @container skc-page-bar (width < 372px){ .skc_pageTabList{ min-width: 0 } }
 
-/* market: toolbar and chips, transcribed from the host market's DiscoverSection */
+/* market: toolbar and chips, transcribed from the host market's DiscoverSection.
+   One departure: the host's marketButton rule carries margin-left:-8px to cancel the
+   toolbar's 8px gap, which welds the menus to the search box (and, once a keyword is
+   typed, to the clear button). Both menus keep the class for the weight and the cap;
+   the negative margin is gone - see decisions, appendix K. */
 .skc_marketSection{ flex-direction: column; gap: 16px; display: flex }
 .skc_marketToolbar{ flex-wrap: wrap; align-items: center; gap: 8px; display: flex }
 .skc_marketSearch{ flex: 1; min-width: 120px }
-.skc_marketSelect{ max-width: 240px; margin-left: -8px; font-weight: 500 }
+/* The input is type=search, so Blink paints its own cancel button inside the field the
+   moment a keyword is typed - right beside the clear button this panel draws itself
+   (which is the one with a label and a title). Keep ours, drop the native one. */
+.skc_marketSearch input::-webkit-search-cancel-button{ -webkit-appearance: none; appearance: none; display: none }
+.skc_marketSelect{ max-width: 240px; font-weight: 500 }
 .skc_marketSelectLabel{ text-overflow: ellipsis; white-space: nowrap; overflow: hidden }
 .skc_marketChips{ flex-wrap: wrap; align-items: center; gap: 6px; display: flex }
 .skc_marketScope{ color: var(--dsw-alias-label-tertiary); margin: 0; font-size: 13px; line-height: 20px }
@@ -278,10 +286,12 @@ const CSS = `
 @media (hover: hover){ .skc_marketCard:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
 .skc_marketMain{ flex-direction: column; flex: 1; gap: 2px; min-width: 0; display: flex }
 .skc_marketTitleRow{ flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; display: flex }
+/* flex + min-width:0 so a long title ellipsises instead of pushing the source mark and
+   the bookmark button onto the next line (min-width:auto would keep the full text width) */
 .skc_marketCardOpen{
   max-width: 100%; color: inherit; font: inherit; text-align: left; cursor: pointer;
   text-overflow: ellipsis; white-space: nowrap; background: 0 0; border: 0; padding: 0;
-  font-size: 14px; font-weight: 500; line-height: 20px; overflow: hidden;
+  flex: 1; min-width: 0; font-size: 14px; font-weight: 500; line-height: 20px; overflow: hidden;
 }
 .skc_marketCardOpen::after{ content: ""; border-radius: var(--dsw-radius-xl); position: absolute; inset: 0 }
 .skc_marketCardOpen:focus-visible{ outline: none }
@@ -291,13 +301,50 @@ const CSS = `
   outline-offset: 2px;
 }
 .skc_marketDesc{
-  color: var(--dsw-alias-label-tertiary); -webkit-line-clamp: 1; -webkit-box-orient: vertical;
+  color: var(--dsw-alias-label-tertiary); -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   font-size: 13px; line-height: 18px; display: -webkit-box; overflow: hidden;
 }
 .skc_marketMeta{
   color: var(--dsw-alias-label-tertiary); margin: 0; overflow-wrap: anywhere;
   font-size: 12px; line-height: 18px;
 }
+/* market: the card's figures - three equal-width slots, downloads / saves / rating.
+   The slots are fixed-width and always three, so the same column lands on the same x in
+   every card of a row (they are empty, not absent, when a source does not report a
+   number). tabular-nums keeps 1 and 8 the same width inside a slot. */
+.skc_marketStats{
+  grid-template-columns: repeat(3, minmax(0, 72px)); gap: 8px; justify-content: start;
+  margin: 2px 0 0; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums;
+  font-size: 12px; line-height: 18px; display: grid;
+}
+.skc_marketStat{
+  align-items: center; gap: 3px; min-width: 0; white-space: nowrap;
+  text-overflow: ellipsis; overflow: hidden; display: inline-flex;
+}
+.skc_marketStat > svg{ width: 13px; height: 13px; flex: none; opacity: .75 }
+.skc_marketStatValue{ min-width: 0; overflow: hidden; text-overflow: ellipsis }
+/* the source's own brand mark, 16px: a 32x32 PNG at 2x. Decoration, not a control. */
+.skc_marketSourceMark{ border-radius: var(--dsw-radius-sm); width: 16px; height: 16px; flex: none; display: block }
+/* the bookmark toggle sits above the card-wide click layer (::after), hence z-index: 2;
+   it is the second and last action seat this card is allowed (the click-boundary rule). */
+.skc_marketFavorite{
+  z-index: 2; margin-left: auto; width: 22px; height: 22px; flex: none; position: relative;
+  border: 0; border-radius: var(--dsw-radius-sm); padding: 0; background: 0 0;
+  color: var(--dsw-alias-label-tertiary); cursor: pointer;
+  align-items: center; justify-content: center; display: inline-flex;
+}
+@media (hover: hover){
+  .skc_marketFavorite:hover{
+    color: var(--dsw-alias-label-primary); background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+.skc_marketFavorite:focus-visible{
+  outline: var(--dsw-focus-ring-width) solid
+    var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+.skc_marketFavoriteOn{ color: var(--dsw-alias-state-business-primary) }
+.skc_marketFavorite > svg{ width: 16px; height: 16px; display: block }
 .skc_marketCardEnd{
   z-index: 1; flex: none; align-self: flex-end; align-items: center; gap: 8px;
   display: inline-flex; position: relative;
@@ -370,6 +417,8 @@ const CSS = `
 .skc_marketSkeletonBar{ margin: 4px 0; display: block }
 .skc_marketSkeletonChip{ border-radius: var(--dsw-radius-lg); width: 64px; height: 26px }
 .skc_marketSkeletonAction{ border-radius: var(--dsw-radius-md); width: 64px; height: 24px }
+/* three figure placeholders in the real row's rhythm; the bed is the shared skeleton fill */
+.skc_marketSkeletonStat{ border-radius: var(--dsw-radius-xs); width: 56px; height: 12px }
 .skc_marketToastHint{
   color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere;
   margin-top: 2px; font-size: 12px; line-height: 18px; display: block;

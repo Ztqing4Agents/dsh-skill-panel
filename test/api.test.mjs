@@ -100,13 +100,15 @@ test('ApiError 没有 message 时用 code 作为 message', () => {
   assert.equal(error.name, 'ApiError', '错误名是 ApiError');
 });
 
-test('K44 五个市场方法的 URL 都是文档相对的 market/* 路由', async () => {
+test('K44 七个市场方法的 URL 都是文档相对的 market/* 路由', async () => {
   const cases = [
     ['marketBootstrap', (api) => api.marketBootstrap(), 'market/bootstrap'],
     ['marketList', (api) => api.marketList({ source: 'skillhub' }), 'market/list?source=skillhub'],
     ['marketDetail', (api) => api.marketDetail({ source: 'skillhub', owner: 'ake', slug: 'dev-god' }), 'market/detail?source=skillhub&owner=ake&slug=dev-god'],
     ['marketInstalled', (api) => api.marketInstalled(), 'market/installed'],
     ['marketInstall', (api) => api.marketInstall({ source: 'skillhub', owner: 'ake', slug: 'dev-god' }), 'market/install'],
+    ['marketFavorite', (api) => api.marketFavorite({ source: 'skillhub', owner: 'ake', slug: 'dev-god', favorited: false }), 'market/favorite'],
+    ['marketIcons', (api) => api.marketIcons({ items: [{ source: 'skillhub', owner: 'ake', slug: 'dev-god' }] }), 'market/icons'],
   ];
   for (const [name, run, expected] of cases) {
     const { fetchImpl, calls } = fetchStub({ body: { code: 'OK', data: {}, message: '' } });
@@ -169,5 +171,36 @@ test('K44 市场失败把信封里的 data 交给调用方（已装路径与声�
       assert.deepEqual(error.data.existing, { name: 'dev-god', version: '0.9.0' }, 'data.existing 透出');
       return true;
     },
+  );
+});
+
+test('K44 marketFavorite：POST + body 只有身份与目标状态（没有 id / version / path）', async () => {
+  const { fetchImpl, calls } = fetchStub({
+    body: { code: 'OK', data: { favorites: ['skillhub:ake:dev-god'], favorited: true }, message: '' },
+  });
+  const data = await new SkillCenterApi(fetchImpl).marketFavorite({
+    source: 'skillhub',
+    owner: 'ake',
+    slug: 'dev-god',
+    favorited: true,
+    id: 'skillhub:ake:evil',
+    version: '9.9.9',
+    path: '/tmp/x',
+  });
+  assert.equal(calls[0].url, 'api/dsh-skill-center/market/favorite', 'URL 是文档相对的 market/favorite');
+  assert.equal(calls[0].init.method, 'POST', '方法是 POST');
+  assert.deepEqual(
+    Object.keys(JSON.parse(calls[0].init.body)).sort(),
+    ['favorited', 'owner', 'slug', 'source'],
+    'body 恰好四个字段：id / version / path 一律不出门（键由 Host 重拼）',
+  );
+  assert.deepEqual(data, { favorites: ['skillhub:ake:dev-god'], favorited: true }, '出参原样给调用方（权威列表 + 生效状态）');
+
+  const { fetchImpl: fallback, calls: fallbackCalls } = fetchStub({ body: { code: 'OK', data: {}, message: '' } });
+  await new SkillCenterApi(fallback).marketFavorite({ source: 'skillhub', owner: 'ake', slug: 'dev-god' });
+  assert.equal(
+    JSON.parse(fallbackCalls[0].init.body).favorited,
+    false,
+    '缺省 favorited 一律按 false 发送（布尔是路由的硬要求）',
   );
 });

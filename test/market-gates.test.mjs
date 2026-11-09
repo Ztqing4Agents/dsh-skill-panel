@@ -4,7 +4,7 @@
  *
  * Contracts: AGENTS.md rules 2 / 4 / 9 / 13 (no CJK in sources, no host hash class
  * names, click affordance boundaries, the browser never calls an upstream), and
- * docs/contracts/acceptance.md 附录 D.3 numbering; case ids K40, K41.
+ * docs/contracts/acceptance.md 附录 D.5 numbering; case ids K40, K41, K81.
  *
  * The three scripts are executed as subprocesses, exactly as `npm run check` runs
  * them: importing them would skip their `process.exitCode` handling, which is the
@@ -134,6 +134,26 @@ test('K40 市场刻度逐条落地：网格 280/12、卡片竖排 14、cardOpen 
   assert.match(end, /z-index: 1/, '动作位浮在可点层之上（不可省）');
   assert.match(end, /align-self: flex-end/, '动作位靠右下（新刻度 ③）');
 
+  // U2: the figures row and the two new seats are new ticks of the same table.
+  const stats = ruleOf('.skc_marketStats');
+  assert.match(stats, /grid-template-columns: repeat\(3, minmax\(0, 72px\)\)/, '三段是三格等宽轨道（新刻度 ⑥）');
+  assert.match(stats, /font-variant-numeric: tabular-nums/, '等宽数字（1 与 8 同宽）');
+  assert.match(stats, /justify-content: start/, '三段左对齐');
+  assert.equal(/z-index/.test(stats), false, '三段不带 z-index：它在点击层下面（点数字 = 进详情）');
+  assert.match(ruleOf('.skc_marketStat > svg'), /width: 13px; height: 13px/, '字形 13px');
+  assert.match(ruleOf('.skc_marketSourceMark'), /width: 16px; height: 16px/, '来源图形 16×16（新刻度 ⑦）');
+  assert.match(ruleOf('.skc_marketSourceMark'), /border-radius: var\(--dsw-radius-sm\)/, '来源图形用 radius-sm');
+  const favorite = ruleOf('.skc_marketFavorite');
+  assert.match(favorite, /z-index: 2/, '收藏按钮浮在安装位之上（新刻度 ⑧）');
+  assert.match(favorite, /width: 22px; height: 22px/, '命中区 22×22');
+  assert.match(favorite, /margin-left: auto/, '右对齐（贴在标题行末尾）');
+  assert.match(ruleOf('.skc_marketFavoriteOn'), /state-business-primary/, '已收藏用 business primary');
+  assert.match(ruleOf('.skc_marketFavorite > svg'), /width: 16px; height: 16px/, '书签 16px');
+  assert.match(ruleOf('.skc_marketSkeletonStat'), /width: 56px; height: 12px/, '骨架三段 56×12（新刻度 ⑨）');
+  assert.match(ruleOf('.skc_marketSkeletonStat'), /border-radius: var\(--dsw-radius-xs\)/, '骨架三段用 radius-xs');
+  assert.match(ruleOf('.skc_marketDesc'), /-webkit-line-clamp: 2/, '描述两行（新刻度 ⑩）');
+  assert.match(ruleOf('.skc_marketCardOpen'), /flex: 1; min-width: 0/, '标题可收缩（否则挤掉来源图与收藏按钮）');
+
   assert.match(ruleOf('.skc_marketDialog'), /min\(480px, 100vw - 32px\)/, '确认弹窗宽度用 min()');
   assert.match(ruleOf('.skc_marketSkeletonChip'), /width: 64px; height: 26px/, 'chip 骨架 64×26');
   assert.match(ruleOf('.skc_marketSkeletonAction'), /width: 64px; height: 24px/, '动作骨架 64×24');
@@ -204,7 +224,7 @@ test('K41 上游 origin 的边界：浏览器半部零 URL，Host 半部只许�
     '认上游主机的地方恰好三个文件（多一个就是越界）',
   );
   assert.equal(withOrigin.includes('normalize.js'), false, '归一化零 origin（R6 退休了 ClawHub 基址）');
-  for (const name of ['install.js', 'zip.js', 'query.js', 'errors.js', 'store.js', 'ledger.js']) {
+  for (const name of ['install.js', 'zip.js', 'query.js', 'errors.js', 'store.js', 'ledger.js', 'favorites.js']) {
     assert.equal(withOrigin.includes(name), false, `${name} 不认识任何上游主机`);
   }
   // 五条：两个适配器 `ORIGIN` + 出口的 `LUCIDE_CDN` / `CLAWHUB_ICON_ORIGIN` + 下载重定向白名单
@@ -257,4 +277,42 @@ test('K41 点击边界按页签划：市场页有 cardOpen 手段，已安装行
   assert.equal(/<a[\s>]/.test(detail), false, '详情视图也没有链接');
   assert.equal(/marketCardOpen/.test(row), false, '已安装行没有引入市场的可点锚点');
   assert.equal(/role="button"/.test(row), false, '已安装行仍然不是按钮');
+});
+
+test('K81 点击层级：三层显式共存，卡片里只有两个动作位', async () => {
+  const css = await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8');
+  const ruleOf = (selector) => {
+    const index = css.indexOf(`${selector}{`);
+    return index === -1 ? '' : css.slice(index, css.indexOf('}', index) + 1);
+  };
+
+  // Layer 0: the card-wide click target. Layer 1: the install seat. Layer 2: the bookmark.
+  assert.match(ruleOf('.skc_marketCardOpen::after'), /inset: 0/, '点击层铺满整卡');
+  assert.match(ruleOf('.skc_marketCardEnd'), /z-index: 1/, '安装位在第 1 层');
+  assert.match(ruleOf('.skc_marketFavorite'), /z-index: 2/, '收藏位在第 2 层');
+  assert.match(ruleOf('.skc_marketCard'), /position: relative/, '卡片是定位参照（但自己不建 stacking context）');
+  assert.equal(/z-index/.test(ruleOf('.skc_marketCard')), false, '卡片不声明 z-index（否则动作位的层级被关进新上下文）');
+
+  const card = await readFile(join(ROOT, 'src', 'client', 'market-card.jsx'), 'utf8');
+  const code = card.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.equal(/<a[\s>]/.test(code), false, '卡片里没有 <a>（不是链接）');
+  assert.equal(/role="button"/.test(code), false, '卡片本身不是按钮');
+  assert.equal(/stopPropagation/.test(code), false, '不用 JS 拦冒泡代替层级');
+  // The install seat is a primitives `Button` (it renders its own <button>), so the source
+  // holds two literal <button> tags; the rendered card has three controls, which K38 pins.
+  const literalButtons = [...code.matchAll(/<button/g)].length;
+  assert.equal(literalButtons, 2, `源码里恰好两个字面 <button>：标题锚点 + 收藏（实际 ${literalButtons}）`);
+  const primitiveButtons = [...code.matchAll(/<Button/g)].length;
+  assert.equal(
+    primitiveButtons,
+    2,
+    '安装位是唯一的 primitives Button，四态里两个分支各一处（第三个控件由它渲染，不是第三个动作位）',
+  );
+  // The <li> must stay inert: no handler, no tabindex, no role.
+  const listItem = /<li className=\{cn\('marketCard'\)\}([^>]*)>/.exec(code);
+  assert.ok(listItem !== null, '找得到卡片的 <li>');
+  assert.equal(/onClick|tabIndex|role=/.test(listItem[1]), false, '<li> 上没有 onClick / tabIndex / role');
+  // The figures row must not carry a z-index either: tapping a number opens the detail.
+  assert.match(ruleOf('.skc_marketStats'), /display: grid/, '三段那一行是网格');
+  assert.equal(/z-index/.test(ruleOf('.skc_marketStats')), false, '三段那一行没有 z-index（落在点击层之下）');
 });

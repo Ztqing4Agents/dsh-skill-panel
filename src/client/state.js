@@ -54,6 +54,9 @@ function initialMarket() {
     installed: {},
     installedReady: false,
     installs: {},
+    favorites: {},
+    favoritesOk: true,
+    favoritesGen: 0,
     icons: {},
     iconsTried: {},
     names: {},
@@ -155,6 +158,12 @@ export function createStore() {
   const setMarket = (patch) => {
     set({ market: { ...state.market, ...patch } });
   };
+  /**
+   * The optimistic turn currently in flight: which id it flipped, and the state the id had
+   * before. A rollback only ever needs the newest turn, because an answer to an older one
+   * is discarded by its generation.
+   */
+  let favoriteTurn = null;
   const setInstall = (id, entry) => {
     const installs = { ...state.market.installs };
     if (entry === null) delete installs[id];
@@ -489,6 +498,76 @@ export function createStore() {
      */
     marketPageFailed: (error) => {
       setMarket({ page: { status: 'error', code: error?.code ?? null, message: error?.message ?? null } });
+    },
+    /**
+     * The bookmark list answered (`market/bootstrap`), or the request for it failed.
+     * Only this action writes a whole list: a toggle flips one id, and the route's own
+     * answer replaces the set.
+     * @param {string[]} list - bookmark ids, most recent first.
+     * @param {boolean} ok - whether the Host could read its file.
+     * @returns {void}
+     */
+    marketFavoritesLoaded: (list, ok) => {
+      const favorites = {};
+      for (const id of Array.isArray(list) ? list : []) {
+        if (typeof id === 'string' && id !== '') favorites[id] = true;
+      }
+      setMarket({ favorites, favoritesOk: ok === true });
+    },
+    /**
+     * Flip one bookmark locally and start a new generation.
+     *
+     * Optimistic on purpose: the button has to answer the click, and the route's answer
+     * then replaces the set. The generation is what keeps a slow answer from an earlier
+     * click from overwriting a later one - only the newest generation may write.
+     * @param {string} id - the item's market key.
+     * @returns {number} the generation this flip created; the caller hands it back.
+     */
+    marketFavoriteToggle: (id) => {
+      if (typeof id !== 'string' || id === '') return state.market.favoritesGen;
+      const before = state.market.favorites[id] === true;
+      const favorites = { ...state.market.favorites };
+      if (before) delete favorites[id];
+      else favorites[id] = true;
+      const gen = state.market.favoritesGen + 1;
+      favoriteTurn = { gen, id, before };
+      setMarket({ favorites, favoritesGen: gen });
+      return gen;
+    },
+    /**
+     * The route answered: adopt its list, but only for the newest generation.
+     * @param {number} gen - the generation the request belongs to.
+     * @param {string[]} list - the authoritative bookmark ids, most recent first.
+     * @returns {void}
+     */
+    marketFavoriteOk: (gen, list) => {
+      if (gen !== state.market.favoritesGen) return;
+      const favorites = {};
+      for (const id of Array.isArray(list) ? list : []) {
+        if (typeof id === 'string' && id !== '') favorites[id] = true;
+      }
+      setMarket({ favorites, favoritesOk: true });
+    },
+    /**
+     * The route failed: undo the newest flip and say why. A stale failure changes nothing.
+     * @param {number} gen - the generation the request belongs to.
+     * @param {string} reason - localized reason for the toast.
+     * @returns {void}
+     */
+    marketFavoriteFail: (gen, reason) => {
+      if (gen !== state.market.favoritesGen) return;
+      const turn = favoriteTurn;
+      if (turn === null || turn.gen !== gen) return;
+      const favorites = { ...state.market.favorites };
+      if (turn.before) favorites[turn.id] = true;
+      else delete favorites[turn.id];
+      seq += 1;
+      // One atomic update: the rolled-back set and the notice that explains it. The notice
+      // reuses the shell overlay seat the install and refresh notices already share.
+      set({
+        market: { ...state.market, favorites },
+        notice: { kind: 'favorite-failed', reason: typeof reason === 'string' ? reason : '', seq },
+      });
     },
     /**
      * The install ledger answered: which market items are already on this machine.

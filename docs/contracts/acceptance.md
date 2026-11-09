@@ -2,7 +2,7 @@
 
 > 类型：规范
 > 读者：验收人（人或 agent）——回答「怎样算通过」
-> 真源：`npm test` 的 573 条用例与 `npm run check` 的三道门；本文件只是它们的分层说明与编号索引
+> 真源：`npm test` 的 646 条用例与 `npm run check` 的四道门；本文件只是它们的分层说明与编号索引
 > 更新触发：新增门禁、改用例编号、改验收口径时同步改本文件（D.3 / D.5 的编号被测试头注锚定，不许重排）
 > 规模上限：400
 
@@ -100,12 +100,12 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | **K37** | 市场纯函数 | 手造 `MarketItem` 与 market 子状态 | `mergeBatches` **按来源顺序分块拼接**（第 1 轮 `[a1 a2 a3｜b1 b2 b3]`、第 2 轮尾部接 `[a4 a5｜b4]`），`existing` 恒在前、按 id 去重保留首次出现、**客户端不跨源重排**（传不传 `sort` 输出逐字相同）、短页照收；**短页 + `next !== null` 不算耗尽**；`installViewOf` 四态且运行时优先于台账；`emptyKindOf` 三分类；`metaSegments` 缺项少段；`visibleCategories` 选 ClawHub 整行隐藏；`chipList` / `detailFacts` | L1 · `test/market-model.test.mjs` |
 | **K38** | 市场首屏与卡片 | 页面 + 播种 store（骨架 / 卡片 / 三类失败 / 三种空态 / 工具栏） | 骨架 6 卡 6 chip + `role=status`；卡片头像 / 标题锚点 / 来源 Tag / 描述 / 元信息 / 安装按钮；安装四态文案；整页失败 / 追加失败 / 空态各就各位（单源之后不再有「部分源」提示条）；工具栏来源锚点显示当前源（默认 SkillHub，无「全部来源」）；chips 数字位随 `total`/`count` 出现；到底与追加互斥 | L3 · `test/market-view.test.mjs` |
 | **K39** | 内嵌详情与确认弹窗 | 同上 + `marketDetailReady` / `marketInstallConfirm` | 返回面包屑、标题与版本 Tag、事实表六行（未知写「未知」、`installTo` 用 `code`）、概览交给宿主 `MarkdownText`、文件清单配 `fileSizeText`；详情加载 / 失败 / 空概览 / 空文件 / 坏声明名五种；确认弹窗 `role=dialog` + `aria-modal` + 三项事实 + 第三方提示 + 两按钮 | L3 · `test/market-view.test.mjs` |
-| **K40** | 三道门禁与市场刻度 | 仓库本身 | `check:i18n` / `check:client` / `check:docs` 全 exit 0（13 份 0 warn）、`§3.7` `§3.8` `§3.9` `§7` `§8.6` `附录 E` `附录 F` `附录 G` 各恰好一处、`styles.js` 无 `xxxxxx_` 形式的宿主哈希类名、附录 F 的六条新刻度逐条落在 `skc_market*` 上 | 门禁 · `test/market-gates.test.mjs` |
+| **K40** | 三道门禁与市场刻度 | 仓库本身 | `check:i18n` / `check:client` / `check:docs` 全 exit 0（13 份 0 warn）、`§3.7` `§3.8` `§3.9` `§7` `§8.6` `附录 E` `附录 F` `附录 G` 各恰好一处、`styles.js` 无 `xxxxxx_` 形式的宿主哈希类名、附录 F 的十条新刻度逐条落在 `skc_market*` 上 | 门禁 · `test/market-gates.test.mjs` |
 | **K41** | 三条「不许再犯」+ 上游 origin 的边界 | 源码与产物 | 市场块无颜色字面量、`dependencies` 为空、点击边界按页签划（市场用 `cardOpen`，已安装行仍不是按钮）；**`src/client/**` 代码里一个 URL 都没有**（浏览器半部零直连，注释里提站点名不算）；**`lib/market/**` 里认上游主机的文件恰好三个、常量恰好五条**：两个适配器的 `ORIGIN` + `upstream.js` 的钉版 jsDelivr CDN、ClawHub icons 基址、COS 重定向白名单；**`normalize.js` 零 origin**（图标地址全部是文档相对路径），编排类文件（`install`/`zip`/`query`/`errors`/`store`/`ledger`）零 origin | 门禁 · `test/market-gates.test.mjs` |
 | **K42** | 源注册表与装配 | 注册表本身 + 注入的假 io | 注册顺序 `skillhub → clawhub`、六个函数与 caps 齐备、描述符形状与 §7.2 一致、`makeMarketDeps` 注入 io 时不自建客户端、`dispose` 幂等 | L1 · `test/market-sources.test.mjs` |
 | **K43** | 上游出口与 302 白名单 | 常量 + 手工构造的 `location` | 四个超时与两个字节上限逐条对齐、只跟一跳、只跟 `*.cos.accelerate.myqcloud.com` 的 https、`createUpstream` 的四个键 | L1 · `test/market-upstream.test.mjs` |
-| **K44** | 客户端 api 五个市场方法 | 记录调用的 fetch 桩 | URL 文档相对且带 `market/` 前缀、空参数不发送、`version` 缺省不传、install 正文只有 `source/owner/slug/version`、失败信封的 `data` 交给调用方 | L1 · `test/api.test.mjs` |
-| **K45** | store 的 market 子状态与 27 个 action | `createStore()` | 初始筛选（`source:'skillhub'`、`total:null`、`countsOk:true`）、`marketSetFilter` 空操作过滤、关键词落定不闪骨架、`reload` 清列表、首屏失败与追加失败语义不同、详情四步不丢列表、安装四步幂等、滚动值归一、boot 兜底、一源失败不影响另一源 | L1 · `test/state.test.mjs` |
+| **K44** | 客户端 api 七个市场方法（含 `marketIcons`，批量的语义细节见 K57） | 记录调用的 fetch 桩 | URL 文档相对且带 `market/` 前缀、空参数不发送、`version` 缺省不传、install 正文只有 `source/owner/slug/version`、favorite 正文只有身份与目标状态、`marketIcons` 正文是 `{items:[{source,owner,slug}]}`、失败信封的 `data` 交给调用方 | L1 · `test/api.test.mjs` |
+| **K45** | store 的 market 子状态与 33 个 action | `createStore()` | 初始筛选（`source:'skillhub'`、`total:null`、`countsOk:true`）、`marketSetFilter` 空操作过滤、关键词落定不闪骨架、`reload` 清列表、首屏失败与追加失败语义不同、详情四步不丢列表、安装四步幂等、滚动值归一、boot 兜底、一源失败不影响另一源 | L1 · `test/state.test.mjs` |
 | **K46** | 安装成功复用浮层座位 | `marketInstallOk` 之后渲染 `ToastHost` | 顶层 `notice{kind:'install-ok'}` 存在 → 主行「已安装 <name> · 新会话生效」+ 副行 `skc_marketToastHint` 给路径；与 `refresh-failed` 按 `kind` 分流；`dismissNotice(seq)` 只关当前那一条 | L3 · `test/view-toast.test.mjs` |
 | **K47** | 详情往返不丢已加载页数 | 两页已加载 + 打开详情再返回 | 返回后 `items` / `cursors` / `pages` 不变、`scrollTop` 留在 store、卡片数不退回第一页 | L3 · `test/market-view.test.mjs` |
 | **K48** | 已安装页签零回归 | 两个页签各渲染一次 | 已安装页签有状态行与「添加技能」、不挂市场面板、行仍不可点（K22 照旧）；市场页签反之 | L3 · `test/market-view.test.mjs` |
@@ -122,8 +122,15 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | **K59** | 六组色板不随主题走 | `src/client/avatar.js` 与 `styles.js` 源码 | 色板六组是字面量（`rgba()` / `#RRGGBB`），不含 `--dsw-*`、`var()`、`currentColor`、`prefers-color-scheme`，也不读 DOM/计算样式；样式侧只通过 `--skc-avatar-bg` / `--skc-avatar-ink` 两个自定义属性接住，`.skc_cardIcon` 没有深色覆盖、也不自己定义这两个属性；`avatarOf` 传不传主题参数结果相同 | L1 + 门禁 · `test/avatar.test.mjs` |
 | **K60** | ClawHub 上传图标代理（第 12 条 exact） | 假代理 + 假字节客户端 + 路由层 | hash 白名单（非 64 位小写 hex ⇒ `400 E_BAD_QUERY` 信封）；命中 → `200` + 按上游 `image/svg+xml`／`image/png` + `cache-control: public, max-age=3600` + `x-content-type-options: nosniff` + `content-security-policy: default-src 'none'`（**断言不透传上游的 `sandbox`**）+ `content-length` 一致 + **不走信封**；不存在/上游失败 → **裸 404 空 body + `no-store`**；只放行 svg/png（`text/html` 等一律当没有）；5s、256 KiB、1h 命中 / 60s 未命中缓存、`?refresh=1` 清；只认 GET 与 loopback | L1 + L2 · `test/market-clawhub-icon.test.mjs` + `test/market-routes.test.mjs` |
 | **K61** | 客户端渐进补齐（先字母后换图） | `market-model.js` 纯函数 + 真 store | 取值优先级 `item.iconUrl` → `market.icons[id]` → null（空串按「无」）；`iconCandidates` 只挑「ClawHub + 没图标 + 没问过 + owner/slug 齐全」，默认 ≤24、顺序随列表；`marketIconsReady` 只把非空值写进 `icons` 但**每个 id 都记 `iconsTried`（null 也记）**；`marketIconsAttempted` 整批失败只记 tried、`icons`／分页态／列表态一动不动；`marketReload` 清空 `icons`+`iconsTried`，而切来源/搜索/追加页保留已拿到的图标；空 batch 不改状态对象 | L1 · `test/market-icons-client.test.mjs` |
+| **K75** | 收藏 store（`lib/market/favorites.js`） | 临时 `DSH_HOME` + 直接调 `createFavoritesStore` | 幂等：`favorited` 与现状一致 ⇒ 文件字节与 mtime 都不变、回包是当前列表；上限 500：第 501 条 ⇒ `E_FAVORITE_FULL`（409），取消永远允许（500 条时删一条成功）；损坏降级：`{` / `[]` / `{"favorites":3}` / 超长条目 ⇒ 空集 + `readable:false` 且**不抛**；原子写：写入失败时旧文件字节不变、目录里没有 `.favorites.*.tmp` 残留；串行化：并发两次 `toggle` 两条都在、不丢；读侧逐条丢坏条目（非字符串 / 空 / 重复 / 非三元组），同一批里好的照样留下 | L2 · `test/market-favorites.test.mjs` |
+| **K76** | `POST market/favorite`（第 13 条 exact 路由） | 已挂载的 13 条路由 + 临时 `DSH_HOME` | 只认 POST（错方法 405 `E_METHOD`）；非 loopback ⇒ 403 `E_FORBIDDEN` 且**零 store 调用**；body 非对象 / `favorited` 非布尔 ⇒ 400 `E_BAD_REQUEST`；`owner:'../x'` 或未注册源 ⇒ 400 `E_BAD_QUERY`；成功出参恰好 `{favorites, favorited}` 且列表最新在前；重复收藏不写盘；满 500 ⇒ 409 `E_FAVORITE_FULL`；写盘失败 ⇒ 500 `E_FAVORITE_IO` 且失败信封不带 `data`；body 里额外塞 `id` / `path` 不生效（键由 Host 重拼） | L2 · `test/market-routes.test.mjs` |
+| **K77** | `bootstrap` 的 `favorites` / `favoritesOk` | 同上 + 三种收藏文件（正常 / 损坏 / 缺失） | `bootstrap` 恰好**八**键；三种文件：正常 ⇒ 列表透传（最新在前）+ `favoritesOk:true`；损坏 ⇒ `[]` + `favoritesOk:false` 且**仍是 200**（市场页不失败）；**缺失（全新安装）⇒ `[]` + `favoritesOk:true`**（缺失 ≠ 损坏，首启不误报）；`?refresh=1` 不清收藏（刷新只清缓存） | L2 · `test/market-routes.test.mjs` |
+| **K78** | `saves` / `score` 的两源取数与缺值口径 | 两源原始条目的四种形状 | SkillHub 的 `raw.stars`/`raw.score` 与 `stats.stars`/`stats.score` 两个取数位都生效；ClawHub 的五条映射（列表 / 搜索 / 详情）恒 `null`；非有限数 ⇒ `null`；上游真给 `0` ⇒ `0`（不是缺值）；`score` **不截断**（`95757.41562195931` 原样）；`rating` **不在** payload 里（Host 只给原料） | L1 · `test/market-normalize.test.mjs` |
+| **K79** | 卡片结构与三段刻度 | 纯函数 + 渲染两半 | 纯函数：`statSegments` 恒三元素、`present` 由 `Number.isFinite` 决定、`ratingOf` 的 `score=0 ⇒ null` / `100000 ⇒ 5.0` / `95757.4 ⇒ 5.0` / `55385 ⇒ 4.6`、`ratingTextOf` 恒一位小数且不依赖 locale、`authorTextOf` 三级回落（`owner/slug` → `owner` → `author`）、`metaSegments` 只剩作者与版本。渲染：来源是 `<img class="skc_marketSourceMark" alt="" title="SkillHub">`（不再有文字 Tag）、作者行 `@ake/dev-god · v1.0.0`、三段 `role="img"` 的 `aria-label` 分别是「下载 12」「收藏 99」「评分 5.0」、收藏按钮 `aria-pressed` 随 store、卡片里**三个**按钮（详情 / 收藏 / 安装）；ClawHub 卡只有一格有数字、另两格是空 `span`（无文本、`aria-hidden`）；三格全缺时整行不渲染；`skc_cardIcon` 仍在 | L1 + L3 · `test/market-model.test.mjs` + `test/market-view.test.mjs` |
+| **K80** | 收藏的乐观翻转与代次防乱序 | `createStore()` | `marketFavoriteToggle` 立刻翻转 `favorites[id]` 并返回递增代次；旧代次的 `Ok` / `Fail` **不改状态**；最新代次的 `Fail` 只回滚**该 id** 并推 `notice{kind:'favorite-failed', reason, seq}`；`Ok` 用权威列表整份替换；`marketReload` **不清** `favorites`；`marketBootFallback` 不清收藏、也不把 `favoritesOk` 置 true | L1 · `test/state.test.mjs` |
+| **K81** | 点击层级门禁（两个动作位、没有第三个） | `src/client/**` 源码 + 样式表 | `.skc_marketCardOpen::after` 仍有 `inset: 0`、`.skc_marketCardEnd` 仍有 `z-index: 1`、**`.skc_marketFavorite` 有 `z-index: 2`**，三者共存；卡片里没有 `<a>`、没有第三个 `<button>`、`<li>` 上没有 `onClick` / `role="button"` / `tabindex`；三段数字那一行**不带** `z-index`（点数字 = 进详情） | 门禁 · `test/market-gates.test.mjs` |
 
-**红绿口径**（Round 9 终态）：K28–K49 与 K52–K74 全部绿（`node --test test/` 573/573）；K50 / K51 不进 `npm test`（要像素级命中、滚动容器与真实上游），由 agent 驱动无头浏览器在隔离 `DSH_HOME` 上验，最近一次为 Round 7（已安装图标与市场同步轮）复验：K50/K51 20 步 + R7 真机七条 13 步 + 11 步全通过。证据与截图见 `.agents/work/scratch/test-report-market-installed-icons.md`。
+**红绿口径**（Round 10 终态，市场卡片重做轮）：K28–K49 与 K52–**K81** 全部绿（`node --test test/` 共 658 例，K 系列零红；K75–K81 的落点见上表末七行）；K50 / K51 不进 `npm test`（要像素级命中、滚动容器与真实上游），由 agent 驱动无头浏览器在隔离 `DSH_HOME` 上验，最近一次为 Round 7（已安装图标与市场同步轮）复验：K50/K51 20 步 + R7 真机七条 13 步 + 11 步全通过。证据与截图见 `.agents/work/scratch/test-report-market-installed-icons.md`。
 
 ---
 
@@ -160,3 +167,6 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 5. 打开任意会话 → 主区回到会话正文；回到「技能」→ 页签保持。
 6. 改完 frontmatter 后模型目录热刷新（`skill-filesystem` 的 `watch`）：停用一个技能后，下一轮会话的可用技能列表减少。
 7. `prefers-reduced-motion: reduce` 下骨架不呼吸、页签指示块无位移过渡。
+8. 市场卡片：深浅两主题下两枚来源图形的可见性与 16px 辨识度；同一屏任意两张卡，`.skc_marketStat` 的 `getBoundingClientRect().left` 逐格相等（280px 窄屏一列与 960px 三列各量一次）。
+
+**K75–K81 的红绿**：全部进 `npm test`（K75–K80 为 L1/L2/L3 自动化，K81 为门禁），没有一条靠真机抽查；真机口径见上面第 8 条。

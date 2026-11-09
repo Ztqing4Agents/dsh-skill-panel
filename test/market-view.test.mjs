@@ -98,7 +98,11 @@ const LETTER = (title) => title.trim().charAt(0).toUpperCase();
 
 /**
  * One market item.
- * @param {{id?: string, sourceId?: string, version?: string|null, downloads?: number|null}} [options] - overrides.
+ *
+ * The figures follow the real sources: SkillHub reports stars and a popularity score,
+ * ClawHub reports neither (so its `saves`/`score` are null, as the normalizer emits them).
+ * @param {{id?: string, sourceId?: string, version?: string|null, downloads?: number|null,
+ *   saves?: number|null, score?: number|null, author?: string|null}} [options] - overrides.
  * @returns {object} the item.
  */
 function item(options = {}) {
@@ -111,9 +115,11 @@ function item(options = {}) {
     slug: id.split(':').at(-1),
     displayName: 'Dev God',
     summary: 'A fixture skill for the market tab.',
-    author: 'Ake',
+    author: options.author === undefined ? 'Ake' : options.author,
     version: options.version === undefined ? '1.0.0' : options.version,
     downloads: options.downloads === undefined ? 12 : options.downloads,
+    saves: options.saves === undefined ? (sourceId === 'skillhub' ? 99 : null) : options.saves,
+    score: options.score === undefined ? (sourceId === 'skillhub' ? 55385 : null) : options.score,
     updatedAt: null,
     category: 'dev-tools',
     packageKind: sourceId === 'clawhub' ? 'zip' : 'files',
@@ -184,7 +190,7 @@ test('K38 首屏骨架：分类 chip 占位 + 6 张卡骨架，带 status 播报
   assert.equal(html.includes('data-skc-market-id'), false, '骨架里没有真卡片');
 });
 
-test('K38 卡片：头像 + 标题按钮 + 来源 Tag + 描述 + 元信息 + 安装按钮', () => {
+test('K38 卡片：头像 + 标题 + 来源图形 + 收藏按钮，作者行 / 描述 / 三段 / 安装', () => {
   const html = renderMarket((store) => {
     store.actions.marketBootReady({
       sources: [{ id: 'skillhub', labelKey: 'market.source.skillhub', hasCategories: true, packageKind: 'files' }],
@@ -201,12 +207,24 @@ test('K38 卡片：头像 + 标题按钮 + 来源 Tag + 描述 + 元信息 + 安
   assert.ok(html.includes('skc_cardIcon'), '头像复用已安装页签的 48px 容器');
   assert.ok(html.includes('skc_marketCardOpen'), '标题按钮是整卡点击的锚点');
   assert.ok(html.includes('aria-label="查看 Dev God 详情"'), '标题按钮有可读名（来自 market.cardOpen）');
-  assert.ok(html.includes('data-tone="outline"'), '来源用 Tag 显示');
-  assert.ok(html.includes('SkillHub'), '来源名来自字典');
+  // The badge seat now holds the source's own brand image, not a text Tag.
+  assert.equal(html.includes('data-tone'), false, '不再有文字来源 Tag（徽章位改成品牌图）');
+  const mark = /<img class="skc_marketSourceMark"[^>]*>/.exec(html);
+  assert.ok(mark !== null, '标题行里有来源图形');
+  assert.ok(mark[0].includes('src="data:image/png;base64,'), '图形是内联位图（零请求）');
+  assert.ok(mark[0].includes('alt=""'), '图形是装饰（读屏不重复播报来源）');
+  assert.ok(mark[0].includes('title="SkillHub"'), '悬停可查来源名（来自字典）');
+  assert.ok(mark[0].includes('referrerPolicy="no-referrer"'), '与既有 <img> 同口径');
+  assert.ok(html.includes('@ake/dev-god'), '作者行是 @owner/slug（market.metaAuthor）');
+  assert.ok(html.includes('· v1.0.0'), '作者行第二段是版本（market.metaVersion）');
   assert.ok(html.includes('A fixture skill for the market tab.'), '描述上屏');
-  assert.ok(html.includes('@Ake'), '元信息第一段是作者（文案来自 market.metaAuthor）');
-  assert.ok(html.includes('v1.0.0'), '元信息第二段是版本（market.metaVersion）');
-  assert.ok(html.includes('下载 12'), '元信息第三段是下载数（market.metaDownloads）');
+  assert.ok(html.includes('aria-label="下载 12"'), '第一段是下载数');
+  assert.ok(html.includes('aria-label="收藏 99"'), '第二段是上游收藏数（stars，不是本地书签）');
+  assert.ok(html.includes('aria-label="评分 4.6"'), '第三段是折算后的评分');
+  assert.ok(html.includes('>4.6<'), '评分按一位小数显示（5.0 也是 5.0）');
+  assert.ok(html.includes('aria-pressed="false"'), '未收藏时按钮的 aria-pressed 是 false');
+  assert.ok(html.includes('aria-label="收藏 Dev God"'), '收藏按钮的可读名带技能名');
+  assert.ok(html.includes('title="收藏"'), '悬停文案是短句');
   assert.ok(html.includes('>安装<'), '右侧是「安装」按钮');
 });
 
@@ -224,7 +242,13 @@ test('K38 卡片可点只用一个手段：没有 <a>、卡片本身不是按钮
   assert.equal(cardTag[0].includes('role="button"'), false, '卡片本身不是按钮（可点性来自 ::after 层）');
   assert.equal(cardTag[0].includes('tabindex'), false, '卡片本身不可聚焦');
   assert.equal(matches(grid, /class="skc_marketCardOpen"/g).length, 1, '整卡点击只有一个锚点');
-  assert.equal(matches(grid, /<button/g).length, 2, '卡片里只有两个按钮：详情锚点 + 安装（键盘可达各一处）');
+  assert.equal(
+    matches(grid, /<button/g).length,
+    3,
+    '卡片里恰好三个按钮：详情锚点 + 收藏 + 安装（键盘 Tab 顺序即 DOM 顺序）',
+  );
+  assert.equal(matches(grid, /class="skc_marketFavorite/g).length, 1, '收藏是第二个动作位');
+  assert.ok(grid.includes('skc_marketFavorite skc_') === false, '未收藏时不多带一个空类名');
   assert.ok(grid.includes('skc_marketCardEnd'), '动作位独立成格（z-index:1 让它浮在点击层上）');
 });
 
@@ -874,6 +898,121 @@ test('K52 三态在卡片/详情/确认弹窗里都走同一个组件（同一�
     });
   });
   assert.equal(plainHtml.includes('skc_marketIconImg'), false, 'ClawHub 的卡片不出现可见图');
-  assert.equal(plainHtml.includes('<img'), false, '连探测图都没有（没有 URL 就没有探测）');
+  const plainTile = plainHtml.slice(plainHtml.indexOf('skc_cardIcon'), plainHtml.indexOf('skc_marketCardOpen'));
+  assert.equal(plainTile.includes('<img'), false, '瓦片里连探测图都没有（没有 URL 就没有探测）');
+  assert.equal(
+    matches(plainHtml, /class="skc_marketSourceMark"/g).length,
+    1,
+    '卡内唯一的 <img> 是来源图形（它不是头像位的图）',
+  );
   assert.match(plainHtml, /class="skc_cardIcon(?: skc_undefined)?"/, '仍然是同一个盒子画字母');
+});
+
+test('K79 缺段：槽位仍在、内容不出现（不显示 0，读屏也读不到）', () => {
+  const clawItem = item({ sourceId: 'clawhub', id: 'clawhub:ivangdavila:design', version: null, downloads: 12 });
+  const html = renderMarket((store) => {
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'clawhub', page: { items: [clawItem], next: null } }],
+      merged: [clawItem],
+    });
+  });
+  assert.ok(html.includes('class="skc_marketStats"'), '底行三段仍在（轨道恒在）');
+  assert.equal(matches(html, /class="skc_marketStat"/g).length, 3, '仍然恰好三格：缺的那两格是空格，不是不存在');
+  assert.ok(html.includes('aria-label="下载 12"'), '有值的那格照常有可读名');
+  assert.equal(matches(html, /role="img"/g).length, 1, '只有一格是 role=img（其余两格不是内容）');
+  assert.equal(matches(html, /aria-hidden="true"/g).length >= 2, true, '空格对读屏是隐藏的');
+  assert.equal(matches(html, /class="skc_marketStatValue"/g).length, 1, '只有一个数值节点（空格里没有数字、没有 0）');
+  assert.equal(html.includes('收藏 0'), false, '缺收藏数时不写 0');
+  assert.equal(html.includes('评分'), false, '缺评分时整段不出现（连文案都不渲染）');
+});
+
+test('K79 三格全缺时整行不渲染（ClawHub 列表条目可能连下载数都没有）', () => {
+  const bare = item({
+    sourceId: 'clawhub',
+    id: 'clawhub:ivangdavila:design',
+    version: null,
+    downloads: null,
+  });
+  const html = renderMarket((store) => {
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'clawhub', page: { items: [bare], next: null } }],
+      merged: [bare],
+    });
+  });
+  assert.equal(html.includes('skc_marketStats'), false, '全缺 ⇒ 整行不渲染（不留三格空白）');
+  assert.ok(html.includes('skc_cardIcon'), '卡片其余部分照常');
+  assert.ok(html.includes('skc_marketCardOpen'), '标题与点击层照常');
+});
+
+test('K79 已收藏：aria-pressed 表达状态，文案与类名跟着换', () => {
+  const html = renderMarket((store) => {
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'skillhub', page: { items: [item()], next: null } }],
+      merged: [item()],
+    });
+    store.actions.marketFavoritesLoaded(['skillhub:ake:dev-god'], true);
+  });
+  assert.ok(html.includes('aria-pressed="true"'), '已收藏时 aria-pressed 是 true');
+  assert.ok(html.includes('aria-label="取消收藏 Dev God"'), '可读名说的是「点了会发生什么」');
+  assert.ok(html.includes('title="已收藏，点击取消"'), '悬停文案也换了');
+  assert.ok(html.includes('skc_marketFavoriteOn'), '实心书签靠 -On 类着色（唯一的颜色来源是令牌）');
+  assert.ok(html.includes('fill="currentColor"'), '已收藏的图形是实心（同一个 path 只换 fill）');
+  assert.ok(html.includes('aria-label="收藏 99"'), '上游收藏数不受本地书签影响（两条不同源的数字）');
+});
+
+test('K79 作者行两级：没有 owner/slug 时回落 publisher 名，两段都没有就整行不渲染', () => {
+  const publisherOnly = item({ author: 'Ake Studio' });
+  publisherOnly.owner = null;
+  publisherOnly.slug = null;
+  const html = renderMarket((store) => {
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'skillhub', page: { items: [publisherOnly], next: null } }],
+      merged: [publisherOnly],
+    });
+  });
+  assert.ok(html.includes('@Ake Studio'), '回落 publisher 名（@ 前缀来自字典）');
+
+  const nothing = item({ author: null, version: null });
+  nothing.owner = null;
+  nothing.slug = null;
+  const bareHtml = renderMarket((store) => {
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'skillhub', page: { items: [nothing], next: null } }],
+      merged: [nothing],
+    });
+  });
+  assert.equal(bareHtml.includes('skc_marketMeta'), false, '两段都缺时作者行整行不渲染');
+});
+
+test('K79 没有品牌图的来源：不画 <img>、也不留空盒，标题行其余部分照常', () => {
+  // A third source added later has no entry in SOURCE_MARKS. The seat must simply not
+  // be drawn (no broken image, no empty box that shifts the title), and the two action
+  // seats plus the click anchor must be unaffected.
+  const future = item({ sourceId: 'future', id: 'future:ake:dev-god' });
+  const html = renderMarket((store) => {
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'future', page: { items: [future], next: null } }],
+      merged: [future],
+    });
+  });
+  assert.equal(matches(html, /class="skc_marketSourceMark"/g).length, 0, '没有品牌图就不渲染图形位');
+  assert.equal(html.includes('<img'), false, '也不留下一个坏图或空 <img>');
+  assert.ok(html.includes('skc_marketCardOpen'), '标题锚点照常（整卡仍可点）');
+  assert.ok(html.includes('aria-pressed="false"'), '收藏按钮照常（第二个动作位不依赖来源图）');
+  assert.ok(html.includes('aria-label="下载 12"'), '三段数字照常');
+});
+
+test('K79 上游真给 0 就显示 0：缺值与 0 是两件事', () => {
+  const zeros = item({ downloads: 0, saves: 0, score: 0 });
+  const html = renderMarket((store) => {
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'skillhub', page: { items: [zeros], next: null } }],
+      merged: [zeros],
+    });
+  });
+  assert.ok(html.includes('aria-label="下载 0"'), '下载数 0 是有值的（显示 0，不是缺段）');
+  assert.ok(html.includes('aria-label="收藏 0"'), '收藏数 0 同理');
+  assert.equal(matches(html, /class="skc_marketStatValue"/g).length, 2, '两个数字节点：0 各自都在');
+  assert.equal(html.includes('评分'), false, 'score 0 折算不出评分（4.0 是缺值伪装），整段不出现');
+  assert.equal(matches(html, /class="skc_marketStat"/g).length, 3, '轨道仍然是三格（缺的那格留空）');
 });

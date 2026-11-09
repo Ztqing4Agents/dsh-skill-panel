@@ -17,7 +17,9 @@ import {
   MARKET_FALLBACK_SOURCES,
   MARKET_PAGE_SIZE,
   MARKET_SORTS,
+  MARKET_STAT_SLOTS,
   MARKET_DEFAULT_SOURCE,
+  authorTextOf,
   chipList,
   countText,
   detailFacts,
@@ -28,9 +30,12 @@ import {
   metaSegments,
   pagedSources,
   queriedSources,
+  ratingOf,
+  ratingTextOf,
   reasonKeyOf,
   sourceDescriptors,
   sourceLabelOf,
+  statSegments,
   visibleCategories,
 } from '../src/client/market-model.js';
 import { createStore } from '../src/client/state.js';
@@ -299,29 +304,96 @@ test('K37 emptyKindOf：只有 ready 且真的空才判空态，且区分为搜�
   assert.equal(emptyKindOf({ ...base, keyword: '  ' }), 'source', '纯空白的关键词不算搜索');
 });
 
-test('K37 metaSegments：缺一项就少一段，下载数绝不补 0', () => {
+test('K37 metaSegments：作者行只剩 handle 与版本，缺一项就少一段', () => {
   assert.deepEqual(
-    metaSegments({ author: 'Ake', version: '1.0.0', downloads: 12 }).map((segment) => segment.key),
-    ['market.metaAuthor', 'market.metaVersion', 'market.metaDownloads'],
-    '三项齐全时按作者 / 版本 / 下载数排列',
+    metaSegments({ owner: 'ake', slug: 'dev-god', author: 'Ake', version: '1.0.0', downloads: 12 })
+      .map((segment) => [segment.key, segment.value]),
+    [['market.metaAuthor', 'ake/dev-god'], ['market.metaVersion', '1.0.0']],
+    '作者行 = @owner/slug + 版本；下载数搬去 statSegments（不在这一行了）',
   );
   assert.deepEqual(
-    metaSegments({ author: 'Ake', version: null, downloads: null }).map((segment) => segment.key),
+    metaSegments({ owner: 'ake', slug: 'dev-god', version: null }).map((segment) => segment.key),
     ['market.metaAuthor'],
-    '缺版本与下载数时只剩作者（不渲染 "0 次下载"）',
+    '缺版本时只剩作者段',
   );
   assert.deepEqual(metaSegments({}), [], '什么都没有时整行不渲染');
   assert.deepEqual(metaSegments(null), [], '非对象也不抛');
   assert.deepEqual(
-    metaSegments({ downloads: 0 }).map((segment) => [segment.key, segment.value]),
-    [['market.metaDownloads', '0']],
-    '上游真给了 0 才显示 0',
+    metaSegments({ downloads: 0 }).map((segment) => segment.key),
+    [],
+    '只有下载数不再是「有一段」：数字不在作者行（不会渲染成 @0 之类的假作者）',
   );
   assert.deepEqual(
-    metaSegments({ downloads: 42 }).map((segment) => segment.param),
-    ['count'],
-    '下载数的插值名是 count（与 locale 占位符一致）',
+    metaSegments({ author: 'Ake Studio', version: '2.0.0' }).map((segment) => segment.value),
+    ['Ake Studio', '2.0.0'],
+    '两段分别是 author / version（插值名与 locale 占位符一致）',
   );
+  assert.deepEqual(
+    metaSegments({ author: 'Ake Studio', version: '2.0.0' }).map((segment) => segment.param),
+    ['author', 'version'],
+    '插值名逐个对齐字典里的占位符',
+  );
+});
+
+test('K79 authorTextOf 三级回落：@owner/slug → @owner → author → null', () => {
+  assert.equal(authorTextOf({ owner: 'ake', slug: 'dev-god', author: 'Ake Studio' }), 'ake/dev-god', '两段齐全时用 handle 路径');
+  assert.equal(authorTextOf({ owner: 'ake', slug: null, author: 'Ake Studio' }), 'ake', '缺 slug 时只剩 owner');
+  assert.equal(authorTextOf({ owner: '', slug: '', author: 'Ake Studio' }), 'Ake Studio', '两段都缺时回落 publisher 名');
+  assert.equal(authorTextOf({ owner: '', slug: '', author: '' }), null, '什么都没有 ⇒ null（整段不渲染）');
+  assert.equal(authorTextOf({}), null, '非对象字段也给出 null');
+  assert.equal(authorTextOf(null), null, 'null 不抛');
+});
+
+test('K79 statSegments：三格恒在，present 只由数值是否有限决定', () => {
+  assert.deepEqual([...MARKET_STAT_SLOTS], ['downloads', 'saves', 'rating'], '槽位顺序写死：下载 / 收藏 / 评分');
+
+  const full = statSegments({ downloads: 12, saves: 99, score: 100000 });
+  assert.deepEqual(full.map((slot) => slot.slot), ['downloads', 'saves', 'rating'], '恒三元素，顺序不变');
+  assert.deepEqual(full.map((slot) => slot.present), [true, true, true], '三项齐全时三格都有内容');
+  assert.deepEqual(full.map((slot) => slot.value), ['12', '99', '5.0'], '计数走 compact、评分恒一位小数');
+
+  const bare = statSegments({});
+  assert.deepEqual(bare.map((slot) => slot.present), [false, false, false], '什么都没有时三格都 absent（页面据此整行不渲染）');
+  assert.deepEqual(bare.map((slot) => slot.value), [null, null, null], 'absent 的格没有值（不是 0、不是破折号）');
+
+  const partial = statSegments({ downloads: 0, saves: null, score: null });
+  assert.deepEqual(partial.map((slot) => slot.present), [true, false, false], '上游真给 0 的下载是 present');
+  assert.equal(partial[0].value, '0', '真 0 显示 0');
+  assert.equal(partial[0].labelKey, 'market.metaDownloads', '每格自带文案键');
+  assert.equal(partial[1].labelKey, 'market.metaSaves', '收藏格用 market.metaSaves');
+  assert.equal(partial[2].labelKey, 'market.metaRating', '评分格用 market.metaRating');
+  assert.deepEqual(partial.map((slot) => slot.param), ['count', 'count', 'rating'], '插值名与字典占位符一致');
+});
+
+test('K79 ratingOf：score 折到 4.0–5.0，score<=0 与缺值都是 null', () => {
+  assert.equal(ratingOf({ score: 100000 }), 5.0, '满分 ⇒ 5.0');
+  assert.equal(ratingOf({ score: 95757.41562195931 }), 5.0, '实测高分四舍五入到 5.0');
+  assert.equal(ratingOf({ score: 55385 }), 4.6, '实测中段 ⇒ 4.6');
+  assert.equal(ratingOf({ score: 1 }), 4.0, '极小正分 ⇒ 4.0');
+  assert.equal(ratingOf({ score: 500000 }), 5.0, '超过满分也夹到 5.0（min(1, …)）');
+  assert.equal(ratingOf({ score: 0 }), null, '0 分 ⇒ null：4.0 是缺值伪装成的分数，绝不显示');
+  assert.equal(ratingOf({ score: -5 }), null, '负分同理');
+  assert.equal(ratingOf({ score: null }), null, '缺值 ⇒ null');
+  assert.equal(ratingOf({}), null, '没有 score ⇒ null');
+  assert.equal(ratingOf(null), null, 'null 不抛');
+});
+
+test('K79 ratingTextOf：恒一位小数、恒用点，不依赖 locale', () => {
+  assert.equal(ratingTextOf(5), '5.0', '整数也要一位小数');
+  assert.equal(ratingTextOf(4.6), '4.6', '小数照写');
+  assert.equal(ratingTextOf(4.66), '4.7', 'toFixed 按一位小数四舍五入');
+  assert.equal(ratingTextOf(null), null, '没有评分 ⇒ null（不写 0.0）');
+  assert.equal(ratingTextOf(NaN), null, '非有限数 ⇒ null');
+  // The one property that matters in a fixed-width slot: the separator never becomes a comma.
+  assert.equal(ratingTextOf(4.6).includes(','), false, '分隔符恒为点（Intl 在 de/fr 会给出 4,6）');
+  const previous = process.env.LANG;
+  process.env.LANG = 'de_DE.UTF-8';
+  try {
+    assert.equal(ratingTextOf(4.6), '4.6', '改环境语言也不影响（toFixed 与 locale 无关）');
+    assert.equal(statSegments({ score: 55385 })[2].value, '4.6', '整条链路都不走 locale');
+  } finally {
+    process.env.LANG = previous;
+  }
 });
 
 test('K37 visibleCategories：选 ClawHub 时整行隐藏，bootstrap 失败时给说明，空表静默隐藏', () => {

@@ -320,6 +320,7 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
   "author": "阿客实验室",             // 上游；三级回落，全缺 null
   "version": "1.2.4",                // 上游；**缺失如实 null**（ClawHub 搜索结果必为 null）
   "downloads": 11340092,             // 上游；缺失 null（**绝不补 0**）
+  "saves": 99, "score": 100000,      // 上游 stars / score；缺失 null（**绝不补 0**）；ClawHub 恒 null
   "updatedAt": 1794205858796,        // 上游；epoch 毫秒，只用于排序，**不上屏**
   "category": "dev-programming",     // 上游；仅 SkillHub 有，ClawHub 恒 null
   "packageKind": "files"             // 本地算：'files' | 'zip'
@@ -344,7 +345,7 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
 
 「缺 = null」不变式（逐条可断言）：
 
-1. 每个字段都存在，不出现 `undefined`；上游没给的一律 `null`，`downloads` 不补 `0`、`version` 不补 `'latest'`、`category` 不补 `''`。
+1. 每个字段都存在，不出现 `undefined`；上游没给的一律 `null`，`downloads`、`saves`、`score` 不补 `0`、`version` 不补 `'latest'`、`category` 不补 `''`。
 2. `id` 全仓库唯一；同一 `id` 出现两次时保留第一次出现的那条（浏览器侧 `mergeBatches` 负责）。
 3. `installTo` 在 `nameValid === false` 时等于 `skillsRoot` 本身（不吃掉最后一级目录名），界面据此显示「不能安装」。
 4. `overview` 不含 frontmatter 分隔行与 `name:`/`description:` 头字段。
@@ -355,8 +356,7 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
 
 ```js
 // lib/market/normalize.js —— 无 I/O、无时钟
-textOrNull(value): string|null / numberOrNull(value): number|null   // 空串、非有限数 → null
-timestampOrNull(value): number|null        // epoch 毫秒或 ISO 串 → 毫秒；不可解析 → null
+textOrNull(value): string|null / numberOrNull(value): number|null / finiteOrNull(value): number|null / timestampOrNull(value): number|null   // 空串与不可解析 → null；numberOrNull 取整、finiteOrNull 不截断（score 是连续分）
 clampLine(value, max) / clampBlock(value, max): string   // 单行折叠 / 保留换行，超长截断
 marketId(sourceId, owner, slug): string    // `${sourceId}:${owner ?? ''}:${slug ?? ''}`
 marketItem(fields): MarketItem              // 字段补齐（上表）
@@ -380,6 +380,7 @@ slugFromUrl(value): string|null             // URL 最后一段（ClawHub 搜索
 ```js
 // src/client/market-model.js —— 合并只在这里发生，纯函数、node 可直测
 marketKeyOf(item): string   // item.id，缺则 `${sourceId}:${owner}:${slug}`
+metaSegments(item) / authorTextOf(item) / statSegments(item) / ratingOf(item) / ratingTextOf(rating)   // 作者行的段（@owner/slug + 版本）／handle 三级回落／三格数字槽／score 折 4.0–5.0／一位小数字符串
 mergeBatches(pages: {sourceId: string, items: MarketItem[]}[], options?: {existing?: MarketItem[]}): MarketItem[]
 ```
 

@@ -1,9 +1,9 @@
 /**
  * L3 — `src/client/toast.jsx`: the refresh-failure toast that outlives the page.
  *
- * Contract: docs/contracts/client.md §3.5 (`shell.overlay` seat, P0-12) and §3.9.3
- * (`marketInstallOk` 推 `notice{kind:'install-ok'}`, 由本组件按 `kind` 选文案);
- * case id K46.
+ * Contract: docs/contracts/client.md §3.5 (`shell.overlay` seat, P0-12), §3.9.3
+ * (`marketInstallOk` 推 `notice{kind:'install-ok'}`、`marketFavoriteFail` 推
+ * `notice{kind:'favorite-failed', reason, seq}`，由本组件按 `kind` 选文案); case id K46.
  */
 import assert from 'node:assert/strict';
 import test, { before } from 'node:test';
@@ -89,4 +89,34 @@ test('K46 安装提示可以被 dismissNotice 关掉，且只关当前那一条'
   assert.notEqual(store.getSnapshot().notice, null, '序号不匹配时不关');
   store.actions.dismissNotice(notice.seq);
   assert.equal(store.getSnapshot().notice, null, '序号匹配时关掉');
+});
+
+test('K46 收藏写失败：复用同一个浮层座位，正文是那句本地化原因', () => {
+  const store = createStore();
+  const gen = store.actions.marketFavoriteToggle('skillhub:ake:dev-god');
+  store.actions.marketFavoriteFail(gen, '收藏数量已达上限，请先取消一些');
+  const html = renderToStaticMarkup(createElement(modules.toast.ToastHost, { store, t }));
+  assert.ok(html.includes('role="alert"'), '提示是 alert 角色');
+  assert.ok(html.includes('收藏数量已达上限，请先取消一些'), '正文是失败原因（不是键名、不是英文 message）');
+  assert.equal(html.includes('新会话生效'), false, '不夹安装文案');
+  assert.equal(html.includes('刷新失败'), false, '不夹刷新文案');
+});
+
+test('K46 三种 notice 按 kind 分流，dismissNotice 仍只关当前那一条', () => {
+  const store = createStore();
+  store.actions.marketInstallOk('skillhub:ake:a', { name: 'a', path: '/skills/a' });
+  const installSeq = store.getSnapshot().notice.seq;
+
+  const gen = store.actions.marketFavoriteToggle('skillhub:ake:b');
+  store.actions.marketFavoriteFail(gen, '写入收藏失败：EACCES');
+  const favoriteSeq = store.getSnapshot().notice.seq;
+  assert.notEqual(favoriteSeq, installSeq, '第二条提示有自己的序号');
+  const html = renderToStaticMarkup(createElement(modules.toast.ToastHost, { store, t }));
+  assert.ok(html.includes('写入收藏失败：EACCES'), '屏幕上是最后那条');
+  assert.equal(html.includes('已安装 a'), false, '前一条不叠加');
+
+  store.actions.dismissNotice(installSeq);
+  assert.notEqual(store.getSnapshot().notice, null, '关旧序号关不掉当前那条');
+  store.actions.dismissNotice(favoriteSeq);
+  assert.equal(store.getSnapshot().notice, null, '关当前序号才生效');
 });

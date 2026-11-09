@@ -12,7 +12,7 @@
 
 ## 3.3 Host 路由清单
 
-十二条 **exact** 路由（`kind:'exact'`，`ctx.webServer.register(route)` 返回 disposer；重复注册同路径会抛错，见 `EX/dsh-host-webserver/README.md`「Registering routes」）。本地面 4 条（下表 #1–#4），市场面 8 条见 §3.7。
+十三条 **exact** 路由（`kind:'exact'`，`ctx.webServer.register(route)` 返回 disposer；重复注册同路径会抛错，见 `EX/dsh-host-webserver/README.md`「Registering routes」）。本地面 4 条（下表 #1–#4），市场面 9 条见 §3.7。
 
 统一信封（§8.1）：成功 `200 {code:'OK', data, message:''}`；失败 `4xx/5xx {code:'E_…', data:null, message}`。唯一例外是市场面的两个图片端点 `market/lucide`（#10）与 `market/clawhub-icon`（#12）：它们回图片字节，不回信封。
 
@@ -151,13 +151,13 @@ return concat(bom, block, body.subarray(block.end))   // 其余字节一个不�
 
 ## 3.7 市场路由清单
 
-市场面 8 条 **exact** 路由，前缀 `/api/dsh-skill-center/market/*`。它们与 #1–#4 **共用同一个 `guard()`**（loopback 围栏 → 方法），共用 `writeJson` 的 `{code,data,message}` 信封与 `no-store`，但**不共用 `collect()`**：本地扫描是磁盘面，市场是网络面，混在一起会让「市场超时」连累「已安装」页签。
+市场面 9 条 **exact** 路由，前缀 `/api/dsh-skill-center/market/*`。它们与 #1–#4 **共用同一个 `guard()`**（loopback 围栏 → 方法），共用 `writeJson` 的 `{code,data,message}` 信封与 `no-store`，但**不共用 `collect()`**：本地扫描是磁盘面，市场是网络面，混在一起会让「市场超时」连累「已安装」页签。
 
-#### 3.7.1 八条路由
+#### 3.7.1 九条路由
 
 | # | 方法 + 路径 | 入参 | 出参 `data` | 错误码（全量） |
 | --- | --- | --- | --- | --- |
-| 5 | `GET /api/dsh-skill-center/market/bootstrap` | 无（`?refresh=1` 绕过分类表与计数的缓存，仅调试） | `{sources:[{id,labelKey,hasCategories,packageKind}], categories:[{key,name,nameEn,count:number\|null}], categoriesOk:boolean, categoriesStale:boolean, total:number\|null, countsOk:boolean}` | `403 E_FORBIDDEN`、`405 E_METHOD`、`500 E_INTERNAL`。分类表失败**不报错**：`categoriesOk:false` + 空数组；计数失败**也不报错**：那一项 `count:null`、`countsOk:false`（`total:null`），两者都不影响列表；`categoriesStale:true` 表示缓存兜底 |
+| 5 | `GET /api/dsh-skill-center/market/bootstrap` | 无（`?refresh=1` 绕过分类表与计数的缓存，仅调试） | `{sources:[{id,labelKey,hasCategories,packageKind}], categories:[{key,name,nameEn,count:number\|null}], categoriesOk:boolean, categoriesStale:boolean, total:number\|null, countsOk:boolean, favorites:string[], favoritesOk:boolean}` | `403 E_FORBIDDEN`、`405 E_METHOD`、`500 E_INTERNAL`。分类表失败**不报错**：`categoriesOk:false` + 空数组；计数失败**也不报错**：那一项 `count:null`、`countsOk:false`（`total:null`），两者都不影响列表；`categoriesStale:true` 表示缓存兜底 |
 | 6 | `GET /api/dsh-skill-center/market/list` | `source`（必填，单个源）、`sort=recommended\|updated\|downloads`、`category`、`keyword`（≤ 64 字符）、`limit=1..24`（默认 12）、`cursor`（该源自己的不透明游标） | `{sourceId, sort, keyword, category, items:[MarketItem], next:string\|null, total:number\|null}` | `403`、`405`、`400 E_BAD_QUERY`、`502 E_SOURCE_BAD_RESPONSE`、`503 E_SOURCE_UNAVAILABLE`、`504 E_SOURCE_TIMEOUT`、`500 E_INTERNAL` |
 | 7 | `GET /api/dsh-skill-center/market/detail` | `source`（必填）、`owner`、`slug`（必填）、`version`（可选） | `MarketDetail`（§3.8.1） | 同 #6 |
 | 8 | `GET /api/dsh-skill-center/market/installed` | 无 | `{items:{[id]:{name,version,path,exists:boolean}}, readable:boolean}` | `403`、`405`、`500 E_INTERNAL` |
@@ -165,13 +165,14 @@ return concat(bom, block, body.subarray(block.end))   // 其余字节一个不�
 | 10 | `GET /api/dsh-skill-center/market/lucide?name=<kebab>` | `name` 白名单 `^[a-z0-9]+(?:-[a-z0-9]+){0,5}$` | **SVG 字节，不走信封**（见下） | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_QUERY`（`name` 缺/不合白名单）、`404`（无此图标或 CDN 不可用，空 body） |
 | 11 | `POST /api/dsh-skill-center/market/icons` | body `{items:[{source?, owner, slug}], source?}`：`items` ≤ **24**，每条 `source`/`owner`/`slug` 走 §3.7.3 的上游白名单；`source` 逐条给，顶层 `source` 只是**兼容默认值**（item 优先，详见 §3.7.5） | `{icons:{'<source>:<owner>:<slug>': iconUrl\|null}, names:{同键→上游标题\|null}}`——两图的**键集合与顺序逐键相同**，缺名也是「键在、值 `null`」 | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_REQUEST`（`items` 缺失/为空/超 24）、`400 E_BAD_QUERY`（标识符不合白名单，或 `source` 未注册）、`500 E_INTERNAL`。单条失败只让该项 `null`，**单源失败只让该源 `null`**，整体仍 `200` |
 | 12 | `GET /api/dsh-skill-center/market/clawhub-icon?hash=<64hex>` | `hash` 白名单 `^[a-f0-9]{64}$`；`?refresh=1` 清缓存 | **图片字节，不走信封**（见下） | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_QUERY`（hash 不合白名单）、`404`（上游无此图或不可用，空 body） |
+| 13 | `POST /api/dsh-skill-center/market/favorite` | `{source, owner, slug, favorited:boolean}`（`objectOnly`，≤ 64 KiB；**没有 id / path / version 生效位**） | `{favorites:string[], favorited:boolean}`（权威全量列表，最新在前；`favorited` 是实际生效的状态） | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_REQUEST`（body 非对象 / `favorited` 非布尔）、`400 E_BAD_QUERY`（身份不合白名单或源未注册）、`409 E_FAVORITE_FULL`、`500 E_FAVORITE_IO`、`500 E_INTERNAL` |
 
 **#10 与 #12 是本插件仅有的两个非信封路由**：`<img>` 读不了 `{code,data,message}`，所以它们直接回图片字节，并统一补 `X-Content-Type-Options: nosniff` 与 `Content-Security-Policy: default-src 'none'`（**不透传上游的 CSP**）；命不中或上游不可用一律 `404` 空 body（不回 HTML，也不回信封），让浏览器的 `onError` 把卡片退回首字母头像。
 
 - **#10 `market/lucide`**：上游是**钉版本**的 `https://cdn.jsdelivr.net/npm/lucide-static@1.70.0/icons/<name>.svg`（不用 `latest`：上游改名会让整类图标静默消失），5s / 32 KB / 必须 `image/svg+xml`，`max-age=604800`；进程内 1 小时缓存，未命中只记 60 秒。
 - **#12 `market/clawhub-icon`**：上游 `https://clawhub.ai/api/v1/skill-icons/<hash>` 的字节**原样转发**（`Content-Type` 按上游，实测 `image/svg+xml`，也放行 `image/png`），5s / 256 KB，`max-age=3600`；1 小时命中缓存 / 60 秒未命中缓存。这条存在的唯一理由是**上游那几个响应带 `content-security-policy: … sandbox`**，同样字节在页内当 `<img>` 一律 `onerror`（走 `blob:` 却能正常光栅化），只有本机重发一次才画得出来。
 
-body 上限沿用 `MAX_BODY_BYTES = 65536`：install 的请求体只有 4 个短字符串，64 KiB 是「有人乱发」的护栏，不是功能需要。
+body 上限沿用 `MAX_BODY_BYTES = 65536`：install 的请求体只有 4 个短字符串，64 KiB 是「有人乱发」的护栏，不是功能需要。#13 的 body 里**没有 id / path**：收藏键由 Host 用 `marketId(source, owner, slug)` 重拼（同 `normalize.js`、同 #9），所以一个请求无法指认不属于任何源的键，多余字段（如 `version`）一律忽略。
 
 install 出参里两个数字的口径**不一样，别混**：`files` 是**落盘后去重后的路径数**（包内文件 + 我们补写的 `_meta.json`；包内自带 `_meta.json` 时它的原文另存为 `_meta.upstream.json`，因此只多算这一个，**不会**把被覆盖的那份再算一次）；`bytes` 是**包内文件字节合计**（不含我们补写的元数据，也不含 `_meta.upstream.json` 的副本）。
 
@@ -296,6 +297,14 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 - **每源每批 12** 是**客户端的选批口径**（`ICON_PER_SOURCE_LIMIT`），不是服务端上限：服务端只认 §3.7.1 #11 的合计 ≤ 24，因此一条 24 条的 ClawHub 批次（旧客户端的合法请求）**依然被接受**。客户端两侧各取 12 的理由是「一个慢源不许吃掉整批额度」。
 - **不新增端点**：已安装行与市场卡片共用这一条；`market/installed`（#7）**不返回图标**，也不为图标加请求。
 
+#### 3.7.6 `market/favorite` 的幂等与上限
+
+1. **幂等**：`favorited` 与现状一致 ⇒ 不写盘、直接回当前列表；取消一个不存在的 id 也算成功。页面状态猜错时再点一次即可自愈，且不产生无意义的 mtime 变化。
+2. **上限 500**：满时新增 ⇒ `409 E_FAVORITE_FULL`；取消永远允许（上限只拦增长，不拦减少）。
+3. **进程内串行化**：两个并发 POST 在 `lib/market/favorites.js` 里被一条 Promise 链排队，读-改-写整体排他，不会互相覆盖。跨进程并发不处理（与 `install.js` 同一档次的本机单宿主假设，见 `docs/contracts/market.md` §7.7）。
+4. **响应永远是权威全量** `favorites[]`（最新在前）：客户端整份替换，不做增量合并。
+5. **写失败** ⇒ `500 E_FAVORITE_IO`，`message` 带系统错误摘要；日志只记 `{route, code}`，**永不**记 owner / slug。
+
 ---
 
 ## 8.1 响应格式与错误码
@@ -327,7 +336,7 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 
 ## 8.6 市场错误码
 
-市场面 8 条路由的 `E_*` 全集。HTTP status 与 `code` 双写，规则同 §8.1；`message` 仍是给开发者看的英文短句，界面文案由客户端按 `code` 取 i18n 键。两个图片端点（#10/#12）只报 `400 E_BAD_QUERY` 与裸 `404`（非信封）；#11 用 `E_BAD_REQUEST` 表示「形状不对」，用 `E_BAD_QUERY` 表示「这个源没有图标可补」。
+市场面 9 条路由的 `E_*` 全集。HTTP status 与 `code` 双写，规则同 §8.1；`message` 仍是给开发者看的英文短句，界面文案由客户端按 `code` 取 i18n 键。两个图片端点（#10/#12）只报 `400 E_BAD_QUERY` 与裸 `404`（非信封）；#11 用 `E_BAD_REQUEST` 表示「形状不对」，用 `E_BAD_QUERY` 表示「这个源没有图标可补」。
 
 | code | HTTP | 含义 | 前端表现 |
 | --- | --- | --- | --- |
@@ -343,9 +352,11 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 | `E_ALREADY_INSTALLED` | 409 | 目标目录已存在（手装、别的工具装、本面板装过都算） | 行内原因 + `data.path`；**无覆盖入口** |
 | `E_INSTALL_BUSY` | 429 | 同一目标正在安装，或全局安装数已满 | 行内原因，提示稍候 |
 | `E_INSTALL_IO` | 500 | 落盘失败（权限、磁盘、rename、台账写失败、回读不一致） | 行内原因 + 「重试」 |
+| `E_FAVORITE_FULL` | 409 | 收藏已达上限（500 条），且这次是新增 | toast 说明上限，按钮回滚到点击前的状态 |
+| `E_FAVORITE_IO` | 500 | 收藏写盘失败（权限、磁盘、rename） | toast 说明写盘失败（带原因），按钮回滚 |
 | `E_INTERNAL` | 500 | 未预期异常（已 `logger.warn`） | 整页错误态 + 重试 |
 
-**唯一的信封例外**：市场路由失败时 `data` 可以携带一个小对象（`{path?, existing?, declaredName?, name?, source?, owner?, slug?}`），因为界面要显示「已装在哪」「包声明的是什么名字」。其余路由的失败信封 `data` 恒 `null`（§8.1）。客户端可以忽略 `data`，只按 `code` 分支也不会错。
+**唯一的信封例外**：市场路由失败时 `data` 可以携带一个小对象（`{path?, existing?, declaredName?, name?, source?, owner?, slug?}`），因为界面要显示「已装在哪」「包声明的是什么名字」。**#13 的失败不带 `data`**：它的界面只有一句 toast，不需要回传任何东西。其余路由的失败信封 `data` 恒 `null`（§8.1）。客户端可以忽略 `data`，只按 `code` 分支也不会错。
 
 ---
 

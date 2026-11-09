@@ -2,7 +2,8 @@
  * `lib/market/normalize.js` — raw upstream payloads to the one shape the page renders.
  *
  * Contract: docs/contracts/market.md §7.4 (the field table, the five-item invariant
- * list) and §7.2 (per-source capability table); case id K31.
+ * list, and the `saves`/`score` row) and §7.2 (per-source capability table);
+ * case ids K31, K78.
  *
  * Fixtures here are *shaped like the real responses* but synthetic: the real endpoints
  * change, and a test that quotes a live payload breaks when they do. What must not
@@ -17,6 +18,7 @@ import {
   clampBlock,
   clampLine,
   declaredNameOf,
+  finiteOrNull,
   fromClawhubDetail,
   fromClawhubListItem,
   fromClawhubSearchItem,
@@ -38,7 +40,7 @@ import {
 /** Every field a MarketItem must carry, from the §7.4 table. */
 const ITEM_FIELDS = [
   'sourceId', 'id', 'owner', 'slug', 'displayName', 'iconUrl', 'summary',
-  'author', 'version', 'downloads', 'updatedAt', 'category', 'packageKind',
+  'author', 'version', 'downloads', 'saves', 'score', 'updatedAt', 'category', 'packageKind',
 ];
 
 /** A real-looking SkillHub icon address (the `/skill-icons/` prefix is the rule). */
@@ -298,4 +300,56 @@ test('K31 sortByUpdatedDesc：时间降序、未知排最后、相等时保持�
   assert.deepEqual(sorted.map((item) => item.id), ['b', 'a', 'd', 'c'], '新的在前，未知的最后，相等的保持原序');
   assert.notEqual(sorted, [a, c, b, d], '返回新数组');
   assert.deepEqual([a, c, b, d].map((item) => item.id), ['a', 'c', 'b', 'd'], '不改动入参');
+});
+
+test('K78 SkillHub 的 stars/score 两个取数位：raw 优先，stats 兜底；缺失即 null', () => {
+  const fromRaw = fromSkillhubListItem({ slug: 'a', namespace: { handle: 'ake' }, stars: 99, score: 95757.41562195931 });
+  assert.equal(fromRaw.saves, 99, 'saves 取 raw.stars（整数值照留）');
+  assert.equal(fromRaw.score, 95757.41562195931, 'score 原样保留：不截断（截断是解释，不是映射）');
+
+  const fromStats = fromSkillhubListItem({ slug: 'b', namespace: { handle: 'ake' }, stats: { stars: 158, score: 55385 } });
+  assert.equal(fromStats.saves, 158, 'saves 回落 stats.stars');
+  assert.equal(fromStats.score, 55385, 'score 回落 stats.score');
+
+  const zero = fromSkillhubListItem({ slug: 'c', namespace: { handle: 'ake' }, stars: 0, score: 0 });
+  assert.equal(zero.saves, 0, '上游真给 0 就是 0（不是缺值，不补也不吞）');
+  assert.equal(zero.score, 0, 'score 的 0 也照留——「0 分不显示」是客户端的判据，不是数据层的');
+
+  const missing = fromSkillhubListItem({ slug: 'd', namespace: { handle: 'ake' } });
+  assert.equal(missing.saves, null, '没给 ⇒ null');
+  assert.equal(missing.score, null, '没给 ⇒ null');
+
+  const junk = fromSkillhubListItem({ slug: 'e', namespace: { handle: 'ake' }, stars: '99', score: Infinity });
+  assert.equal(junk.saves, null, '非数字 ⇒ null');
+  assert.equal(junk.score, null, '非有限数 ⇒ null');
+
+  const detail = fromSkillhubDetail({
+    skill: { slug: 'dev-god', name: 'Dev God', stars: 7, score: 12345.6 },
+    stats: { stars: 99, score: 95757.41562195931 },
+  });
+  assert.equal(detail.saves, 99, '详情同口径：stats 优先，skill 兜底');
+  assert.equal(detail.score, 95757.41562195931, '详情的 score 两处都读得到');
+});
+
+test('K78 ClawHub 的五条映射恒 null：saves 与 score 都不猜', () => {
+  const items = [
+    fromClawhubListItem({ slug: 'design', ownerHandle: 'ivangdavila', stats: { downloads: 3, stars: 5 }, score: 9 }),
+    fromClawhubSearchItem({ slug: 'design', ownerHandle: 'ivangdavila', stats: { stars: 5 }, score: 9 }),
+    fromClawhubDetail({ skill: { slug: 'design', stars: 5, score: 9 }, stats: { stars: 5, score: 9 } }),
+  ];
+  for (const item of items) {
+    assert.equal(item.saves, null, '这个源报不报 stars 都不收：口径写死在映射里');
+    assert.equal(item.score, null, '同上（ClawHub 没有评分）');
+    assert.equal('rating' in item, false, 'rating 不是数据层字段（由客户端 ratingOf 算）');
+  }
+  const listItem = fromSkillhubListItem({ slug: 'a', namespace: { handle: 'ake' }, stars: 1, score: 1 });
+  assert.equal('rating' in listItem, false, 'SkillHub 的条目也没有 rating：payload 里只有原料 score');
+});
+
+test('K78 finiteOrNull 与 numberOrNull 的分工：一个不截断，一个取整', () => {
+  assert.equal(finiteOrNull(95757.41562195931), 95757.41562195931, 'finiteOrNull 原样返回');
+  assert.equal(numberOrNull(95757.41562195931), 95757, 'numberOrNull 取整（计数是整数）');
+  for (const value of [NaN, Infinity, -Infinity, '3', null, undefined, {}]) {
+    assert.equal(finiteOrNull(value), null, `finiteOrNull(${String(value)}) ⇒ null`);
+  }
 });

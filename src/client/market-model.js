@@ -48,6 +48,8 @@ const MARKET_ERROR_CODES = new Set([
   'E_DOWNLOAD_FAILED',
   'E_INSTALL_IO',
   'E_INSTALL_BUSY',
+  'E_FAVORITE_FULL',
+  'E_FAVORITE_IO',
 ]);
 
 /**
@@ -296,24 +298,122 @@ export function iconBatch(payload, market) {
 }
 
 /**
- * The meta line's segments, in display order. A missing field is an absent segment,
- * never a zero: a card that claims "0 downloads" is lying about a null.
+ * The author handle of one item: `owner/slug`, then `owner`, then the publisher name.
+ *
+ * The card shows a handle rather than the publisher's display name because both market
+ * sources always carry an owner and a slug - the route's own whitelist requires them -
+ * while `author` (the publisher's display name) may be missing. The publisher name is
+ * still visible in the detail view's fact table.
+ * @param {object} item - a MarketItem, or anything carrying the same fields.
+ * @returns {string|null} the handle to show, or null when there is nothing to show.
+ */
+export function authorTextOf(item) {
+  const owner = typeof item?.owner === 'string' ? item.owner : '';
+  const slug = typeof item?.slug === 'string' ? item.slug : '';
+  if (owner !== '' && slug !== '') return `${owner}/${slug}`;
+  if (owner !== '') return owner;
+  const author = typeof item?.author === 'string' ? item.author : '';
+  return author === '' ? null : author;
+}
+
+/**
+ * The author line's segments, in display order: the handle, then the version.
+ *
+ * Two segments, and an absent field is an absent segment - never an empty one. The
+ * figures moved out of this line into `statSegments`, which is why a card can no longer
+ * claim "0 downloads" here.
  * @param {object} item - a MarketItem.
  * @returns {{key: string, param: string, value: string}[]} locale key, its interpolation
  *   name, and the value to interpolate.
  */
 export function metaSegments(item) {
   const segments = [];
-  if (typeof item?.author === 'string' && item.author !== '') {
-    segments.push({ key: 'market.metaAuthor', param: 'author', value: item.author });
+  const handle = authorTextOf(item);
+  if (handle !== null) {
+    segments.push({ key: 'market.metaAuthor', param: 'author', value: handle });
   }
   if (typeof item?.version === 'string' && item.version !== '') {
     segments.push({ key: 'market.metaVersion', param: 'version', value: item.version });
   }
-  if (Number.isFinite(item?.downloads)) {
-    segments.push({ key: 'market.metaDownloads', param: 'count', value: String(item.downloads) });
-  }
   return segments;
+}
+
+/** The figure slots of one card, in the order they are drawn. */
+export const MARKET_STAT_SLOTS = Object.freeze(['downloads', 'saves', 'rating']);
+
+/** The top of the upstream popularity score, which maps onto a rating of 5.0. */
+const SCORE_TOP = 100000;
+
+/** The bottom of the projected rating scale. */
+const RATING_BASE = 4;
+
+/**
+ * The projected rating of one item: the upstream score folded onto 4.0-5.0.
+ *
+ * `null` for a missing score **and** for a score of zero or less, because
+ * `scoreToRating(0)` is `4.0` - indistinguishable from an upstream that really said 4.0,
+ * and a 4.0 drawn out of thin air is exactly the fake number the "never show a zero"
+ * rule exists to prevent.
+ * @param {object} item - a MarketItem.
+ * @returns {number|null} one decimal, 4.0-5.0, or null.
+ */
+export function ratingOf(item) {
+  const score = item?.score;
+  if (!Number.isFinite(score) || score <= 0) return null;
+  return Math.round((RATING_BASE + Math.min(1, score / SCORE_TOP)) * 10) / 10;
+}
+
+/**
+ * A rating as the card writes it: always one decimal, always a dot.
+ *
+ * `toFixed` and not `Intl.NumberFormat` on purpose: a scale reading is fixed, and in a
+ * German or French locale `Intl` would spell it `4,6` - a different glyph in a
+ * fixed-width slot, and a value that no longer matches its neighbours on screen. Counts
+ * (downloads, saves) are the ones that go through the locale-aware `countText`.
+ * @param {number|null} rating - a `ratingOf` product.
+ * @returns {string|null} e.g. `4.6`, or null when there is no rating.
+ */
+export function ratingTextOf(rating) {
+  return Number.isFinite(rating) ? rating.toFixed(1) : null;
+}
+
+/**
+ * The three figure slots of one card, always three.
+ *
+ * The slots are fixed even when a source reports nothing: the track stays, the contents
+ * do not. Three fixed slots are the only way the same column lands on the same x in every
+ * card of a row, so an item missing its saves cannot push its rating into slot two. A
+ * slot that is not `present` is drawn as an empty span with no icon, no number and no
+ * zero; when all three are absent the caller drops the whole line.
+ * @param {object} item - a MarketItem.
+ * @returns {{slot: string, present: boolean, value: string|null, labelKey: string,
+ *   param: string}[]} one entry per slot, in `MARKET_STAT_SLOTS` order.
+ */
+export function statSegments(item) {
+  const rating = ratingOf(item);
+  return [
+    {
+      slot: 'downloads',
+      present: Number.isFinite(item?.downloads),
+      value: countText(item?.downloads),
+      labelKey: 'market.metaDownloads',
+      param: 'count',
+    },
+    {
+      slot: 'saves',
+      present: Number.isFinite(item?.saves),
+      value: countText(item?.saves),
+      labelKey: 'market.metaSaves',
+      param: 'count',
+    },
+    {
+      slot: 'rating',
+      present: Number.isFinite(rating),
+      value: ratingTextOf(rating),
+      labelKey: 'market.metaRating',
+      param: 'rating',
+    },
+  ];
 }
 
 /**

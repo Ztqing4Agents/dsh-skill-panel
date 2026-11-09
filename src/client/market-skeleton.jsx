@@ -14,6 +14,9 @@ const FIRST_SCREEN = [0, 1, 2, 3, 4, 5];
 /** How many placeholder cards are appended while the next page is in flight. */
 const TAIL = [0, 1, 2];
 
+/** How many figure placeholders one card stands in for (the real card always has three). */
+const STAT_SLOTS = [0, 1, 2];
+
 /** How many category chips the skeleton stands in for. */
 const CHIPS = [0, 1, 2, 3, 4, 5];
 
@@ -31,8 +34,18 @@ function SkeletonCard() {
             <span className={cn('skeletonFill', 'skeletonBar')} />
           </span>
         </div>
+        {/* the author line's place: the same two-level shape as the title, no new class */}
+        <span className={cn('skeletonText', 'skeletonTitle')}>
+          <span className={cn('skeletonFill', 'skeletonBar')} />
+        </span>
         <span className={cn('skeletonText', 'skeletonDescription')}>
           <span className={cn('skeletonFill', 'skeletonBar')} />
+        </span>
+        {/* three figure placeholders, in the real row's rhythm */}
+        <span className={cn('marketStats')} aria-hidden="true">
+          {STAT_SLOTS.map((index) => (
+            <span key={index} className={cn('skeletonFill', 'marketSkeletonStat')} />
+          ))}
         </span>
       </div>
       <div className={cn('marketCardEnd')}>

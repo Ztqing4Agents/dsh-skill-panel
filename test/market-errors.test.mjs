@@ -37,11 +37,13 @@ const EXPECTED = {
   E_ALREADY_INSTALLED: 409,
   E_INSTALL_BUSY: 429,
   E_INSTALL_IO: 500,
+  E_FAVORITE_FULL: 409,
+  E_FAVORITE_IO: 500,
   E_INTERNAL: 500,
 };
 
 test('K30 code → HTTP 状态表与 §8.6 逐条一致，没有多余也没有遗漏', () => {
-  assert.deepEqual(MARKET_STATUS, EXPECTED, '十三种市场失败码与状态一字不差');
+  assert.deepEqual(MARKET_STATUS, EXPECTED, '十五种市场失败码与状态一字不差');
   for (const [code, status] of Object.entries(EXPECTED)) {
     assert.equal(statusOfMarketError(marketError(code, 'x')), status, `${code} ⇒ ${status}`);
   }
@@ -91,11 +93,23 @@ test('K30 契约文本与代码同源：routes.md §8.6 的表格行逐条对得
   assert.notEqual(section, '', 'routes.md 里有 §8.6 一节');
   const rows = [...section.matchAll(/^\| `(E_[A-Z_]+)` \| (\d{3}) \|/gm)]
     .map((match) => [match[1], Number(match[2])]);
-  assert.equal(rows.length >= 13, true, `§8.6 的表格至少十三行（实际 ${rows.length} 行）`);
+  assert.equal(rows.length >= 15, true, `§8.6 的表格至少十五行（实际 ${rows.length} 行）`);
   const documented = Object.fromEntries(rows);
   for (const [code, status] of Object.entries(documented)) {
     assert.equal(MARKET_STATUS[code], status, `契约里的 ${code} ⇒ ${status} 与代码一致`);
   }
   const undocumented = Object.keys(MARKET_STATUS).filter((code) => documented[code] === undefined);
   assert.deepEqual(undocumented, [], '代码里没有契约未登记的失败码');
+});
+
+test('K30 两个新码在客户端有对应文案键（reasonKeyOf 取得到）', async () => {
+  const { reasonKeyOf } = await import('../src/client/market-model.js');
+  assert.equal(reasonKeyOf('E_FAVORITE_FULL'), 'error.E_FAVORITE_FULL', '满 500 有自己的句子');
+  assert.equal(reasonKeyOf('E_FAVORITE_IO'), 'error.E_FAVORITE_IO', '写盘失败有自己的句子');
+  for (const code of ['E_FAVORITE_FULL', 'E_FAVORITE_IO']) {
+    const zh = JSON.parse(await readFile(join(ROOT, 'locale', 'zh.json'), 'utf8'));
+    const en = JSON.parse(await readFile(join(ROOT, 'locale', 'en.json'), 'utf8'));
+    assert.equal(typeof zh[`error.${code}`], 'string', `zh 字典有 error.${code}`);
+    assert.equal(typeof en[`error.${code}`], 'string', `en 字典有 error.${code}`);
+  }
 });

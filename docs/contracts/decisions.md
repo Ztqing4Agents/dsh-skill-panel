@@ -34,7 +34,7 @@
 | C-2 | 无「实验性插件」分区、无「更多 ›」 | PRD §3.3.7 |
 | C-3 | `＋ 添加技能 ⌄` **P0 呈现但禁用**（PRD Q3 原建议 P0 不呈现） | 队长决策 3（视觉保留 1:1）；提示用包裹 `<span title>` 的原生 tooltip |
 | C-4 | ~~技能市场页签只渲染占位文案~~ **（2026-11-09 由本轮改写，见附录 E）** | 队长决策 + PRD P0-13 |
-| C-5 | ~~全行无点击，唯一交互是开关~~ **（已改写为「按页签划边界」：已安装行不可点、市场卡片可点；见附录 E 与 `docs/contracts/market.md` 附录 F）** | PRD Q6 / D2 |
+| C-5 | ~~全行无点击，唯一交互是开关~~ **（已改写为「按页签划边界」：已安装行不可点；市场卡片的整卡点击层 + 两个动作位（安装 / 收藏）；见附录 E、附录 J 与 `docs/contracts/market.md` 附录 F）** | PRD Q6 / D2 |
 | C-6 | 页脚新增「另有 N 个技能…」一行 | PRD P0-14 / PRD §3.3.7 |
 | C-7 | 软链行右侧改静态标记（无开关） | 队长决策 2 |
 | C-8 | 软链行不预留 22px（不预留进度环位） | 该行永不 pending，预留只会在视觉上多一条空白；行高仍 64px（标记 18px < 20px 开关） |
@@ -112,6 +112,33 @@
 | A6 | 扫描 `~/.dsh/skills` 时 `.system` 子目录必须跳过 | `EX/dsh-skill-filesystem/README.md`「The user DSH root skips its `.system` child」；本机当前无该目录（防御性跳过） |
 | A7 | P1/P2 全部不做（搜索、状态筛选、来源 tooltip、同名遮蔽提示、项目级根） | PRD §3.2 P1/P2；设计里只留不冲突的钩子（`Row.rule`/`Row.confidence` 已在 payload 里，P1 加 tooltip 不需要改 Host） |
 | A8 | 客户端不需要 `localStorage`（页签状态用模块级 store） | 满足 P0-3「离开页面再回来保持」；整页 reload 后回到「已安装」是宿主同款行为 |
+
+---
+
+## 附录 J 市场卡片重做轮（2026-11-09）
+
+> 参考项目 `montersy123/dsh-skill-market` 的卡片结构（作者行 / 等宽三段 / 收藏按钮）。每条都带来源，市场面的完整契约在 `docs/contracts/market.md` §7，路由在 `docs/contracts/routes.md` §3.7。
+
+| # | 待定说法 | 实际（逐字证据 / 算式） | 处理 |
+| --- | --- | --- | --- |
+| J-1 | 卡片的**来源标识**用什么 | 用户诉求是「skillhub 就显示 skillhub 的 icon」，因此保真是需求本身：单色自绘 path 只能做到六成神似（等于自造 logo）；运行时直连品牌 URL 会踩「浏览器半部零 URL」那条回归门禁 | **内联位图**：`src/client/market-marks.jsx` 里两段 `data:image/png;base64`（SkillHub 站点自带 32×32 favicon 1334 B、sha256 `b00f1749…25a0fc`；ClawHub 站点自带 logo 由 192×192 降采样到 32×32、2357 B、sha256 `64a32b4f…949600`），显示 16×16、零网络、零新路由、不新增依赖。**替换**原来那枚文字 Tag（同一位），`title` 保留来源名；注释里不写 URL |
+| J-2 | 收藏存哪、键是什么 | 别人的存储（`~/.dsh/skills-manager/state.json`、`skill-market/*`、`.skills-lock.json`）对本面板只读（`AGENTS.md` 硬约束 10），书签只能落本插件自己的目录 | `$DSH_HOME/dsh-skill-center/favorites.json`，键 = `marketId(source, owner, slug)`（与图标缓存 / 上游标题 / 安装台账同一个键）；`{version:1, favorites:[…]}` 最新在前；上限 500；写盘走 `store.js` 的 `writeAtomic`；进程内一条 Promise 链串行化；与现状一致的写入不落盘（幂等）。读侧只在 `market/bootstrap`（`favorites` + `favoritesOk`），**不新增 GET**；写侧一条 `POST market/favorite`（见 `docs/contracts/routes.md` §3.7.6） |
+| J-3 | 三段数字各是什么口径 | 参考项目的 `Stats` 是「下载 / 收藏 / 评分」三段；SkillHub 的 `stars` 是小整数（实测 37 / 99 / 158）、`score` 是 0–100000 的连续分（实测 `95757.41562195931`） | 下载 = `downloads`；收藏 = 上游 **`stars`**（不是你自己的书签，你自己的由按钮 `aria-pressed` 表达，两者不合并）；评分 = `4 + min(1, score/100000)` 量化到一位小数。`rating` **不进数据层**：它是客户端的显示投影，Host 只给原料 `score`（`normalize.js` 的「只映射、不解释」）。`score <= 0` 时评分段整段不出现——`4.0` 是缺值伪装成的分数 |
+| J-4 | 三段与安装按钮能否同一行 | 安装按钮四态（安装 / 已安装 / 安装中… / 重试）宽度不同：段宽 =（内容宽 − 按钮宽 − gap）/ 3，`安装` 与 `已安装` 差一个汉字 ≈12.5px ⇒ 每段差 ≈4.2px，同屏两卡的「收藏」「评分」列各错开 4.2 / 8.4px；最窄卡（280−28=252px）塞进「安装中…」（≈78px）后三格只剩 ≈166px，每格 ≈55px 而中文 `1135万` 需 ≈39px 文本 + 16px 图标 | **三段独占一行**（`repeat(3, minmax(0,72px))` 左对齐）、安装按钮另起一行右对齐（`.skc_marketCardEnd` 既有声明一字不改）。代价是卡片高 ≈28px，换来四种情况下数字列零抖动 |
+| J-5 | 缺段的格子：占位还是不占位 | 若缺段就让后面的段左移，一张缺「收藏」的卡会把「评分」挪到第二格，同屏立刻错位 | **槽位占位、内容不出现**：三格轨道恒在（同列的 x 坐标在任何两张卡上相同），空格里没有图标、没有数字、没有 `0`、没有破折号，读屏也读不到（`aria-hidden`）；三格全缺时整行不渲染（否则卡片中部剩三格空白） |
+| J-6 | 作者行显示 `@owner/slug` 还是 publisher 中文名 | 用户原话的例子逐字是 `@indiv-integrator/dev-expert-pro`（= `@` + owner + `/` + slug），而这两个字段两源必填（路由白名单就要求），`author`（publisher 显示名）反而可能缺失 | **`@owner/slug`**（`authorTextOf` 三级回落：`owner/slug` → `owner` → `author`）；`market.metaAuthor` 文案 `@{author}` 一个字不改，插值换成 handle。代价：卡片不再出现 publisher 中文名，它仍在详情事实表的「作者」行 |
+
+---
+
+## 附录 K 市场工具栏间距（2026-11-09）
+
+> 用户指着「技能市场」工具栏右侧那一组（搜索框右端 + `SkillHub ⌄` + `推荐 ⌄`）说「间距有些问题」。实测在隔离实例里做完再定，完整过程见 `.agents/work/wip/U4-toolbar-spacing.md`；刻度表在 `docs/contracts/market.md` 附录 F。
+
+| # | 待定说法 | 实际（逐字证据 / 算式） | 处理 |
+| --- | --- | --- | --- |
+| K-1 | 搜索框与两个菜单之间留多少 | 附录 F 逐字抄了宿主的 `.marketButton{margin-left:-8px}`，而工具栏 `gap:8px`：负边距把第一段吃成 **0**，第二段 8，右端 0（`推荐` 贴内容右边界）。实测（1320×940、内容宽 944）：搜索框右沿 1120.1 = 来源菜单左沿 1120.1；有词时清空按钮右沿也是 1120.1——× 直接贴住菜单。宿主这么做是因为它自己的按钮内边距更小，抄到位后在本面板里读起来像「搜索框里长出了两个菜单」 | **去掉 `margin-left:-8px`**（用户 2026-11-09 拍板）：间距变成 8 / 8 / 0，右端仍贴内容右边界；清空按钮与来源菜单之间回到 8px。代价：相对宿主整体 +8px，附录 F 已标成「唯一偏离」 |
+| K-2 | 两个同级菜单要不要同字重 | 只有来源菜单带了 `skc_marketSelect`，排序菜单没带：实测 `SkillHub` 是 500、`推荐` 是 400（同为 12px），同排两个同级控件看着不是一套。这是「只抄了半套」的实现漏，不是设计选择 | **两个菜单同带 `skc_marketSelect`**：字重统一 500、`max-width:240px` 统一生效；`text-overflow:ellipsis` 的标签类本来就两边都有 |
+| K-3 | 搜索框有词时的清空按钮 | `Input` 的 `type="search"` 没被 `appearance` 收口，Blink 会在输入框内自己画一枚取消按钮，与面板自绘的清空按钮并排出现（实测：框内一枚原生 ×、框外 8px 又一枚自绘 ×） | **只留自绘那个**（它带 `aria-label` / `title`，可本地化、可被读屏念到）：`.skc_marketSearch input::-webkit-search-cancel-button` 关掉原生按钮。宿主市场页没有对应规则，这条算本面板自己的收口 |
 
 ---
 

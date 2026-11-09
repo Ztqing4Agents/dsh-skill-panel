@@ -56,6 +56,9 @@
   "market.metaAuthor": "@{author}",
   "market.metaVersion": "v{version}",
   "market.metaDownloads": "下载 {count}",
+  "market.metaSaves": "收藏 {count}",
+  "market.metaRating": "评分 {rating}",
+  "market.metaRatingHint": "上游评分的折算（4.0–5.0），不是用户评分均值",
   "market.install": "安装",
   "market.installing": "安装中…",
   "market.installed": "已安装",
@@ -111,5 +114,11 @@
   "error.E_PACKAGE_INVALID": "这个技能的包不完整或校验不通过",
   "error.E_DOWNLOAD_FAILED": "下载技能包失败：{reason}",
   "error.E_INSTALL_IO": "写入技能目录失败：{reason}",
-  "error.E_INSTALL_BUSY": "这个技能正在安装，请稍候"
+  "error.E_INSTALL_BUSY": "这个技能正在安装，请稍候",
+  "market.favorite": "收藏 {name}",
+  "market.unfavorite": "取消收藏 {name}",
+  "market.favoriteTitle": "收藏",
+  "market.unfavoriteTitle": "已收藏，点击取消",
+  "error.E_FAVORITE_FULL": "收藏数量已达上限，请先取消一些",
+  "error.E_FAVORITE_IO": "写入收藏失败：{reason}"
 }

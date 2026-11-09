@@ -2,7 +2,7 @@
 
 > 类型：规范
 > 读者：加改市场源适配器、上游调用、归一化、安装取包形状，或改市场页视觉刻度的人
-> 真源：`lib/market/` 下的十个模块与 `src/client/` 下 `market-` 前缀的文件的实际导出
+> 真源：`lib/market/` 下的十一个模块与 `src/client/` 下 `market-` 前缀的文件的实际导出
 > 更新触发：加删源适配器、改上游调用/归一化/安装取包形状，或改市场刻度时，同步改 §7 / 附录 F / 附录 G
 > 规模上限：400
 
@@ -114,6 +114,8 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 | `author` | 上游 | 三级回落：`publisher.name/displayName` → `namespace.displayName` → `owner` |
 | `version` | 上游 | **缺失如实为 `null`**（ClawHub 搜索结果必为 `null`，因为该端点不给版本号） |
 | `downloads` | 上游 | SkillHub `downloads`／ClawHub `stats.downloads`；缺失 `null` |
+| `saves` | 上游 | SkillHub `stars`（小整数，实测 37 / 99 / 158）；ClawHub 恒 `null`。**卡片把它显示成「收藏」**——这是上游的收藏数，与本地收藏（§7.7）不是一个东西；缺失 `null`，绝不补 `0`，上游真给 `0` 就显示 `0` |
+| `score` | 上游 | SkillHub `score`（0–100000 连续分，实测 `95757.41562195931`）；ClawHub 恒 `null`。**只作原料**：卡上的 4.0–5.0 是客户端 `ratingOf()` 的折算，Host 不解释、不格式化 |
 | `updatedAt` | 上游 | epoch 毫秒，**只用于排序，不上屏** |
 | `category` | 上游 | 仅 SkillHub 有；ClawHub 恒 `null` |
 | `packageKind` | 本地算 | 来自 `caps.package`，决定详情页「文件」从哪来 |
@@ -124,7 +126,7 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 
 **不变式（逐条可断言）**：
 
-1. 上表每个字段都存在（不出现 `undefined`）；上游没给的一律 `null`，`downloads` 绝不补 `0`、`version` 绝不补 `'latest'`。
+1. 上表每个字段都存在（不出现 `undefined`）；上游没给的一律 `null`，`downloads`、`saves`、`score` 绝不补 `0`、`version` 绝不补 `'latest'`。
 2. `id` 全仓库唯一；同一 `id` 出现两次时保留第一次出现的那条。
 3. `overview` 不含 frontmatter 分隔行（`---`）与 `name:` 之类的头字段。
 4. `files` 里 `path` 一律通过 `isSafeRelativePath`；`path` 与 `size` 是详情页唯一需要的两项。
@@ -153,6 +155,16 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 
 必须代理而不是直连的理由：ClawHub 的上传图标响应头带 `content-security-policy: … sandbox`，同样字节在页内当 `<img>` 一律 `onerror`（走 `blob:` 却能正常光栅化）；Lucide 给的则根本不是图片地址，而是图标名。
 
+### 7.7 收藏（本地书签）
+
+**身份键与文件**：收藏键 = `MarketItem.id` = `marketId(source, owner, slug)`（与图标缓存、上游标题、安装台账同一个键）。落本插件自己的文件 `$DSH_HOME/dsh-skill-center/favorites.json`：`{version:1, favorites:[id…]}`，**最新在前**（将来「我的收藏」列表天然是收藏时间倒序）。数组而不是对象键，理由同 `provider-toggles.json`：id 里含 `:`，用它当对象键会把分隔符歧义写进文件格式。**不碰** `~/.dsh/skills-manager/state.json`、其他市场插件的 `skill-market/*`、`.skills-lock.json`（AGENTS.md 硬约束 10）。
+
+**读侧只有一处**：`market/bootstrap` 的 `favorites` 与 `favoritesOk`。**不新增 GET**——收藏是全局集合，而 `bootstrap` 正是「全局一次」的那条，同一往返拿齐、首帧书签就对；新开一条只读端点，等于为「bootstrap 挂了还能读收藏」这一个代价多一份 `guard()` / 错误码 / 测试，却不减少任何一次往返。`bootstrap` 失败时书签态未知，由 #13 的权威回包自愈（点一下无论方向，响应里的 `favorites` 就是真值，且 `toggle` 幂等）。`bootstrap?refresh=1` **不清**收藏（收藏不是缓存）。
+
+**两条同名不同源**：卡片上的「收藏 N」是上游 `stars`（别人收藏了多少），你自己的书签由按钮的 `aria-pressed` 表达。界面**不合并、不互相修正**，按钮的 `aria-label` 与数字段的 `aria-label` 分别说清，否则「我收藏了它为什么显示 0」是一定的投诉。
+
+**降级 / 上限 / 幂等 / 并发**：文件**缺失** ⇒ 空集 + `readable:true`（全新安装没写过这个文件，**缺失 ≠ 损坏**，`favoritesOk` 的唯一语义是「书签可能丢了」）；**只有**解析失败或不可读（非 JSON、顶层非对象、`favorites` 非数组、EACCES/EISDIR…）才 `readable:false`，此时 `bootstrap` 照常 `200`（`favoritesOk:false`），**绝不让市场页失败**；读侧逐条丢弃「不是 `sourceId:owner:slug` 三元组或超过 200 字符」的条目与重复项，手改坏了只丢坏行；上限 **500**，满时新增 `409 E_FAVORITE_FULL`，取消永远允许；与现状一致的写入不落盘（幂等）；写盘复用 `store.js` 的 `writeAtomic`（临时文件 + fsync + rename，临时名带 `favorites` 前缀），进程内一条 Promise 链把读-改-写串行化。跨进程并发不处理：与 `install.js` 一样按「本机单宿主」设计。路由细节见 `docs/contracts/routes.md` §3.7.6。
+
 ## 附录 F 市场视觉刻度
 
 市场样式全部落在 `src/client/styles.js` 的 `skc_market*` 类里，取值逐字取自宿主插件市场的 `DiscoverSection` 规则体（宿主类名是构建哈希，只作证据，不进选择器）。市场**不新增任何颜色字面量**。
@@ -162,17 +174,18 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 | `.skc_marketSection` | `flex-direction:column; gap:16px; display:flex` | `.section` |
 | `.skc_marketToolbar` | `flex-wrap:wrap; align-items:center; gap:8px; display:flex` | `.toolbar` |
 | `.skc_marketSearch` | `flex:1; min-width:120px` | `.search` |
-| `.skc_marketSelect` / `Label` | `max-width:240px; margin-left:-8px; font-weight:500` / `text-overflow:ellipsis; white-space:nowrap; overflow:hidden` | `.marketButton` / `.marketName` |
+| `.skc_marketSearch input::-webkit-search-cancel-button` | `-webkit-appearance:none; appearance:none; display:none` | **新刻度**：`type=search` 的原生取消按钮会在有词时与自绘的清空按钮并排出现，只留后者（见 `docs/contracts/decisions.md` 附录 K） |
+| `.skc_marketSelect` / `Label` | `max-width:240px; font-weight:500` / `text-overflow:ellipsis; white-space:nowrap; overflow:hidden` | `.marketButton` / `.marketName`，**唯一偏离**：去掉宿主的 `margin-left:-8px`（它把工具栏 `gap:8px` 吃掉，搜索框与来源菜单贴成 0、有词时清空按钮也贴上去）；两个菜单同带此类，理由见 `docs/contracts/decisions.md` 附录 K |
 | `.skc_marketChips` | `flex-wrap:wrap; align-items:center; gap:6px; display:flex` | `.categories` |
 | `.skc_marketScope` | `color:var(--dsw-alias-label-tertiary); margin:0; font-size:13px; line-height:20px` | `.muted` |
 | `.skc_marketNotice` | `border-radius:var(--dsw-radius-md); background:var(--dsw-alias-state-warn-tertiary); align-items:flex-start; gap:8px; margin:0; padding:10px 12px; font-size:12px; line-height:18px; display:flex` | `.notice` |
 | `.skc_marketGrid` | `display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px; margin:0; padding:0; list-style:none` | **新刻度** |
 | `.skc_marketCard` | `border-radius:var(--dsw-radius-xl); align-items:stretch; gap:14px; padding:14px; display:flex; flex-direction:column; position:relative; min-width:0` + hover `background:var(--dsw-alias-interactive-bg-hover)` | `.card`（**无边框**）；column 下必须 `stretch`——`flex-start` 会让骨架条形段与描述收缩包裹 |
 | `.skc_marketMain` / `TitleRow` | `flex-direction:column; flex:1; gap:2px; min-width:0; display:flex` / `flex-wrap:wrap; align-items:center; gap:8px; min-width:0; display:flex` | `.main` / `.titleRow` |
-| `.skc_marketCardOpen` | `max-width:100%; color:inherit; font:inherit; text-align:left; cursor:pointer; text-overflow:ellipsis; white-space:nowrap; background:0 0; border:0; padding:0; font-size:14px; font-weight:500; line-height:20px; overflow:hidden` | `.cardOpen` |
+| `.skc_marketCardOpen` | `max-width:100%; color:inherit; font:inherit; text-align:left; cursor:pointer; text-overflow:ellipsis; white-space:nowrap; background:0 0; border:0; padding:0; flex:1; min-width:0; font-size:14px; font-weight:500; line-height:20px; overflow:hidden` | `.cardOpen`。`flex:1; min-width:0` 让标题**收缩**成省略号，否则长标题把来源图标与收藏按钮挤到下一行（不加 `min-width:0` 时 `min-width:auto` = 文本整宽） |
 | `.skc_marketCardOpen::after` | `content:""; border-radius:var(--dsw-radius-xl); position:absolute; inset:0` | `.cardOpen:after`（整卡可点的唯一手段） |
 | `.skc_marketCardOpen:focus-visible` | `outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset:2px` | `.cardOpen:focus-visible` |
-| `.skc_marketDesc` | `color:var(--dsw-alias-label-tertiary); -webkit-line-clamp:1; -webkit-box-orient:vertical; display:-webkit-box; overflow:hidden; font-size:13px; line-height:18px` | `.description` |
+| `.skc_marketDesc` | `color:var(--dsw-alias-label-tertiary); -webkit-line-clamp:2; -webkit-box-orient:vertical; display:-webkit-box; overflow:hidden; font-size:13px; line-height:18px` | `.description` |
 | `.skc_marketMeta` / `FileSize` | `color:var(--dsw-alias-label-tertiary); margin:0; overflow-wrap:anywhere; font-size:12px; line-height:18px` | `.meta` |
 | `.skc_marketCardEnd` | `z-index:1; flex:none; align-self:flex-end; align-items:center; gap:8px; display:inline-flex; position:relative` | `.cardEnd`（`z-index:1` 让安装按钮浮在点击层之上，不可省；`align-self:flex-end` 让动作靠右下） |
 | `.skc_marketEmpty` / `EmptyTitle` | `text-align:center; flex-direction:column; align-items:center; gap:8px; padding:64px 0; display:flex` / `margin:8px 0 0; font-size:14px; font-weight:500; line-height:20px` | `.empty` / `.emptyTitle` |
@@ -188,13 +201,17 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 | `.skc_marketSkeletonChip` | `border-radius:var(--dsw-radius-lg); width:64px; height:26px` | 分类 chips 占位（对齐 `Button size="sm"` 的静态尺寸） |
 | `.skc_marketSkeletonAction` | `border-radius:var(--dsw-radius-md); width:64px; height:24px` | 安装按钮占位（同上） |
 | `.skc_marketToastHint` | `color:var(--dsw-alias-label-secondary); overflow-wrap:anywhere; margin-top:2px; font-size:12px; line-height:18px; display:block` | 安装 toast 的副行（安装路径），12/18 secondary |
+| `.skc_marketStats` / `.skc_marketStat` / `StatValue` | `grid-template-columns:repeat(3, minmax(0, 72px)); gap:8px; justify-content:start; margin:2px 0 0; color:var(--dsw-alias-label-tertiary); font-variant-numeric:tabular-nums; font-size:12px; line-height:18px; display:grid` / `align-items:center; gap:3px; min-width:0; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; display:inline-flex`（`> svg` 13×13、`opacity:.75`）/ `min-width:0; overflow:hidden; text-overflow:ellipsis` | **新刻度** ⑦（见下） |
+| `.skc_marketSourceMark` | `border-radius:var(--dsw-radius-sm); width:16px; height:16px; flex:none; display:block` | **新刻度** ⑧（见下） |
+| `.skc_marketFavorite` / `FavoriteOn` | `z-index:2; margin-left:auto; width:22px; height:22px; flex:none; position:relative; border:0; border-radius:var(--dsw-radius-sm); padding:0; background:0 0; color:var(--dsw-alias-label-tertiary); cursor:pointer; align-items:center; justify-content:center; display:inline-flex` + hover `color:label-primary` / `background:interactive-bg-hover` + `:focus-visible` 焦点环同 `.skc_marketCrumb`（`outline-offset:2px`）/ `color:var(--dsw-alias-state-business-primary)`（`> svg` 16×16） | **新刻度** ⑨（见下） |
+| `.skc_marketSkeletonStat` | `border-radius:var(--dsw-radius-xs); width:56px; height:12px`；底色复用既有 `.skc_skeletonFill` | **新刻度** ⑩（见下） |
 
-**新刻度共六条**（宿主没有对应规则体，逐条给理由；其余全部是宿主规则体转写）：① 网格 `minmax(280px, 1fr)` + `gap:12px`（960px 内容宽正好 3 列、<600px 一行 1 列）；② 卡片改竖向排布、`padding` 8 → 14、`align-items:stretch`（column 下 `flex-start` 会让骨架条形段与描述收缩包裹）；③ 安装按钮行 `align-self:flex-end`（动作靠右下，而不是被拉伸成整行）；④⑤ 两个骨架占位 `SkeletonChip` 64×26、`SkeletonAction` 64×24（对齐 `Button size="sm"`，骨架与真件同宽同高）；⑥ 安装 toast 副行 `ToastHint` 12/18 secondary（与元信息行同刻度）。三条骨架/副行类只在市场页出现，**不碰已安装页签的任何既有类**。
+**新刻度共十条**（宿主没有对应规则体，逐条给理由；其余全部是宿主规则体转写）：① 网格 `minmax(280px, 1fr)` + `gap:12px`（960px 内容宽正好 3 列、<600px 一行 1 列）；② 卡片改竖向排布、`padding` 8 → 14、`align-items:stretch`（column 下 `flex-start` 会让骨架条形段与描述收缩包裹）；③ 安装按钮行 `align-self:flex-end`（动作靠右下，而不是被拉伸成整行）；④ 骨架占位 `SkeletonChip` 64×26；⑤ 骨架占位 `SkeletonAction` 64×24（④⑤ 都对齐 `Button size="sm"`，骨架与真件同宽同高）；⑥ 安装 toast 副行 `ToastHint` 12/18 secondary（与元信息行同刻度）；⑦ 底行三段 `marketStats`：三格轨道恒为 `repeat(3, minmax(0,72px))`、左对齐、`tabular-nums`，缺值的格留空——**三格固定宽度是三段在任何两张卡上落到同一 x 的唯一办法**，`tabular-nums` 让 `1` 与 `8` 同宽；⑧`.skc_marketSourceMark` 16×16 品牌位图 + `radius-sm`（与标题 14/20 同一视觉重量，再大就抢标题）；⑨`.skc_marketFavorite` 22×22 命中区 + `z-index:2` + `-On` 用 `state-business-primary` + 焦点环同 `.skc_marketCrumb`（命中区大于图标，因为它是必须可点的控件）；⑩`.skc_marketSkeletonStat` 56×12 + `radius-xs`（与真件三段同节奏）。三条骨架/副行/图形类只在市场页出现，**不碰已安装页签的任何既有类**；`.skc_marketDesc` 由 1 行改 2 行是**改值**（见上表那一行），不算新刻度。
 
 三条不可协商的纪律：
 
 1. 市场**不新增任何颜色字面量**：色值只来自 `--dsw-*` 令牌与 `avatar.js` 的 12 组粉彩。
-2. 全仓库**仍然只有 `styles.js` 与 `avatar.js` 两处**有颜色字面量（`test/styles.test.mjs` 会查）。
+2. 全仓库**仍然只有 `styles.js` 与 `avatar.js` 两处**有颜色字面量（`test/styles.test.mjs` 会查）；两枚来源品牌图形是**位图**（`src/client/market-marks.jsx` 的两段 `data:image/png;base64`），其颜色是品牌自带的像素、不是可写的样式值——不得据此在样式表里补任何色值。
 3. 市场卡片**复用**既有 `.skc_cardIcon`（48×48、`border-box`、`radius-lg`、`background-clip:padding-box`），一条声明都不改——改它会让「已安装」页签 11 行同时回归。
 
 卡片**无描边**：描边只出现在头像框上；卡面靠 `radius-xl` + hover 底色表达可点性（依据见 `docs/contracts/decisions.md` 附录 E）。
@@ -218,7 +235,8 @@ Host 半部（`lib/market/`，纯 node ESM，无构建）：
 | `lib/market/sources/clawhub.js` | ClawHub 适配器：`list/search/detail/plan/fetchFile/icons`；`skill.description` 即 `SKILL.md` 全文，zip 一包一次 |
 | `lib/market/zip.js` | 最小 ZIP 读取器（EOCD → 中央目录 → local header；`store`/`deflate`；zip-slip/符号链接/加密/条目数与体积上限；CRC32） |
 | `lib/market/install.js` | 安装编排：解析名字 → 冲突检测 → 临时目录 → 逐文件校验写入 → 原子 rename → 台账 → 失败清理（唯一 `rm -rf` 处） |
-| `lib/market/store.js` | 自有台账 `$DSH_HOME/dsh-skill-center/installed.json` 的读/写（临时文件 + fsync + rename；损坏降级为空；形状与 `lib/ledger.js` 的 `own-record` 兼容） |
+| `lib/market/store.js` | 自有台账 `$DSH_HOME/dsh-skill-center/installed.json` 的读/写（临时文件 + fsync + rename；损坏降级为空；形状与 `lib/ledger.js` 的 `own-record` 兼容）；`writeAtomic(file, text, tempPrefix)` 供收藏复用 |
+| `lib/market/favorites.js` | 自有收藏集合 `$DSH_HOME/dsh-skill-center/favorites.json` 的读/写（复用 `store.js` 的 `writeAtomic`；进程内串行化；损坏降级为空；上限 500；幂等不写盘） |
 
 Client 半部（`src/client/`，纯逻辑模块 node 可直接 import）：
 
@@ -227,10 +245,11 @@ Client 半部（`src/client/`，纯逻辑模块 node 可直接 import）：
 | `src/client/market-model.js` | **纯函数**：`marketKeyOf` / `mergeBatches` / `metaSegments` / `visibleCategories` / `chipList` / `installViewOf` / `emptyKindOf` / `detailFacts` / `reasonKeyOf` |
 | `src/client/market-panel.jsx` | `MarketPanel`：工具栏 / 分类 chips / 网格 / 尾部（骨架 / 重试 / 没有更多了）/ 整页态 / 详情切换 / 确认弹窗 / 触底预取 |
 | `src/client/market-filters.jsx` | 搜索框（250ms 防抖 + 回车立即 + 清空复位）、来源选择、排序选择、分类 chips、分类作用域说明 |
-| `src/client/market-card.jsx` | 一张卡：头像（复用 `avatar.js`）+ 标题按钮（`skc_marketCardOpen` 铺满整卡）+ 来源 Tag + 描述 + 元信息行 + 安装动作位 |
+| `src/client/market-card.jsx` | 一张卡：头像（复用 `avatar.js`）+ 标题按钮（`skc_marketCardOpen` 铺满整卡）+ 来源品牌图 + 收藏按钮 + 作者行 + 描述（2 行）+ 三段等宽数字 + 安装动作位 |
 | `src/client/market-detail.jsx` | 内嵌详情：面包屑返回 + 头（头像/标题/版本 Tag/动作）+ 事实表 + 概览 + 文件清单 + 三种失败态 |
 | `src/client/market-skeleton.jsx` | 首屏 6 张卡骨架 + 分类 chips 占位；尾部 3 张骨架 |
 | `src/client/market-confirm.jsx` | 安装确认（primitives `Modal` + 头像 + 名称 + 版本 + 事实表 + 第三方提示） |
+| `src/client/market-marks.jsx` | 两枚来源品牌位图（data URI 常量）+ 三段字形 + 书签字形；无 hook、无状态 |
 
 三句不变量：
 
@@ -242,4 +261,4 @@ Client 半部（`src/client/`，纯逻辑模块 node 可直接 import）：
 
 ## 验收
 
-市场面的验收不另建表（避免两份口径）：用例编号 K28–K51 与 PRD 的 A1–A17 对照登记在 `docs/contracts/acceptance.md` 的附录 D.5；路由与安装链路的契约面见 `docs/contracts/routes.md` §3.7 与 §8.6。
+市场面的验收不另建表（避免两份口径）：用例编号 K28–K51 与 K75–K81 与 PRD 的 A1–A17 对照登记在 `docs/contracts/acceptance.md` 的附录 D.5；路由与安装链路的契约面见 `docs/contracts/routes.md` §3.7 与 §8.6。

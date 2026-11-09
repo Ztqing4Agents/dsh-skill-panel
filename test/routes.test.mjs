@@ -49,7 +49,7 @@ async function mount(options = {}) {
   };
 }
 
-test('路由表就是设计里的十条 exact 路由（本地面 4 + 市场面 6）', () => {
+test('路由表就是设计里的十三条 exact 路由（本地面 4 + 市场面 9）', () => {
   assert.deepEqual(ROUTES, {
     list: '/api/dsh-skill-center/list',
     toggle: '/api/dsh-skill-center/toggle',
@@ -63,19 +63,20 @@ test('路由表就是设计里的十条 exact 路由（本地面 4 + 市场面 6
     marketLucide: '/api/dsh-skill-center/market/lucide',
     marketIcons: '/api/dsh-skill-center/market/icons',
     marketClawhubIcon: '/api/dsh-skill-center/market/clawhub-icon',
-  }, '十二条路径与设计逐字一致（本地面 4 条 + 市场面 8 条，见 routes.md §3.3 / §3.7.1）');
+    marketFavorite: '/api/dsh-skill-center/market/favorite',
+  }, '十三条路径与设计逐字一致（本地面 4 条 + 市场面 9 条，见 routes.md §3.3 / §3.7.1）');
 });
 
 test('路由都是 exact 类型，不用前缀匹配', async () => {
   const mounted = await mount();
   try {
     const routes = Object.values(mounted.byPath);
-    assert.equal(routes.length, 12, '一共注册十二条路由');
-    assert.equal(routes.every((route) => route.kind === 'exact'), true, '十二条都是 exact 路由');
+    assert.equal(routes.length, 13, '一共注册十三条路由');
+    assert.equal(routes.every((route) => route.kind === 'exact'), true, '十三条都是 exact 路由');
     assert.equal(
       routes.filter((route) => route.path.includes('/market/')).length,
-      8,
-      '市场面恰好八条（bootstrap/list/detail/installed/install/lucide/icons/clawhub-icon）',
+      9,
+      '市场面恰好九条（bootstrap/list/detail/installed/install/lucide/icons/clawhub-icon/favorite）',
     );
   } finally {
     await mounted.close();

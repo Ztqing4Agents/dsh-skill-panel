@@ -180,7 +180,7 @@
 ```
 
 > **不实现** `.cardLink:hover` / `:active`（宿主行是链接，我们的行不可点击，见附录 B-4）。行高恒 64px（48 图标 + 8×2 padding）。
-> 市场卡片**复用** `.skc_cardIcon`（48×48 同一条规则），其声明一字不改——改它会让「已安装」页签 11 行同时回归。
+> 市场卡片**复用** `.skc_cardIcon`（48×48 同一条规则），其声明一字不改——改它会让「已安装」页签 11 行同时回归。来源品牌图标**不是**头像色板的第七组：它是 `src/client/market-marks.jsx` 里两段 `data:image/png;base64` 位图（16×16 显示），只在市场卡片上出现，「已安装」页签不渲染它，也不参与 `avatar.js` 的散列。
 
 头像的两种颜色**不走样式表常量，走行内自定义属性**：`row.jsx` 渲染
 `<span class="skc_cardIcon" style="--skc-avatar-bg:…;--skc-avatar-ink:…">首字母</span>`，

@@ -56,6 +56,9 @@
   "market.metaAuthor": "@{author}",
   "market.metaVersion": "v{version}",
   "market.metaDownloads": "{count} downloads",
+  "market.metaSaves": "{count} saves",
+  "market.metaRating": "Rated {rating}",
+  "market.metaRatingHint": "Projected from the upstream score (4.0–5.0); not an average of user ratings",
   "market.install": "Install",
   "market.installing": "Installing...",
   "market.installed": "Installed",
@@ -111,5 +114,11 @@
   "error.E_PACKAGE_INVALID": "This skill’s package is incomplete or failed verification",
   "error.E_DOWNLOAD_FAILED": "Could not download the skill package: {reason}",
   "error.E_INSTALL_IO": "Could not write the skill directory: {reason}",
-  "error.E_INSTALL_BUSY": "This skill is already being installed"
+  "error.E_INSTALL_BUSY": "This skill is already being installed",
+  "market.favorite": "Save {name}",
+  "market.unfavorite": "Remove {name} from saved",
+  "market.favoriteTitle": "Save",
+  "market.unfavoriteTitle": "Saved. Tap to remove",
+  "error.E_FAVORITE_FULL": "You have reached the saved-items limit",
+  "error.E_FAVORITE_IO": "Could not save the favourite: {reason}"
 }

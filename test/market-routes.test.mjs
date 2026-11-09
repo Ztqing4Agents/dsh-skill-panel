@@ -1,8 +1,10 @@
 /**
- * The five market routes: fences, query fences, envelopes and the installed map.
+ * The six market read/write routes: fences, query fences, envelopes, the installed map,
+ * and the local bookmark write.
  *
  * Contracts: docs/contracts/routes.md §3.7.1 (route table), §3.7.2 (list semantics),
- * §3.7.3 (whitelists), §8.6 (codes and the `data` exception); case ids K35, K36.
+ * §3.7.3 (whitelists), §3.7.6 (`market/favorite` idempotency and cap), §8.6 (codes and
+ * the `data` exception); case ids K35, K36, K76, K77.
  *
  * The routes are mounted against two fake adapters and a temp DSH home, so nothing
  * here reaches the network. What is being tested is the *fence*: which requests are
@@ -10,13 +12,15 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdir } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { ROUTES, makeRoutes } from '../lib/routes.js';
+import { createFavoritesStore, favoritesFile } from '../lib/market/favorites.js';
 import { createInstaller } from '../lib/market/install.js';
 import { createStore, storeFile } from '../lib/market/store.js';
 import { LOOPBACK_HEADERS, callRoute } from './helpers/http.mjs';
+import { ROOT } from './helpers/ssr.mjs';
 import { tempDir } from './helpers/tree.mjs';
 
 /** The clock every route call is pinned to. */
@@ -143,10 +147,12 @@ function adapter(options) {
 }
 
 /**
- * Mount the nine routes over a temp DSH home and two fake adapters.
- * @param {{skillhub?: object, clawhub?: object, withLedger?: boolean}} [options] - adapters.
+ * Mount the ten routes under test over a temp DSH home and two fake adapters.
+ * @param {{skillhub?: object, clawhub?: object, withLedger?: boolean, favorites?: object}} [options]
+ *   adapters, and an optional favourites store to stand in for the real file.
  * @returns {Promise<{byPath: Record<string, object>, dshHome: string, skillsRoot: string,
- *   sources: object[], close: () => Promise<void>}>} the mounted routes.
+ *   sources: object[], favoritesCalls: string[], favoritesFile: string,
+ *   close: () => Promise<void>}>} the mounted routes.
  */
 async function mount(options = {}) {
   const { dir, cleanup } = await tempDir();
@@ -218,6 +224,23 @@ async function mount(options = {}) {
       resets.push('clawhub-icon-reset');
     },
   };
+  // The bookmark store is a real file under the temp home, wrapped so a test can count
+  // calls: "fenced before the store" is a property of the route, not of the file.
+  const favoritesCalls = [];
+  const realFavorites = options.favorites ?? createFavoritesStore({ dshHome: dir });
+  const favorites = options.favorites === undefined
+    ? {
+      file: realFavorites.file,
+      async read() {
+        favoritesCalls.push('read');
+        return realFavorites.read();
+      },
+      async toggle(id, favorited) {
+        favoritesCalls.push(`toggle:${id}:${favorited}`);
+        return realFavorites.toggle(id, favorited);
+      },
+    }
+    : realFavorites;
   const routes = makeRoutes({}, {
     dshHome: dir,
     skillsRoot,
@@ -231,6 +254,7 @@ async function mount(options = {}) {
       sources,
       sourceById,
       store,
+      favorites,
       installer,
       lucide,
       clawhubIcon,
@@ -248,6 +272,8 @@ async function mount(options = {}) {
     skillhubIconCalls,
     iconCalls,
     resets,
+    favoritesCalls,
+    favoritesFile: favoritesFile(dir),
     storeFile: storeFile(dir),
     close: cleanup,
   };
@@ -300,7 +326,7 @@ test('K35 非 loopback 请求一律 403 E_FORBIDDEN，且没有发生上游调�
   }
 });
 
-test('K35 bootstrap：六个键（sources / categories / categoriesOk / categoriesStale / total / countsOk）', async () => {
+test('K35/K77 bootstrap：八个键（sources / categories / categoriesOk / categoriesStale / total / countsOk / favorites / favoritesOk）', async () => {
   const mounted = await mount({
     skillhub: adapter({
       id: 'skillhub',
@@ -314,8 +340,8 @@ test('K35 bootstrap：六个键（sources / categories / categoriesOk / categori
     assert.equal(response.status, 200, 'bootstrap 200');
     assert.equal(response.json.code, 'OK', '信封 code 是 OK');
     assert.deepEqual(Object.keys(response.json.data).sort(),
-      ['categories', 'categoriesOk', 'categoriesStale', 'countsOk', 'sources', 'total'],
-      '恰好六个键（R4 加了 total 与 countsOk）');
+      ['categories', 'categoriesOk', 'categoriesStale', 'countsOk', 'favorites', 'favoritesOk', 'sources', 'total'],
+      '恰好八个键（R4 加了 total 与 countsOk；U2 加了 favorites 与 favoritesOk）');
     assert.deepEqual(response.json.data.sources.map((source) => source.id), ['skillhub', 'clawhub'], '两个来源按注册顺序');
     assert.deepEqual(response.json.data.sources[0], {
       id: 'skillhub',
@@ -1056,6 +1082,306 @@ test('K66 单源失败不连坐：SkillHub 整体抛错 ⇒ 200、skillhub 键�
     );
     assert.deepEqual(Object.keys(response.json.data.names), Object.keys(response.json.data.icons), '两张图同键同序');
     assert.equal(response.json.code, 'OK', '信封仍是 OK');
+  } finally {
+    await mounted.close();
+  }
+});
+
+/** A valid bookmark request body: identity plus the target state, nothing else. */
+const FAVORITE_BODY = JSON.stringify({ source: 'skillhub', owner: 'ake', slug: 'dev-god', favorited: true });
+
+test('K76 market/favorite 的围栏：只认 POST，只认 loopback，被挡下时零 store 调用', async () => {
+  const mounted = await mount();
+  try {
+    const route = mounted.byPath[ROUTES.marketFavorite];
+    assert.equal(typeof route, 'object', '第 13 条路由已注册');
+
+    const wrongMethod = await callRoute(route, { method: 'GET', headers: LOOPBACK_HEADERS });
+    assert.equal(wrongMethod.status, 405, 'GET ⇒ 405');
+    assert.equal(wrongMethod.json.code, 'E_METHOD', '错误码是 E_METHOD');
+    assert.deepEqual(mounted.favoritesCalls, [], '错方法时没有碰收藏文件');
+
+    const fenced = await callRoute(route, {
+      method: 'POST',
+      headers: LOOPBACK_HEADERS,
+      body: FAVORITE_BODY,
+      remoteAddress: '10.0.0.2',
+    });
+    assert.equal(fenced.status, 403, '非回环来源 ⇒ 403');
+    assert.equal(fenced.json.code, 'E_FORBIDDEN', '错误码是 E_FORBIDDEN');
+    assert.equal(fenced.json.data, null, '本地路由的失败信封 data 是 null');
+    assert.deepEqual(mounted.favoritesCalls, [], '被挡下时既没读也没写');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K76 market/favorite 的 body 形状：非对象 / 空 / favorited 非布尔都是 400 E_BAD_REQUEST', async () => {
+  const mounted = await mount();
+  try {
+    const route = mounted.byPath[ROUTES.marketFavorite];
+    const cases = [
+      ['[]', 'body 是数组（不是对象）'],
+      ['', '空 body'],
+      ['{oops', '不是 JSON'],
+      [JSON.stringify({ source: 'skillhub', owner: 'ake', slug: 'dev-god' }), '没有 favorited'],
+      [JSON.stringify({ source: 'skillhub', owner: 'ake', slug: 'dev-god', favorited: 'true' }), 'favorited 是字符串'],
+    ];
+    for (const [body, hint] of cases) {
+      const response = await callRoute(route, { method: 'POST', headers: LOOPBACK_HEADERS, body });
+      assert.equal(response.status, 400, `${hint} ⇒ 400`);
+      assert.equal(response.json.code, 'E_BAD_REQUEST', `${hint} ⇒ E_BAD_REQUEST（形状不对，不是参数不对）`);
+    }
+    assert.deepEqual(mounted.favoritesCalls, [], '形状不对时一次都没碰收藏文件');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K76 身份白名单：owner 带路径片段或源未注册都是 400 E_BAD_QUERY', async () => {
+  const mounted = await mount();
+  try {
+    const route = mounted.byPath[ROUTES.marketFavorite];
+    for (const body of [
+      { source: 'skillhub', owner: '../x', slug: 'dev-god', favorited: true },
+      { source: 'skillhub', owner: 'ake', slug: 'dev-god', favorited: true, source2: 'x' },
+      { source: 'nosuch', owner: 'ake', slug: 'dev-god', favorited: true },
+    ]) {
+      const response = await callRoute(route, {
+        method: 'POST',
+        headers: LOOPBACK_HEADERS,
+        body: JSON.stringify(body),
+      });
+      // `source2` is an extra field and is simply ignored, so that one succeeds; the other
+      // two are rejected. Assert per case below instead of one blanket expectation.
+      if (body.source === 'nosuch' || body.owner === '../x') {
+        assert.equal(response.status, 400, `${JSON.stringify(body)} ⇒ 400`);
+        assert.equal(response.json.code, 'E_BAD_QUERY', `${JSON.stringify(body)} ⇒ E_BAD_QUERY（身份/源不合规）`);
+      } else {
+        assert.equal(response.status, 200, '多余字段被忽略，不影响合法请求');
+      }
+    }
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K76 成功与幂等：出参只有 favorites/favorited，重复收藏不写盘，body 里的 id/path 不生效', async () => {
+  const mounted = await mount();
+  try {
+    const route = mounted.byPath[ROUTES.marketFavorite];
+    const first = await callRoute(route, { method: 'POST', headers: LOOPBACK_HEADERS, body: FAVORITE_BODY });
+    assert.equal(first.status, 200, '收藏成功 200');
+    assert.deepEqual(
+      Object.keys(first.json.data).sort(),
+      ['favorited', 'favorites'],
+      '出参恰好两个键（权威全量列表 + 生效状态）',
+    );
+    assert.deepEqual(first.json.data, { favorites: ['skillhub:ake:dev-god'], favorited: true }, '键由 Host 用三元组重拼');
+    const before = await readFile(mounted.favoritesFile, 'utf8');
+
+    const again = await callRoute(route, {
+      method: 'POST',
+      headers: LOOPBACK_HEADERS,
+      body: JSON.stringify({
+        source: 'skillhub',
+        owner: 'ake',
+        slug: 'dev-god',
+        favorited: true,
+        id: 'evil:whatever:key',
+        path: '/etc/passwd',
+      }),
+    });
+    assert.equal(again.status, 200, '重复收藏仍是 200（幂等）');
+    assert.deepEqual(again.json.data.favorites, ['skillhub:ake:dev-god'], 'id 字段不生效：键仍是重拼的那个');
+    assert.equal(await readFile(mounted.favoritesFile, 'utf8'), before, '字节不变（幂等不写盘）');
+
+    const removed = await callRoute(route, {
+      method: 'POST',
+      headers: LOOPBACK_HEADERS,
+      body: JSON.stringify({ source: 'skillhub', owner: 'ake', slug: 'dev-god', favorited: false }),
+    });
+    assert.deepEqual(removed.json.data, { favorites: [], favorited: false }, '取消后列表为空');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K76 两个失败码：满 500 ⇒ 409 E_FAVORITE_FULL，写盘失败 ⇒ 500 E_FAVORITE_IO（失败信封不带 data）', async () => {
+  // The cap is exercised through the *real* store: a file holding 500 bookmarks, then
+  // one more POST. The I/O failure needs a store that cannot write, so that one is stubbed.
+  const capped = await mount();
+  await mkdir(join(capped.dshHome, 'dsh-skill-center'), { recursive: true });
+  await writeFile(
+    capped.favoritesFile,
+    `${JSON.stringify({
+      version: 1,
+      favorites: Array.from({ length: 500 }, (_, i) => `skillhub:ake:id-${i}`),
+    })}
+`,
+    'utf8',
+  );
+  const failing = await mount();
+  try {
+    const fullResponse = await callRoute(capped.byPath[ROUTES.marketFavorite], {
+      method: 'POST',
+      headers: LOOPBACK_HEADERS,
+      body: FAVORITE_BODY,
+    });
+    assert.equal(fullResponse.status, 409, '满 500 时新增 ⇒ 409');
+    assert.equal(fullResponse.json.code, 'E_FAVORITE_FULL', '错误码 E_FAVORITE_FULL');
+
+    // The real store, on a home it cannot create a file under: the fs error must surface
+    // as the route's own code, not as a generic 500.
+    await chmod(failing.dshHome, 0o555);
+    try {
+      const ioFailure = await callRoute(failing.byPath[ROUTES.marketFavorite], {
+        method: 'POST',
+        headers: LOOPBACK_HEADERS,
+        body: FAVORITE_BODY,
+      });
+      assert.equal(ioFailure.status, 500, '写盘失败 ⇒ 500');
+      assert.equal(ioFailure.json.code, 'E_FAVORITE_IO', '文件系统失败映射成 E_FAVORITE_IO（不是 E_INTERNAL）');
+      assert.equal(ioFailure.json.data, null, '收藏的失败信封不带 data（界面只有一句 toast）');
+    } finally {
+      await chmod(failing.dshHome, 0o755);
+    }
+  } finally {
+    await capped.close();
+    await failing.close();
+  }
+});
+
+test('K77 bootstrap 下发收藏：正常文件透传（最新在前）+ favoritesOk:true', async () => {
+  const mounted = await mount();
+  try {
+    await mkdir(join(mounted.dshHome, 'dsh-skill-center'), { recursive: true });
+    await writeFile(
+      mounted.favoritesFile,
+      `${JSON.stringify({ version: 1, favorites: ['clawhub:ivangdavila:design', 'skillhub:ake:dev-god'] }, null, 2)}\n`,
+      'utf8',
+    );
+    const response = await callRoute(mounted.byPath[ROUTES.marketBootstrap], { headers: LOOPBACK_HEADERS });
+    assert.equal(response.status, 200, 'bootstrap 200');
+    assert.deepEqual(
+      response.json.data.favorites,
+      ['clawhub:ivangdavila:design', 'skillhub:ake:dev-god'],
+      '收藏随 bootstrap 下发，顺序即文件顺序（最新在前）',
+    );
+    assert.equal(response.json.data.favoritesOk, true, '读成功才 true');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K77 收藏文件缺失 / 损坏都仍是 200：缺失报 favoritesOk:true，损坏才 false；refresh 不清收藏', async () => {
+  const mounted = await mount();
+  try {
+    // 1. No file at all: a fresh install. Nobody has saved anything, so this is not a
+    //    defect - `favoritesOk` must stay true or every first run raises a false alarm.
+    const missing = await callRoute(mounted.byPath[ROUTES.marketBootstrap], { headers: LOOPBACK_HEADERS });
+    assert.equal(missing.status, 200, '没有文件也是 200');
+    assert.deepEqual(missing.json.data.favorites, [], '没有文件 ⇒ 空集');
+    assert.equal(missing.json.data.favoritesOk, true, '缺失 ≠ 损坏：首启不报「书签可能丢了」');
+
+    // 2. A corrupt file: this is the case the flag exists for.
+    await mkdir(join(mounted.dshHome, 'dsh-skill-center'), { recursive: true });
+    await writeFile(mounted.favoritesFile, '{"favorites": 3}\n', 'utf8');
+
+    const broken = await callRoute(mounted.byPath[ROUTES.marketBootstrap], { headers: LOOPBACK_HEADERS });
+    assert.equal(broken.status, 200, '损坏降级不是错误：仍然 200');
+    assert.deepEqual(broken.json.data.favorites, [], '降级成空集');
+    assert.equal(broken.json.data.favoritesOk, false, '损坏才报 false');
+    assert.equal(Array.isArray(broken.json.data.sources), true, '其余键照常（市场页不失败）');
+
+    await writeFile(mounted.favoritesFile, `${JSON.stringify({ version: 1, favorites: ['skillhub:ake:dev-god'] })}\n`, 'utf8');
+    const refreshed = await callRoute(mounted.byPath[ROUTES.marketBootstrap], {
+      headers: LOOPBACK_HEADERS,
+      url: `${ROUTES.marketBootstrap}?refresh=1`,
+    });
+    assert.deepEqual(refreshed.json.data.favorites, ['skillhub:ake:dev-god'], 'refresh=1 只清缓存，不动收藏');
+    assert.equal(refreshed.json.data.favoritesOk, true, '刷新后仍读成功');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K76 favorited 只认布尔：null / 1 / 0 / [] 都是 400 E_BAD_REQUEST，且零 store 调用', async () => {
+  const mounted = await mount();
+  try {
+    const route = mounted.byPath[ROUTES.marketFavorite];
+    for (const value of [null, 1, 0, [], {}]) {
+      const response = await callRoute(route, {
+        method: 'POST',
+        headers: LOOPBACK_HEADERS,
+        body: JSON.stringify({ source: 'skillhub', owner: 'ake', slug: 'dev-god', favorited: value }),
+      });
+      assert.equal(response.status, 400, `favorited=${JSON.stringify(value)} ⇒ 400`);
+      assert.equal(response.json.code, 'E_BAD_REQUEST', '形状不对（不是参数不合白名单）');
+    }
+    assert.deepEqual(mounted.favoritesCalls, [], '布尔不对的请求一次都没碰收藏文件');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K76 出参列表最新在前：第二个收藏排第一个；取消没收藏过的条目仍是 200 且不写盘', async () => {
+  const mounted = await mount();
+  try {
+    const route = mounted.byPath[ROUTES.marketFavorite];
+    const post = (body) => callRoute(route, { method: 'POST', headers: LOOPBACK_HEADERS, body: JSON.stringify(body) });
+
+    const first = await post({ source: 'skillhub', owner: 'ake', slug: 'dev-god', favorited: true });
+    assert.deepEqual(first.json.data.favorites, ['skillhub:ake:dev-god'], '第一条');
+    const second = await post({ source: 'clawhub', owner: 'ivangdavila', slug: 'design', favorited: true });
+    assert.deepEqual(
+      second.json.data.favorites,
+      ['clawhub:ivangdavila:design', 'skillhub:ake:dev-god'],
+      '两个源各自一条，最新收藏在前（与文件顺序、bootstrap 下发顺序一致）',
+    );
+
+    const before = await readFile(mounted.favoritesFile, 'utf8');
+    const never = await post({ source: 'skillhub', owner: 'ake', slug: 'never-saved', favorited: false });
+    assert.equal(never.status, 200, '取消一个没收藏过的条目仍是 200（幂等）');
+    assert.deepEqual(never.json.data, {
+      favorites: ['clawhub:ivangdavila:design', 'skillhub:ake:dev-god'],
+      favorited: false,
+    }, '列表原样回，状态是「它现在确实没被收藏」');
+    assert.equal(await readFile(mounted.favoritesFile, 'utf8'), before, '不产生无意义的写盘');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K77 契约文本与实现同形：routes.md 的 bootstrap 行必须列出 favorites / favoritesOk', async () => {
+  // K77 says the response has exactly eight keys; the route table is where a reader
+  // learns that shape, so the two cannot disagree. (K30 does the same for the codes.)
+  const text = await readFile(join(ROOT, 'docs', 'contracts', 'routes.md'), 'utf8');
+  const row = text.split('\n').find((line) => line.includes('`GET /api/dsh-skill-center/market/bootstrap`'));
+  assert.ok(row !== undefined, 'routes.md §3.7.1 里找得到 bootstrap 一行');
+  assert.match(row, /\bfavorites\b/, '出参 data 里写着 favorites（收藏随 bootstrap 下发）');
+  assert.match(row, /\bfavoritesOk\b/, '出参 data 里写着 favoritesOk（读成功才是 true）');
+});
+
+test('K76 body 里的 version 也不生效：收藏键只有三元组，列表里不会长出带版本的条目', async () => {
+  const mounted = await mount();
+  try {
+    const route = mounted.byPath[ROUTES.marketFavorite];
+    const response = await callRoute(route, {
+      method: 'POST',
+      headers: LOOPBACK_HEADERS,
+      body: JSON.stringify({
+        source: 'skillhub',
+        owner: 'ake',
+        slug: 'dev-god',
+        version: '9.9.9',
+        favorited: true,
+      }),
+    });
+    assert.equal(response.status, 200, '多余字段被忽略，不影响合法请求');
+    assert.deepEqual(response.json.data.favorites, ['skillhub:ake:dev-god'], '键里没有版本段（与图标缓存、台账同一个键）');
+    const file = JSON.parse(await readFile(mounted.favoritesFile, 'utf8'));
+    assert.deepEqual(file, { version: 1, favorites: ['skillhub:ake:dev-god'] }, '文件里的 version 是文档版本，不是技能版本');
   } finally {
     await mounted.close();
   }

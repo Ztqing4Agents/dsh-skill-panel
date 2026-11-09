@@ -1,13 +1,15 @@
 /**
- * The shell overlay's notices: a refresh that failed, and an install that landed.
+ * The shell overlay's notices: a refresh that failed, an install that landed, and a
+ * bookmark that could not be written.
  *
  * They live outside the page on purpose: a refresh can fail after the user has clicked
  * back into a conversation, and an install keeps running while they browse on. Both
  * therefore have to be visible without the page being mounted.
  *
- * One seat serves both: the notice's `kind` picks the copy and the icon, so an install
- * tells the user where the skill went and that it takes effect in a new conversation
- * without inventing a second overlay.
+ * One seat serves all three: the notice's `kind` picks the copy and the icon, so an
+ * install tells the user where the skill went and that it takes effect in a new
+ * conversation, and a failed save explains itself after the bookmark has already sprung
+ * back, without inventing a second overlay.
  */
 import { useSyncExternalStore } from 'react';
 import { Toast, IconWarningOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives';
@@ -44,6 +46,16 @@ export function ToastHost({ t = identityTranslate, store }) {
               : null}
           </>
         )}
+        onDone={dismiss}
+      />
+    );
+  }
+  if (notice.kind === 'favorite-failed') {
+    return (
+      <Toast
+        key={notice.seq}
+        text={notice.reason}
+        icon={<IconWarningOutlineRegular />}
         onDone={dismiss}
       />
     );

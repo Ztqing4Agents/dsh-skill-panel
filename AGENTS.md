@@ -23,7 +23,7 @@ npm test             # node --test test/（测试由 QA 维护）
 | 路由表、写盘、错误码 | `docs/contracts/routes.md` | §3.3 §3.4 §8.1 |
 | 前端组件、状态机、命名与 i18n | `docs/contracts/client.md` | §3.5 §3.6 §8.2–§8.5 |
 | 调用流程与未定事项 | `docs/contracts/flows.md` | §4 §5 |
-| 验收口径、夹具、用例编号 K1–K74 | `docs/contracts/acceptance.md` | 附录 D.5（K28–K61）、D.6（K62–K74） |
+| 验收口径、夹具、用例编号 K1–K81 | `docs/contracts/acceptance.md` | 附录 D.5（K28–K61 K75–K81）、D.6（K62–K74） |
 | 决策登记（偏离 / 更正 / 假设） | `docs/contracts/decisions.md` | 附录 B |
 | 页面视觉刻度（px、令牌、`skc_` 类名、收拢顺序） | `docs/contracts/visual.md` | A.1–A.9 |
 | 技能市场（源适配器、数据流、市场刻度、安装链路） | `docs/contracts/market.md` | §7 附录 F 附录 G（路由见 `routes.md` §3.7 §8.6） |
@@ -33,7 +33,7 @@ npm test             # node --test test/（测试由 QA 维护）
 | 过去是什么、为什么这么定 | `git log`（`git log -S`） | 仓库里没有 `archive/`，历史交 git |
 | 现在卡在哪、还剩什么没验 | `.agents/work/BOARD.md` | 本地看板（列约定在文件头，过程产物在 wip/ 与 scratch/），不入库 |
 
-契约按**编号分区**：`§x.y` 与 `附录 X.n` 在全仓库唯一，正文里看到编号就按上表定位；编号是 `test/*.test.mjs` 头注的锚点（K1–K74），**不许重排或复用**。
+契约按**编号分区**：`§x.y` 与 `附录 X.n` 在全仓库唯一，正文里看到编号就按上表定位；编号是 `test/*.test.mjs` 头注的锚点（K1–K81），**不许重排或复用**。
 
 **新知识写哪**：可 grep 的断言 → 契约；不能做错的事 → 本文件「硬约束」；用户可感知的变化 → `CHANGELOG`；还没做的事 → 看板；**没定型的探索结论**才进项目记忆。文档里不放过程（PRD、测试报告、设计图）——已移出，见 commit `a8141eb`。
 
@@ -41,13 +41,13 @@ npm test             # node --test test/（测试由 QA 维护）
 
 | 路径 | 是什么 |
 | --- | --- |
-| `index.js` | Host 半部入口：解析 `dshHome`/`skillsRoot`，注册 12 条路由（本地面 4 + 市场面 8） |
+| `index.js` | Host 半部入口：解析 `dshHome`/`skillsRoot`，注册 13 条路由（本地面 4 + 市场面 9） |
 | `lib/classify.js` | **纯函数核心**：`rankOf` / `classifySkill` / `mergeCatalog` / `buildGroups`。改判据只改这里 |
 | `lib/scan.js`、`lib/ledger.js` | 唯一碰盘的读取模块（自扫描 / 安装台账） |
 | `lib/frontmatter.js` | 字节级改写器（CRLF/BOM/注释保真）+ 读侧解析器（含块标量 `>`/`\|`） |
 | `lib/write-skill.js` | 指纹 → 临时文件 → fsync → rename → 回读校验 → 回滚 |
-| `lib/routes.js` | 12 条 exact 路由（本地面 4 + 市场面 8），共用一个 `guard()` |
-| `src/client/**` → `client.js` | 源码 19 个文件（市场页 7 个为 `market-*`，`icon-tile.jsx`/`avatar.js` 是共用视觉单元；纯逻辑模块不含 JSX，node 可直接测）；`client.js` 是**构建产物、入库、不要手改** |
+| `lib/routes.js` | 13 条 exact 路由（本地面 4 + 市场面 9），共用一个 `guard()` |
+| `src/client/**` → `client.js` | 源码 20 个文件（市场页 8 个为 `market-*`，`icon-tile.jsx`/`avatar.js` 是共用视觉单元；纯逻辑模块不含 JSX，node 可直接测）；`client.js` 是**构建产物、入库、不要手改** |
 | `lib/market/**`、`src/client/` 的 `market-*` 文件 | 市场半部：源适配器、安装链路、市场页组件（清单见 `docs/contracts/market.md` 附录 G） |
 | `locale/{zh,en}.json` | 唯一文案真源 |
 
@@ -66,7 +66,7 @@ npm test             # node --test test/（测试由 QA 维护）
 7. **frontmatter 改写只能走 `lib/frontmatter.js`**：现成实现（含 skill-explorer 的
    `setFrontmatterField`）会把 CRLF 洗成 LF。本机 `indiv-guipi--find-skills/SKILL.md` 就是 CRLF 样本。
 8. **`exports["./client"]` 必须是字符串 `"./client.js"`**：宿主 `clientExportOf()` 硬契约。
-9. **点击边界按页签划**：「已安装」页签唯一交互控件是右侧开关（不加行 hover 底色、不加详情入口）；「技能市场」页签的**卡片可点**（进内嵌详情），实现只能用宿主那一个手段——`cardOpen::after` 铺满整卡 + `cardEnd{z-index:1}` 把安装按钮浮在上层，**不许**做成 `<a href>`、不许在卡片里再嵌第二个可点区域；两处都不许出现「看着能点、点了没反应」。
+9. **点击边界按页签划**：「已安装」页签唯一交互控件是右侧开关（不加行 hover 底色、不加详情入口）；「技能市场」页签的**卡片可点**（进内嵌详情），实现只能用宿主那一个手段——`cardOpen::after` 铺满整卡 + 动作位显式 `z-index` 浮在上层（安装位 `cardEnd{z-index:1}`、收藏按钮 `marketFavorite{z-index:2}`）；卡片里**只允许这两个动作位**，其余任何区域（含底行三段数字）都落在点击层上、点的都是"进详情"，**不许**做成 `<a href>`、不许加第三个可点区域、不许用 JS 拦冒泡代替层级；两处都不许出现「看着能点、点了没反应」。
 10. **不写别人的存储**：`~/.dsh/skills-manager/state.json`、`skill-market/*`、`.skills-lock.json` 只读。
 11. **Client 半部必须 `export const inject = ['slots', 'locale']`，且与 `ctx.*` 读取严格对齐**：
     cordis 按 fiber 的 inject 声明解析服务，读到未声明的服务直接抛
