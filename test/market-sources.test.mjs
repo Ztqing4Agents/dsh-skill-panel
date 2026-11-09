@@ -33,7 +33,20 @@ test('K42 每个适配器都实现 §7.1 的六个函数与 caps，文案只给�
       assert.equal(typeof source.caps[key], 'boolean', `${source.id}: caps.${key} 是布尔`);
     }
     assert.ok(['files', 'zip'].includes(source.caps.package), `${source.id}: package 只能是 files 或 zip`);
+    // 有分类表的源必须同时能"数"（chips 上的数字与 bootstrap 的 total 都走它）；
+    // 没有分类表的源不必实现，路由会按「没有 counts 能力」降级。
+    if (source.caps.categories === true) {
+      assert.equal(typeof source.categories, 'function', `${source.id}: 声明有分类表就必须实现 categories`);
+      assert.equal(typeof source.counts, 'function', `${source.id}: 声明有分类表就必须实现 counts（K53）`);
+    }
   }
+});
+
+test('K42 counts 只在有分类表的源上存在，且返回形状固定', () => {
+  const skillhub = getSource('skillhub');
+  const clawhub = getSource('clawhub');
+  assert.equal(typeof skillhub.counts, 'function', 'SkillHub 有 counts');
+  assert.equal(clawhub.counts, undefined, 'ClawHub 没有分类表，也就没有 counts');
 });
 
 test('K42 能力对照与 §7.2 一致：SkillHub 有分类表、ClawHub 没有且是整包', () => {

@@ -19,8 +19,8 @@ export const MARKET_FALLBACK_SOURCES = Object.freeze([
 /** Source ids that publish no category table even before `bootstrap` says so. */
 const NO_CATEGORY_SOURCES = new Set(['clawhub']);
 
-/** The filter value that means "do not narrow by source". */
-export const SOURCE_ALL = 'all';
+/** The source the market opens on: the menu lists the real sources only, with no "all". */
+export const MARKET_DEFAULT_SOURCE = 'skillhub';
 
 /** Per-source page size. Two sources therefore add 24 cards per scroll page. */
 export const MARKET_PAGE_SIZE = 12;
@@ -114,16 +114,14 @@ export function metaSegments(item) {
  * @returns {{visible: boolean, unavailable: boolean, items: object[]}} the row's fate.
  */
 export function visibleCategories(market) {
-  const selected = market?.filters?.source ?? SOURCE_ALL;
+  const selected = market?.filters?.source ?? MARKET_DEFAULT_SOURCE;
   const sources = Array.isArray(market?.sources) ? market.sources : [];
   const categories = Array.isArray(market?.categories) ? market.categories : [];
-  if (selected !== SOURCE_ALL) {
-    const descriptor = sources.find((source) => source?.id === selected);
-    const hasCategories = descriptor === undefined
-      ? !NO_CATEGORY_SOURCES.has(selected)
-      : descriptor.hasCategories === true;
-    if (!hasCategories) return { visible: false, unavailable: false, items: [] };
-  }
+  const descriptor = sources.find((source) => source?.id === selected);
+  const hasCategories = descriptor === undefined
+    ? !NO_CATEGORY_SOURCES.has(selected)
+    : descriptor.hasCategories === true;
+  if (!hasCategories) return { visible: false, unavailable: false, items: [] };
   if (market?.categoriesOk === false) return { visible: false, unavailable: true, items: [] };
   if (categories.length === 0) return { visible: false, unavailable: false, items: [] };
   return { visible: true, unavailable: false, items: categories };
@@ -135,15 +133,35 @@ export function visibleCategories(market) {
  * @returns {{value: string|null, label: string}[]} machine value plus display text;
  *   the `null` chip has no label of its own and is rendered from the dictionary.
  */
-export function chipList(categories) {
+export function chipList(categories, options = {}) {
   const items = Array.isArray(categories) ? categories : [];
+  const countsOk = options.countsOk !== false;
+  const total = Number.isFinite(options.total) ? options.total : null;
+  const countOf = (value) => (countsOk && Number.isFinite(value) ? value : null);
   return [
-    { value: null, label: '' },
+    { value: null, label: '', count: countOf(total) },
     ...items.map((category) => ({
       value: typeof category?.key === 'string' ? category.key : '',
       label: category?.name || category?.nameEn || category?.key || '',
+      count: countOf(category?.count),
     })),
   ];
+}
+
+/**
+ * A compact count for a chip ("1.3M", "13K", and whatever the runtime's default locale
+ * spells them as). Returns null for "there is no number", which the chip renders as
+ * nothing at all - never a zero placeholder, never a dash.
+ * @param {unknown} value - the count from bootstrap.
+ * @returns {string|null} the formatted number, or null.
+ */
+export function countText(value) {
+  if (!Number.isFinite(value) || value < 0) return null;
+  try {
+    return new Intl.NumberFormat(undefined, { notation: 'compact' }).format(value);
+  } catch {
+    return String(value);
+  }
 }
 
 /**
@@ -238,9 +256,7 @@ export function sourceDescriptors(market) {
  * @returns {string[]} source ids, in render order.
  */
 export function queriedSources(market) {
-  const ids = sourceDescriptors(market).map((source) => source.id);
-  const selected = market?.filters?.source ?? SOURCE_ALL;
-  return selected === SOURCE_ALL ? ids : [selected];
+  return [market?.filters?.source ?? MARKET_DEFAULT_SOURCE];
 }
 
 /**

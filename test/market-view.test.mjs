@@ -379,25 +379,16 @@ test('K39 确认弹窗：dialog 语义 + 标题 + 三项事实 + 第三方提示
   assert.equal(matches(html, /data-skc-market-id=/g).length, 1, '弹窗之外列表仍在原位');
 });
 
-test('K38 四类失败态：整页失败、单源失败提示条、追加失败、搜索无结果', () => {
+test('K38 三类失败态：整页失败、追加失败、搜索无结果', () => {
+  // 单源之后「一源失败但另一源照常」这个状态不存在了：那一次请求的失败就是整页失败。
+  // 旧的 `skc_marketNotice` 提示条随之删除（`market.partialSource` 键也删了）。
   const wholeFailure = renderMarket((store) => {
     store.actions.marketListFailed({ code: 'E_SOURCE_UNAVAILABLE', message: 'down' });
   });
-  assert.ok(wholeFailure.includes('class="skc_marketFailure"'), '两源都失败 ⇒ 整页失败容器');
+  assert.ok(wholeFailure.includes('class="skc_marketFailure"'), '请求失败 ⇒ 整页失败容器');
   assert.ok(wholeFailure.includes('无法连接技能市场'), '整页失败文案');
   assert.ok(wholeFailure.includes('>重试<'), '整页失败有重试');
-
-  const partial = renderMarket((store) => {
-    store.actions.marketPageAppended({
-      pages: [{ sourceId: 'skillhub', page: { items: [item()], next: null } }],
-      merged: [item()],
-      errors: [{ sourceId: 'clawhub', code: 'E_SOURCE_TIMEOUT' }],
-    });
-  });
-  assert.ok(partial.includes('class="skc_marketNotice"'), '一源失败 ⇒ 提示条');
-  assert.ok(/role="note"/.test(partial), '提示条以 note 播报（不是 alert：列表仍然可用）');
-  assert.ok(partial.includes('ClawHub'), '提示条点名失败的那个源');
-  assert.ok(partial.includes('data-skc-market-id'), '另一源的卡片照常渲染');
+  assert.equal(wholeFailure.includes('skc_marketNotice'), false, '不再有「部分源失败」提示条');
 
   const tailFailure = renderMarket((store) => {
     store.actions.marketPageAppended({
@@ -471,8 +462,10 @@ test('K38 工具栏：搜索框、来源与排序菜单、分类 chips；选 Cla
         { id: 'skillhub', labelKey: 'market.source.skillhub', hasCategories: true, packageKind: 'files' },
         { id: 'clawhub', labelKey: 'market.source.clawhub', hasCategories: false, packageKind: 'zip' },
       ],
-      categories: [{ key: 'dev-tools', name: '开发工具' }],
+      categories: [{ key: 'dev-tools', name: '开发工具', count: 137000 }],
       categoriesOk: true,
+      total: 2540000,
+      countsOk: true,
     });
   });
   assert.ok(skillhub.includes('class="skc_marketToolbar"'), '有工具栏');
@@ -483,8 +476,20 @@ test('K38 工具栏：搜索框、来源与排序菜单、分类 chips；选 Cla
   // 菜单选项只在展开时渲染（Menu 是本组件的 useState），字符串渲染拿到的是锚点上的当前值。
   // 这里断言锚点形状与当前值；点开之后的三个选项由真机抽查覆盖。
   assert.equal(matches(skillhub, /aria-haspopup="menu"/g).length, 2, '两个锚点都声明自己是 menu（来源 / 排序）');
-  assert.ok(skillhub.includes('>全部来源<'), '来源锚点显示当前值「全部来源」');
+  // 「全部来源」这个选项已删：来源锚点显示的就是当前那个真实源，缺省是 SkillHub。
+  assert.ok(skillhub.includes('>SkillHub<'), '来源锚点显示当前值「SkillHub」（默认源）');
+  assert.equal(skillhub.includes('全部来源'), false, '不再有「全部来源」这个选项');
   assert.ok(skillhub.includes('>推荐<'), '排序锚点显示当前值「推荐」');
+  // 分类 chips 上的数字：`total` 挂在「全部」上，`count` 挂在各自 chip 上（K54）。
+  assert.equal(matches(skillhub, /class="skc_marketChipCount"/g).length, 2, '「全部」与「开发工具」都带数字');
+  assert.ok(
+    skillhub.includes(`>${new Intl.NumberFormat(undefined, { notation: 'compact' }).format(2540000)}<`),
+    '「全部」的数字是 total 的紧凑写法',
+  );
+  assert.ok(
+    skillhub.includes(`>${new Intl.NumberFormat(undefined, { notation: 'compact' }).format(137000)}<`),
+    '分类自己的数字',
+  );
 
   const clawhub = renderMarket((store) => {
     store.actions.marketBootReady({
@@ -602,6 +607,84 @@ test('K49 市场页签的刷新按钮跟随市场加载状态（aria-busy / disa
   assert.ok(idle.includes('data-icon="refresh"'), '空闲时是刷新图标');
 });
 
+/* ------------------------------------------------- K54/K55/K56 · 数量、单源、contain */
+
+test('K54 countsOk:false ⇒ 一个数字都不渲染（chips 照常可点）', () => {
+  const html = renderMarket((store) => {
+    store.actions.marketBootReady({
+      sources: [
+        { id: 'skillhub', labelKey: 'market.source.skillhub', hasCategories: true, packageKind: 'files' },
+        { id: 'clawhub', labelKey: 'market.source.clawhub', hasCategories: false, packageKind: 'zip' },
+      ],
+      categories: [{ key: 'dev-tools', name: '开发工具', count: null }],
+      categoriesOk: true,
+      total: null,
+      countsOk: false,
+    });
+  });
+  assert.equal(html.includes('skc_marketChipCount'), false, '计数不全时整段不渲染数字（不留 0、不留破折号）');
+  assert.ok(html.includes('>全部<'), '「全部」chip 仍在');
+  assert.ok(html.includes('>开发工具<'), '分类 chip 仍在（数字没了不影响筛选）');
+});
+
+test('K55 单源：来源锚点默认 SkillHub，没有「全部来源」；切到 ClawHub 分类行消失', () => {
+  const html = renderMarket((store) => {
+    store.actions.marketBootReady({
+      sources: [
+        { id: 'skillhub', labelKey: 'market.source.skillhub', hasCategories: true, packageKind: 'files' },
+        { id: 'clawhub', labelKey: 'market.source.clawhub', hasCategories: false, packageKind: 'zip' },
+      ],
+      categories: [{ key: 'dev-tools', name: '开发工具' }],
+      categoriesOk: true,
+      total: 10,
+      countsOk: true,
+    });
+  });
+  assert.ok(html.includes('aria-label="来源"'), '来源菜单在');
+  assert.ok(html.includes('>SkillHub<'), '锚点显示 SkillHub');
+  assert.equal(html.includes('全部来源'), false, '菜单里不再有「全部来源」');
+  // 下拉里的选项在展开时渲染；这里断言「能展开」的那两个稳定钩子，选项数量由真机抽查数。
+  assert.equal(matches(html, /aria-haspopup="menu"/g).length, 2, '来源与排序两个 anchor');
+
+  const claw = renderMarket((store) => {
+    store.actions.marketBootReady({
+      sources: [
+        { id: 'skillhub', labelKey: 'market.source.skillhub', hasCategories: true, packageKind: 'files' },
+        { id: 'clawhub', labelKey: 'market.source.clawhub', hasCategories: false, packageKind: 'zip' },
+      ],
+      categories: [{ key: 'dev-tools', name: '开发工具' }],
+      categoriesOk: true,
+      total: 10,
+      countsOk: true,
+    });
+    store.actions.marketSetFilter({ source: 'clawhub' });
+  });
+  assert.ok(claw.includes('>ClawHub<'), '切到 ClawHub 后锚点跟着变');
+  assert.equal(claw.includes('class="skc_marketChips"'), false, 'ClawHub 没有分类表 ⇒ 整行消失');
+});
+
+test('K56 图标用 object-fit: contain（宽幅 logo 不裁切），市场块里没有 cover', async () => {
+  const css = await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8');
+  const start = css.indexOf('.skc_marketIconImg{');
+  const rule = css.slice(start, css.indexOf('}', start) + 1);
+  assert.match(rule, /object-fit: contain/, '图片按 contain 完整显示（留白，不裁形状）');
+  assert.equal(/object-fit:\s*cover/.test(css), false, '整个样式表都不再出现 cover');
+  // `.skc_marketIconImg` 仍然只是那几条声明：这轮只改了一个取值，没有顺手加东西。
+  // 逐条列出来比数分号稳（多一条就红，少一条也红）。
+  const declarations = rule
+    .slice(rule.indexOf('{') + 1, rule.lastIndexOf('}'))
+    .split(';')
+    .map((part) => part.trim())
+    .filter((part) => part !== '');
+  assert.deepEqual(declarations, [
+    'border-radius: calc(var(--dsw-radius-lg) - .5px)',
+    'width: 100%',
+    'height: 100%',
+    'object-fit: contain',
+    'display: block',
+  ], '四条既有声明 + 只把 cover 换成 contain，没有顺手加东西');
+});
+
 /* ------------------------------------------------------------------ K52 · MarketIcon */
 
 const ICON_URL = 'https://cdn.skillhub.cn/skill-icons/ake/dev-god.png';
@@ -634,7 +717,7 @@ test('K52 ① 填满内容盒的四条声明在样式表里（0.5px 描边仍压
   const rule = css.slice(start, css.indexOf('}', start) + 1);
   assert.match(rule, /width: 100%/, '宽度填满内容盒');
   assert.match(rule, /height: 100%/, '高度填满内容盒');
-  assert.match(rule, /object-fit: cover/, '不拉伸变形');
+  // object-fit 的取值单独由 K56 守（它是「宽幅 logo 不裁切」这条用户反馈的落点）。
   assert.match(rule, /display: block/, '去掉行内元素的基线缝');
   assert.match(rule, /border-radius: calc\(var\(--dsw-radius-lg\) - \.5px\)/, '内圆角 = 外圆角减描边（同心）');
 

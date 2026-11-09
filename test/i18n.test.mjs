@@ -122,14 +122,14 @@ test('设计 §8.3 键表要求的每一个键都在（按名字断言，不按�
     // 市场面：本轮用真市场替换了 `market.placeholder` 占位键。下面这批键名是 locale/zh.json
     // 的实际键（不是设计稿里的示意名），覆盖面板/筛选/卡片/详情/确认/空态/失败态各一处。
     'market.sectionLabel', 'market.searchLabel', 'market.searchPlaceholder', 'market.clearSearch',
-    'market.sourceLabel', 'market.source.all', 'market.source.skillhub', 'market.source.clawhub',
+    'market.sourceLabel', 'market.source.skillhub', 'market.source.clawhub',
     'market.sortLabel', 'market.sort.recommended', 'market.sort.updated', 'market.sort.downloads',
-    'market.categoriesLabel', 'market.category.all', 'market.categoryScope',
+    'market.categoriesLabel', 'market.category.all',
     'market.loading', 'market.loadingMore', 'market.endOfList', 'market.moreFailed',
     'market.emptyTitle', 'market.emptySearchTitle', 'market.emptySearchHint',
     'market.emptyCategoryTitle', 'market.emptyCategoryAction',
     'market.errorTitle', 'market.errorHint', 'market.retry',
-    'market.partialSource', 'market.categoriesUnavailable',
+    'market.categoriesUnavailable',
     'market.cardOpen', 'market.metaAuthor', 'market.metaVersion', 'market.metaDownloads',
     'market.install', 'market.installing', 'market.installed', 'market.installedTitle', 'market.retryInstall',
     'market.detailBack', 'market.detailLoading', 'market.detailError',

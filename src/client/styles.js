@@ -259,9 +259,17 @@ const CSS = `
 /* the upstream icon inside the untouched .skc_cardIcon box: a flex child, so it fills
    the *content* box and the .5px hairline still paints on top of it; the radius is the
    concentric inner one (the host box radius minus that hairline) */
+/* contain, not cover: upstream icons come from a mixed bag of sources whose dimensions
+   range from a 256x64 wordmark to 1024x1024, and cropping a wordmark into a square is
+   worse than showing it whole on the pastel bed. Square icons look identical. */
 .skc_marketIconImg{
   border-radius: calc(var(--dsw-radius-lg) - .5px); width: 100%; height: 100%;
-  object-fit: cover; display: block;
+  object-fit: contain; display: block;
+}
+/* the chip count rides inside the pill: 4px from the label, secondary, one step down in
+   size - the pill's own height and hit area stay exactly as the primitive draws them */
+.skc_marketChipCount{
+  margin-left: 4px; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px;
 }
 .skc_marketCard{
   border-radius: var(--dsw-radius-xl); align-items: stretch; gap: 14px; min-width: 0;

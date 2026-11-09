@@ -154,7 +154,7 @@ return concat(bom, block, body.subarray(block.end))   // 其余字节一个不�
 
 | # | 方法 + 路径 | 入参 | 出参 `data` | 错误码（全量） |
 | --- | --- | --- | --- | --- |
-| 5 | `GET /api/dsh-skill-center/market/bootstrap` | 无（`?refresh=1` 绕过分类缓存，仅调试） | `{sources:[{id,labelKey,hasCategories,packageKind}], categories:[{key,name,nameEn}], categoriesOk:boolean, categoriesStale:boolean}` | `403 E_FORBIDDEN`、`405 E_METHOD`、`500 E_INTERNAL`。分类失败**不报错**：`categoriesOk:false` + 空数组，列表照常可用；`categoriesStale:true` 表示缓存兜底 |
+| 5 | `GET /api/dsh-skill-center/market/bootstrap` | 无（`?refresh=1` 绕过分类表与计数的缓存，仅调试） | `{sources:[{id,labelKey,hasCategories,packageKind}], categories:[{key,name,nameEn,count:number\|null}], categoriesOk:boolean, categoriesStale:boolean, total:number\|null, countsOk:boolean}` | `403 E_FORBIDDEN`、`405 E_METHOD`、`500 E_INTERNAL`。分类表失败**不报错**：`categoriesOk:false` + 空数组；计数失败**也不报错**：那一项 `count:null`、`countsOk:false`（`total:null`），两者都不影响列表；`categoriesStale:true` 表示缓存兜底 |
 | 6 | `GET /api/dsh-skill-center/market/list` | `source`（必填，单个源）、`sort=recommended\|updated\|downloads`、`category`、`keyword`（≤ 64 字符）、`limit=1..24`（默认 12）、`cursor`（该源自己的不透明游标） | `{sourceId, sort, keyword, category, items:[MarketItem], next:string\|null, total:number\|null}` | `403`、`405`、`400 E_BAD_QUERY`、`502 E_SOURCE_BAD_RESPONSE`、`503 E_SOURCE_UNAVAILABLE`、`504 E_SOURCE_TIMEOUT`、`500 E_INTERNAL` |
 | 7 | `GET /api/dsh-skill-center/market/detail` | `source`（必填）、`owner`、`slug`（必填）、`version`（可选） | `MarketDetail`（§3.8.1） | 同 #6 |
 | 8 | `GET /api/dsh-skill-center/market/installed` | 无 | `{items:{[id]:{name,version,path,exists:boolean}}, readable:boolean}` | `403`、`405`、`500 E_INTERNAL` |
@@ -180,6 +180,7 @@ install 出参里两个数字的口径**不一样，别混**：`files` 是**落�
 | --- | --- | --- |
 | 列表 / 搜索 / 详情 | 单源 **10s**（连接 5s + 总 10s） | `upstream.getJson({timeoutMs})` |
 | 分类表 | 6s，失败静默降级 | `skillhub.categories()` |
+| 分类计数 | 单项 **6s**、整体 **10s** 预算、并发 **6**、10 分钟缓存；任一项失败只让该 `count:null`（`countsOk:false`），不影响 bootstrap 的 200 | `skillhub.counts()` |
 | 安装整包 | **120s** 总预算（每次取文件前检查 deadline） | `install.js` |
 | 安装单文件 | 30s | `upstream.getBytes({timeoutMs})` |
 | 上游并发 | 全局 6、单 origin 3（`upstream.js` 的两道计数闸） | 一次扇出 = 每源 1 个 |

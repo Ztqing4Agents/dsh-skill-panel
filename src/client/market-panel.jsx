@@ -7,13 +7,13 @@
  * §6.1). Only two things need the DOM, and both live in effects: the scroll-offset
  * restore and the bottom prefetch listener.
  *
- * One request per source is a route-level rule, not a taste: each source carries its own
- * cursor, so a page is a fan-out of one request per source, settled independently - one
- * source failing still renders the other one, and only "every source failed" is an
- * error state (an empty list is not a failure).
+ * The market shows one source at a time (the source menu has no "all"), so a page is a
+ * single request: no fan-out, no per-source settlement. A failed page is the whole page's
+ * failure and gets the error state with a retry - while an empty list is not a failure,
+ * it is an empty state.
  */
 import { Fragment, useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
-import { Button, StateDot, IconWarningOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives';
+import { Button, StateDot } from '@deepseek-ai/dsh-client-ui-primitives';
 
 import { cn } from './styles.js';
 import {
@@ -23,7 +23,6 @@ import {
   mergeBatches,
   marketKeyOf,
   pagedSources,
-  queriedSources,
   reasonKeyOf,
   sourceLabelOf,
 } from './market-model.js';
@@ -86,87 +85,74 @@ export function MarketPanel({ store, api, t }) {
   }, [boot, loadInstalled, store]);
 
   /**
-   * Ask every given source for one page, in parallel, and settle them independently.
-   * @param {string[]} sources - source ids to ask.
-   * @param {{sort: string, category: string|null, keyword: string, cursors: object}} query - the query.
-   * @returns {Promise<{pages: object[], errors: {sourceId: string, code: string}[]}>} the settled fan-out.
+   * Ask the selected source for one page. The market shows one source at a time, so this
+   * is a plain request: no fan-out, no per-source settlement, and a failure is the whole
+   * page's failure rather than one strip among several.
+   * @param {{sort: string, category: string|null, keyword: string, cursor: string|undefined}} query
+   *   the query, with the cursor that source handed out last time.
+   * @returns {Promise<object>} the route's page: `{items, next, total}`.
    */
-  const fanOut = useCallback(async (sources, query) => {
-    const settled = await Promise.allSettled(sources.map((source) => api.marketList({
-      source,
+  const fetchPage = useCallback(async (query) => {
+    const page = await api.marketList({
+      source: query.source,
       sort: query.sort,
       category: query.category,
       keyword: query.keyword,
-      cursor: query.cursors?.[source] ?? undefined,
+      cursor: query.cursor,
       limit: MARKET_PAGE_SIZE,
-    })));
-    const pages = [];
-    const errors = [];
-    settled.forEach((outcome, index) => {
-      const sourceId = sources[index];
-      if (outcome.status === 'fulfilled' && outcome.value !== null && typeof outcome.value === 'object') {
-        pages.push({
-          sourceId,
-          page: outcome.value,
-          items: Array.isArray(outcome.value.items) ? outcome.value.items : [],
-        });
-        return;
-      }
-      const code = outcome.status === 'rejected'
-        ? (outcome.reason?.code ?? 'E_UNKNOWN')
-        : 'E_SOURCE_BAD_RESPONSE';
-      errors.push({ sourceId, code });
     });
-    return { pages, errors };
+    return page !== null && typeof page === 'object' ? page : { items: [], next: null };
   }, [api]);
 
   /** Fetch page one for the current query, replacing whatever is on screen. @returns {Promise<void>} */
   const loadFirst = useCallback(async () => {
     const current = store.getSnapshot().market;
     store.actions.marketListLoading();
-    const { pages, errors } = await fanOut(queriedSources(current), {
-      ...current.filters,
-      keyword: current.keyword,
-      cursors: {},
-    });
-    if (pages.length === 0) {
-      store.actions.marketListFailed(errors[0] ?? { code: 'E_UNKNOWN', message: '' });
-      return;
+    try {
+      const page = await fetchPage({
+        source: current.filters.source,
+        sort: current.filters.sort,
+        category: current.filters.category,
+        keyword: current.keyword,
+        cursor: undefined,
+      });
+      const items = Array.isArray(page.items) ? page.items : [];
+      store.actions.marketPageAppended({
+        pages: [{ sourceId: current.filters.source, page, items }],
+        merged: mergeBatches([{ sourceId: current.filters.source, items }]),
+      });
+    } catch (error) {
+      store.actions.marketListFailed({ code: error?.code ?? 'E_UNKNOWN', message: error?.message ?? '' });
     }
-    store.actions.marketPageAppended({
-      pages,
-      merged: mergeBatches(pages),
-      errors,
-    });
-  }, [fanOut, store]);
+  }, [fetchPage, store]);
 
   /** Fetch the next page of every source that still has one. @returns {Promise<void>} */
   const loadMore = useCallback(async () => {
     const current = store.getSnapshot().market;
     if (current.listStatus !== 'ready' || current.page.status === 'loading' || appending.current) return;
-    const sources = pagedSources(current);
-    if (sources.length === 0) return;
+    const [source] = pagedSources(current);
+    if (source === undefined) return;
     appending.current = true;
     store.actions.marketPageStart();
     try {
-      const { pages, errors } = await fanOut(sources, {
-        ...current.filters,
+      const page = await fetchPage({
+        source,
+        sort: current.filters.sort,
+        category: current.filters.category,
         keyword: current.keyword,
-        cursors: current.cursors,
+        cursor: current.cursors[source] ?? undefined,
       });
-      if (pages.length === 0) {
-        store.actions.marketPageFailed(errors[0] ?? { code: 'E_UNKNOWN', message: '' });
-        return;
-      }
+      const items = Array.isArray(page.items) ? page.items : [];
       store.actions.marketPageAppended({
-        pages,
-        merged: mergeBatches(pages, { existing: current.items }),
-        errors,
+        pages: [{ sourceId: source, page, items }],
+        merged: mergeBatches([{ sourceId: source, items }], { existing: current.items }),
       });
+    } catch (error) {
+      store.actions.marketPageFailed({ code: error?.code ?? 'E_UNKNOWN', message: error?.message ?? '' });
     } finally {
       appending.current = false;
     }
-  }, [fanOut, store]);
+  }, [fetchPage, store]);
 
   useEffect(() => {
     const current = store.getSnapshot().market;
@@ -326,12 +312,6 @@ export function MarketPanel({ store, api, t }) {
             onFilter={(patch) => store.actions.marketSetFilter(patch)}
           />
           {market.boot === 'loading' && market.sources.length === 0 ? <MarketChipsSkeleton /> : null}
-          {market.sourceErrors.map((entry) => (
-            <p className={cn('marketNotice')} role="note" key={entry.sourceId}>
-              <IconWarningOutlineRegular size={14} aria-hidden="true" />
-              <span>{t('market.partialSource', { source: sourceLabelOf(entry.sourceId, t) })}</span>
-            </p>
-          ))}
           {loadingFirst ? <MarketSkeleton label={t('market.loading')} /> : null}
           {market.listStatus === 'error' ? (
             <div className={cn('marketFailure')}>

@@ -25,8 +25,9 @@ import {
 import { cn } from './styles.js';
 import {
   MARKET_SORTS,
-  SOURCE_ALL,
+  MARKET_DEFAULT_SOURCE,
   chipList,
+  countText,
   sourceDescriptors,
   sourceLabelOf,
   visibleCategories,
@@ -86,12 +87,10 @@ function Select({ name, label, value, items, menu, className, onToggle, onSelect
 export function MarketFilters({ market, t, busy, onInput, onCommit, onFilter }) {
   const [menu, setMenu] = useState(null);
   const chips = visibleCategories(market);
-  const selectedSource = market.filters.source ?? SOURCE_ALL;
+  const selectedSource = market.filters.source ?? MARKET_DEFAULT_SOURCE;
   const selectedSort = market.filters.sort ?? MARKET_SORTS[0];
-  const sourceItems = [
-    { id: SOURCE_ALL, label: t('market.source.all') },
-    ...sourceDescriptors(market).map((source) => ({ id: source.id, label: sourceLabelOf(source.id, t) })),
-  ];
+  const sourceItems = sourceDescriptors(market)
+    .map((source) => ({ id: source.id, label: sourceLabelOf(source.id, t) }));
   const sortItems = MARKET_SORTS.map((value) => ({ id: value, label: t(`market.sort.${value}`) }));
 
   useEffect(() => {
@@ -161,24 +160,25 @@ export function MarketFilters({ market, t, busy, onInput, onCommit, onFilter }) 
       </div>
       {chips.visible ? (
         <div className={cn('marketChips')} role="group" aria-label={t('market.categoriesLabel')}>
-          {chipList(chips.items).map((chip) => (
-            <Pill
-              key={chip.value === null ? SOURCE_ALL : chip.value}
-              active={market.filters.category === chip.value}
-              aria-pressed={market.filters.category === chip.value}
-              onClick={() => onFilter({ category: chip.value })}
-            >
-              {chip.value === null ? t('market.category.all') : chip.label}
-            </Pill>
-          ))}
+          {chipList(chips.items, { total: market.total, countsOk: market.countsOk }).map((chip) => {
+            const count = countText(chip.count);
+            return (
+              <Pill
+                key={chip.value === null ? 'category-all' : chip.value}
+                active={market.filters.category === chip.value}
+                aria-pressed={market.filters.category === chip.value}
+                onClick={() => onFilter({ category: chip.value })}
+              >
+                {chip.value === null ? t('market.category.all') : chip.label}
+                {count === null ? null : <span className={cn('marketChipCount')}>{count}</span>}
+              </Pill>
+            );
+          })}
         </div>
       ) : null}
       {!chips.visible && chips.unavailable
         ? <p className={cn('marketScope')}>{t('market.categoriesUnavailable')}</p>
         : null}
-      {market.filters.category === null || !chips.visible
-        ? null
-        : <p className={cn('marketScope')}>{t('market.categoryScope')}</p>}
     </>
   );
 }

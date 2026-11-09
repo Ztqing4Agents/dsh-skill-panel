@@ -191,19 +191,25 @@ test('K31 ClawHub 搜索结果是浅形状：无版本号（恒 null），slug �
   assert.equal(item.downloads, null, '搜索结果没有下载数 ⇒ null');
 });
 
-test('K31 skillhubIconUrl 只认 /skill-icons/ 的 https 地址：占位图与站点横幅一律 null', () => {
-  assert.equal(skillhubIconUrl(ICON), ICON, '真图标原样返回');
-  assert.equal(
-    skillhubIconUrl('https://cdn.skillhub.cn/skill-icons/other/x.jpg?v=2'),
-    'https://cdn.skillhub.cn/skill-icons/other/x.jpg?v=2',
-    '带查询串的图标也认（返回的是 URL 归一化后的串）',
-  );
+test('K31 skillhubIconUrl 只要求「绝对 https 且能解析」：两个图床都收，其余一律 null', () => {
+  // 上一版按 `/skill-icons/` 路径过滤，把 cloudcache 那个图床当成了站点占位图 —— 判断错了：
+  // 它是逐技能的真图（覆盖率因此从 ~82% 掉到 ~41%）。现在没有 host / path 白名单，
+  // 坏地址交给浏览器的 onError 兜（K52 ③）。详见 market.md §7.4 与决策记录。
   for (const value of [
-    // 站点级占位图：画上去等于给每个技能贴同一张别人的图，比字母头像更糟
-    'https://cloudcache.tencent-cloud.com/qcloud/ui/static/other_external_resource/banner.png',
+    ICON,
+    // 另一个图床：宽幅 logo（256×64 这类）就来自这里
+    'https://cloudcache.tencent-cloud.com/qcloud/ui/static/other_external_resource/a1b2c3.png',
+    'https://skillhub-1388575217.cos.accelerate.myqcloud.com/skill-icons/uploads/783809/35df42.png',
     'https://cdn.skillhub.cn/covers/123.png',
+    'https://example.com/any/path.jpg?v=2',
+  ]) {
+    assert.equal(skillhubIconUrl(value), value, `${value} 原样透传`);
+  }
+  for (const value of [
     'http://cdn.skillhub.cn/skill-icons/a.png',
+    'http://cloudcache.tencent-cloud.com/qcloud/ui/static/other_external_resource/a.png',
     '/skill-icons/a.png',
+    'skill-icons/a.png',
     'not a url',
     '',
     '   ',
@@ -212,7 +218,7 @@ test('K31 skillhubIconUrl 只认 /skill-icons/ 的 https 地址：占位图与�
     42,
     { url: ICON },
   ]) {
-    assert.equal(skillhubIconUrl(value), null, `${JSON.stringify(value)} ⇒ null`);
+    assert.equal(skillhubIconUrl(value), null, `${JSON.stringify(value)} ⇒ null（非 https / 相对 / 空 / 非字符串）`);
   }
 });
 

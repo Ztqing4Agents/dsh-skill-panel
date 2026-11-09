@@ -166,11 +166,11 @@ sequenceDiagram
         SRC-->>RT: {items:[], ok:false}
         Note over RT: 仍 200：categoriesOk:false，列表照常
     end
-    RT-->>API: 200 {sources[], categories[], categoriesOk}
+    RT-->>API: 200 {sources[], categories[], categoriesOk, total, countsOk}
     API-->>MP: descriptors → 来源筛选项由数据渲染
 
-    MP->>ST: 记 filters（source=all, sort=recommended）
-    MP->>API: marketList({source:'skillhub',…}) 与 marketList({source:'clawhub',…})（并行）
+    MP->>ST: 记 filters（source=skillhub, sort=recommended）
+    MP->>API: marketList({source:'skillhub',…})（一次只看一个来源：切换菜单才换源）
     API->>RT: GET market/list?source=…&sort=…&limit=12(&cursor)
     RT->>SRC: search(q) 当 keyword 非空，否则 list(q)
     SRC->>IO: getJson(白名单过的 URL)
@@ -184,11 +184,9 @@ sequenceDiagram
     MM-->>MP: 按源拼接 / 去重后的列表
     MP-->>U: 首屏骨架 → 卡片网格
 
-    alt 某一源 rejected（503/502/504）
-        MP->>ST: sourceErrors 记该源
-        MP-->>U: 顶部提示条 + 另一源结果照常渲染
-    else 两源都 rejected
-        MP-->>U: 整页错误态 + 重试（不显示空态：空 ≠ 失败）
+    alt 该请求 rejected（503/502/504）
+        MP->>ST: marketListFailed
+        MP-->>U: 整页错误态 + 重试（不显示空态：空 ≠ 失败；单源没有「部分源失败」中间态）
     end
 
     U->>MP: 输入关键词（250ms 防抖）/ 回车（立即）/ 清空（立即）
@@ -196,11 +194,11 @@ sequenceDiagram
     Note over MP,ST: 请求中保留旧 items，只有筛选切换才回骨架
 
     U->>MP: 触底（距底 200px）
-    MP->>API: 只向 cursor !== null 的源各发一次
-    Note over MP: next === null 的源不再打扰；两源都 null 才显示「没有更多了」
+    MP->>API: 当前源 cursor !== null 才发一次（cursor 原样回传）
+    Note over MP: next === null 即到底，显示「没有更多了」
 ```
 
-四条分支与两条失败分支的判据：切来源 / 切分类 / 切排序 ⇒ 清 `items/pages/cursors/exhausted/detail` 并重拉第一页；换关键词 ⇒ 同上但**不清**来源与分类；部分源失败 ⇒ 该源进 `sourceErrors`、另一源照常（`market/list` 用 HTTP 状态码表达失败，见 `docs/contracts/routes.md` §3.7.2）；两源同时失败 ⇒ 整页错误态。
+四条分支与两条失败分支的判据：切来源 / 切分类 / 切排序 ⇒ 清 `items/pages/cursors/exhausted/detail` 并重拉第一页；换关键词 ⇒ 同上但**不清**来源与分类；首屏失败 ⇒ 整页错误态；追加失败 ⇒ 已有卡片留着，尾部给「重试」（`market/list` 用 HTTP 状态码表达失败，见 `docs/contracts/routes.md` §3.7.2）。市场一次只看一个来源，所以没有「部分源失败」这一支。
 
 ### 4.6 市场安装
 

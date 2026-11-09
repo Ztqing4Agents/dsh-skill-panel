@@ -70,12 +70,12 @@ ClientPlugin.apply(ctx)
 market = {
   boot: 'idle'|'loading'|'ready',                 // bootstrap；失败也进 ready，不是 error
   sources / categories / categoriesOk,            // 失败时 sources 回落内置双源、categoriesOk=false
-  filters: {source, category, sort},              // source 含机器值 'all'
+  total / countsOk,                               // 分类 chip 的数量：'全部' 用 total，各分类用 categories[].count
+  filters: {source, category, sort},              // source 是机器值 'skillhub'|'clawhub'，默认 'skillhub'，没有 'all'
   keyword / input,                                // 已提交关键词 / 输入框现值（防抖在组件里，store 不持定时器）
   items / pages,                                  // 已合并去重后的列表、已加载页数（返回详情后要恢复）
   cursors / exhausted,                            // 每源自己的不透明游标与「已耗尽」
   page: {status, code, message},                  // idle | loading | more | done | error（尾部）
-  sourceErrors: [{sourceId, code}],               // 部分源不可用 → 顶部提示条
   listStatus: 'idle'|'loading'|'ready'|'error',   // 整页态
   detail: null | {id, item, status, data, code},  // 内嵌详情三态
   installed / installedReady,                     // 安装台账 × item.id；只读一次
@@ -89,15 +89,15 @@ market = {
 
 | 触发 | 结果 | 副作用 |
 | --- | --- | --- |
-| 首次进入市场页签 | `boot=loading`，并发发 `bootstrap` + `installed` + 第一页扇出 | 骨架（分类条也是占位） |
+| 首次进入市场页签 | `boot=loading`，并发发 `bootstrap` + `installed` + 第一页（默认来源 SkillHub） | 骨架（分类条也是占位） |
 | `bootstrap` 成功 | `boot=ready` | 填 `sources/categories`；`categoriesOk=false` 时分类行换成一句说明 |
 | `bootstrap` 失败 | `boot=ready`（**不是 error**） | `sources` 回落内置双源，列表照打，分类行隐藏 |
 | 关键词变化 | 250ms 防抖后提交 | 请求中**保留旧 items**（`aria-busy` + 搜索框旁 ongoing 点），不换骨架 |
 | 回车 / 清空输入 | 立刻提交，不经防抖 | 清空只清关键词，不动来源与分类 |
 | 切来源 / 分类 / 排序 | 清 `items/pages/cursors/exhausted/detail`，滚回顶部 | 值没变时不重拉 |
-| 扇出返回（≥1 源成功） | `listStatus=ready`，`page` 进 `more` 或 `done` | 成功的源按 `mergeBatches` **按来源分块依次拼接**（不交织、不跨源重排）；失败的源进 `sourceErrors` → 提示条 |
-| 扇出返回（全部失败） | `listStatus=error` | 整页错误态 + 重试；**不出空态**（空 ≠ 失败） |
-| 追加返回 | `page` 进 `more` 或 `done` | 只向 `cursor !== null` 的源扇出；`items` 追加去重，不重排已有项 |
+| 一页返回 | `listStatus=ready`，`page` 进 `more` 或 `done` | 列表 = 已有项 + 这一页按序拼接（`mergeBatches` 仍接受多源数组，但市场一次只看一个源，只喂一项）；不跨源重排 |
+| 请求失败 | `listStatus=error` | 整页错误态 + 重试；**不出空态**（空 ≠ 失败）。单源没有「部分源失败」这种中间态 |
+| 追加返回 | `page` 进 `more` 或 `done` | 当前源 `cursor !== null` 才追加；`items` 追加去重，不重排已有项 |
 | 追加失败 | `page=error` | 底部「加载失败，点此重试」，items 不动 |
 | 触底（距底 200px）或本页没填满视口 | `page=loading` | 同时最多一次（组件内 `useRef` 闸）；**短页不算结束**，判据只有 `next === null` |
 | 打开详情 | `detail={status:'loading'}` | 先记 `scrollTop`；items 与 pages 原地不动 |
@@ -114,36 +114,38 @@ market = {
 SkillsPage (page.jsx：页头 + 两个页签)
 ├─ toolbar：刷新（恒在，行为跟随当前页签）｜计数 + ＋添加技能（仅「已安装」页签渲染）
 └─ tabPanel(market) → MarketPanel (market-panel.jsx)
-    ├─ MarketFilters (market-filters.jsx)：Input(250ms 防抖) / Menu(来源) / Menu(排序) / Pill(分类 chips)
-    ├─ 提示条（部分源不可用）｜首屏骨架｜整页错误态｜空态
+    ├─ MarketFilters (market-filters.jsx)：Input(250ms 防抖) / Menu(来源 = SkillHub｜ClawHub) / Menu(排序) / Pill(分类 chips + 数量)
+    ├─ 首屏骨架｜整页错误态（当前源失败）｜空态
     ├─ ul.skc_marketGrid → MarketCard (market-card.jsx) × N（尾部 3 张骨架；头像位是 MarketIcon）
     ├─ MarketDetail (market-detail.jsx)：面包屑 + 头 + 事实表 + 概览 + 文件
     └─ MarketConfirm (market-confirm.jsx)：Modal（width:min(480px,100vw - 32px)）
 MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 ```
 
-五条结构约束：
+七条结构约束：
 
 1. **整卡可点只有一个手段**：标题按钮 `.skc_marketCardOpen::after{inset:0}` 铺满整卡，`.skc_marketCardEnd{z-index:1}` 让安装按钮浮在点击层之上。不做 `<a href>`、不做卡片内的第二个可点区域、不给卡片加行 hover 之外的交互。已安装页签的行一个字节不变。
 2. **详情就地替换网格**（`detail !== null` 时返回详情而不是网格），与宿主的页内详情同构；返回不重拉任何东西。
 3. 详情正文用宿主 primitives 的 `MarkdownText` 渲染（与对话里的第三方 markdown 同一个渲染器，不自造 sanitizer）；渲染抛错或正文为空时回落纯文本 + `market.detailNoOverview`。
 4. 组件只读 props（`store/api/t`）写 `store.actions`，不直接 `fetch`；只有滚动位置恢复与触底预取读 DOM，且都在 `useEffect` 里（字符串渲染不触发）。
-5. **头像只有两态**（卡片、详情头、确认弹窗共用一个 `MarketIcon`）：`item.iconUrl` 为非空字符串时画图（`<img>` + `skc_marketIconImg`、`alt=""`、`loading="lazy"`、`referrerPolicy="no-referrer"`），否则画首字母；**图片 `onError` 也回落首字母**，任何情况下都不留空白方块。图片是 `.skc_cardIcon` 的 flex 子项、只填满内容盒，所以宿主那条 `.5px` 描边始终压在图片之上；头像盒既有声明（48×48 / `border .5px` / `radius-lg` / `background-clip: padding-box` / 粉彩底）一字不改。
+5. **来源只有一个**：来源菜单就是 `SkillHub` 与 `ClawHub` 两项，默认 `skillhub`，没有「全部来源」；因此不存在「两源同屏」「部分源失败提示条」这两种中间态——当前源失败即整页错误态（可重试）。分类行只在当前源发布分类时出现（ClawHub 直接隐藏），选中的分类也不会跨源。
+6. **分类 chip 带数量**：`全部` 用 `bootstrap.total`，各分类用 `categories[].count`；`count` 为 `null` 时数字位整段不渲染（不写 0、不写破折号），`countsOk:false` 时所有数字位都不出现。格式是 `Intl.NumberFormat(undefined, {notation:'compact'})`（运行时默认语言，`try/catch` 兜底成原数字），样式见 §8.5。
+7. **头像只有两态**（卡片、详情头、确认弹窗共用一个 `MarketIcon`）：`item.iconUrl` 为非空字符串时画图（`<img>` + `skc_marketIconImg`、`alt=""`、`loading="lazy"`、`referrerPolicy="no-referrer"`），否则画首字母；**图片 `onError` 也回落首字母**，任何情况下都不留空白方块。图片是 `.skc_cardIcon` 的 flex 子项、只填满内容盒，所以宿主那条 `.5px` 描边始终压在图片之上；头像盒既有声明（48×48 / `border .5px` / `radius-lg` / `background-clip: padding-box` / 粉彩底）一字不改。
 
 ### 3.9.3 store action（`src/client/state.js`）
 
 | action | 入参 | 做什么 |
 | --- | --- | --- |
 | `marketBootLoading()` | —— | `boot='loading'` |
-| `marketBootReady({sources,categories,categoriesOk})` | bootstrap data | 填三件 |
-| `marketBootFallback(sources)` | 描述符数组 | `boot='ready'`、`categoriesOk=false`（失败不是错误态） |
+| `marketBootReady({sources,categories,categoriesOk,total,countsOk})` | bootstrap data | 填这几件（`total`/`countsOk` 供 chip 数量位） |
+| `marketBootFallback(sources)` | 描述符数组 | `boot='ready'`、`categoriesOk=false`、`countsOk=false`（失败不是错误态） |
 | `marketSetInput(text)` | string | 只改 `input` |
 | `marketCommitKeyword(text)` | string | `keyword=input=text`，清分页；**保留 items** |
 | `marketSetFilter({source?,category?,sort?})` | 部分 filters | 合并 + 清 items/分页 + 关详情；值没变就什么都不做 |
 | `marketReload()` | —— | 页头「刷新」在市场页签的行为：清已加载页，由面板 effect 重拉第一页 |
 | `marketListLoading()` / `marketListFailed({code,message})` | —— / 错误 | 整页态 |
 | `marketPageStart()` | —— | `page.status='loading'`（追加用，不清 items） |
-| `marketPageAppended({pages,merged,errors})` | `pages:[{sourceId,page,items}]`、合并结果、本轮失败源 | 写每源 cursor/exhausted、`items=merged`、`pages+1`、尾部进 `more` 或 `done`；成功的源从 `sourceErrors` 里清掉 |
+| `marketPageAppended({pages,merged})` | `pages:[{sourceId,page,items}]`、合并结果 | 写该源 cursor/exhausted、`items=merged`、`pages+1`、尾部进 `more` 或 `done` |
 | `marketPageFailed({code,message})` | 错误 | `page.status='error'`，items 不动 |
 | `marketInstalledLoaded(map)` | `{[id]:{name,version,path,exists}}` | 填 `installed` + `installedReady=true` |
 | `marketDetailOpen(item)` | MarketItem | `detail={id,item,status:'loading'}` |
@@ -156,7 +158,7 @@ MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 
 `notice` 复用既有字段：`refresh-failed`（既有）与 `install-ok`（新增，副行给安装路径），由 `toast.jsx` 按 `kind` 选文案，5 秒后 `dismissNotice(seq)`。
 
-`marketPageAppended` 的入参是**数组**（设计文档写的是单源形状）：触底追加会同时向「还没耗尽」的多个源扇出，单源形状承载不了；语义（写游标、合并、翻页计数）不变。
+`marketPageAppended` 的入参仍是**数组**（设计文档写的是单源形状）：现在是「一源一项」，留着数组是为了将来真要同屏多源时不必改签名；语义（写游标、合并、翻页计数）不变。
 
 ### 3.9.4 api 方法（`src/client/api.js`）
 
@@ -246,7 +248,6 @@ MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 | `market.clearSearch` | 清除搜索 |
 | `market.searching` | 正在搜索 |
 | `market.sourceLabel` | 来源 |
-| `market.source.all` | 全部来源 |
 | `market.source.skillhub` | SkillHub |
 | `market.source.clawhub` | ClawHub |
 | `market.sortLabel` | 排序 |
@@ -255,7 +256,6 @@ MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 | `market.sort.downloads` | 下载最多 |
 | `market.categoriesLabel` | 分类 |
 | `market.category.all` | 全部 |
-| `market.categoryScope` | 分类只作用于带分类的来源（ClawHub 条目不在分类内） |
 | `market.loading` | 正在读取技能市场… |
 | `market.loadingMore` | 正在加载更多 |
 | `market.endOfList` | 没有更多了 |
@@ -268,7 +268,6 @@ MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 | `market.errorTitle` | 无法连接技能市场 |
 | `market.errorHint` | 检查网络后重试 |
 | `market.retry` | 重试 |
-| `market.partialSource` | {source} 暂时连不上，以下是另一个来源的结果 |
 | `market.categoriesUnavailable` | 暂时读不到分类 |
 | `market.cardOpen` | 查看 {name} 详情 |
 | `market.metaAuthor` | @{author} |
@@ -346,7 +345,8 @@ MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 ## 8.5 样式字面量单点
 
 尺寸与颜色字面量只允许出现在 `src/client/styles.js`（样式）与 `src/client/avatar.js`（12 组头像色板，全仓库仅此两处色值）；其它组件文件不得写颜色/尺寸（`size={11|13}` 这类图标尺寸除外）。
-市场样式同样只进 `styles.js`（类名 `skc_market*`，取值逐条来自 `docs/contracts/market.md` 附录 F）；**市场不新增任何颜色字面量**，也不改 `.skc_cardIcon` 的任何一条声明。上游图标用的 `.skc_marketIconImg` 只有四条声明（`width/height:100%`、`object-fit:cover`、`display:block`、`border-radius:calc(var(--dsw-radius-lg) - .5px)` 同心内圆角），不含色值。
+市场样式同样只进 `styles.js`（类名 `skc_market*`，取值逐条来自 `docs/contracts/market.md` 附录 F）；**市场不新增任何颜色字面量**，也不改 `.skc_cardIcon` 的任何一条声明。上游图标用的 `.skc_marketIconImg` 只有四条声明（`width/height:100%`、`object-fit:contain`、`display:block`、`border-radius:calc(var(--dsw-radius-lg) - .5px)` 同心内圆角），不含色值；`contain` 是因为上游图标尺寸从 256×64 的横版 logo 到 1024×1024 都有，`cover` 会把横版裁成怪形状。
+分类 chip 的数量位用 `.skc_marketChipCount`（`margin-left:4px`、12px/18px、`var(--dsw-alias-label-secondary)`），**不改 chip 的高度与点击面积**，也不新增色值。
 锚点：`test/styles.test.mjs`；把刻度搬进组件时那条用例先红。
 
 ---

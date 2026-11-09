@@ -36,6 +36,7 @@
  * @property {(ref: ItemRef, io: UpstreamIo) => Promise<SourcePlan>} plan
  * @property {(plan: SourcePlan, path: string, io: UpstreamIo) => Promise<Buffer>} fetchFile
  * @property {(io: UpstreamIo, options: {now: () => number, refresh?: boolean}) => Promise<{items: Category[]}>} [categories]
+ * @property {(io: UpstreamIo, options: {now: () => number, refresh?: boolean}) => Promise<{counts: Record<string, number|null>, total: number|null, ok: boolean}>} [counts]
  */
 ```
 
@@ -61,9 +62,11 @@
 | `categories` | `GET /api/v1/categories`，滤 `pay-skill`，10 分钟内存缓存 | 无（`caps.categories = false`） |
 | `caps` | `{search:true, paged:true, categories:true, package:'files'}` | `{search:true, paged:true, categories:false, package:'zip'}` |
 | `total` | 上游 `data.total`（数字） | 恒 `null` |
-| 图标 | `iconUrl`：实测前 100 条约 **四成**是真图标（COS 上的 `/skill-icons/uploads/…png`），另四成是站点占位图（`cloudcache.tencent-cloud.com` 的 `other_external_resource/…`），其余为空 ⇒ 只收真图标 | `icon`/`iconUrl` **没有图片地址**：列表项字段缺失，搜索偶尔给 Lucide 图标 token（`lucide:Zap`），`/api/v1/skill-icons/*` 一律 404 ⇒ 恒 `null` |
+| 图标 | `iconUrl`：实测前 100 条约 **八成**有图（COS 的 `/skill-icons/uploads/…` 与 `cloudcache.tencent-cloud.com` 的 `other_external_resource/…` **两者都是该技能自己的图**），其余为空 ⇒ **绝对 `https:` 即接受，不做 host/path 白名单** | `icon`/`iconUrl` **没有图片地址**：列表项字段缺失，搜索偶尔给 Lucide 图标 token（`lucide:Zap`），`/api/v1/skill-icons/*` 一律 404 ⇒ 恒 `null` |
+| 计数 | `counts`：13 次 `GET /api/skills?page=1&pageSize=1(&category=)` 取 `data.total`（12 个分类 + 1 个「全部」），并发 6、单项 6s、整体 10s 预算、10 分钟缓存；**每个 `count` 是该过滤条件的独立总数，不保证 12 类相加等于 `total`**（实测差几十条，上游按请求时刻统计、且一条技能可归属多个分类），界面不得用「合计」校验它 | 无 |
 | 一次 `list` 的上游请求数 | 1 | 1 |
 | 一次 `detail` 的上游请求数 | 3（详情 + 清单 + `SKILL.md`） | 2（详情 + zip） |
+| 一次 `bootstrap` 的上游请求数 | 冷缓存 **14**（分类表 1 + 计数 13），10 分钟内 0 | 0（不参与 bootstrap） |
 
 sort 映射（`sort` 只有三个值，路由层已白名单化）：
 
@@ -101,7 +104,7 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 | `owner` | 上游 | SkillHub `namespace.handle`（实测含下划线）／ClawHub `ownerHandle` |
 | `slug` | 上游 | ClawHub 搜索结果缺 slug 时取 `canonicalUrl` 的最后一段 |
 | `displayName` | 上游 | `name`／`displayName`；缺则回落 `slug`，再缺为空串 |
-| `iconUrl` | 上游 | 绝对 `https:` 且路径含 `/skill-icons/` 才收；站点占位图（`cloudcache.tencent-cloud.com` 的 `other_external_resource/…`）与空值一律 `null`；ClawHub 恒 `null`（给的是 lucide token，不是图片地址）。`null` ⇒ 回落首字母头像 |
+| `iconUrl` | 上游 | **绝对 `https:` 即接受**（可解析、非空），不做 host/path 白名单——上游两个图床都是逐技能的真图；`http:`、相对路径、空值与非字符串归 `null`；ClawHub 恒 `null`（给的是 lucide token，不是图片地址）。`null` 与**加载失败**都是「回落首字母头像」，破图由浏览器侧 `onError` 兜住 |
 | `summary` | 上游 | 折叠成一行、≤ 400 字符（超长截断） |
 | `author` | 上游 | 三级回落：`publisher.name/displayName` → `namespace.displayName` → `owner` |
 | `version` | 上游 | **缺失如实为 `null`**（ClawHub 搜索结果必为 `null`，因为该端点不给版本号） |
@@ -170,7 +173,7 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 
 卡片**无描边**：描边只出现在头像框上；卡面靠 `radius-xl` + hover 底色表达可点性（依据见 `docs/contracts/decisions.md` 附录 E）。
 
-**头像位的两种内容**：`iconUrl !== null` 时头像盒里渲染 `<img src={iconUrl}>`——`width:100%; height:100%`、`object-fit:cover`、圆角继承盒子，且**不覆盖**头像框那条 0.5px 描边（图铺在 `padding-box` 内，与既有 `background-clip:padding-box` 是同一套几何，改动会在描边处露出 1px 白边）；`iconUrl === null`（含图片加载失败，按 `null` 处理、不重试）时回落 `avatar.js` 的首字母头像。两种内容共用同一个 48×48 盒子，切换**不改变**行高、节距与网格列宽——所以「有图标」只是换盒内内容，不新增容器。
+**头像位的两种内容**：`iconUrl !== null` 时头像盒里渲染 `<img src={iconUrl}>`——占满盒子（`width:100%; height:100%`）、`object-fit:contain`（图标常带透明边或非正方形，`cover` 会裁掉形状）、圆角 `calc(var(--dsw-radius-lg) - .5px)` 即落在 0.5px 描边**内侧**（与既有 `background-clip:padding-box` 是同一套几何，改错会在描边处露出 1px 白边）；`iconUrl === null` 与**图片加载失败**（`onError`，按 URL 记录、不重试）都回落 `avatar.js` 的首字母头像。两种内容共用同一个 48×48 盒子，切换**不改变**行高、节距与网格列宽——「有图标」只是换盒内内容，不新增容器。
 
 ---
 

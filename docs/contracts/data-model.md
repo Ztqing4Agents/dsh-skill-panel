@@ -349,7 +349,7 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
 3. `installTo` 在 `nameValid === false` 时等于 `skillsRoot` 本身（不吃掉最后一级目录名），界面据此显示「不能安装」。
 4. `overview` 不含 frontmatter 分隔行与 `name:`/`description:` 头字段。
 5. 卡片与详情**不显示任何时间**：`updatedAt` 只影响顺序。
-6. `iconUrl` **只收真图标**：绝对 `https:` 且路径含 `/skill-icons/`。站点占位图（`cloudcache.tencent-cloud.com` 下 `other_external_resource/` 的前缀，其中一张是 SkillHub 自己的横幅）与空值一律归一 `null`；ClawHub 的 `icon` 是 Lucide 图标 token（`lucide:Zap`）而不是图片地址，恒 `null`。`null` 的语义是「回落首字母头像」，**不是**「加载失败」。
+6. `iconUrl` 的判据是「**能当图片地址用**」：绝对 `https:` 且 `new URL` 可解析即接受，**不做 host/path 白名单**（上游两个图床 `skillhub-*.cos.accelerate.myqcloud.com/skill-icons/…` 与 `cloudcache.tencent-cloud.com/qcloud/ui/static/other_external_resource/…` 都是逐技能的真图）；`http:`、相对路径、空值与非字符串归 `null`；ClawHub 的 `icon` 是 Lucide 图标 token（`lucide:Zap`）而不是图片地址，恒 `null`。`null` 与**加载失败**都是「回落首字母头像」，破图由浏览器侧 `onError` 兜住。
 
 #### 3.8.2 `lib/market/normalize.js` 与 `mergeBatches` 的纯函数契约
 

@@ -43,7 +43,8 @@ const ITEM = {
  * Build one fake adapter.
  * @param {{id: string, items?: object[], next?: string|null, total?: number|null,
  *   failList?: string, failDetail?: string, categories?: object[]|null,
- *   categoriesThrows?: boolean, packageKind?: string}} options - adapter behaviour.
+ *   categoriesThrows?: boolean, counts?: Record<string, number|null>, countTotal?: number|null,
+ *   countsThrows?: boolean, countsOk?: boolean, packageKind?: string}} options - adapter behaviour.
  * @returns {object} the adapter, with a log of the calls it received.
  */
 function adapter(options) {
@@ -101,6 +102,20 @@ function adapter(options) {
       // category endpoint cannot take the tab down (skillhub.js `categories`).
       if (options.categoriesThrows === true) return { items: [], ok: false, stale: false };
       return { items: options.categories ?? [], ok: true, stale: false };
+    },
+    /**
+     * Read the per-category counts (chips numbers).
+     * @returns {Promise<object>} counts, total and the `ok` flag.
+     */
+    async counts() {
+      calls.push('counts');
+      if (options.countsThrows === true) return { counts: {}, total: null, ok: false, stale: false };
+      return {
+        counts: options.counts ?? {},
+        total: options.countTotal ?? null,
+        ok: options.countsOk !== false,
+        stale: false,
+      };
     },
     /**
      * Serve one package file.
@@ -206,14 +221,22 @@ test('K35 非 loopback 请求一律 403 E_FORBIDDEN，且没有发生上游调�
   }
 });
 
-test('K35 bootstrap：返回 sources / categories / categoriesOk / categoriesStale 四个键', async () => {
-  const mounted = await mount();
+test('K35 bootstrap：六个键（sources / categories / categoriesOk / categoriesStale / total / countsOk）', async () => {
+  const mounted = await mount({
+    skillhub: adapter({
+      id: 'skillhub',
+      categories: [{ key: 'dev-tools', name: '开发编程', nameEn: 'Dev tools' }],
+      counts: { 'dev-tools': 137000 },
+      countTotal: 2540000,
+    }),
+  });
   try {
     const response = await callRoute(mounted.byPath[ROUTES.marketBootstrap], { headers: LOOPBACK_HEADERS });
     assert.equal(response.status, 200, 'bootstrap 200');
     assert.equal(response.json.code, 'OK', '信封 code 是 OK');
     assert.deepEqual(Object.keys(response.json.data).sort(),
-      ['categories', 'categoriesOk', 'categoriesStale', 'sources'], '恰好四个键');
+      ['categories', 'categoriesOk', 'categoriesStale', 'countsOk', 'sources', 'total'],
+      '恰好六个键（R4 加了 total 与 countsOk）');
     assert.deepEqual(response.json.data.sources.map((source) => source.id), ['skillhub', 'clawhub'], '两个来源按注册顺序');
     assert.deepEqual(response.json.data.sources[0], {
       id: 'skillhub',
@@ -222,8 +245,10 @@ test('K35 bootstrap：返回 sources / categories / categoriesOk / categoriesSta
       packageKind: 'files',
     }, '来源描述符形状固定（界面按它渲染筛选项，不枚举）');
     assert.equal(response.json.data.sources[1].hasCategories, false, 'ClawHub 没有分类表');
-    assert.equal(response.json.data.categories.length, 1, '分类表透传');
-    assert.equal(response.json.data.categoriesOk, true, '读成功');
+    assert.deepEqual(response.json.data.categories, [{ key: 'dev-tools', name: '开发编程', nameEn: 'Dev tools', count: 137000 }], '分类表透传并带上各自的 count');
+    assert.equal(response.json.data.categoriesOk, true, '分类读成功');
+    assert.equal(response.json.data.total, 2540000, 'total 是「全部」的数量');
+    assert.equal(response.json.data.countsOk, true, '计数齐全');
   } finally {
     await mounted.close();
   }
@@ -552,5 +577,80 @@ test('K36 市场路由不参与磁盘扫描：skillsRoot 不存在也能列表',
     assert.equal(response.status, 200, '市场列表不需要 skillsRoot 存在（与已安装页签的磁盘面分离）');
   } finally {
     await cleanup();
+  }
+});
+
+test('K53 bootstrap 的计数降级：计数失败不报错，count 全 null + countsOk:false，列表照常', async () => {
+  const mounted = await mount({
+    skillhub: adapter({
+      id: 'skillhub',
+      categories: [
+        { key: 'dev-tools', name: '开发编程', nameEn: 'Dev tools' },
+        { key: 'office', name: '办公效率', nameEn: 'Office' },
+      ],
+      countsThrows: true,
+    }),
+  });
+  try {
+    const boot = await callRoute(mounted.byPath[ROUTES.marketBootstrap], { headers: LOOPBACK_HEADERS });
+    assert.equal(boot.status, 200, '计数失败不是整页失败（§8.6）');
+    assert.equal(boot.json.data.countsOk, false, 'countsOk 报 false');
+    assert.equal(boot.json.data.total, null, 'total 也是 null');
+    assert.deepEqual(
+      boot.json.data.categories.map((entry) => entry.count),
+      [null, null],
+      '每个分类的 count 都是 null —— 界面据此整段不渲染数字',
+    );
+    assert.deepEqual(
+      boot.json.data.categories.map((entry) => entry.key),
+      ['dev-tools', 'office'],
+      '分类本身照常下发（chips 还能点）',
+    );
+    assert.equal(boot.json.data.categoriesOk, true, '分类表本身没问题');
+    const list = await callRoute(mounted.byPath[ROUTES.marketList], {
+      headers: LOOPBACK_HEADERS,
+      url: `${ROUTES.marketList}?source=skillhub`,
+    });
+    assert.equal(list.status, 200, '列表仍然可用');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K53 bootstrap 对「没有 counts 能力的源」与脏数字的处理', async () => {
+  // 第三个源只实现 §7.1 那些函数、没有 counts：bootstrap 仍要 200，只是没有数字。
+  const bare = adapter({ id: 'skillhub', categories: [{ key: 'dev-tools', name: '开发编程', nameEn: 'Dev tools' }] });
+  delete bare.counts;
+  const mounted = await mount({ skillhub: bare });
+  try {
+    const boot = await callRoute(mounted.byPath[ROUTES.marketBootstrap], { headers: LOOPBACK_HEADERS });
+    assert.equal(boot.status, 200, '没有 counts 不是错误');
+    assert.equal(boot.json.data.countsOk, false, '没有实现 ⇒ countsOk:false');
+    assert.equal(boot.json.data.total, null, 'total 为 null');
+    assert.deepEqual(boot.json.data.categories.map((entry) => entry.count), [null], '分类项 count 为 null');
+  } finally {
+    await mounted.close();
+  }
+
+  // 上游脏数据（小数 / 字符串）在路由层被 `Number.isInteger` 挡掉，界面不会显示 "1.5"。
+  const dirty = adapter({
+    id: 'skillhub',
+    categories: [
+      { key: 'dev-tools', name: '开发编程', nameEn: 'Dev tools' },
+      { key: 'office', name: '办公效率', nameEn: 'Office' },
+    ],
+  });
+  dirty.counts = async () => ({ counts: { 'dev-tools': 1.5, office: '9' }, total: 2.5, ok: true });
+  const dirtyMounted = await mount({ skillhub: dirty });
+  try {
+    const boot = await callRoute(dirtyMounted.byPath[ROUTES.marketBootstrap], { headers: LOOPBACK_HEADERS });
+    assert.deepEqual(
+      boot.json.data.categories.map((entry) => entry.count),
+      [null, null],
+      '小数与字符串都当成「没数」',
+    );
+    assert.equal(boot.json.data.total, null, 'total 的小数同样被挡');
+  } finally {
+    await dirtyMounted.close();
   }
 });

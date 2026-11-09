@@ -160,9 +160,12 @@ function marketItem(id, sourceId = 'skillhub') {
   };
 }
 
-test('K45 初始 market 子状态：默认「全部来源 / 推荐 / 未筛分类」，什么都没加载', () => {
+test('K45 初始 market 子状态：默认「SkillHub / 推荐 / 未筛分类」，什么都没加载', () => {
   const market = createStore().getSnapshot().market;
-  assert.deepEqual(market.filters, { source: 'all', category: null, sort: 'recommended' }, '默认筛选与设计一致');
+  // 用户去掉了「全部来源」（市场一次只问一个源），默认停在 SkillHub（market-model §3.8.2）。
+  assert.deepEqual(market.filters, { source: 'skillhub', category: null, sort: 'recommended' }, '默认筛选与设计一致');
+  assert.equal(market.total, null, 'bootstrap 之前没有总数');
+  assert.equal(market.countsOk, true, '计数默认可用（没数就不渲染，但不用报错态）');
   assert.equal(market.boot, 'idle', 'bootstrap 还没发');
   assert.equal(market.listStatus, 'idle', '列表还没请求');
   assert.deepEqual(market.items, [], '没有卡片');
@@ -177,10 +180,15 @@ test('K45 初始 market 子状态：默认「全部来源 / 推荐 / 未筛分�
 test('K45 marketSetFilter 过滤空操作：同一个值再设一次不产生新快照（不会白重拉一页）', () => {
   const store = createStore();
   const before = store.getSnapshot().market;
-  store.actions.marketSetFilter({ source: 'all' });
+  store.actions.marketSetFilter({ source: 'skillhub' });
   assert.equal(store.getSnapshot().market, before, '值没变 ⇒ 状态对象不变（引用相等）');
+  // `{source:'all'}` 不再是「默认值」：它现在是一个普通（不存在的）源 id，设它会真的改状态。
+  store.actions.marketSetFilter({ source: 'all' });
+  assert.equal(store.getSnapshot().market.filters.source, 'all', 'all 不再是特殊值，照字面生效');
+  store.actions.marketSetFilter({ source: 'skillhub' });
+  const reset = store.getSnapshot().market;
   store.actions.marketSetFilter(null);
-  assert.equal(store.getSnapshot().market, before, '非对象入参被忽略');
+  assert.equal(store.getSnapshot().market, reset, '非对象入参被忽略');
   store.actions.marketSetFilter({ source: 'clawhub', sort: 'updated' });
   const changed = store.getSnapshot().market;
   assert.equal(changed.filters.source, 'clawhub', '改变来源生效');
@@ -331,16 +339,26 @@ test('K45 marketBootFallback：bootstrap 失败不是错误态，用内置来源
   assert.equal(market.categoriesOk, false, '分类行显示不可用');
 });
 
-test('K45 两个来源一好一坏：好的一页照常渲染，坏的记在 sourceErrors 里', () => {
+test('K45 单源：那一次请求失败就是整页失败（不再有 sourceErrors 这条通道）', () => {
+  // 单源之后「一半成功一半失败」的状态不存在了：`errors` 入参没人再传，
+  // `sourceErrors` 字段与「部分源失败」提示条一起删掉了（K38 同步改了口径）。
   const store = createStore();
   store.actions.marketListLoading();
   store.actions.marketPageAppended({
     pages: [{ sourceId: 'skillhub', page: { items: [marketItem('skillhub:ake:a')], next: null } }],
     merged: [marketItem('skillhub:ake:a')],
-    errors: [{ sourceId: 'clawhub', code: 'E_SOURCE_TIMEOUT' }],
   });
-  const market = store.getSnapshot().market;
-  assert.equal(market.listStatus, 'ready', '一源成功就是 ready（不是 error）');
-  assert.deepEqual(market.sourceErrors, [{ sourceId: 'clawhub', code: 'E_SOURCE_TIMEOUT' }], '失败的源记在提示条上');
-  assert.equal(market.items.length, 1, '成功的源照常上屏');
+  const ok = store.getSnapshot().market;
+  assert.equal(ok.listStatus, 'ready', '成功 ⇒ ready');
+  assert.equal(ok.items.length, 1, '卡片上屏');
+  // 注意：`marketListLoading` 里还留着 `sourceErrors: []` 一行死写入（没有读者、界面也不读），
+  // 属 cosmetic 残留（报告 KI-R4-1，Engineer 一行可删）。所以这里不钉「字段不存在」，
+  // 只钉「没有语义」——界面不再因为它有任何表现。
+  assert.deepEqual(ok.sourceErrors ?? [], [], '没有读者，恒为空数组（无论有没有这一行）');
+
+  store.actions.marketListLoading();
+  store.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 'timeout' });
+  const failed = store.getSnapshot().market;
+  assert.equal(failed.listStatus, 'error', '唯一那个源失败 ⇒ 整页 error 态');
+  assert.equal(failed.page.code, 'E_SOURCE_TIMEOUT', '错误码留在 page 上（界面据此选文案）');
 });

@@ -17,8 +17,9 @@ import {
   MARKET_FALLBACK_SOURCES,
   MARKET_PAGE_SIZE,
   MARKET_SORTS,
-  SOURCE_ALL,
+  MARKET_DEFAULT_SOURCE,
   chipList,
+  countText,
   detailFacts,
   emptyKindOf,
   installViewOf,
@@ -171,23 +172,73 @@ test('K37 mergeBatches：页为空 / 参数缺失都不抛，已有项原样保�
   assert.deepEqual(mergeBatches([{ sourceId: 'x' }], {}), [], '页里没有 items 也不报错');
 });
 
+test('K54 countText：紧凑格式 + 四态（万 / M / 0 / null）', () => {
+  // 契约（client.md §3.9.1 第 6 条）：chips 上的数字用 `Intl.NumberFormat(undefined, {notation:'compact'})`，
+  // 也就是「跟随运行时默认语言」。所以断言分两层：格式跟随运行时；zh/en 的具体写法单独钉住，
+  // 证明这套格式化确实是用户要求的那个形状（中文 254万、英文 2.5M），而不是自己拼的字符串。
+  const compact = (value) => new Intl.NumberFormat(undefined, { notation: 'compact' }).format(value);
+  assert.equal(countText(2540000), compact(2540000), '跟随运行时默认语言');
+  assert.equal(new Intl.NumberFormat('zh-CN', { notation: 'compact' }).format(2540000), '254万', '中文环境：254万');
+  assert.equal(new Intl.NumberFormat('en-US', { notation: 'compact' }).format(2500000), '2.5M', '英文环境：2.5M');
+  assert.equal(countText(0), compact(0), '真实的 0 照常显示（不是 null，也不是空）');
+  assert.equal(countText(7), compact(7), '小数字原样');
+  for (const value of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY, -1, '12', {}, []]) {
+    assert.equal(countText(value), null, `${JSON.stringify(value)} ⇒ null（不渲染任何数字）`);
+  }
+});
+
+test('K54 chipList 带数量：total 挂在「全部」上，每类自己的 count，countsOk:false 时整段不渲染', () => {
+  const categories = [
+    { key: 'dev-tools', name: '开发工具', count: 137000 },
+    { key: 'writing', name: '内容创作', count: 0 },
+    { key: 'other', name: '其他', count: null },
+  ];
+  const chips = chipList(categories, { total: 2540000, countsOk: true });
+  assert.equal(chips.length, 4, '「全部」+ 三个分类');
+  assert.equal(chips[0].count, 2540000, '「全部」显示 total');
+  assert.deepEqual(chips.slice(1).map((chip) => chip.count), [137000, 0, null], '每类自己的 count；0 保留，null 表示没数');
+  assert.equal(countText(chips[1].count), new Intl.NumberFormat(undefined, { notation: 'compact' }).format(137000), '137000 会变成「14万」/「137K」这种紧凑写法');
+
+  const degraded = chipList(categories, { total: 2540000, countsOk: false });
+  assert.deepEqual(degraded.map((chip) => chip.count), [null, null, null, null], 'countsOk:false 时一个数字都不给');
+  assert.deepEqual(degraded.map((chip) => chip.label), chips.map((chip) => chip.label), '文案不受影响（chips 照常可用）');
+
+  const bare = chipList(categories);
+  assert.deepEqual(bare.map((chip) => chip.count), [null, 137000, 0, null], '不传 countsOk 视为可渲染；没传 total 时「全部」不带数字，各类自己的 count 照常');
+
+  // 上游回了字符串（或 total 是字符串）一律当成「没数」，不猜。这里只守 `Number.isFinite`：
+  // 整数性由上游保证——适配器 `readTotal` 做 `Math.trunc`，路由再要求 `Number.isInteger`，
+  // 到 model 这一层的 count 不可能是小数。
+  const dirty = chipList([{ key: 'a', count: '12' }, { key: 'b', count: null }], { total: '9', countsOk: true });
+  assert.deepEqual(dirty.map((chip) => chip.count), [null, null, null], '字符串计数不进 chips');
+});
+
 test('K37 短页不等于耗尽：next 非 null 时 pagedSources 仍要这个源（短页 + 游标前进）', () => {
+  // ClawHub 实际会这样：limit=12 只回 1 条，但 nextCursor 非空。改成单源之后这条规则
+  // 更要紧——页里只有 1 条卡，唯一能说明「后面还有」的就是 next。
   const store = createStore();
+  store.actions.marketSetFilter({ source: 'clawhub' });
   store.actions.marketListLoading();
-  // ClawHub 实际会这样：limit=12 只回 1 条，但 nextCursor 非空。
+  const only = item({ sourceId: 'clawhub', id: 'clawhub:ake:only' });
   store.actions.marketPageAppended({
-    pages: [
-      { sourceId: 'skillhub', page: { items: [], next: null } },
-      { sourceId: 'clawhub', page: { items: [item({ sourceId: 'clawhub', id: 'clawhub:ake:only' })], next: 'cursor-2' } },
-    ],
-    merged: [item({ sourceId: 'clawhub', id: 'clawhub:ake:only' })],
+    pages: [{ sourceId: 'clawhub', page: { items: [only], next: 'cursor-2' } }],
+    merged: [only],
   });
   const market = store.getSnapshot().market;
-  assert.equal(market.page.status, 'more', '还有下一页');
-  assert.equal(market.exhausted.clawhub, false, '短页的源没有判成耗尽');
-  assert.equal(market.exhausted.skillhub, true, 'next=null 的源才算耗尽');
-  assert.deepEqual(pagedSources(market), ['clawhub'], '下一次追加只问还有游标的那个源');
-  assert.equal(MARKET_PAGE_SIZE, 12, '每源 12 条（双源一屏 24 张）');
+  assert.equal(market.page.status, 'more', '短页 + next 非空 ⇒ 还有下一页');
+  assert.equal(market.exhausted.clawhub, false, '短页没有判成耗尽');
+  assert.deepEqual(pagedSources(market), ['clawhub'], '下一次追加仍问这个源');
+
+  // 同一个源 next=null 才是真的到底。
+  store.actions.marketPageAppended({
+    pages: [{ sourceId: 'clawhub', page: { items: [], next: null } }],
+    merged: [only],
+  });
+  const done = store.getSnapshot().market;
+  assert.equal(done.exhausted.clawhub, true, 'next=null 才算耗尽');
+  assert.equal(done.page.status, 'done', '没有游标 ⇒ done');
+  assert.deepEqual(pagedSources(done), [], '到底之后不再问');
+  assert.equal(MARKET_PAGE_SIZE, 12, '单源每页 12 条');
 });
 
 test('K37 两源都 next=null 时才算到底：page.status 变 done，pagedSources 为空', () => {
@@ -290,14 +341,21 @@ test('K37 visibleCategories：选 ClawHub 时整行隐藏，bootstrap 失败时�
     '选 SkillHub 时分类行可用',
   );
   assert.deepEqual(
-    visibleCategories({ filters: { source: SOURCE_ALL }, sources, categories: [], categoriesOk: false }),
+    visibleCategories({ filters: { source: MARKET_DEFAULT_SOURCE }, sources, categories: [], categoriesOk: false }),
     { visible: false, unavailable: true, items: [] },
     'bootstrap 失败时隐藏并提示不可用',
   );
   assert.deepEqual(
-    visibleCategories({ filters: { source: SOURCE_ALL }, sources, categories: [], categoriesOk: true }),
+    visibleCategories({ filters: { source: MARKET_DEFAULT_SOURCE }, sources, categories: [], categoriesOk: true }),
     { visible: false, unavailable: false, items: [] },
     '空分类表静默隐藏',
+  );
+  // 「全部来源」这个选项已删：filters.source 永远是某个真实源。缺省（undefined）应当按
+  // default 源判，而不是当成「不过滤来源」。
+  assert.deepEqual(
+    visibleCategories({ filters: {}, sources, categories, categoriesOk: true }),
+    { visible: true, unavailable: false, items: categories },
+    '缺省来源按 MARKET_DEFAULT_SOURCE 判（SkillHub 有分类）',
   );
   assert.deepEqual(
     visibleCategories({ filters: { source: 'a-third-source' }, sources: [], categories, categoriesOk: true }),
@@ -324,21 +382,43 @@ test('K37 chipList：第一个是「全部」空值 chip，其余用中文名，
     ['writing', 'Writing'],
     ['other', 'other'],
   ], 'name → nameEn → key 三级回落');
-  assert.deepEqual(chipList(null), [{ value: null, label: '' }], '非数组时只有「全部」一个 chip');
+  const empty = chipList(null);
+  assert.equal(empty.length, 1, '非数组时只有「全部」一个 chip');
+  assert.equal(empty[0].value, null, '仍然是空值 chip');
+  assert.equal(empty[0].label, '', '文案由字典给');
+  assert.equal(empty[0].count, null, '没有 total 时不带数字');
 });
 
-test('K37 queriedSources / pagedSources：选「全部」时扇出两个源，选单个时只问那个', () => {
+test('K55 单源语义：市场一次只问一个源，缺省就是 MARKET_DEFAULT_SOURCE', () => {
+  // 用户去掉了「全部来源」：菜单里只有真实源，默认停在 SkillHub。于是 queriedSources
+  // 永远只有一个元素——扇出、部分失败提示条这些「多源」概念随之消失。
   const sources = [
     { id: 'skillhub', hasCategories: true },
     { id: 'clawhub', hasCategories: false },
   ];
-  assert.deepEqual(queriedSources({ sources, filters: { source: SOURCE_ALL } }), ['skillhub', 'clawhub'], '全部来源 ⇒ 两源');
-  assert.deepEqual(queriedSources({ sources, filters: { source: 'clawhub' } }), ['clawhub'], '选单个源 ⇒ 只问它');
-  assert.deepEqual(queriedSources({ sources: [], filters: { source: SOURCE_ALL } }), ['skillhub', 'clawhub'], 'bootstrap 未答时用内置两源');
+  assert.equal(MARKET_DEFAULT_SOURCE, 'skillhub', '默认源是 SkillHub');
+  assert.deepEqual(queriedSources({ sources, filters: {} }), ['skillhub'], '缺省 → 只问 SkillHub');
+  assert.deepEqual(queriedSources({ sources, filters: { source: 'clawhub' } }), ['clawhub'], '选中哪个就只问哪个');
+  assert.deepEqual(queriedSources({ sources: [], filters: { source: 'clawhub' } }), ['clawhub'], 'bootstrap 未答时也照用户选的问');
   assert.deepEqual(
-    pagedSources({ sources, filters: { source: SOURCE_ALL }, cursors: { skillhub: 'c2', clawhub: null } }),
+    queriedSources({ sources, filters: { source: 'all' } }),
+    ['all'],
+    '不再有特殊值 all：它被当成一个普通源 id（路由会以 E_BAD_QUERY 拒掉，不是静默扇出）',
+  );
+  assert.deepEqual(
+    pagedSources({ sources, filters: { source: 'skillhub' }, cursors: { skillhub: 'c2', clawhub: null } }),
     ['skillhub'],
-    '只剩有游标的源',
+    '有游标才翻页',
+  );
+  assert.deepEqual(
+    pagedSources({ sources, filters: { source: 'skillhub' }, cursors: { skillhub: null } }),
+    [],
+    '游标为 null 表示该源已耗尽',
+  );
+  assert.deepEqual(
+    pagedSources({ sources, filters: { source: 'clawhub' }, cursors: {} }),
+    ['clawhub'],
+    '还没有游标记录时（首屏）也算有下一页',
   );
 });
 

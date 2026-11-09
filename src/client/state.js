@@ -14,7 +14,7 @@
  * No optimistic UI: a row's `enabled` only changes when the host confirms it, and a
  * card reads "installed" only after the install route answered.
  */
-import { marketKeyOf } from './market-model.js';
+import { MARKET_DEFAULT_SOURCE, marketKeyOf } from './market-model.js';
 import { rowKey, TAB_INSTALLED } from './model.js';
 
 /**
@@ -39,7 +39,9 @@ function initialMarket() {
     sources: [],
     categories: [],
     categoriesOk: true,
-    filters: { source: 'all', category: null, sort: 'recommended' },
+    total: null,
+    countsOk: true,
+    filters: { source: MARKET_DEFAULT_SOURCE, category: null, sort: 'recommended' },
     keyword: '',
     input: '',
     items: [],
@@ -47,7 +49,6 @@ function initialMarket() {
     cursors: {},
     exhausted: {},
     page: { status: 'idle', code: null, message: null },
-    sourceErrors: [],
     listStatus: 'idle',
     detail: null,
     installed: {},
@@ -115,7 +116,6 @@ function clearedPaging(market) {
     cursors: {},
     exhausted: {},
     page: { status: 'idle', code: null, message: null },
-    sourceErrors: [],
     listStatus: market.items.length > 0 ? 'ready' : 'idle',
   };
 }
@@ -127,11 +127,6 @@ function clearedPaging(market) {
  * @param {{sourceId: string, code: string}[]} failed - sources that failed this round.
  * @returns {{sourceId: string, code: string}[]} the deduplicated error list.
  */
-function withSourceErrors(current, answered, failed) {
-  const next = current.filter((entry) => !answered.includes(entry.sourceId)
-    && !failed.some((failure) => failure.sourceId === entry.sourceId));
-  return [...next, ...failed];
-}
 
 /**
  * Create a store with the shape the page binds to.
@@ -263,6 +258,8 @@ export function createStore() {
         sources: Array.isArray(data?.sources) ? data.sources : [],
         categories: Array.isArray(data?.categories) ? data.categories : [],
         categoriesOk: data?.categoriesOk !== false,
+        total: Number.isFinite(data?.total) ? data.total : null,
+        countsOk: data?.countsOk !== false,
       });
     },
     /**
@@ -277,6 +274,8 @@ export function createStore() {
         sources: Array.isArray(sources) ? sources : [],
         categories: [],
         categoriesOk: false,
+        total: null,
+        countsOk: false,
       });
     },
     /**
@@ -334,18 +333,17 @@ export function createStore() {
       });
     },
     /**
-     * A page-one fan-out is in flight.
+     * The page-one request is in flight.
      * @returns {void}
      */
     marketListLoading: () => {
       setMarket({
         listStatus: 'loading',
         page: { status: 'loading', code: null, message: null },
-        sourceErrors: [],
       });
     },
     /**
-     * Every source of a page-one fan-out failed: this is a failure, not an empty list.
+     * The page-one request failed: this is a failure, not an empty list.
      * @param {{code?: string, message?: string}} error - failure code and note.
      * @returns {void}
      */
@@ -358,22 +356,21 @@ export function createStore() {
       });
     },
     /**
-     * An append fan-out is in flight. The cards already on screen stay where they are.
+     * The append request is in flight. The cards already on screen stay where they are.
      * @returns {void}
      */
     marketPageStart: () => {
       setMarket({ page: { status: 'loading', code: null, message: null } });
     },
     /**
-     * One fan-out answered: adopt the merged list, remember each source's cursor, and
-     * keep the sources that failed this round in the notice strip.
-     * @param {{pages: {sourceId: string, page: object}[], merged: object[],
-     *   errors?: {sourceId: string, code: string}[]}} result - the settled fan-out.
+     * A page answered: adopt the merged list and remember that source's cursor.
+     * @param {{pages: {sourceId: string, page: object, items: object[]}[], merged: object[]}} result
+     *   the answered page and the list to render (the array keeps room for several sources
+     *   later, but the market shows one source at a time).
      * @returns {void}
      */
     marketPageAppended: (result) => {
       const pages = Array.isArray(result?.pages) ? result.pages : [];
-      const errors = Array.isArray(result?.errors) ? result.errors : [];
       const cursors = { ...state.market.cursors };
       const exhausted = { ...state.market.exhausted };
       for (const entry of pages) {
@@ -382,7 +379,6 @@ export function createStore() {
         exhausted[entry.sourceId] = next === null;
       }
       const more = Object.values(cursors).some((cursor) => cursor !== null);
-      const answered = pages.map((entry) => entry.sourceId);
       setMarket({
         items: Array.isArray(result?.merged) ? result.merged : state.market.items,
         pages: state.market.pages + (pages.length > 0 ? 1 : 0),
@@ -390,11 +386,10 @@ export function createStore() {
         exhausted,
         page: { status: more ? 'more' : 'done', code: null, message: null },
         listStatus: 'ready',
-        sourceErrors: withSourceErrors(state.market.sourceErrors, answered, errors),
       });
     },
     /**
-     * An append fan-out failed: the loaded cards stay, the tail says so.
+     * The append request failed: the loaded cards stay, the tail says so.
      * @param {{code?: string, message?: string}} error - failure code and note.
      * @returns {void}
      */
