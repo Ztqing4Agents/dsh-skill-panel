@@ -135,7 +135,7 @@ export function MarketPanel({ store, api, t }) {
     }
     store.actions.marketPageAppended({
       pages,
-      merged: mergeBatches(pages, { sort: current.filters.sort }),
+      merged: mergeBatches(pages),
       errors,
     });
   }, [fanOut, store]);
@@ -160,7 +160,7 @@ export function MarketPanel({ store, api, t }) {
       }
       store.actions.marketPageAppended({
         pages,
-        merged: mergeBatches(pages, { existing: current.items, sort: current.filters.sort }),
+        merged: mergeBatches(pages, { existing: current.items }),
         errors,
       });
     } finally {

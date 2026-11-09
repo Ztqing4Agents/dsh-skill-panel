@@ -95,7 +95,7 @@ market = {
 | 关键词变化 | 250ms 防抖后提交 | 请求中**保留旧 items**（`aria-busy` + 搜索框旁 ongoing 点），不换骨架 |
 | 回车 / 清空输入 | 立刻提交，不经防抖 | 清空只清关键词，不动来源与分类 |
 | 切来源 / 分类 / 排序 | 清 `items/pages/cursors/exhausted/detail`，滚回顶部 | 值没变时不重拉 |
-| 扇出返回（≥1 源成功） | `listStatus=ready`，`page` 进 `more` 或 `done` | 成功的源按 `mergeBatches` 交错；失败的源进 `sourceErrors` → 提示条 |
+| 扇出返回（≥1 源成功） | `listStatus=ready`，`page` 进 `more` 或 `done` | 成功的源按 `mergeBatches` **按来源分块依次拼接**（不交织、不跨源重排）；失败的源进 `sourceErrors` → 提示条 |
 | 扇出返回（全部失败） | `listStatus=error` | 整页错误态 + 重试；**不出空态**（空 ≠ 失败） |
 | 追加返回 | `page` 进 `more` 或 `done` | 只向 `cursor !== null` 的源扇出；`items` 追加去重，不重排已有项 |
 | 追加失败 | `page=error` | 底部「加载失败，点此重试」，items 不动 |
@@ -116,18 +116,19 @@ SkillsPage (page.jsx：页头 + 两个页签)
 └─ tabPanel(market) → MarketPanel (market-panel.jsx)
     ├─ MarketFilters (market-filters.jsx)：Input(250ms 防抖) / Menu(来源) / Menu(排序) / Pill(分类 chips)
     ├─ 提示条（部分源不可用）｜首屏骨架｜整页错误态｜空态
-    ├─ ul.skc_marketGrid → MarketCard (market-card.jsx) × N（尾部 3 张骨架）
+    ├─ ul.skc_marketGrid → MarketCard (market-card.jsx) × N（尾部 3 张骨架；头像位是 MarketIcon）
     ├─ MarketDetail (market-detail.jsx)：面包屑 + 头 + 事实表 + 概览 + 文件
     └─ MarketConfirm (market-confirm.jsx)：Modal（width:min(480px,100vw - 32px)）
 MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 ```
 
-四条结构约束：
+五条结构约束：
 
 1. **整卡可点只有一个手段**：标题按钮 `.skc_marketCardOpen::after{inset:0}` 铺满整卡，`.skc_marketCardEnd{z-index:1}` 让安装按钮浮在点击层之上。不做 `<a href>`、不做卡片内的第二个可点区域、不给卡片加行 hover 之外的交互。已安装页签的行一个字节不变。
 2. **详情就地替换网格**（`detail !== null` 时返回详情而不是网格），与宿主的页内详情同构；返回不重拉任何东西。
 3. 详情正文用宿主 primitives 的 `MarkdownText` 渲染（与对话里的第三方 markdown 同一个渲染器，不自造 sanitizer）；渲染抛错或正文为空时回落纯文本 + `market.detailNoOverview`。
 4. 组件只读 props（`store/api/t`）写 `store.actions`，不直接 `fetch`；只有滚动位置恢复与触底预取读 DOM，且都在 `useEffect` 里（字符串渲染不触发）。
+5. **头像只有两态**（卡片、详情头、确认弹窗共用一个 `MarketIcon`）：`item.iconUrl` 为非空字符串时画图（`<img>` + `skc_marketIconImg`、`alt=""`、`loading="lazy"`、`referrerPolicy="no-referrer"`），否则画首字母；**图片 `onError` 也回落首字母**，任何情况下都不留空白方块。图片是 `.skc_cardIcon` 的 flex 子项、只填满内容盒，所以宿主那条 `.5px` 描边始终压在图片之上；头像盒既有声明（48×48 / `border .5px` / `radius-lg` / `background-clip: padding-box` / 粉彩底）一字不改。
 
 ### 3.9.3 store action（`src/client/state.js`）
 
@@ -171,7 +172,7 @@ MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 
 ### 3.9.5 详情就地替换网格的返回契约
 
-「返回市场」必须逐项恢复，且**不重拉**：`items` 与 `pages` 不动、`filters` 与 `keyword` 不动、`scrollTop` 写回滚动容器、`detail` 置 `null`。这是结构保证（状态在 store 里），不是补丁：面板卸载/重挂都不影响。
+「返回市场」必须逐项恢复，且**不重拉**：`items` 与 `pages` 不动、`filters` 与 `keyword` 不动、`scrollTop` 写回滚动容器、`detail` 置 `null`。列表顺序同样不动——顺序就是各源各自的分页顺序，客户端不二次排序（见 §8.4）。这是结构保证（状态在 store 里），不是补丁：面板卸载/重挂都不影响。
 
 市场用例（K28–K51）与 PRD 的 A1–A17 对照见 `docs/contracts/acceptance.md` 的附录 D.5（由 QA 落地）。
 
@@ -335,7 +336,7 @@ MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 ## 8.4 时间与其他
 
 - 日志与 `health` 里的时间一律 **ISO 8601 UTC**（`new Date().toISOString()`）；**界面上不显示任何时间**（首版无版本检查、无「上次刷新」）。
-- 市场条目的 `updatedAt` **只用于排序**：卡片与详情都不显示任何时间（不写「3 天前」、不写日期）；市场列表的 `total` 也不上屏。
+- 市场条目的 `updatedAt` **客户端不读**：三种排序都由路由按 `sort` 在各源内完成，浏览器侧不二次排序；卡片与详情都不显示任何时间（不写「3 天前」、不写日期）；市场列表的 `total` 也不上屏。
 - 布尔：YAML 侧接受 `true/false/yes/no/on/off/1/0`（大小写不敏感，宿主同文法，`EX/dsh-skill-filesystem/README.md`「Skill format」）；**写回只用 `true`/`false`**。
 - 数字：`counts` 全部是整数，缺失按 0（不做 `undefined` 透出）。
 - 日志：`ctx.logger.warn(error)` 记录，**不把路径之外的敏感内容打进日志**。
@@ -345,7 +346,7 @@ MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 ## 8.5 样式字面量单点
 
 尺寸与颜色字面量只允许出现在 `src/client/styles.js`（样式）与 `src/client/avatar.js`（12 组头像色板，全仓库仅此两处色值）；其它组件文件不得写颜色/尺寸（`size={11|13}` 这类图标尺寸除外）。
-市场样式同样只进 `styles.js`（类名 `skc_market*`，取值逐条来自 `docs/contracts/market.md` 附录 F）；**市场不新增任何颜色字面量**，也不改 `.skc_cardIcon` 的任何一条声明。
+市场样式同样只进 `styles.js`（类名 `skc_market*`，取值逐条来自 `docs/contracts/market.md` 附录 F）；**市场不新增任何颜色字面量**，也不改 `.skc_cardIcon` 的任何一条声明。上游图标用的 `.skc_marketIconImg` 只有四条声明（`width/height:100%`、`object-fit:cover`、`display:block`、`border-radius:calc(var(--dsw-radius-lg) - .5px)` 同心内圆角），不含色值。
 锚点：`test/styles.test.mjs`；把刻度搬进组件时那条用例先红。
 
 ---

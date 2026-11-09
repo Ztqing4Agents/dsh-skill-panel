@@ -28,6 +28,7 @@ import {
   nameIsValid,
   numberOrNull,
   overviewOf,
+  skillhubIconUrl,
   slugFromUrl,
   sortByUpdatedDesc,
   textOrNull,
@@ -36,9 +37,12 @@ import {
 
 /** Every field a MarketItem must carry, from the §7.4 table. */
 const ITEM_FIELDS = [
-  'sourceId', 'id', 'owner', 'slug', 'displayName', 'summary',
+  'sourceId', 'id', 'owner', 'slug', 'displayName', 'iconUrl', 'summary',
   'author', 'version', 'downloads', 'updatedAt', 'category', 'packageKind',
 ];
+
+/** A real-looking SkillHub icon address (the `/skill-icons/` prefix is the rule). */
+const ICON = 'https://cdn.skillhub.cn/skill-icons/ake/dev-god.png';
 
 /**
  * A `SKILL.md` with frontmatter and a body.
@@ -74,6 +78,7 @@ test('K31 SkillHub 列表条目：字段全、缺的下发 null，author 三级�
     downloads: 1200,
     updated_at: '2026-11-01T10:00:00.000Z',
     category: 'dev-tools',
+    iconUrl: ICON,
     namespace: { handle: 'ake', displayName: 'Ake' },
     publisher: { name: 'Ake Studio' },
   });
@@ -87,6 +92,7 @@ test('K31 SkillHub 列表条目：字段全、缺的下发 null，author 三级�
   assert.equal(item.downloads, 1200, 'downloads 原样');
   assert.equal(item.updatedAt, Date.parse('2026-11-01T10:00:00.000Z'), 'updated_at 转 epoch 毫秒');
   assert.equal(item.category, 'dev-tools', 'category 只有 SkillHub 有');
+  assert.equal(item.iconUrl, ICON, 'SkillHub 的 /skill-icons/ 图标原样透传');
   assert.equal(item.packageKind, 'files', 'SkillHub 是逐文件包');
 });
 
@@ -97,6 +103,7 @@ test('K31 SkillHub 列表条目缺字段：downloads/version/category 都是 nul
   assert.equal(item.version, null, 'version 缺 ⇒ null（绝不是 latest）');
   assert.equal(item.category, null, 'category 缺 ⇒ null');
   assert.equal(item.updatedAt, null, 'updatedAt 缺 ⇒ null');
+  assert.equal(item.iconUrl, null, 'iconUrl 缺 ⇒ null（回落首字母头像，绝不半张图）');
   assert.equal(item.author, 'someone', 'author 回落到 owner');
   assert.equal(item.displayName, 'bare', 'displayName 回落到 slug');
   assert.equal(item.summary, '', 'summary 是唯一的空串字段（卡片整段不渲染）');
@@ -111,7 +118,7 @@ test('K31 author 三级回落：publisher → namespace.displayName → owner', 
 
 test('K31 SkillHub 详情：stats/latestVersion 落在正确字段上，形不对的条目返回 null', () => {
   const item = fromSkillhubDetail({
-    skill: { slug: 'dev-god', name: 'Dev God', summary: 'S', category: 'dev-tools' },
+    skill: { slug: 'dev-god', name: 'Dev God', summary: 'S', category: 'dev-tools', iconUrl: ICON },
     stats: { downloads: 42 },
     namespace: { handle: 'ake' },
     latestVersion: { version: '2.0.0' },
@@ -119,6 +126,7 @@ test('K31 SkillHub 详情：stats/latestVersion 落在正确字段上，形不�
   assertItemShape(item, 'skillhub detail');
   assert.equal(item.version, '2.0.0', 'version 取 latestVersion.version');
   assert.equal(item.downloads, 42, 'downloads 取 stats.downloads');
+  assert.equal(item.iconUrl, ICON, '详情里的图标也透传（卡片与详情同一张图）');
   for (const raw of [null, {}, { skill: 'x' }, []]) {
     assert.equal(fromSkillhubDetail(raw), null, `${JSON.stringify(raw)} 没有 skill 对象 ⇒ null`);
   }
@@ -139,6 +147,7 @@ test('K31 ClawHub 列表与详情：packageKind 是 zip，category 恒 null', ()
   assertItemShape(fromList, 'clawhub list');
   assert.equal(fromList.packageKind, 'zip', 'ClawHub 整包 zip');
   assert.equal(fromList.category, null, 'ClawHub 没有分类表，category 恒 null');
+  assert.equal(fromList.iconUrl, null, 'ClawHub 的 icon 是 Lucide token 不是图片地址 ⇒ 恒 null');
   assert.equal(fromList.version, '1.0.1', 'version 取 latestVersion.version');
   assert.equal(fromList.downloads, 7, 'downloads 取 stats.downloads');
   assert.equal(fromList.updatedAt, 1762000000000, '数值时间戳原样');
@@ -153,6 +162,7 @@ test('K31 ClawHub 列表与详情：packageKind 是 zip，category 恒 null', ()
   assert.equal(fromDetail.id, 'clawhub:ivangdavila:design', '详情也能拼出 id');
   assert.equal(fromDetail.downloads, 9, 'downloads 取 skill.stats.downloads');
   assert.equal(fromDetail.version, '1.0.2', 'version 取 latestVersion.version');
+  assert.equal(fromDetail.iconUrl, null, '详情同样 null（两个源不会一半有图一半没图地混排）');
 });
 
 test('K31 ClawHub 列表的 tags.latest 只是兜底：像 id 的不当版本号用', () => {
@@ -177,7 +187,33 @@ test('K31 ClawHub 搜索结果是浅形状：无版本号（恒 null），slug �
   assert.equal(item.slug, 'design', 'slug 缺时取 canonicalUrl 的最后一段');
   assert.equal(item.summary, 'Design skill', 'summary 取 native.skill.summary');
   assert.equal(item.category, null, '搜索结果没有分类');
+  assert.equal(item.iconUrl, null, '搜索结果同样没有图片地址');
   assert.equal(item.downloads, null, '搜索结果没有下载数 ⇒ null');
+});
+
+test('K31 skillhubIconUrl 只认 /skill-icons/ 的 https 地址：占位图与站点横幅一律 null', () => {
+  assert.equal(skillhubIconUrl(ICON), ICON, '真图标原样返回');
+  assert.equal(
+    skillhubIconUrl('https://cdn.skillhub.cn/skill-icons/other/x.jpg?v=2'),
+    'https://cdn.skillhub.cn/skill-icons/other/x.jpg?v=2',
+    '带查询串的图标也认（返回的是 URL 归一化后的串）',
+  );
+  for (const value of [
+    // 站点级占位图：画上去等于给每个技能贴同一张别人的图，比字母头像更糟
+    'https://cloudcache.tencent-cloud.com/qcloud/ui/static/other_external_resource/banner.png',
+    'https://cdn.skillhub.cn/covers/123.png',
+    'http://cdn.skillhub.cn/skill-icons/a.png',
+    '/skill-icons/a.png',
+    'not a url',
+    '',
+    '   ',
+    null,
+    undefined,
+    42,
+    { url: ICON },
+  ]) {
+    assert.equal(skillhubIconUrl(value), null, `${JSON.stringify(value)} ⇒ null`);
+  }
 });
 
 test('K31 overview 由 SKILL.md 派生：不含 frontmatter 的分隔行与头字段', () => {
@@ -242,6 +278,8 @@ test('K31 marketItem 本身兜底：非字符串 displayName 回落 slug，packa
   assertItemShape(item, 'marketItem 兜底');
   assert.equal(item.displayName, 's', 'displayName 非字符串 ⇒ 回落 slug');
   assert.equal(item.packageKind, 'files', '未知包形态回落 files（只有显式 zip 才是 zip）');
+  assert.equal(item.iconUrl, null, '非字符串 iconUrl 归一成 null（不会渲染 src="42"）');
+  assert.equal(marketItem({ slug: 's', iconUrl: '' }).iconUrl, null, '空串 iconUrl 等同没有');
   assert.equal(marketId('skillhub', null, null), 'skillhub::', '三元组缺值也拼得出 id');
 });
 

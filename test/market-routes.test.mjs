@@ -35,6 +35,7 @@ const ITEM = {
   downloads: 12,
   updatedAt: NOW(),
   category: 'dev-tools',
+  iconUrl: 'https://cdn.skillhub.cn/skill-icons/ake/dev-god.png',
   packageKind: 'files',
 };
 
@@ -368,10 +369,14 @@ test('K36 detail：缺 source/owner/slug 都是 400；成功时补出 installTo'
     });
     assert.equal(ok.status, 200, 'detail 200');
     assert.deepEqual(Object.keys(ok.json.data).sort(),
-      ['declaredName', 'files', 'filesComplete', 'installTo', 'item', 'nameValid', 'overview'], 'MarketDetail 七个键');
+      ['declaredName', 'files', 'filesComplete', 'iconUrl', 'installTo', 'item', 'nameValid', 'overview'],
+      'MarketDetail 八个键（iconUrl 是给详情头与确认弹窗的那一份）');
     assert.equal(ok.json.data.nameValid, true, '声明名合规');
     assert.equal(ok.json.data.installTo, join(mounted.skillsRoot, 'dev-god'), 'installTo 由路由补（适配器不碰磁盘）');
     assert.equal(ok.json.data.files.length, 1, '文件清单透传');
+    // 两个字段必须恒等：客户端可能读 detail.iconUrl，也可能读 detail.item.iconUrl，不能一个有一个没有。
+    assert.equal(ok.json.data.iconUrl, ok.json.data.item.iconUrl, '顶层 iconUrl 与 item.iconUrl 恒等');
+    assert.equal(ok.json.data.iconUrl, ITEM.iconUrl, '值就是适配器给的那一个');
   } finally {
     await mounted.close();
   }

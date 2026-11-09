@@ -3,7 +3,7 @@
  *
  * Contract: docs/contracts/acceptance.md 附录 D.1 (what L3 can and cannot prove),
  * docs/contracts/client.md §3.9 (market components and state machine),
- * docs/contracts/market.md 附录 F (market tick classes); case ids K38, K39.
+ * docs/contracts/market.md 附录 F (market tick classes); case ids K38, K39, K47–K49, K52.
  *
  * The primitives are the documented stub (`test/helpers/primitives-stub.mjs`), so
  * `role="dialog"` here is evidence of prop wiring, not of the host painting. Geometry,
@@ -15,21 +15,76 @@
  */
 import assert from 'node:assert/strict';
 import test, { before } from 'node:test';
+import { createRequire } from 'node:module';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { createStore } from '../src/client/state.js';
-import { loadClientModules, zhTranslator } from './helpers/ssr.mjs';
+import { ROOT, loadClientModules, zhTranslator } from './helpers/ssr.mjs';
 
 /** The bundled client page. */
 let page;
+/** The bundled market card module (exports `MarketIcon`). */
+let card;
 /** The Chinese translator. */
 let t;
 
 before(async () => {
-  page = (await loadClientModules(['page'])).page;
+  const modules = await loadClientModules(['page', 'card']);
+  page = modules.page;
+  card = modules.card;
   t = await zhTranslator();
 });
+
+const require = createRequire(import.meta.url);
+const ReactCjs = require('react');
+
+/**
+ * Render one function component that only uses `useState`, with a controllable slot.
+ *
+ * `renderToStaticMarkup` can prove what a state *renders* but cannot fire an event into
+ * it, and this repo has no DOM (no jsdom) - so the one transition that matters here
+ * ("the image 404s, the tile must fall back to the letter") is driven through React's
+ * own hook dispatcher, which is what a test renderer does internally. The component
+ * under test is the real one; only the reconciler is replaced.
+ * @param {Function} component - the component to mount.
+ * @param {object} initialProps - its props.
+ * @returns {{render: (nextProps?: object) => object}} a handle whose `render` can be called again after a state write.
+ */
+function mountHooks(component, initialProps) {
+  const slots = [];
+  const internals = ReactCjs.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+  const holder = internals.ReactCurrentDispatcher;
+  const previous = holder.current;
+  let props = initialProps;
+  const render = (nextProps) => {
+    if (nextProps !== undefined) props = nextProps;
+    let index = 0;
+    holder.current = {
+      useEffect: () => {},
+      useState(initial) {
+        const at = index;
+        index += 1;
+        if (!(at in slots)) slots[at] = typeof initial === 'function' ? initial() : initial;
+        const set = (next) => {
+          slots[at] = typeof next === 'function' ? next(slots[at]) : next;
+        };
+        return [slots[at], set];
+      },
+    };
+    try {
+      return component(props);
+    } finally {
+      holder.current = previous;
+    }
+  };
+  return { render };
+}
+
+/** The letter tile the avatar palette gives a title. */
+const LETTER = (title) => title.trim().charAt(0).toUpperCase();
 
 /**
  * One market item.
@@ -545,4 +600,139 @@ test('K49 市场页签的刷新按钮跟随市场加载状态（aria-busy / disa
   const idleRefresh = /<button[^>]*aria-label="刷新"[^>]*>/.exec(idle);
   assert.equal(idleRefresh[0].includes('disabled=""'), false, '空闲时刷新按钮可点');
   assert.ok(idle.includes('data-icon="refresh"'), '空闲时是刷新图标');
+});
+
+/* ------------------------------------------------------------------ K52 · MarketIcon */
+
+const ICON_URL = 'https://cdn.skillhub.cn/skill-icons/ake/dev-god.png';
+
+test('K52 ① iconUrl 有效：内容盒里渲染 <img>，属性齐全、外层盒子一个字节没变', () => {
+  const html = renderToStaticMarkup(createElement(card.MarketIcon, {
+    item: { iconUrl: ICON_URL },
+    title: 'Dev God',
+  }));
+  assert.ok(html.includes(`src="${ICON_URL}"`), 'src 原样（不做改写、不加参数）');
+  assert.ok(html.includes('class="skc_marketIconImg"'), '图片用市场刻度里的 skc_marketIconImg');
+  assert.ok(html.includes('alt=""'), '装饰图 alt 为空（标题已经在旁边）');
+  assert.ok(html.includes('loading="lazy"'), '懒加载：一屏 24 张图不能一次性拉满');
+  assert.ok(html.includes('decoding="async"'), '异步解码');
+  // React 18 的 SSR 把这条属性原样写成驼峰，别照着 JSX 的写法去比。
+  assert.ok(html.includes('referrerPolicy="no-referrer"'), '不带 referrer（第三方 CDN）');
+  // 只校验「包含」而不是拼死整串：本轮实测这里会多一个 `skc_undefined`（`cn` 不过滤
+  // undefined，见报告 KI-R3-1）。它没有对应规则、纯属 DOM 噪音，属 cosmetic，不该被
+  // 断言固化成契约——修掉之后也不用改这条。
+  assert.match(html, /class="skc_cardIcon(?: skc_undefined)?"/, '外层仍是已安装页签那个 48px 盒子');
+  assert.ok(html.includes('--skc-avatar-bg'), '字母头像的两个变量照旧写在外层（回落时才有底色）');
+  assert.ok(html.includes('aria-hidden="true"'), '整个瓦片对读屏隐藏');
+  assert.equal(html.includes('>D<'), false, '有图时不画字母');
+});
+
+test('K52 ① 填满内容盒的四条声明在样式表里（0.5px 描边仍压在图上方）', async () => {
+  const css = await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8');
+  const start = css.indexOf('.skc_marketIconImg{');
+  assert.notEqual(start, -1, '样式表里有 .skc_marketIconImg 规则');
+  const rule = css.slice(start, css.indexOf('}', start) + 1);
+  assert.match(rule, /width: 100%/, '宽度填满内容盒');
+  assert.match(rule, /height: 100%/, '高度填满内容盒');
+  assert.match(rule, /object-fit: cover/, '不拉伸变形');
+  assert.match(rule, /display: block/, '去掉行内元素的基线缝');
+  assert.match(rule, /border-radius: calc\(var\(--dsw-radius-lg\) - \.5px\)/, '内圆角 = 外圆角减描边（同心）');
+
+  // 容器那 9 条既有声明不许被这条新规则带偏（K40 的检查只覆盖了整块，这里点名 48px 盒）。
+  const boxStart = css.indexOf('.skc_cardIcon{');
+  const box = css.slice(boxStart, css.indexOf('}', boxStart) + 1);
+  assert.match(box, /width: 48px; height: 48px/, '盒子仍是 48×48');
+  assert.match(box, /border: \.5px solid/, '描边仍是 0.5px');
+  assert.match(box, /background-clip: padding-box/, '底色仍只铺到 padding box（描边不被盖掉）');
+  assert.equal(/\.skc_marketIconImg\{[^}]*position: absolute/.test(css), false, '图片不是绝对定位（正常流里填满内容盒）');
+});
+
+test('K52 ② iconUrl 为 null：回落首字母头像，没有 <img> 也没有空盒子', () => {
+  for (const iconUrl of [null, undefined, '']) {
+    const html = renderToStaticMarkup(createElement(card.MarketIcon, {
+      item: { iconUrl },
+      title: 'dev-god',
+    }));
+    assert.equal(html.includes('<img'), false, `iconUrl=${JSON.stringify(iconUrl)} 时不渲染图片`);
+    assert.ok(html.includes('>D<'), '画首字母（大写）');
+    assert.match(html, /class="skc_cardIcon(?: skc_undefined)?"/, '仍是同一个盒子');
+    assert.ok(html.includes('--skc-avatar-bg'), '底色变量在（字母头像靠它上色）');
+    assert.equal(/<span[^>]*><\/span>/.test(html), false, '不存在「空瓦片」形态');
+  }
+});
+
+test('K52 ③ 同一实例遇到 404：onError 之后仍回落首字母，且换一张图能重新尝试', () => {
+  const mounted = mountHooks(card.MarketIcon, { item: { iconUrl: ICON_URL }, title: 'Dev God' });
+
+  const first = mounted.render();
+  assert.equal(first.type, 'span', '第一次渲染外层是 span');
+  assert.match(first.props.className, /\bskc_cardIcon\b/, '外层盒子');
+  const img = first.props.children;
+  assert.equal(img.type, 'img', '第一次渲染的内容是 <img>');
+  assert.equal(img.props.src, ICON_URL, 'src 就是 iconUrl');
+  assert.equal(typeof img.props.onError, 'function', '图片挂了要有 onError 兜底');
+
+  // 模拟浏览器加载失败
+  img.props.onError();
+
+  const second = mounted.render();
+  assert.equal(second.props.children, 'D', 'onError 之后画的是首字母，不是空白');
+  assert.notEqual(second.props.children, '', '内容非空（空瓦片比字母更糟）');
+  assert.match(second.props.className, /\bskc_cardIcon\b/, '盒子不变（几何不会跳）');
+  assert.equal(second.props.style['--skc-avatar-bg'], first.props.style['--skc-avatar-bg'], '底色与失败前一致');
+  assert.equal(JSON.stringify(second).includes('<img'), false, '这一步没有再渲染 img');
+
+  // 同一实例换到另一张图：失败记录是按 URL 记的，所以新图有自己的一次机会
+  const other = 'https://cdn.skillhub.cn/skill-icons/other/next.png';
+  const third = mounted.render({ item: { iconUrl: other }, title: 'Dev God' });
+  assert.equal(third.props.children.type, 'img', '换 URL 后重新尝试渲染图片');
+  assert.equal(third.props.children.props.src, other, '用的是新 URL');
+});
+
+test('K52 三态在卡片/详情/确认弹窗里都走同一个组件（同一张图不会一处有一处没有）', () => {
+  const withIcon = item();
+  withIcon.iconUrl = ICON_URL;
+  const cardHtml = renderMarket((store) => {
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'skillhub', page: { items: [withIcon], next: null } }],
+      merged: [withIcon],
+    });
+  });
+  assert.ok(cardHtml.includes('class="skc_marketIconImg"'), '卡片上画的是图片');
+
+  const detailHtml = renderMarket((store) => {
+    store.actions.marketDetailOpen(withIcon);
+    store.actions.marketDetailReady({
+      item: withIcon,
+      iconUrl: ICON_URL,
+      overview: 'x',
+      declaredName: 'dev-god',
+      nameValid: true,
+      installTo: '/tmp/x',
+      files: [],
+      filesComplete: true,
+    });
+  });
+  assert.ok(detailHtml.includes('class="skc_marketIconImg"'), '详情头也是同一张图');
+
+  const confirmHtml = renderMarket((store) => {
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'skillhub', page: { items: [withIcon], next: null } }],
+      merged: [withIcon],
+    });
+    store.actions.marketInstallConfirm('skillhub:ake:dev-god');
+  });
+  assert.ok(confirmHtml.includes('class="skc_marketIconImg"'), '确认弹窗也一致');
+
+  const bare = item({ id: 'clawhub:ake:plain' });
+  bare.sourceId = 'clawhub';
+  bare.iconUrl = null;
+  const plainHtml = renderMarket((store) => {
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'clawhub', page: { items: [bare], next: null } }],
+      merged: [bare],
+    });
+  });
+  assert.equal(plainHtml.includes('skc_marketIconImg'), false, 'ClawHub 的卡片不出现 img');
+  assert.match(plainHtml, /class="skc_cardIcon(?: skc_undefined)?"/, '仍然是同一个盒子画字母');
 });

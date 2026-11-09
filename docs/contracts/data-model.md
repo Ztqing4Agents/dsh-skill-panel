@@ -315,6 +315,7 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
   "owner": "ake",                    // 上游；缺失 null
   "slug": "dev-god",                 // 上游；缺失 null
   "displayName": "编程大神.Skill",   // 上游；缺则回落 slug，再缺为空串
+  "iconUrl": "https://…/skill-icons/uploads/…png", // 上游；只收真图标，其余 null（见不变式 6）
   "summary": "≤ 400 字符单行",        // 上游；超长截断，缺失为空串
   "author": "阿客实验室",             // 上游；三级回落，全缺 null
   "version": "1.2.4",                // 上游；**缺失如实 null**（ClawHub 搜索结果必为 null）
@@ -329,6 +330,7 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
 // MarketDetail —— market/detail 的 data
 {
   "item": MarketItem,
+  "iconUrl": "恒等于 item.iconUrl",            // 路由层复制一份，详情头部直接用；两处永不相同
   "overview": "SKILL.md 正文（≤ 8000 字符）",   // stripFrontmatter 后；正文为空则回落 summary
   "declaredName": "dev-god",                  // parseFrontmatter(SKILL.md).name；不合规也原样给出
   "nameValid": true,                          // isSkillName(declaredName)
@@ -347,16 +349,15 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
 3. `installTo` 在 `nameValid === false` 时等于 `skillsRoot` 本身（不吃掉最后一级目录名），界面据此显示「不能安装」。
 4. `overview` 不含 frontmatter 分隔行与 `name:`/`description:` 头字段。
 5. 卡片与详情**不显示任何时间**：`updatedAt` 只影响顺序。
+6. `iconUrl` **只收真图标**：绝对 `https:` 且路径含 `/skill-icons/`。站点占位图（`cloudcache.tencent-cloud.com` 下 `other_external_resource/` 的前缀，其中一张是 SkillHub 自己的横幅）与空值一律归一 `null`；ClawHub 的 `icon` 是 Lucide 图标 token（`lucide:Zap`）而不是图片地址，恒 `null`。`null` 的语义是「回落首字母头像」，**不是**「加载失败」。
 
 #### 3.8.2 `lib/market/normalize.js` 与 `mergeBatches` 的纯函数契约
 
 ```js
 // lib/market/normalize.js —— 无 I/O、无时钟
-textOrNull(value): string|null            // trim 后为空 → null
-numberOrNull(value): number|null          // 非有限数 → null；小数截断
+textOrNull(value): string|null / numberOrNull(value): number|null   // 空串、非有限数 → null
 timestampOrNull(value): number|null        // epoch 毫秒或 ISO 串 → 毫秒；不可解析 → null
-clampLine(value, max): string              // 折叠空白、超长按字符截断并以 '...' 结尾
-clampBlock(value, max): string             // 保留换行，超长截断
+clampLine(value, max) / clampBlock(value, max): string   // 单行折叠 / 保留换行，超长截断
 marketId(sourceId, owner, slug): string    // `${sourceId}:${owner ?? ''}:${slug ?? ''}`
 marketItem(fields): MarketItem              // 字段补齐（上表）
 fromSkillhubListItem(raw, packageKind?): MarketItem|null
@@ -378,18 +379,17 @@ slugFromUrl(value): string|null             // URL 最后一段（ClawHub 搜索
 
 ```js
 // src/client/market-model.js —— 合并只在这里发生，纯函数、node 可直测
-marketKeyOf(item): string                    // item.id，缺则 `${sourceId}:${owner}:${slug}`
-mergeBatches(pages: {sourceId: string, items: MarketItem[]}[],
-             options?: {existing?: MarketItem[], sort?: string}): MarketItem[]
+marketKeyOf(item): string   // item.id，缺则 `${sourceId}:${owner}:${slug}`
+mergeBatches(pages: {sourceId: string, items: MarketItem[]}[], options?: {existing?: MarketItem[]}): MarketItem[]
 ```
 
-`mergeBatches` 的语义（每条都是断言）：
+`mergeBatches` 的语义（每条都是断言）：**不交错、不排序**（2026-11-09 队长裁决取消 1:1 交错与「让位」）。
 
-- `existing` 原样保留在前，新一页的条目追加在后；**已有项的相对顺序绝不重排**（用户正在看）。
-- `recommended` / `downloads`：按 `pages` 给的顺序 `1:1` 交错取出；某一源先耗尽时**让位**给另一源连续填充（不补空位）。
-- `updated`：忽略交错，整个列表（含 `existing`）按 `updatedAt` 降序；`null` 时间排最后，相等时间保持稳定序。
+- `existing` 原样保留在前；新一页的条目按 `pages` 给的**来源顺序整段拼接**（先第一个源那一页的全部，再第二个源的），已有项的相对顺序永不被打乱。
+- **函数不排序**：`updated` 的页内顺序由适配器负责（`sortByUpdatedDesc`），跨源不重排。
 - 去重按 `marketKeyOf`：同一个 key 第二次出现即丢弃，**保留第一次出现的条目**。
-- 输入为空数组时返回 `existing` 的副本；函数不修改任何入参。
+- 短页照收（n < limit 就只追加 n 条）；「还有没有下一页」只看 `next === null`，不看本页条数。
+- 输入为空时返回 `existing` 的副本；函数不修改任何入参。
 
 ---
 

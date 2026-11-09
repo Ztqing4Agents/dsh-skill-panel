@@ -180,8 +180,8 @@ sequenceDiagram
     SRC-->>RT: {items, next, total}
     RT-->>API: 200 {sourceId, sort, keyword, category, items, next, total}
     API-->>MP: 单源一页
-    MP->>MM: mergeBatches([{sourceId,items}…], {existing, sort})
-    MM-->>MP: 交错 / 去重 / 让位后的列表
+    MP->>MM: mergeBatches([{sourceId,items}…], {existing})
+    MM-->>MP: 按源拼接 / 去重后的列表
     MP-->>U: 首屏骨架 → 卡片网格
 
     alt 某一源 rejected（503/502/504）

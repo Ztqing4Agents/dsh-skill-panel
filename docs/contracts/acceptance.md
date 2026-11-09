@@ -2,7 +2,7 @@
 
 > 类型：规范
 > 读者：验收人（人或 agent）——回答「怎样算通过」
-> 真源：`npm test` 的 476 条用例与 `npm run check` 的三道门；本文件只是它们的分层说明与编号索引
+> 真源：`npm test` 的 483 条用例与 `npm run check` 的三道门；本文件只是它们的分层说明与编号索引
 > 更新触发：新增门禁、改用例编号、改验收口径时同步改本文件（D.3 / D.5 的编号被测试头注锚定，不许重排）
 > 规模上限：400
 
@@ -82,7 +82,7 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 补充验收点：K17–K20 覆盖围栏、方法、body 上限与路由身份校验；K18 是「软链零写入」的验收点（队长决策 2）。
 真机逐项清单（几何、深色模式、页头停靠、标题栏安全区、页面切换、热刷新）见文末「真机才能验证的项」。
 
-### D.5 市场轮用例编号（K28–K51）
+### D.5 市场轮用例编号（K28–K52）
 
 技能市场（双源发现 / 跨源搜索 / 筛选 / 排序 / 懒加载 / 内嵌详情 / 一键安装）的验收编号。K28 接 D.3 的 K27 往后排，全仓库唯一；每一行的「落点」就是跑它的测试文件（或真机），编号也写在该文件的头注里。
 
@@ -91,13 +91,13 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | **K28** | 市场页签挂载 | 一个 `ListPayload` + `setTab('market')` | 占位文案消失、`skc_marketSection` 挂载、已安装面整块退场（无分区 / 无状态行 / 无添加按钮），工具栏保留 | L3 · `test/view-page.test.mjs` |
 | **K29** | 查询白名单与游标 | 手工构造的 `URLSearchParams` / 记录对象 | `sort` 三档白名单、`source` 必填且只过文法、`limit` 夹 1..24（非数字才 400）、`keyword ≤ 64`、`owner/slug/version` 过正则且拒 `..`、游标往返一致且坏游标 400、`buildUrl` 用 `searchParams` 且 origin 逃逸走 500 | L1 · `test/market-query.test.mjs` |
 | **K30** | 错误码 → 状态表 | `MARKET_STATUS` 与 `routes.md` §8.6 的表格 | 十三条逐条一致、`asMarketError` 兜底成 `E_INTERNAL`、已知 code 保留、`detail` 透传、契约文本与代码对表 | L1 · `test/market-errors.test.mjs` |
-| **K31** | 归一化与「缺 = null」 | 两源六种上游形状（列表 / 详情 / 搜索） | 十二个字段恒存在且无 `undefined`、`id` 三元组、`downloads` 缺不补 0、`version` 缺不补 latest、ClawHub 搜索恒无版本、`category` 只有 SkillHub 有、`overview` 由 `SKILL.md` 派生且不含 frontmatter、`sortByUpdatedDesc` 稳定 | L1 · `test/market-normalize.test.mjs` |
+| **K31** | 归一化与「缺 = null」 | 两源六种上游形状（列表 / 详情 / 搜索）+ 四类 `iconUrl` 样例 | 十三个字段恒存在且无 `undefined`、`id` 三元组、`downloads` 缺不补 0、`version` 缺不补 latest、ClawHub 搜索恒无版本、`category` 只有 SkillHub 有、`iconUrl` 只认「绝对 `https` 且路径含 `/skill-icons/`」（占位图 / 站点横幅 / 非 https / 空串一律 null，ClawHub 恒 null）、`overview` 由 `SKILL.md` 派生且不含 frontmatter、`sortByUpdatedDesc` 稳定 | L1 · `test/market-normalize.test.mjs` |
 | **K32** | 包内路径闸 | 真 / 假路径样例 | `isSafeRelativePath` 接受 `SKILL.md` / `a/b/c.md` / `.gitignore`，拒绝 `/x`、`C:`、`\`、`..`、`.`、`//`、控制字符、单段 >100、整体 >240 | L1 · `test/names.test.mjs` |
 | **K33** | ZIP 读取器 | `buildZip` 造的归档（store / deflate / 篡改一位） | 两法都能读回；zip-slip、符号链接、加密、方法非 0/8、重复路径、条目 >200、单文件 >5 MiB、解压 >20 MiB、压缩体 >40 MiB、CRC / 尺寸不符、结构截断一律 `E_PACKAGE_INVALID`（整包拒，不跳过） | L1 · `test/market-zip.test.mjs` |
 | **K34** | 安装链路十四阶段 | 临时 `dshHome` / `skillsRoot` + 假适配器 + 假 io | 成功（`SKILL.md` + `_meta.json{source,ownerId,slug,version}` + 台账被 `lib/ledger.js` 读成 `own-record`）；同名 409 带 `data.path` / `existing`；坏声明名 422 且只取 1 个文件、目录集合不变；上游失败 502/503/504 且无 `.skc-install-*`、无台账；并发同名 429；包内 `_meta.json` 原文另存 `_meta.upstream.json` | L2 · `test/market-install.test.mjs` |
 | **K35** | 五条路由的围栏 | 两个假适配器 + 临时 DSH home | 每条只认一个方法（错方法 405 `E_METHOD`）、非 loopback 403 `E_FORBIDDEN` 且零上游调用、`bootstrap` 恰好四键、分类失败不报错（`categoriesOk:false`） | L2 · `test/market-routes.test.mjs` |
-| **K36** | 四条数据路由的参数围栏与信封 | 同上 | `list` 七键、未知 `source` / `all` / 缺参 / 坏游标 / 非数字 `limit` 均 400 `E_BAD_QUERY`、上游失败用 502/503/504 且 `data:null`、`detail` 补 `installTo`、`installed` 无台账 `readable:false`、install body >64 KiB 400、body 里的 `path/files/name` 不生效、失败信封的 `data` 例外只属于市场 | L2 · `test/market-routes.test.mjs` |
-| **K37** | 市场纯函数 | 手造 `MarketItem` 与 market 子状态 | `mergeBatches` 1:1 交错 / 让位 / 去重 / `updated` 全局降序 / 稳定；**短页 + `next !== null` 不算耗尽**；`installViewOf` 四态且运行时优先于台账；`emptyKindOf` 三分类；`metaSegments` 缺项少段；`visibleCategories` 选 ClawHub 整行隐藏；`chipList` / `detailFacts` | L1 · `test/market-model.test.mjs` |
+| **K36** | 四条数据路由的参数围栏与信封 | 同上 | `list` 七键、未知 `source` / `all` / 缺参 / 坏游标 / 非数字 `limit` 均 400 `E_BAD_QUERY`、上游失败用 502/503/504 且 `data:null`、`detail` 八键且顶层 `iconUrl` 与 `item.iconUrl` 恒等、`detail` 补 `installTo`、`installed` 无台账 `readable:false`、install body >64 KiB 400、body 里的 `path/files/name` 不生效、失败信封的 `data` 例外只属于市场 | L2 · `test/market-routes.test.mjs` |
+| **K37** | 市场纯函数 | 手造 `MarketItem` 与 market 子状态 | `mergeBatches` **按来源顺序分块拼接**（第 1 轮 `[a1 a2 a3｜b1 b2 b3]`、第 2 轮尾部接 `[a4 a5｜b4]`），`existing` 恒在前、按 id 去重保留首次出现、**客户端不跨源重排**（传不传 `sort` 输出逐字相同）、短页照收；**短页 + `next !== null` 不算耗尽**；`installViewOf` 四态且运行时优先于台账；`emptyKindOf` 三分类；`metaSegments` 缺项少段；`visibleCategories` 选 ClawHub 整行隐藏；`chipList` / `detailFacts` | L1 · `test/market-model.test.mjs` |
 | **K38** | 市场首屏与卡片 | 页面 + 播种 store（骨架 / 双源卡片 / 四类失败 / 三种空态 / 工具栏） | 骨架 6 卡 6 chip + `role=status`；卡片头像 / 标题锚点 / 来源 Tag / 描述 / 元信息 / 安装按钮；安装四态文案；整页失败 / 单源提示条 / 追加失败 / 空态各就各位；到底与追加互斥 | L3 · `test/market-view.test.mjs` |
 | **K39** | 内嵌详情与确认弹窗 | 同上 + `marketDetailReady` / `marketInstallConfirm` | 返回面包屑、标题与版本 Tag、事实表六行（未知写「未知」、`installTo` 用 `code`）、概览交给宿主 `MarkdownText`、文件清单配 `fileSizeText`；详情加载 / 失败 / 空概览 / 空文件 / 坏声明名五种；确认弹窗 `role=dialog` + `aria-modal` + 三项事实 + 第三方提示 + 两按钮 | L3 · `test/market-view.test.mjs` |
 | **K40** | 三道门禁与市场刻度 | 仓库本身 | `check:i18n` / `check:client` / `check:docs` 全 exit 0（13 份 0 warn）、`§3.7` `§3.8` `§3.9` `§7` `§8.6` `附录 E` `附录 F` `附录 G` 各恰好一处、`styles.js` 无 `xxxxxx_` 形式的宿主哈希类名、附录 F 的六条新刻度逐条落在 `skc_market*` 上 | 门禁 · `test/market-gates.test.mjs` |
@@ -112,8 +112,9 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | **K49** | 页头刷新按页签分工 | 市场加载中 / 空闲两种状态 | 市场加载中刷新按钮 `aria-busy="true"` + `disabled` + 进行中指示；空闲时换成刷新图标；已安装面不受影响 | L3 · `test/market-view.test.mjs` |
 | **K50** | 真机：双源卡片与深色 | 隔离 `DSH_HOME` + 真机 host + 无头 Chrome | 市场页签出双源卡片、来源 Tag 与分类 chips 正常；浅色与深色各截一张，令牌全部解析（无透明边框 / 看不见的文字） | L4 · 真机抽查（截图在 `.agents/scratch/`） |
 | **K51** | 真机：装一个真实技能 + 断网降级 | 同一个隔离实例 | 确认弹窗 → 安装成功 toast 给路径 → `DSH_HOME/skills/<name>` 出现 `SKILL.md` 与 `_meta.json` → 刷新已安装页签后出现在「已安装技能」组；把上游域名黑洞后市场页签报错而**已安装页签照常** | L4 · 真机抽查（A 级端到端判据） |
+| **K52** | 市场头像三态（`MarketIcon`） | 有效 `iconUrl` / `null` / 404 三种 + 卡片·详情·确认弹窗三处 | ① 有效 → `<img class="skc_marketIconImg">`，`src` 原样、`alt=""`、`loading=lazy`、`decoding=async`、`referrerPolicy=no-referrer`；样式里 `width/height:100%` + `object-fit:cover` + 同心内圆角，`.skc_cardIcon` 的 48px 盒与 0.5px 描边一字未动 ② `null` / 非字符串 → 首字母头像，无 `<img>`、无空瓦片 ③ **同一实例遇到 404**（`onError` 触发）→ 回落首字母、盒子几何不变；失败按 URL 记，换一张图能重新尝试；卡片 / 详情头 / 确认弹窗三处同一组件，同一条目不会一处有图一处没图 | L3 · `test/market-view.test.mjs` |
 
-**红绿口径**（Round 2 终态）：K28–K49 全部绿（`node --test test/` 476/476），K50 / K51 由 agent 驱动无头浏览器在隔离 `DSH_HOME` 上验过 20 步全通过（截图与逐条证据见 `.agents/work/test-report-market.md`）。两项真机用例不进 `npm test`：它们要的是像素级命中、滚动容器与真实上游，字符串渲染结构上到不了。
+**红绿口径**（Round 3 终态）：K28–K49 与 K52 全部绿（`node --test test/` 483/483）；K50 / K51 不进 `npm test`（要像素级命中、滚动容器与真实上游），由 agent 驱动无头浏览器在隔离 `DSH_HOME` 上验，最近一次为 Round 3（图标轮）复验：20 步全通过，含「带图卡片与字母头像卡片同屏各 ≥3 张、深浅色、已安装页签零回归」。证据与截图见 `.agents/work/test-report-market.md`。
 
 ---
 

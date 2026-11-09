@@ -8,8 +8,8 @@
  */
 import { Button, Modal, Tag, IconWarningOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives';
 
-import { avatarOf } from './avatar.js';
 import { cn } from './styles.js';
+import { MarketIcon } from './market-card.jsx';
 import { FactsTable } from './market-detail.jsx';
 
 /**
@@ -21,7 +21,6 @@ import { FactsTable } from './market-detail.jsx';
  */
 export function MarketConfirm({ item, detail, t, onCancel, onConfirm }) {
   const title = item?.displayName || item?.slug || '';
-  const avatar = avatarOf(title);
   const data = detail?.status === 'ready' ? detail.data : null;
   const installTo = typeof data?.installTo === 'string' && data.installTo !== '' ? data.installTo : null;
   const unknown = t('market.factUnknown');
@@ -57,13 +56,7 @@ export function MarketConfirm({ item, detail, t, onCancel, onConfirm }) {
     >
       <div className={cn('marketConfirmBody')}>
         <div className={cn('marketConfirmHead')}>
-          <span
-            className={cn('cardIcon')}
-            style={{ '--skc-avatar-bg': avatar.bg, '--skc-avatar-ink': avatar.ink }}
-            aria-hidden="true"
-          >
-            {avatar.letter}
-          </span>
+          <MarketIcon item={item} title={title} />
           <div className={cn('marketMain')}>
             <div className={cn('marketTitleRow')}>
               <span className={cn('marketDetailTitle')}>{title}</span>

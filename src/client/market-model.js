@@ -6,8 +6,8 @@
  * surface can be unit-tested in node without a browser.
  *
  * Two sources are merged here and nowhere else (`mergeBatches`): each source answers
- * one page with its own cursor, so the interleave, the deduplication and the
- * "one side runs dry, the other keeps filling" rule all live in one pure function.
+ * one page with its own cursor, so the per-source blocks and the deduplication both
+ * live in one pure function.
  */
 
 /** The source ids the panel falls back to before `bootstrap` answers (or after it fails). */
@@ -55,56 +55,24 @@ export function marketKeyOf(item) {
 }
 
 /**
- * One `updatedAt` value, or null when the upstream did not give one.
- * @param {object} item - a MarketItem.
- * @returns {number|null} milliseconds since the epoch, or null.
- */
-function updatedAtOf(item) {
-  return Number.isFinite(item?.updatedAt) ? item.updatedAt : null;
-}
-
-/**
- * Newest first, unknown timestamps last, and stable for equal timestamps so that a
- * re-merge cannot reshuffle cards the user is already looking at.
- * @param {object[]} items - market items.
- * @returns {object[]} a new array in the requested order.
- */
-function byUpdatedAt(items) {
-  return items
-    .map((item, index) => ({ item, index }))
-    .sort((left, right) => {
-      const a = updatedAtOf(left.item);
-      const b = updatedAtOf(right.item);
-      if (a === b) return left.index - right.index;
-      if (a === null) return 1;
-      if (b === null) return -1;
-      return b - a;
-    })
-    .map((entry) => entry.item);
-}
-
-/**
  * Merge one round of per-source pages into the list.
  *
- * `recommended` and `downloads` interleave 1:1 in the order the sources are given,
- * which keeps each source's own ordering intact (they are not comparable across
- * sources); a source that runs out of items simply yields the rest of the round to
- * the other one. `updated` ignores the interleave and orders the whole list by time,
- * because that is what the user asked for when they picked it.
+ * Each source keeps its own block: the new items are the pages concatenated in the order
+ * the sources are given - not interleaved, and not re-sorted on this side. Upstream
+ * orderings are not comparable across sources (SkillHub ranks with its own model,
+ * ClawHub by recency), and every sort the user can pick is already applied per source by
+ * the route, so a client-side merge order would only be a third opinion nobody asked for.
  * @param {{sourceId: string, items: object[]}[]} pages - one page per source, in render order.
- * @param {{existing?: object[], sort?: string}} [options] - already-rendered items and the sort.
- * @returns {object[]} the merged list: existing items first, then the new ones.
+ * @param {{existing?: object[]}} [options] - items already on screen, kept in front.
+ * @returns {object[]} the merged list: existing items first, then each source's new ones.
  */
 export function mergeBatches(pages, options = {}) {
   const existing = Array.isArray(options.existing) ? options.existing : [];
   const lists = (Array.isArray(pages) ? pages : []).map((page) => (Array.isArray(page?.items) ? page.items : []));
   const seen = new Set(existing.map((item) => marketKeyOf(item)));
   const merged = [...existing];
-  let longest = 0;
-  for (const list of lists) longest = Math.max(longest, list.length);
-  for (let index = 0; index < longest; index += 1) {
-    for (const list of lists) {
-      const item = list[index];
+  for (const list of lists) {
+    for (const item of list) {
       if (item === undefined || item === null) continue;
       const key = marketKeyOf(item);
       if (seen.has(key)) continue;
@@ -112,7 +80,7 @@ export function mergeBatches(pages, options = {}) {
       merged.push(item);
     }
   }
-  return options.sort === 'updated' ? byUpdatedAt(merged) : merged;
+  return merged;
 }
 
 /**

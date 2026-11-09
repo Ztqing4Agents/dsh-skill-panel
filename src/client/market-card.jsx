@@ -9,8 +9,11 @@
  * ways is a card whose clicks land somewhere unexpected.
  *
  * The avatar is the installed tab's own tile (`.skc_cardIcon` + `avatar.js`): the
- * container keeps the host's border, radius and 48px box, unchanged.
+ * container keeps the host's border, radius and 48px box, unchanged. When the upstream
+ * item carries a real icon it is drawn inside that box and the letter is only what is
+ * left when there is none - see `MarketIcon`.
  */
+import { useState } from 'react';
 import { Button, StateDot, Tag } from '@deepseek-ai/dsh-client-ui-primitives';
 
 import { avatarOf } from './avatar.js';
@@ -63,6 +66,43 @@ export function InstallAction({ item, market, t, size = 'sm', className, onInsta
 }
 
 /**
+ * The avatar tile, shared by the card, the detail head and the confirm dialog.
+ *
+ * Two states and no third: an upstream icon when `iconUrl` is a non-empty string, the
+ * letter tile otherwise. A failed load counts as "no icon" - the tile never stays blank,
+ * because a blank square in a list of 24 reads as a broken panel, not as a missing image.
+ * @param {{item: object, title: string, className?: string}} props - the market item, its
+ *   display title, and an extra class for the wrapper.
+ * @returns {import('react').ReactElement} the tile.
+ */
+export function MarketIcon({ item, title, className }) {
+  const avatar = avatarOf(title);
+  const iconUrl = typeof item?.iconUrl === 'string' && item.iconUrl !== '' ? item.iconUrl : null;
+  // Keyed by url: a different item's icon gets its own chance to load.
+  const [failedUrl, setFailedUrl] = useState(null);
+  const showIcon = iconUrl !== null && failedUrl !== iconUrl;
+  return (
+    <span
+      className={cn('cardIcon', className)}
+      style={{ '--skc-avatar-bg': avatar.bg, '--skc-avatar-ink': avatar.ink }}
+      aria-hidden="true"
+    >
+      {showIcon ? (
+        <img
+          className={cn('marketIconImg')}
+          src={iconUrl}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          onError={() => setFailedUrl(iconUrl)}
+        />
+      ) : avatar.letter}
+    </span>
+  );
+}
+
+/**
  * Render one card of the market grid.
  * @param {{item: object, market: object, t: Function, onOpen: Function, onInstall: Function}} props
  *   the market item, the market state, translate, and the two handlers.
@@ -71,7 +111,6 @@ export function InstallAction({ item, market, t, size = 'sm', className, onInsta
 export function MarketCard({ item, market, t, onOpen, onInstall }) {
   const key = marketKeyOf(item);
   const title = item.displayName || item.slug || '';
-  const avatar = avatarOf(title);
   const segments = metaSegments(item);
   const view = installViewOf(market, key);
   const source = sourceLabelOf(item.sourceId, t);
@@ -79,13 +118,7 @@ export function MarketCard({ item, market, t, onOpen, onInstall }) {
     <li className={cn('marketCard')} data-skc-market-id={key}>
       <div className={cn('marketMain')}>
         <div className={cn('marketTitleRow')}>
-          <span
-            className={cn('cardIcon')}
-            style={{ '--skc-avatar-bg': avatar.bg, '--skc-avatar-ink': avatar.ink }}
-            aria-hidden="true"
-          >
-            {avatar.letter}
-          </span>
+          <MarketIcon item={item} title={title} />
           <button
             type="button"
             className={cn('marketCardOpen')}

@@ -61,24 +61,47 @@ function item(options = {}) {
 /** A `t()` that returns the key, so assertions read the lookup, not the copy. */
 const t = (key) => key;
 
-test('K37 mergeBatches：两源 1:1 交错，各自顺序不动（跨源不可比）', () => {
-  const a = [item({ id: 'skillhub:a:1' }), item({ id: 'skillhub:a:2' }), item({ id: 'skillhub:a:3' })];
-  const b = [item({ sourceId: 'clawhub', id: 'clawhub:b:1' }), item({ sourceId: 'clawhub', id: 'clawhub:b:2' })];
-  const merged = mergeBatches([{ sourceId: 'skillhub', items: a }, { sourceId: 'clawhub', items: b }]);
-  assert.deepEqual(merged.map((entry) => entry.id), [
-    'skillhub:a:1', 'clawhub:b:1',
-    'skillhub:a:2', 'clawhub:b:2',
-    'skillhub:a:3',
-  ], '一轮一轮来：先两源各一张，再各一张，最后一源剩的那张');
+test('K37 mergeBatches：按来源顺序分块拼接，不做 1:1 交错', () => {
+  // 用户要求「先独立排，暂时不混排」：每个源自成一块，块内保持上游顺序。
+  const a1 = item({ id: 'skillhub:a:1' });
+  const a2 = item({ id: 'skillhub:a:2' });
+  const a3 = item({ id: 'skillhub:a:3' });
+  const b1 = item({ sourceId: 'clawhub', id: 'clawhub:b:1', updatedAt: 999999 });
+  const b2 = item({ sourceId: 'clawhub', id: 'clawhub:b:2', updatedAt: 1 });
+  const b3 = item({ sourceId: 'clawhub', id: 'clawhub:b:3' });
+  const first = mergeBatches([{ sourceId: 'skillhub', items: [a1, a2, a3] }, { sourceId: 'clawhub', items: [b1, b2, b3] }]);
+  assert.deepEqual(
+    first.map((entry) => entry.id),
+    ['skillhub:a:1', 'skillhub:a:2', 'skillhub:a:3', 'clawhub:b:1', 'clawhub:b:2', 'clawhub:b:3'],
+    'skillhub 整块在前、clawhub 整块在后（同源顺序原样）',
+  );
+  assert.equal(first[3].id, 'clawhub:b:1', '时间更新的 clawhub 项也不会被提到前面（客户端不再跨源重排）');
+
+  // 第二轮：已有的六张不动，新一页按来源顺序接在后面。
+  const a4 = item({ id: 'skillhub:a:4' });
+  const a5 = item({ id: 'skillhub:a:5' });
+  const b4 = item({ sourceId: 'clawhub', id: 'clawhub:b:4' });
+  const second = mergeBatches(
+    [{ sourceId: 'skillhub', items: [a4, a5] }, { sourceId: 'clawhub', items: [b4] }],
+    { existing: first },
+  );
+  assert.deepEqual(
+    second.map((entry) => entry.id),
+    [
+      'skillhub:a:1', 'skillhub:a:2', 'skillhub:a:3', 'clawhub:b:1', 'clawhub:b:2', 'clawhub:b:3',
+      'skillhub:a:4', 'skillhub:a:5', 'clawhub:b:4',
+    ],
+    '追加的一轮：已有六张在前，新页按来源顺序接上（a4,a5,b4）',
+  );
 });
 
-test('K37 mergeBatches：一源先干涸时让位给另一源（不空转、不丢卡）', () => {
+test('K37 mergeBatches：一源只有一张时另一源仍是整块（不再有「让位」这回事）', () => {
   const a = [item({ id: 'skillhub:a:1' })];
   const b = [item({ sourceId: 'clawhub', id: 'clawhub:b:1' }), item({ sourceId: 'clawhub', id: 'clawhub:b:2' }), item({ sourceId: 'clawhub', id: 'clawhub:b:3' })];
   const merged = mergeBatches([{ sourceId: 'skillhub', items: a }, { sourceId: 'clawhub', items: b }]);
   assert.deepEqual(merged.map((entry) => entry.id), [
     'skillhub:a:1', 'clawhub:b:1', 'clawhub:b:2', 'clawhub:b:3',
-  ], 'skillhub 没了就让 clawhub 把这一轮剩下的一次填完');
+  ], '分块拼接下这是自然结果，不需要「谁先干涸」的规则');
 });
 
 test('K37 mergeBatches：按 id 去重，已有项在前且不重复，去重保留第一次出现', () => {
@@ -103,21 +126,42 @@ test('K37 mergeBatches：同一批里两源给出同 id 也只留一条（兜底
   assert.equal(merged.length, 1, '同 id 只留一条');
 });
 
-test('K37 mergeBatches：sort=updated 时整表按时间降序，未知时间排最后且稳定', () => {
+test('K37 mergeBatches：sort 选项已删除——传了也不改变顺序（排序是 Host 的事）', () => {
+  // 上一版这里断言「sort=updated 时整表按时间降序」。用户改为「先独立排、不混排」之后，
+  // 客户端不再有跨源重排这一步：排序由路由按源实现（§7.2 的 sort 映射），客户端只拼块。
   const older = item({ id: 'skillhub:a:old', updatedAt: 100 });
   const newer = item({ sourceId: 'clawhub', id: 'clawhub:b:new', updatedAt: 300 });
   const unknown = item({ id: 'skillhub:a:unknown', updatedAt: null });
-  const sameAsOlder = item({ sourceId: 'clawhub', id: 'clawhub:b:old', updatedAt: 100 });
-  const merged = mergeBatches(
-    [
-      { sourceId: 'skillhub', items: [older, unknown] },
-      { sourceId: 'clawhub', items: [newer, sameAsOlder] },
-    ],
-    { sort: 'updated' },
+  const pages = [
+    { sourceId: 'skillhub', items: [older, unknown] },
+    { sourceId: 'clawhub', items: [newer] },
+  ];
+  const plain = mergeBatches(pages);
+  const withSort = mergeBatches(pages, { sort: 'updated' });
+  const withOtherSort = mergeBatches(pages, { sort: 'downloads' });
+  assert.deepEqual(
+    plain.map((entry) => entry.id),
+    ['skillhub:a:old', 'skillhub:a:unknown', 'clawhub:b:new'],
+    '默认就是分块拼接（不做时间排序）',
   );
-  assert.deepEqual(merged.map((entry) => entry.id), [
-    'clawhub:b:new', 'skillhub:a:old', 'clawhub:b:old', 'skillhub:a:unknown',
-  ], '新的在前；时间相同的按交错后的原序；未知时间排最后');
+  assert.deepEqual(withSort.map((entry) => entry.id), plain.map((entry) => entry.id), '传 sort=updated 与不传逐字相同');
+  assert.deepEqual(withOtherSort.map((entry) => entry.id), plain.map((entry) => entry.id), '传 sort=downloads 也不变');
+});
+
+test('K37 mergeBatches：existing 永远在前，重复项保留第一次出现的那条，短页照样收下', () => {
+  const existing = [item({ id: 'skillhub:ake:x', version: '1.0.0' })];
+  const duplicate = item({ id: 'skillhub:ake:x', version: '9.9.9' });
+  const fresh = item({ sourceId: 'clawhub', id: 'clawhub:ake:y' });
+  const merged = mergeBatches(
+    // 短页：clawhub 这一轮只回了一条，也照收（「还有没有下一页」只看 next，不看条数）
+    [{ sourceId: 'skillhub', items: [duplicate] }, { sourceId: 'clawhub', items: [fresh] }],
+    { existing },
+  );
+  assert.deepEqual(merged.map((entry) => entry.id), ['skillhub:ake:x', 'clawhub:ake:y'], 'existing 在前，新项追加在后');
+  assert.equal(merged[0].version, '1.0.0', '重复项保留第一次出现的那条（不刷新已显示的卡片）');
+  assert.equal(merged.length, 2, '总共两条');
+  assert.notEqual(merged, existing, '返回新数组（不改调用方的 items）');
+  assert.deepEqual(existing.map((entry) => entry.id), ['skillhub:ake:x'], '入参未被就地修改');
 });
 
 test('K37 mergeBatches：页为空 / 参数缺失都不抛，已有项原样保留', () => {

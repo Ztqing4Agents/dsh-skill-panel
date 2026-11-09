@@ -21,9 +21,8 @@ import {
   fileSizeText,
 } from '@deepseek-ai/dsh-client-ui-primitives';
 
-import { avatarOf } from './avatar.js';
 import { cn } from './styles.js';
-import { InstallAction } from './market-card.jsx';
+import { InstallAction, MarketIcon } from './market-card.jsx';
 import { detailFacts, marketKeyOf } from './market-model.js';
 
 /**
@@ -86,7 +85,6 @@ export function MarketDetail({ detail, market, t, onBack, onRetry, onInstall }) 
   const data = detail?.status === 'ready' ? detail.data : null;
   const item = data?.item ?? detail?.item ?? {};
   const title = item.displayName || item.slug || '';
-  const avatar = avatarOf(title);
   const overview = typeof data?.overview === 'string' ? data.overview.trim() : '';
   const files = Array.isArray(data?.files) ? data.files : [];
   return (
@@ -96,13 +94,7 @@ export function MarketDetail({ detail, market, t, onBack, onRetry, onInstall }) 
         <span>{t('market.detailBack')}</span>
       </button>
       <div className={cn('marketDetailHead')}>
-        <span
-          className={cn('cardIcon')}
-          style={{ '--skc-avatar-bg': avatar.bg, '--skc-avatar-ink': avatar.ink }}
-          aria-hidden="true"
-        >
-          {avatar.letter}
-        </span>
+        <MarketIcon item={item} title={title} />
         <div className={cn('marketMain')}>
           <div className={cn('marketTitleRow')}>
             <h3 className={cn('marketDetailTitle')}>{title}</h3>

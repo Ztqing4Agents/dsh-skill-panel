@@ -45,7 +45,7 @@
 
 1. **适配器不碰 `fetch`、不碰文件系统、不碰时钟。** 网络只经注入的 `io`（`{getJson, getBytes}`，由 `lib/market/upstream.js` 的 `createUpstream()` 产出），时间只经 `options.now`。QA 用假 `io` 就能跑通整条链路，不必起服务器。
 2. **适配器只输出归一化后的形状，字段兜底统一在 `normalize.js`。** 每个适配器只提供 `toItem` 需要的映射；跨源字段一律由 `lib/market/normalize.js` 兜底（缺字段 = `null`，绝不写 `0`/`''` 假装有值）。
-3. **适配器不知道「来源筛选」「排序交错」「分页大小」。** 它只接受 `ListQuery` 并返回 `{items, next, total}`；`next` 是它自己的不透明游标（`null` = 没有下一页）。
+3. **适配器不知道「来源筛选」「跨源合并顺序」「分页大小」。** 它只接受 `ListQuery` 并返回 `{items, next, total}`；`next` 是它自己的不透明游标（`null` = 没有下一页）。
 4. **安装只认清单。** `plan()` 返回的 `files[{path, size, sha256|null}]` 是唯一合法的取文件集合；客户端永远不传文件路径，`install` 的请求体只有 `{source, owner, slug, version}`。
 
 ### 7.2 两源能力对照、游标与 sort 映射
@@ -61,6 +61,7 @@
 | `categories` | `GET /api/v1/categories`，滤 `pay-skill`，10 分钟内存缓存 | 无（`caps.categories = false`） |
 | `caps` | `{search:true, paged:true, categories:true, package:'files'}` | `{search:true, paged:true, categories:false, package:'zip'}` |
 | `total` | 上游 `data.total`（数字） | 恒 `null` |
+| 图标 | `iconUrl`：实测前 100 条约 **四成**是真图标（COS 上的 `/skill-icons/uploads/…png`），另四成是站点占位图（`cloudcache.tencent-cloud.com` 的 `other_external_resource/…`），其余为空 ⇒ 只收真图标 | `icon`/`iconUrl` **没有图片地址**：列表项字段缺失，搜索偶尔给 Lucide 图标 token（`lucide:Zap`），`/api/v1/skill-icons/*` 一律 404 ⇒ 恒 `null` |
 | 一次 `list` 的上游请求数 | 1 | 1 |
 | 一次 `detail` 的上游请求数 | 3（详情 + 清单 + `SKILL.md`） | 2（详情 + zip） |
 
@@ -100,6 +101,7 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 | `owner` | 上游 | SkillHub `namespace.handle`（实测含下划线）／ClawHub `ownerHandle` |
 | `slug` | 上游 | ClawHub 搜索结果缺 slug 时取 `canonicalUrl` 的最后一段 |
 | `displayName` | 上游 | `name`／`displayName`；缺则回落 `slug`，再缺为空串 |
+| `iconUrl` | 上游 | 绝对 `https:` 且路径含 `/skill-icons/` 才收；站点占位图（`cloudcache.tencent-cloud.com` 的 `other_external_resource/…`）与空值一律 `null`；ClawHub 恒 `null`（给的是 lucide token，不是图片地址）。`null` ⇒ 回落首字母头像 |
 | `summary` | 上游 | 折叠成一行、≤ 400 字符（超长截断） |
 | `author` | 上游 | 三级回落：`publisher.name/displayName` → `namespace.displayName` → `owner` |
 | `version` | 上游 | **缺失如实为 `null`**（ClawHub 搜索结果必为 `null`，因为该端点不给版本号） |
@@ -167,6 +169,8 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 3. 市场卡片**复用**既有 `.skc_cardIcon`（48×48、`border-box`、`radius-lg`、`background-clip:padding-box`），一条声明都不改——改它会让「已安装」页签 11 行同时回归。
 
 卡片**无描边**：描边只出现在头像框上；卡面靠 `radius-xl` + hover 底色表达可点性（依据见 `docs/contracts/decisions.md` 附录 E）。
+
+**头像位的两种内容**：`iconUrl !== null` 时头像盒里渲染 `<img src={iconUrl}>`——`width:100%; height:100%`、`object-fit:cover`、圆角继承盒子，且**不覆盖**头像框那条 0.5px 描边（图铺在 `padding-box` 内，与既有 `background-clip:padding-box` 是同一套几何，改动会在描边处露出 1px 白边）；`iconUrl === null`（含图片加载失败，按 `null` 处理、不重试）时回落 `avatar.js` 的首字母头像。两种内容共用同一个 48×48 盒子，切换**不改变**行高、节距与网格列宽——所以「有图标」只是换盒内内容，不新增容器。
 
 ---
 

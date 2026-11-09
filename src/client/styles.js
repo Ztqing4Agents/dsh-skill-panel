@@ -22,7 +22,14 @@ const STYLE_ID = 'dsh-skill-center/client.css';
  * @returns {string} the class attribute value.
  */
 export function cn(...names) {
-  return names.map((name) => `${PREFIX}${name}`).join(' ');
+  // Call sites pass optional class names (`cn('cardIcon', className)`), so a missing one
+  // must simply be absent - never `skc_undefined` in the DOM. Strings keep their exact
+  // old behaviour, empty string included (`cn('')` has always been `skc_`, and
+  // `test/styles.test.mjs` pins that).
+  return names
+    .filter((name) => typeof name === 'string')
+    .map((name) => `${PREFIX}${name}`)
+    .join(' ');
 }
 
 /** The stylesheet text. */
@@ -248,6 +255,13 @@ const CSS = `
 .skc_marketGrid{
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;
   margin: 0; padding: 0; list-style: none; display: grid;
+}
+/* the upstream icon inside the untouched .skc_cardIcon box: a flex child, so it fills
+   the *content* box and the .5px hairline still paints on top of it; the radius is the
+   concentric inner one (the host box radius minus that hairline) */
+.skc_marketIconImg{
+  border-radius: calc(var(--dsw-radius-lg) - .5px); width: 100%; height: 100%;
+  object-fit: cover; display: block;
 }
 .skc_marketCard{
   border-radius: var(--dsw-radius-xl); align-items: stretch; gap: 14px; min-width: 0;

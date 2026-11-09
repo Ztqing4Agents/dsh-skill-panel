@@ -39,6 +39,8 @@ const SOURCES = {
   state: 'state.js',
   api: 'api.js',
   header: 'header-scroll.js',
+  card: 'market-card.jsx',
+  detail: 'market-detail.jsx',
 };
 
 /** Bundles already built in this process, by cache key. */
