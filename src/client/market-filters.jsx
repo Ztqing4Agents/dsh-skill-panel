@@ -10,7 +10,7 @@
  * no document: a portal cannot be server-rendered, and the panel has to stay renderable
  * to a string for the structural tests.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Button,
   Input,
@@ -86,6 +86,12 @@ function Select({ name, label, value, items, menu, className, onToggle, onSelect
  */
 export function MarketFilters({ market, t, busy, onInput, onCommit, onFilter }) {
   const [menu, setMenu] = useState(null);
+  /** The field container, so the clear button can hand focus back to the input. */
+  const fieldRef = useRef(null);
+  /** True while an IME composition owns the input (pinyin/zhuyin/kana in progress). */
+  const composing = useRef(false);
+  /** The pending debounce, so a composition or a clear can cancel it. */
+  const timer = useRef(null);
   const chips = visibleCategories(market);
   const selectedSource = market.filters.source ?? MARKET_DEFAULT_SOURCE;
   const selectedSort = market.filters.sort ?? MARKET_SORTS[0];
@@ -93,11 +99,60 @@ export function MarketFilters({ market, t, busy, onInput, onCommit, onFilter }) 
     .map((source) => ({ id: source.id, label: sourceLabelOf(source.id, t) }));
   const sortItems = MARKET_SORTS.map((value) => ({ id: value, label: t(`market.sort.${value}`) }));
 
-  useEffect(() => {
-    if (market.input === market.keyword) return undefined;
-    const timer = setTimeout(() => onCommit(market.input), TEXT_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [market.input, market.keyword, onCommit]);
+  /**
+   * Drop a pending commit, if there is one.
+   * @returns {void}
+   */
+  const cancelCommit = () => {
+    if (timer.current !== null) clearTimeout(timer.current);
+    timer.current = null;
+  };
+
+  /**
+   * Commit a keyword now, and make sure nothing else commits later.
+   * @param {string} text - the keyword.
+   * @returns {void}
+   */
+  const commitNow = (text) => {
+    cancelCommit();
+    onCommit(text);
+  };
+
+  /**
+   * Commit a keyword after the typing pause - never during an IME composition, which is
+   * why this lives with the handlers instead of an effect on the state.
+   * @param {string} text - the keyword.
+   * @returns {void}
+   */
+  const scheduleCommit = (text) => {
+    cancelCommit();
+    if (composing.current) return;
+    if (text === '') commitNow(text);
+    else timer.current = setTimeout(() => onCommit(text), TEXT_DELAY_MS);
+  };
+
+  // Leaving the tab must not apply a query the user never finished typing.
+  useEffect(() => () => cancelCommit(), []);
+
+  /**
+   * Clear the box and the query together, then put the caret back where the user was.
+   *
+   * Clearing only the committed keyword would leave the typed text on screen until the
+   * store echoed back; clearing only the input would leave the list filtered by a keyword
+   * nothing on screen shows. Both, in that order, and the focus goes back into the field -
+   * the host `Input` renders the native element internally and forwards no ref, so the
+   * only way in is through this component's own container.
+   * @returns {void}
+   */
+  const clear = () => {
+    composing.current = false;
+    // Cancel first: a debounce armed 200ms ago would otherwise land *after* the clear and
+    // put the old keyword back on the list the user just emptied.
+    cancelCommit();
+    onInput('');
+    onCommit('');
+    fieldRef.current?.querySelector('input')?.focus();
+  };
 
   const onToggle = (name) => setMenu(menu === name ? null : name);
   const onSelect = (name, id) => {
@@ -108,30 +163,50 @@ export function MarketFilters({ market, t, busy, onInput, onCommit, onFilter }) 
   return (
     <>
       <div className={cn('marketToolbar')}>
-        <Input
-          className={cn('marketSearch')}
-          type="search"
-          icon={<IconSearchOutlineRegular size={14} aria-hidden="true" />}
-          value={market.input}
-          placeholder={t('market.searchPlaceholder')}
-          aria-label={t('market.searchLabel')}
-          onChange={(event) => onInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter') return;
-            event.preventDefault();
-            onCommit(event.currentTarget.value);
-          }}
-        />
-        {market.input === '' ? null : (
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<IconCloseOutlineRegular size={13} aria-hidden="true" />}
-            aria-label={t('market.clearSearch')}
-            title={t('market.clearSearch')}
-            onClick={() => onCommit('')}
+        <span className={cn('marketSearchField')} ref={fieldRef}>
+          <Input
+            className={cn('marketSearch')}
+            type="search"
+            icon={<IconSearchOutlineRegular size={14} aria-hidden="true" />}
+            value={market.input}
+            placeholder={t('market.searchPlaceholder')}
+            aria-label={t('market.searchLabel')}
+            spellCheck={false}
+            onChange={(event) => {
+              onInput(event.target.value);
+              scheduleCommit(event.target.value);
+            }}
+            onCompositionStart={() => {
+              // An IME is mid-syllable: neither the debounce nor Enter may fire on half a
+              // word (this is the one every Chinese user hits).
+              composing.current = true;
+              cancelCommit();
+            }}
+            onCompositionEnd={(event) => {
+              composing.current = false;
+              scheduleCommit(event.currentTarget.value);
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') return;
+              event.preventDefault();
+              // keyCode 229 is what a composing Enter reports on Windows IMEs, where
+              // `isComposing` is already false by the time React sees the event.
+              if (composing.current || event.nativeEvent?.isComposing === true || event.keyCode === 229) return;
+              commitNow(event.currentTarget.value);
+            }}
           />
-        )}
+          {market.input === '' ? null : (
+            <button
+              type="button"
+              className={cn('marketClear')}
+              aria-label={t('market.clearSearch')}
+              title={t('market.clearSearch')}
+              onClick={clear}
+            >
+              <IconCloseOutlineRegular size={13} aria-hidden="true" />
+            </button>
+          )}
+        </span>
         <Select
           name="source"
           label={t('market.sourceLabel')}

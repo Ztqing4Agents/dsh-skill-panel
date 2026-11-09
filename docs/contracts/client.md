@@ -93,11 +93,11 @@ market = {
 
 | 触发 | 结果 | 副作用 |
 | --- | --- | --- |
-| 首次进入市场页签 | `boot=loading`，并发发 `bootstrap` + `installed` + 第一页（默认来源 SkillHub） | 骨架（分类条也是占位） |
+| 首次进入市场页签 | `boot=loading`，并发发 `bootstrap` + `installed` + 第一页（默认 scope「所有来源」） | 骨架（分类条也是占位） |
 | `bootstrap` 成功 | `boot=ready` | 填 `sources/categories`；`categoriesOk=false` 时分类行换成一句说明 |
-| `bootstrap` 失败 | `boot=ready`（**不是 error**） | `sources` 回落内置双源，列表照打，分类行隐藏 |
-| 关键词变化 | 250ms 防抖后提交 | 请求中**保留旧 items**（`aria-busy` + 搜索框旁 ongoing 点），不换骨架 |
-| 回车 / 清空输入 | 立刻提交，不经防抖 | 清空只清关键词，不动来源与分类 |
+| `bootstrap` 失败 | `boot=ready`（**不是 error**） | `sources` 回落内置三 scope，列表照打，分类行换成一句说明 |
+| 关键词变化 | 250ms 防抖后提交；**IME 组字期间先攒着，组字结束才提交**（否则中文用户会被半成品过滤） | 请求中**保留旧 items**（`aria-busy` + 搜索框旁 ongoing 点），不换骨架 |
+| 回车（非组字）/ 点 × / 清空输入 | 立刻提交，不经防抖（× 与回车都取消在飞的防抖） | × 在**框内**（`.skc_marketSearchField` 里绝对定位），同时清 `input` 与 `keyword` 并把焦点送回输入框；不动 scope 与分类 |
 | 切 scope / 分类 / 排序（或关键词） | 清 `items/pages/cursors/exhausted/detail`，滚回顶部；`bootScope !== filters.source` 时补一次 `bootstrap?source=`（带 token 守卫，旧响应不覆盖新数字） | 值没变时不重拉；切 scope 只让 chips 进骨架 |
 | 一页返回 | `listStatus=ready`，`page` 进 `more` 或 `done` | 列表 = 已有项 + 这一页按序拼接（`mergeBatches` 仍接受多源数组，但市场一次只看一个源，只喂一项）；不跨源重排 |
 | 请求失败 | `listStatus=error` | 整页错误态 + 重试；**不出空态**（空 ≠ 失败）。单源没有「部分源失败」这种中间态 |

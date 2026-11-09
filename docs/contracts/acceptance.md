@@ -150,7 +150,9 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | **K97** | 排序四项与映射 | `SORT_PARAMS` + `buildUrl` | `stars` ⇒ `sortBy=stars&order=desc`；四档逐个对齐；`sort=bogus` ⇒ `E_BAD_QUERY`；`source`+`category`+`sort` 三参数同时在 URL 里，`all` 那档不带 `source` | L1 · `test/market-query.test.mjs` |
 | **K98** | 客户端：三个 scope + 四个排序 | 纯函数 + store | `MARKET_DEFAULT_SOURCE === 'all'`；`MARKET_FALLBACK_SOURCES` 三项且 `clawhub.hasCategories === true`；`MARKET_SORTS` 四项含 `stars`；`visibleCategories` 三档都可见；`emptyKindOf('all')` **永不**返回 `'source'`；切 scope ⇒ `items`/`cursors` 清空 + `categoriesLoading` 置位 + `bootScope` 未换时补一次 bootstrap，新数字到达后 `bootScope`/`total` 跟着换 | L1/L3 · `test/market-model.test.mjs` + `test/market-view.test.mjs` + `test/state.test.mjs` |
 
-**红绿口径**（Round 14 终态，筛选对齐轮）：K28–K49 与 K52–**K98** 全部绿（**K33 / K58 / K60 / K80 已退役、不计入**；`node --test test/` 共 **663** 例，K 系列零红；K94–K98 的落点见上表末五行，K29/K35/K36/K37/K38/K42/K45/K55/K89/K93 的用例体按 U8 改写而编号未变）；K50 / K51 不进 `npm test`（要像素级命中、滚动容器与真实上游），由 agent 驱动无头浏览器在隔离 `DSH_HOME` 上验。
+| **K99** | 搜索框：× 在框内、清空即提交、IME 不误提交 | 字符串渲染 + hooks 直驱（无 DOM） | `.skc_marketSearchField` 在工具栏里、宿主 `Input` 与 `button` 都是它的子节点、按钮在容器闭合之前（不是工具栏的兄弟）；× 只在有文字时渲染、`type=button` + `aria-label`/`title`；样式断言：容器 `position:relative`/`flex:1`/`min-width:120px`、搜索框 `padding-right:32px`+`box-sizing:border-box`+`width:100%`（且不再自己吃 `flex:1`）、按钮 `position:absolute;right:5px;top:50%;translateY(-50%)`+24×24+`border:0`+无颜色字面量；点 × ⇒ `onInput('')` 后 `onCommit('')`，store 的 `input` 与 `keyword` 同时为空，且焦点回到输入框（`querySelector('input').focus()`）；组字中回车不提交、`onCompositionEnd` 后回车立即提交、`keyCode 229` 也算组字、非 Enter 键永不提交 | L3 · `test/market-search.test.mjs` |
+
+**红绿口径**（Round 15 终态，搜索框轮）：K28–K49 与 K52–**K99** 全部绿（**K33 / K58 / K60 / K80 已退役、不计入**；`node --test test/` 共 **671** 例，K 系列零红；K94–K99 的落点见上表末六行，K29/K35/K36/K37/K38/K42/K45/K55/K89/K93 的用例体按 U8 改写而编号未变）；K50 / K51 不进 `npm test`（要像素级命中、滚动容器与真实上游），由 agent 驱动无头浏览器在隔离 `DSH_HOME` 上验。
 
 ---
 

@@ -243,11 +243,36 @@ const CSS = `
    the negative margin is gone - see decisions, appendix K. */
 .skc_marketSection{ flex-direction: column; gap: 16px; display: flex }
 .skc_marketToolbar{ flex-wrap: wrap; align-items: center; gap: 8px; display: flex }
-.skc_marketSearch{ flex: 1; min-width: 120px }
+/* The search box and its clear button are one control: the button sits inside the field,
+   so showing or hiding it never moves the toolbar (measured: it used to sit 8px outside the
+   right edge and shorten the field by 44px). The wrapper owns the flex sizing; the host
+   Input's own span keeps the padding that the button floats over. */
+.skc_marketSearchField{
+  min-width: 120px; flex: 1; align-items: center; display: flex; position: relative;
+}
+.skc_marketSearch{
+  padding-right: 32px; box-sizing: border-box; width: 100%; min-width: 0;
+}
 /* The input is type=search, so Blink paints its own cancel button inside the field the
    moment a keyword is typed - right beside the clear button this panel draws itself
    (which is the one with a label and a title). Keep ours, drop the native one. */
 .skc_marketSearch input::-webkit-search-cancel-button{ -webkit-appearance: none; appearance: none; display: none }
+.skc_marketClear{
+  display: flex; position: absolute; top: 50%; right: 5px; transform: translateY(-50%);
+  align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0;
+  border: 0; border-radius: var(--dsw-radius-sm); background: 0 0; cursor: pointer;
+  color: var(--dsw-alias-label-secondary); font: inherit;
+}
+@media (hover: hover){
+  .skc_marketClear:hover{
+    color: var(--dsw-alias-label-primary); background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+.skc_marketClear:focus-visible{
+  outline: var(--dsw-focus-ring-width) solid
+    var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
 .skc_marketSelect{ max-width: 240px; font-weight: 500 }
 .skc_marketSelectLabel{ text-overflow: ellipsis; white-space: nowrap; overflow: hidden }
 .skc_marketChips{ flex-wrap: wrap; align-items: center; gap: 6px; display: flex }

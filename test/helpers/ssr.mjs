@@ -42,6 +42,7 @@ const SOURCES = {
   card: 'market-card.jsx',
   iconTile: 'icon-tile.jsx',
   detail: 'market-detail.jsx',
+  filters: 'market-filters.jsx',
 };
 
 /** Bundles already built in this process, by cache key. */

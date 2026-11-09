@@ -197,13 +197,15 @@ ClawHub 的**目录、详情、安装包**三条链路都由 SkillHub 的镜像�
 
 ## 附录 F 市场视觉刻度
 
-市场样式全部落在 `src/client/styles.js` 的 `skc_market*` 类里，取值逐字取自宿主插件市场的 `DiscoverSection` 规则体（宿主类名是构建哈希，只作证据，不进选择器）。市场**不新增任何颜色字面量**。
+市场样式全部落在 `src/client/styles.js` 的 `skc_market*` 类里，取值逐字取自宿主插件市场的 `DiscoverSection` 规则体（宿主类名是构建哈希，只作证据，不进选择器）；**三处例外**（搜索框容器 / 搜索框 / 框内清除按钮）取自 `dsh-market` 的 `SearchInput`，每行都标了理由。市场**不新增任何颜色字面量**。
 
 | 类 | 取值（逐字） | 取自宿主哪条 |
 | --- | --- | --- |
 | `.skc_marketSection` | `flex-direction:column; gap:16px; display:flex` | `.section` |
 | `.skc_marketToolbar` | `flex-wrap:wrap; align-items:center; gap:8px; display:flex` | `.toolbar` |
-| `.skc_marketSearch` | `flex:1; min-width:120px` | `.search` |
+| `.skc_marketSearchField` | `min-width:120px; flex:1; align-items:center; display:flex; position:relative` | **新刻度**：`dsh-market` 的 `SearchInput`（非宿主），理由：× 在框外会挤动工具栏（真机实测框短 44px、按钮落在 1052–1088 即框外） |
+| `.skc_marketSearch` | `padding-right:32px; box-sizing:border-box; width:100%; min-width:0` | **新刻度**：`dsh-market` 的 `SearchInput`（非宿主）——给框内的 × 让位，`border-box` 保证 32px 不撑破 100% 宽 |
+| `.skc_marketClear` | `display:flex; position:absolute; top:50%; right:5px; transform:translateY(-50%); align-items:center; justify-content:center; width:24px; height:24px; padding:0; border:0; border-radius:var(--dsw-radius-sm); background:0 0; cursor:pointer; color:var(--dsw-alias-label-secondary); font:inherit`；hover `label-primary` + `interactive-bg-hover`；`:focus-visible` 用 `--dsw-focus-ring-width` | **新刻度**：`dsh-market` 的 `SearchInput`（非宿主）；不改颜色字面量，全部走令牌 |
 | `.skc_marketSearch input::-webkit-search-cancel-button` | `-webkit-appearance:none; appearance:none; display:none` | **新刻度**：`type=search` 的原生取消按钮会在有词时与自绘的清空按钮并排出现，只留后者（见 `docs/contracts/decisions.md` 附录 K） |
 | `.skc_marketSelect` / `Label` | `max-width:240px; font-weight:500` / `text-overflow:ellipsis; white-space:nowrap; overflow:hidden` | `.marketButton` / `.marketName`，**唯一偏离**：去掉宿主的 `margin-left:-8px`（它把工具栏 `gap:8px` 吃掉，搜索框与来源菜单贴成 0、有词时清空按钮也贴上去）；两个菜单同带此类，理由见 `docs/contracts/decisions.md` 附录 K |
 | `.skc_marketChips` | `flex-wrap:wrap; align-items:center; gap:6px; display:flex` | `.categories` |
