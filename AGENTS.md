@@ -23,7 +23,7 @@ npm test             # node --test test/（测试由 QA 维护）
 | 路由表、写盘、错误码 | `docs/contracts/routes.md` | §3.3 §3.4 §8.1 |
 | 前端组件、状态机、命名与 i18n | `docs/contracts/client.md` | §3.5 §3.6 §8.2–§8.5 |
 | 调用流程与未定事项 | `docs/contracts/flows.md` | §4 §5 |
-| 验收口径、夹具、用例编号 K1–K85 | `docs/contracts/acceptance.md` | 附录 D.5（K28–K61 K75–K78 K82–K85）、D.6（K62–K74） |
+| 验收口径、夹具、用例编号 K1–K89 | `docs/contracts/acceptance.md` | 附录 D.5（K28–K61 K75–K78 K82–K89）、D.6（K62–K74） |
 | 决策登记（偏离 / 更正 / 假设） | `docs/contracts/decisions.md` | 附录 B |
 | 页面视觉刻度（px、令牌、`skc_` 类名、收拢顺序） | `docs/contracts/visual.md` | A.1–A.9 |
 | 技能市场（源适配器、数据流、市场刻度、安装链路） | `docs/contracts/market.md` | §7 附录 F 附录 G（路由见 `routes.md` §3.7 §8.6） |
@@ -33,7 +33,7 @@ npm test             # node --test test/（测试由 QA 维护）
 | 过去是什么、为什么这么定 | `git log`（`git log -S`） | 仓库里没有 `archive/`，历史交 git |
 | 现在卡在哪、还剩什么没验 | `.agents/work/BOARD.md` | 本地看板（列约定在文件头，过程产物在 wip/ 与 scratch/），不入库 |
 
-契约按**编号分区**：`§x.y` 与 `附录 X.n` 在全仓库唯一，正文里看到编号就按上表定位；编号是 `test/*.test.mjs` 头注的锚点（K1–K85），**不许重排或复用**（K80 已退役，号不复用）。
+契约按**编号分区**：`§x.y` 与 `附录 X.n` 在全仓库唯一，正文里看到编号就按上表定位；编号是 `test/*.test.mjs` 头注的锚点（K1–K89），**不许重排或复用**（K80 已退役，号不复用）。
 
 **新知识写哪**：可 grep 的断言 → 契约；不能做错的事 → 本文件「硬约束」；用户可感知的变化 → `CHANGELOG`；还没做的事 → 看板；**没定型的探索结论**才进项目记忆。文档里不放过程（PRD、测试报告、设计图）——已移出，见 commit `a8141eb`。
 
@@ -89,7 +89,7 @@ npm test             # node --test test/（测试由 QA 维护）
 - **`SkillSummary` 不暴露 `rank`**：`lib/registry.js` 用 `source`/`provider` 反推档位（表见 `docs/contracts/architecture.md` §1.4.3）；加新来源先补表，否则同名裁决会错。
 - **frontmatter 写入与读侧是两套规则**：`setDisableModelInvocation` 只做字节手术、只替换一行；`parseFrontmatter` 只负责读（含块标量，见 `docs/contracts/data-model.md` §3.2.4）。改一侧不影响另一侧；QA 踩过 `description: >`。
 - **宿主 primitives 来自浏览器 seed**，node 里 import 不到：测组件先映射（`docs/contracts/acceptance.md` 附录 D.1 的 L3 层）；`useSyncExternalStore` 必须带第三个参数，否则 SSR 直接抛。
-- **ClawHub 会回短页、搜索结果没有版本号**：「还有没有下一页」只看 `next === null`，**不看本页条数**；`tags.latest` 是版本 id 不是版本号，缺版本就不渲染版本段。
+- **ClawHub 的目录来自 SkillHub 镜像、安装包只来自 `clawhub.ai`**：镜像按 `data.total` 判末页（**归一化会丢条目，短页 ≠ 末页**，不看本页条数）；镜像的 `version` 只上屏、`plan()` 恒向 `clawhub.ai` 解析真实版本；镜像的包**不完整**（实测有 0 文件的条目），安装只许走 `clawhub.ai`；`tags.latest` 仍是版本 id 不是版本号。
 
 ## 改完自检
 

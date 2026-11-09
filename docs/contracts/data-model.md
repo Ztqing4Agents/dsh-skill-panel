@@ -320,7 +320,7 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
   "author": "阿客实验室",             // 上游；三级回落，全缺 null
   "version": "1.2.4",                // 上游；**缺失如实 null**（ClawHub 搜索结果必为 null）
   "downloads": 11340092,             // 上游；缺失 null（**绝不补 0**）
-  "saves": 99, "score": 100000, "tags": ["代码生成", "Bug 修复"],   // 上游 stars/score（缺失 null，绝不补 0，ClawHub 恒 null）/ subCategories.name 或 topics 前 3（≤3 条、单条 ≤24 字符、**缺 = []**）
+  "saves": 99, "score": 100000, "tags": ["代码生成", "Bug 修复"],   // 上游 stars/score（缺失 null，绝不补 0；**ClawHub 由镜像提供，不再恒 null**）/ subCategories.name 或 topics 前 3（≤3 条、单条 ≤24 字符、**缺 = []**）
   "updatedAt": 1794205858796,        // 上游；epoch 毫秒，只用于排序，**不上屏**
   "category": "dev-programming",     // 上游；仅 SkillHub 有，ClawHub 恒 null
   "packageKind": "files"             // 本地算：'files' | 'zip'
@@ -356,26 +356,24 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
 
 ```js
 // lib/market/normalize.js —— 无 I/O、无时钟
-textOrNull(value): string|null / numberOrNull(value): number|null / finiteOrNull(value): number|null / timestampOrNull(value): number|null   // 空串与不可解析 → null；numberOrNull 取整、finiteOrNull 不截断（score 是连续分）
+textOrNull(value): string|null / numberOrNull(value): number|null / finiteOrNull(value): number|null / timestampOrNull(value): number|null / mirrorOwnerOf(raw): string|null   // 空串与不可解析 → null；numberOrNull 取整、finiteOrNull 不截断（score 是连续分）；mirrorOwnerOf 取原生 ClawHub owner（upstream_owner_login → 剥 clawhub_ → null）
 clampLine(value, max) / clampBlock(value, max): string / tagListOf(value, 'name'|'topic'): string[]   // 单行折叠 / 保留换行，超长截断 / 标签：≤3 条、去重、topic 转小写
 marketId(sourceId, owner, slug): string    // `${sourceId}:${owner ?? ''}:${slug ?? ''}`
 marketItem(fields): MarketItem              // 字段补齐（上表）
 fromSkillhubListItem(raw, packageKind?): MarketItem|null
 fromSkillhubDetail(raw, packageKind?): MarketItem|null
-fromClawhubListItem(raw, packageKind?): MarketItem|null      // version 取 latestVersion.version
-fromClawhubSearchItem(raw, packageKind?): MarketItem|null    // version 恒 null
-fromClawhubDetail(raw, packageKind?): MarketItem|null
+fromClawhubMirrorItem(raw, packageKind?): MarketItem|null   // 镜像条目：复用 fromSkillhubListItem 的字段读取，owner 取 upstream_owner_login，id 重拼，version 过 versionLike
+fromClawhubDetail(raw, packageKind?): MarketItem|null        // clawhub.ai 详情（detail() 用）
 overviewOf(sourceText, fallback?): string   // stripFrontmatter → 正文；空则回落 fallback
 declaredNameOf(sourceText): string / nameIsValid(name): boolean   // 声明名，及其是否合文法
 sortByUpdatedDesc(items): MarketItem[]      // 新的降序数组；null 时间排最后，相等时保持原序
-slugFromUrl(value): string|null             // URL 最后一段（ClawHub 搜索结果缺 slug 时的回落）
 ```
 
 契约要点：
 
 1. **同一个上游响应重复喂进去，输出必须逐字段相同**（无随机、无时钟、无缓存）。
 2. `fromSkillhubListItem` 的 `owner` 取自 `namespace.handle`；缺失时 `owner = null` 且该条不可安装（不猜、不补）。`summary` 超 400 字符时截断并以 ASCII `...` 结尾。
-3. `fromClawhubSearchItem` 的 `version` **恒 `null`**：该端点不给版本号，猜一个比缺一个更糟。
+3. `fromClawhubMirrorItem` **认不出身份就返回 `null`**（`upstream_owner_login` 缺且 `namespace.handle` 不是 `clawhub_<owner>`、或 `slug` 为空）：装不上的卡片不如不出现；`version` 过 `versionLike()`，像 id 的串一律 `null`。
 
 ```js
 // src/client/market-model.js —— 合并只在这里发生，纯函数、node 可直测

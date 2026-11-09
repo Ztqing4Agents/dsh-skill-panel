@@ -156,6 +156,24 @@
 
 ---
 
+## 附录 N ClawHub 数据源改走 SkillHub 镜像（2026-11-09）
+
+> 用户原话：「ClawHub 的数据来源，你看 skillhub.cn/skills?sortBy=score&source=clawhub 这个网站就有下载量等情况」。完整设计见 `.agents/work/wip/U6-clawhub-stats.md`。
+
+| # | 待定说法 | 实际（实测证据） | 处理 |
+| --- | --- | --- | --- |
+| N-1 | ClawHub 的数字从哪来 | 镜像 `api/skills?source=clawhub` 每条带 `downloads` / `stars` / `score`；`clawhub.ai` 列表三样都没有 | **list / search 走镜像**，`detail` / `plan` / `fetchFile` 仍走 `clawhub.ai`（混合适配器，按方法切） |
+| N-2 | 两套下载量口径取哪个 | `agent-browser` 镜像 1,258,479 vs `clawhub.ai` 详情 4,347（≈290 倍） | 取**镜像**（用户参照的是 skillhub.cn），并在 `detail()` 里用一次镜像**列表**查询（`keyword=<slug>`，按 `slug` + `upstream_owner_login` 双匹配）覆盖五个字段，保证**卡片与详情同数**；零命中或失败退回 `clawhub.ai` 的数、不抛。**不按 `namespace` 查镜像 detail**：认领过的 namespace 没有 `clawhub_` 前缀（实测 `find-skills` → `indiv-guipi`），猜前缀会漏 5% |
+| N-3 | 安装能不能走镜像 | `/api/v1/skills/<slug>/files` 实测：`self-improving-agent` 17 个文件、`agent-browser` 只有 `SKILL.md`+`_meta.json`、`buzzmark` **0 个** | **绝不**。镜像只提供目录级事实，包级事实只信 `clawhub.ai`；`plan` / `fetchFile` 出现镜像主机即返工（K88） |
+| N-4 | identity 用什么 | 镜像给 `upstream_owner_login`（100/100 有值）与 `namespace.handle`（`clawhub_<owner>`，95/100 带前缀） | 用 `upstream_owner_login`（原生 handle，`clawhub.ai` 的 `ownerHandle=` 认它，已安装行与图标缓存键零迁移）；缺则剥前缀，剥不出就丢条目 |
+| N-5 | `caps.categories` 翻不翻 | `bootstrap` 的分类表与 13 个计数写死取自 SkillHub 本体 | **不翻**：翻了就是让 ClawHub 页签显示 SkillHub 的数字。做对要按源计数（每源 14 次请求）+ 客户端按源取值，留给下一轮（方案见 U6 设计 §8） |
+| N-6 | 图标渐进补齐还留不留 | 镜像自带 `iconUrl` ⇒ 卡片不再需要；但**已安装行**只有身份，仍只能单查 | **全留**（`icons()` / `market/icons` / 两条代理）。删它等于删「已安装行的图标与标题」，且要动 5 处契约与 3 个 K 号，收益只是少一段休眠代码 |
+| N-7 | 卡片的版本号还在不在 | 设计期只是「未证」；落地时实测镜像给的是真 semver（`self-improving-agent` 3.0.24、`find-skills` 1.7.0、`agent-browser` 1.0.0），但**会滞后**：同一条 `self-improving-agent` 在 `clawhub.ai` 已是 **4.0.5** | `fromClawhubMirrorItem` 仍过 `versionLike()`（只在以数字开头时上屏），版本段照常显示、只挡 id 形串。**安装永远装到 `clawhub.ai` 的版本**（`plan()` 恒解析），代价是卡片版本可能比详情旧——按设计只上屏；若要求「卡片与详情同版本」，把那一次镜像覆盖的字段表里加 `version` 即可（`detail()` 一处，契约 §7.8 第 2 条同改） |
+| N-8 | 双匹配的样本 owner 是谁 | 设计期记的三个样本 owner 里 `cad-viewer` 记为 `pskoett`；实测镜像与 `clawhub.ai` 都说是 **`sanshuili334-code`**（`self-improving-agent` 才是 `pskoett`） | 双匹配按**镜像行的 `upstream_owner_login`** 比，而不是按设计稿里的样本值——卡片与详情的 owner 本来就同源，永远自洽；`keyword=cad-viewer` / `find-skills` / `self-improving-agent` 三次实测均命中，且 `clawhub.ai` 认这个 handle |
+| N-9 | 镜像与包的完整度差多少 | `agent-browser`：镜像 `/files` **2** 个文件、`clawhub.ai` 的 zip **3** 个（多 `skill-card.md`）；`self-improving-agent`：镜像 **17**、zip **17**（两者一致） | 印证 N-3：有的条目一致、有的少文件，**所以一律走 `clawhub.ai`**，不做「镜像优先、缺失再补」的两级策略（判不出哪种情形会少） |
+
+---
+
 ## 验收
 
 每条登记都必须能指出来源（PRD 原文 / 宿主读数 / 队长决策 / 测试用例），没有一条是「因为我觉得」。登记与实现不符时，先改实现或先改登记，不允许两边并存。

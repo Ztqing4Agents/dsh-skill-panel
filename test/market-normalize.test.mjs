@@ -3,7 +3,12 @@
  *
  * Contract: docs/contracts/market.md §7.4 (the field table, the five-item invariant
  * list, and the `saves`/`score`/`tags` rows) and §7.2 (per-source capability table);
- * case ids K31, K78, K82.
+ * case ids K31, K78, K82, K86.
+ *
+ * U6: ClawHub's catalogue now arrives through the SkillHub mirror, so the ClawHub list and
+ * search mappings were deleted and `fromClawhubMirrorItem` took their place (it reuses the
+ * SkillHub field reading - the mirror *is* SkillHub's API). `fromClawhubDetail` stayed: the
+ * detail view still comes from `clawhub.ai`.
  *
  * Fixtures here are *shaped like the real responses* but synthetic: the real endpoints
  * change, and a test that quotes a live payload breaks when they do. What must not
@@ -20,8 +25,7 @@ import {
   declaredNameOf,
   finiteOrNull,
   fromClawhubDetail,
-  fromClawhubListItem,
-  fromClawhubSearchItem,
+  fromClawhubMirrorItem,
   fromSkillhubDetail,
   fromSkillhubListItem,
   isObject,
@@ -30,8 +34,8 @@ import {
   nameIsValid,
   numberOrNull,
   overviewOf,
+  mirrorOwnerOf,
   skillhubIconUrl,
-  slugFromUrl,
   sortByUpdatedDesc,
   textOrNull,
   timestampOrNull,
@@ -135,26 +139,7 @@ test('K31 SkillHub 详情：stats/latestVersion 落在正确字段上，形不�
   assert.equal(fromSkillhubListItem('text'), null, '非对象一律 null（形状不符由适配器报 502）');
 });
 
-test('K31 ClawHub 列表与详情：packageKind 是 zip，category 恒 null', () => {
-  const fromList = fromClawhubListItem({
-    ownerHandle: 'ivangdavila',
-    slug: 'design',
-    displayName: 'Design',
-    summary: 'Design skill',
-    latestVersion: { version: '1.0.1' },
-    stats: { downloads: 7 },
-    updatedAt: 1762000000000,
-    publisher: { displayName: 'Ivan' },
-  });
-  assertItemShape(fromList, 'clawhub list');
-  assert.equal(fromList.packageKind, 'zip', 'ClawHub 整包 zip');
-  assert.equal(fromList.category, null, 'ClawHub 没有分类表，category 恒 null');
-  assert.equal(fromList.iconUrl, null, 'ClawHub 的 icon 是 Lucide token 不是图片地址 ⇒ 恒 null');
-  assert.equal(fromList.version, '1.0.1', 'version 取 latestVersion.version');
-  assert.equal(fromList.downloads, 7, 'downloads 取 stats.downloads');
-  assert.equal(fromList.updatedAt, 1762000000000, '数值时间戳原样');
-  assert.equal(fromList.author, 'Ivan', 'author 取 publisher.displayName');
-
+test('K31 ClawHub 详情：packageKind 是 zip，图标与分类由镜像在适配器里补', () => {
   const fromDetail = fromClawhubDetail({
     skill: { slug: 'design', displayName: 'Design', summary: 'S', stats: { downloads: 9 }, updatedAt: 1762000000001 },
     latestVersion: { version: '1.0.2' },
@@ -162,35 +147,21 @@ test('K31 ClawHub 列表与详情：packageKind 是 zip，category 恒 null', ()
   });
   assertItemShape(fromDetail, 'clawhub detail');
   assert.equal(fromDetail.id, 'clawhub:ivangdavila:design', '详情也能拼出 id');
+  assert.equal(fromDetail.packageKind, 'zip', 'ClawHub 整包 zip');
   assert.equal(fromDetail.downloads, 9, 'downloads 取 skill.stats.downloads');
   assert.equal(fromDetail.version, '1.0.2', 'version 取 latestVersion.version');
-  assert.equal(fromDetail.iconUrl, null, '详情同样 null（两个源不会一半有图一半没图地混排）');
+  assert.equal(fromDetail.iconUrl, null, '详情端点没有图片地址（镜像那一次覆盖在适配器里做）');
+  assert.equal(fromDetail.category, null, '详情端点没有分类（同上）');
+  assert.equal(fromDetail.saves, null, '详情端点没有 stars（同上）');
 });
 
-test('K31 ClawHub 列表的 tags.latest 只是兜底：像 id 的不当版本号用', () => {
-  const withId = fromClawhubListItem({ ownerHandle: 'o', slug: 's', tags: { latest: 'a1b2c3d4e5f6' } });
-  assert.equal(withId.version, null, '不以数字开头的 tags.latest 是版本 id，不当版本号');
-  const withSemver = fromClawhubListItem({ ownerHandle: 'o', slug: 's', tags: { latest: '2.3.4' } });
-  assert.equal(withSemver.version, '2.3.4', '像版本号的 tags.latest 才兜底');
-});
-
-test('K31 ClawHub 搜索结果是浅形状：无版本号（恒 null），slug 可从 canonicalUrl 取', () => {
-  const item = fromClawhubSearchItem({
-    ownerHandle: 'ivangdavila',
-    displayName: 'Design',
-    canonicalUrl: 'https://clawhub.ai/ivangdavila/design',
-    native: { skill: { summary: 'Design skill' } },
-    metrics: { updatedAt: 1762000000002 },
-    tags: { latest: '9.9.9' },
-    latestVersion: { version: '9.9.9' },
-  });
-  assertItemShape(item, 'clawhub search');
-  assert.equal(item.version, null, '搜索端点不给版本号 —— 即便响应里混进 latestVersion 也不采用');
-  assert.equal(item.slug, 'design', 'slug 缺时取 canonicalUrl 的最后一段');
-  assert.equal(item.summary, 'Design skill', 'summary 取 native.skill.summary');
-  assert.equal(item.category, null, '搜索结果没有分类');
-  assert.equal(item.iconUrl, null, '搜索结果同样没有图片地址');
-  assert.equal(item.downloads, null, '搜索结果没有下载数 ⇒ null');
+test('K31 已删除的两个 ClawHub 映射不再导出：catalogue 只走镜像，没有第二条形状', async () => {
+  const module = await import('../lib/market/normalize.js');
+  for (const gone of ['fromClawhubListItem', 'fromClawhubSearchItem', 'slugFromUrl']) {
+    assert.equal(gone in module, false, `${gone} 已随 clawhub.ai 列表/搜索下线（U6）`);
+  }
+  assert.equal(typeof module.fromClawhubMirrorItem, 'function', '替代它的是镜像映射');
+  assert.equal(typeof module.fromClawhubDetail, 'function', '详情映射仍在（detail() 还在用）');
 });
 
 test('K31 skillhubIconUrl 只要求「绝对 https 且能解析」：两个图床都收，其余一律 null', () => {
@@ -274,11 +245,8 @@ test('K31 工具函数：null 家族、单行折叠、slug 提取', () => {
   assert.equal(clampBlock('a\r\nb', 100), 'a\nb', 'CRLF 归一成 LF');
   assert.equal(clampBlock(null, 100), '', '非字符串 ⇒ 空串');
 
-  assert.equal(slugFromUrl('https://clawhub.ai/ivangdavila/design'), 'design', '取最后一段');
-  assert.equal(slugFromUrl('https://clawhub.ai/one/'), 'one', '忽略尾部斜杠');
-  assert.equal(slugFromUrl('https://clawhub.ai'), null, '没有路径段 ⇒ null');
-  assert.equal(slugFromUrl('/relative/path'), null, '相对路径解析失败 ⇒ null');
-  assert.equal(slugFromUrl(''), null, '空串 ⇒ null');
+  // `slugFromUrl` retired with the search mapping it existed for (U6): the mirror always
+  // carries a slug, so no code path derives one from a URL any more.
 });
 
 test('K31 marketItem 本身兜底：非字符串 displayName 回落 slug，packageKind 只认 zip', () => {
@@ -331,15 +299,25 @@ test('K78 SkillHub 的 stars/score 两个取数位：raw 优先，stats 兜底�
   assert.equal(detail.score, 95757.41562195931, '详情的 score 两处都读得到');
 });
 
-test('K78 ClawHub 的五条映射恒 null：saves 与 score 都不猜', () => {
-  const items = [
-    fromClawhubListItem({ slug: 'design', ownerHandle: 'ivangdavila', stats: { downloads: 3, stars: 5 }, score: 9 }),
-    fromClawhubSearchItem({ slug: 'design', ownerHandle: 'ivangdavila', stats: { stars: 5 }, score: 9 }),
-    fromClawhubDetail({ skill: { slug: 'design', stars: 5, score: 9 }, stats: { stars: 5, score: 9 } }),
-  ];
-  for (const item of items) {
-    assert.equal(item.saves, null, '这个源报不报 stars 都不收：口径写死在映射里');
-    assert.equal(item.score, null, '同上（ClawHub 没有评分）');
+test('K78 ClawHub 的收藏与评分来自镜像：详情端点仍是 null，镜像条目照收', () => {
+  // The detail payload has never carried stars or a score; the mirror row does, and that is
+  // the only reason a ClawHub card can show those two figures at all (U6).
+  const detail = fromClawhubDetail({ skill: { slug: 'design', stars: 5, score: 9 }, stats: { stars: 5, score: 9 } });
+  assert.equal(detail.saves, null, 'clawhub.ai 详情不报 stars：映射不猜');
+  assert.equal(detail.score, null, '同上（这个端点没有评分）');
+
+  const mirror = fromClawhubMirrorItem({
+    slug: 'design',
+    namespace: { handle: 'clawhub_ivangdavila' },
+    stars: 5,
+    score: 9,
+    downloads: 3,
+  });
+  assert.equal(mirror.saves, 5, '镜像的 stars 就是收藏数（与卡片「收藏 N」同口径）');
+  assert.equal(mirror.score, 9, '镜像的 score 是评分原料（客户端 ratingOf 折算）');
+  assert.equal(mirror.downloads, 3, '下载数同理');
+
+  for (const item of [detail, mirror]) {
     assert.equal('rating' in item, false, 'rating 不是数据层字段（由客户端 ratingOf 算）');
   }
   const listItem = fromSkillhubListItem({ slug: 'a', namespace: { handle: 'ake' }, stars: 1, score: 1 });
@@ -376,24 +354,19 @@ test('K82 tags：SkillHub 取 subCategories[].name 且保留大小写', () => {
   assert.deepEqual(byKeyOnly.tags, [], '只有 key 没有 name ⇒ 不拿 key 顶替');
 });
 
-test('K82 tags：ClawHub 取 topics 前 3、转小写、去重；tags:{latest} 不是标签', () => {
-  const item = fromClawhubListItem({
-    slug: 'buzzmark',
-    ownerHandle: 'ivangdavila',
-    topics: ['social-media', 'Marketing', 'linkedin', 'instagram', 'mcp'],
-    tags: { latest: '1.4.0' },
-  });
-  assert.deepEqual(item.tags, ['social-media', 'marketing', 'linkedin'], '前 3 且转小写（不做 title-case）');
+test('K82 tags：ClawHub 的 topics 取前 3、转小写、去重；tags:{latest} 不是标签', () => {
+  // Since U6 a ClawHub *card* takes its labels from the mirror's `subCategories[].name`
+  // (Chinese names, case kept - the SkillHub reading). The `topic` reading survives on the
+  // one path that still speaks to clawhub.ai: the detail payload.
+  const detail = (topics, extra = {}) => fromClawhubDetail({ skill: { slug: 'buzzmark', topics, ...extra } });
 
-  const dedupe = fromClawhubListItem({
-    slug: 'x',
-    ownerHandle: 'ake',
-    topics: ['Marketing', 'marketing', 'MCP'],
-  });
-  assert.deepEqual(dedupe.tags, ['marketing', 'mcp'], '归一后同值只留一条');
-
-  const versionOnly = fromClawhubListItem({ slug: 'y', ownerHandle: 'ake', tags: { latest: '2.0.0' } });
-  assert.deepEqual(versionOnly.tags, [], 'tags 是 {latest: version}，不是标签清单');
+  assert.deepEqual(
+    detail(['social-media', 'Marketing', 'linkedin', 'instagram', 'mcp']).tags,
+    ['social-media', 'marketing', 'linkedin'],
+    '前 3 且转小写（不做 title-case）',
+  );
+  assert.deepEqual(detail(['Marketing', 'marketing', 'MCP']).tags, ['marketing', 'mcp'], '归一后同值只留一条');
+  assert.deepEqual(detail(undefined, { tags: { latest: '2.0.0' } }).tags, [], 'tags 是 {latest: version}，不是标签清单');
 });
 
 test('K82 tags 的边界：≤24 字符截断、丢空与畸形、非数组 ⇒ []、恒不是 null', () => {
@@ -432,22 +405,25 @@ test('K82 tags：详情与列表同形，两源详情的兜底路径都覆盖', 
   });
   assert.deepEqual(clawhubDetail.tags, ['marketing'], 'ClawHub 详情取 skill.topics 并转小写');
 
-  const search = fromClawhubSearchItem({ slug: 'buzzmark', ownerHandle: 'ivangdavila', topics: ['MCP'] });
-  assert.deepEqual(search.tags, ['mcp'], '搜索结果也带标签（同一口径）');
+  // The mirror's labels ride the SkillHub mapping: `subCategories[].name`, case kept.
+  const mirror = fromClawhubMirrorItem({
+    slug: 'buzzmark',
+    namespace: { handle: 'clawhub_ivangdavila' },
+    subCategories: [{ key: 'design', name: '设计' }, { key: 'api', name: 'API 调用' }],
+  });
+  assert.deepEqual(mirror.tags, ['设计', 'API 调用'], '镜像条目保留大小写（与 SkillHub 同一读取）');
 });
 
 test('K82 标签的脏输入：大写、连字符、非字符串元素、去重发生在截断之后', () => {
-  const mixed = fromClawhubListItem({
-    slug: 'buzzmark',
-    ownerHandle: 'ake',
-    topics: ['MCP', 'Social-Media', 42, null, { name: 'nope' }, '', '   ', 'LinkedIn'],
+  const mixed = fromClawhubDetail({
+    skill: { slug: 'buzzmark', topics: ['MCP', 'Social-Media', 42, null, { name: 'nope' }, '', '   ', 'LinkedIn'] },
   });
   assert.deepEqual(mixed.tags, ['mcp', 'social-media', 'linkedin'], '大写转小写、连字符原样、畸形元素逐条丢');
 
   // Two topics that only differ after the 24-character cut are the same chip once clamped.
   const longA = `${'k'.repeat(30)}-alpha`;
   const longB = `${'k'.repeat(30)}-beta`;
-  const collapsed = fromClawhubListItem({ slug: 'x', ownerHandle: 'ake', topics: [longA, longB, 'tail'] });
+  const collapsed = fromClawhubDetail({ skill: { slug: 'x', topics: [longA, longB, 'tail'] } });
   assert.equal(collapsed.tags.length, 2, '截断后同值的两条合并成一条');
   assert.equal(collapsed.tags[0].length, 24, '每条仍 ≤24 字符');
   assert.equal(collapsed.tags[1], 'tail', '去重后把后面的好条目补上来');
@@ -475,14 +451,93 @@ test('K82 详情的两层兜底：skill 上没有就用响应的顶层，空数�
   });
   assert.deepEqual(emptyStaysEmpty.tags, [], '空数组不是「缺失」：不再回落顶层（?? 的语义）');
 
-  const clawNative = fromClawhubSearchItem({
-    slug: 'buzzmark',
-    ownerHandle: 'ivangdavila',
-    native: { skill: { topics: ['MCP', 'Marketing'] } },
-    topics: ['ignored'],
-  });
-  assert.deepEqual(clawNative.tags, ['mcp', 'marketing'], '搜索结果优先取 native.skill.topics，再转小写');
+  const clawSkill = fromClawhubDetail({ skill: { slug: 'buzzmark', topics: ['MCP', 'Marketing'] } });
+  assert.deepEqual(clawSkill.tags, ['mcp', 'marketing'], '详情取 skill.topics，再转小写');
 
-  const clawTop = fromClawhubSearchItem({ slug: 'y', ownerHandle: 'ake', topics: ['MCP'] });
-  assert.deepEqual(clawTop.tags, ['mcp'], '没有 native 时回落 raw.topics');
+  const clawTop = fromClawhubDetail({ skill: { slug: 'y' }, topics: ['MCP'] });
+  assert.deepEqual(clawTop.tags, ['mcp'], 'skill 上没有 topics 时回落响应顶层的 topics');
+});
+
+test('K86 镜像条目：owner 取 upstream_owner_login，id / 包型 / 版本 / 图标按契约', () => {
+  const raw = {
+    slug: 'cad-viewer',
+    name: 'CAD Viewer',
+    summary: 'A fixture skill.',
+    upstream_owner_login: 'pskoett',
+    namespace: { handle: 'clawhub_somebody-else' },
+    downloads: 50034,
+    stars: 12,
+    score: 80000,
+    iconUrl: 'https://cloudcache.tencent-cloud.com/qcloud/ui/static/x.png',
+    category: 'dev-tools',
+    subCategories: [{ key: 'design', name: '设计' }],
+    version: '1.2.3',
+  };
+  const item = fromClawhubMirrorItem(raw);
+  assertItemShape(item, 'clawhub mirror');
+  assert.equal(item.sourceId, 'clawhub', '源是 clawhub（虽然走 SkillHub 的形状）');
+  assert.equal(item.owner, 'pskoett', '原生的 upstream_owner_login 优先于 namespace.handle');
+  assert.equal(item.id, 'clawhub:pskoett:cad-viewer', 'id 与 marketKeyOf / 图标缓存键逐字相同');
+  assert.equal(item.packageKind, 'zip', '包型恒 zip（包仍来自 clawhub.ai）');
+  assert.equal(item.downloads, 50034, '下载数不再是 null');
+  assert.equal(item.saves, 12, '收藏数来自镜像的 stars');
+  assert.equal(item.score, 80000, '评分原料来自镜像');
+  assert.equal(item.category, 'dev-tools', '分类不再是 null');
+  assert.equal(item.iconUrl, raw.iconUrl, '绝对 https 的图标原样保留');
+  assert.deepEqual(item.tags, ['设计'], '标签走 subCategories[].name（保留大小写）');
+  assert.equal(item.version, '1.2.3', '像版本的串照留');
+
+  const idLike = fromClawhubMirrorItem({ ...raw, version: 'a1b2c3d4e5' });
+  assert.equal(idLike.version, null, '版本 id 形（非数字开头）⇒ null，卡片不印 v a1b2c3…');
+  assert.equal(fromClawhubMirrorItem({ ...raw, version: undefined }).version, null, '镜像不给版本 ⇒ null');
+  assert.equal(fromClawhubMirrorItem({ ...raw, iconUrl: 'http://x/y.png' }).iconUrl, null, 'http: 图标 ⇒ null');
+  assert.equal(fromClawhubMirrorItem({ ...raw, iconUrl: 'lucide:Zap' }).iconUrl, null, 'lucide: 是 clawhub.ai 的形态，镜像条目里不接受');
+});
+
+test('K86 身份的兜底与丢条目：空串、clawhub_ 前缀、前缀后为空、无前缀、slug 空', () => {
+  assert.equal(mirrorOwnerOf({ upstream_owner_login: '  pskoett  ' }), 'pskoett', '两端空白被修掉');
+  assert.equal(mirrorOwnerOf({ upstream_owner_login: '', namespace: { handle: 'clawhub_x' } }), 'x', '空串不是值：继续走兜底');
+  assert.equal(mirrorOwnerOf({ namespace: { handle: 'clawhub_guipi888' } }), 'guipi888', '剥掉镜像前缀');
+  assert.equal(mirrorOwnerOf({ namespace: { handle: 'clawhub_' } }), null, '前缀后为空 ⇒ 拼不出身份');
+  assert.equal(mirrorOwnerOf({ namespace: { handle: 'indiv-guipi' } }), null, '认领过的 namespace 没有前缀，不猜');
+  assert.equal(mirrorOwnerOf({ upstream_owner_login: 42 }), null, '非字符串不是身份');
+  assert.equal(mirrorOwnerOf(null), null, 'null 不抛');
+
+  const base = { slug: 'cad-viewer', name: 'Cad', downloads: 1 };
+  assert.equal(
+    fromClawhubMirrorItem({ ...base, upstream_owner_login: '', namespace: { handle: 'clawhub_pskoett' } }).owner,
+    'pskoett',
+    '空串 + 可剥前缀 ⇒ 仍然得到条目',
+  );
+  for (const [label, raw] of [
+    ['空串 + 前缀后为空', { ...base, upstream_owner_login: '', namespace: { handle: 'clawhub_' } }],
+    ['空串 + 无前缀', { ...base, upstream_owner_login: '', namespace: { handle: 'guessable' } }],
+    ['slug 为空', { ...base, slug: '', upstream_owner_login: 'pskoett' }],
+    ['既无 slug 也无 owner', { slug: '', name: 'x' }],
+  ]) {
+    assert.equal(fromClawhubMirrorItem(raw), null, `${label} ⇒ 丢掉整条（宁可少一张卡，不多一张装不上的卡）`);
+  }
+  assert.equal(fromClawhubMirrorItem(null), null, '非对象 ⇒ null，不抛');
+});
+
+test('K86 脏数字与 stats 兜底：字符串不隐式转换、非有限数是 null、负数不补 0', () => {
+  const base = { slug: 'x', name: 'X', upstream_owner_login: 'o' };
+  const strings = fromClawhubMirrorItem({ ...base, downloads: '50034', stars: '12', score: '80000' });
+  assert.equal(strings.downloads, null, '数字位置的字符串不隐式转换（只映射，不解释）');
+  assert.equal(strings.saves, null, '同上');
+  assert.equal(strings.score, null, '同上');
+
+  const infinite = fromClawhubMirrorItem({ ...base, downloads: Number.POSITIVE_INFINITY, stars: Number.NaN });
+  assert.equal(infinite.downloads, null, '非有限数 ⇒ null');
+  assert.equal(infinite.saves, null, 'NaN ⇒ null');
+
+  const negative = fromClawhubMirrorItem({ ...base, downloads: -3, stars: -2, score: -5 });
+  assert.equal(negative.downloads, -3, '负数原样保留（不补 0、不夹到 0：不伪造数字）');
+  assert.equal(negative.saves, -2, '同上');
+  assert.equal(negative.score, -5, '同上；评分的 4.0–5.0 显示由客户端 ratingOf 决定（score<=0 ⇒ 整段不出现）');
+
+  const statsOnly = fromClawhubMirrorItem({ ...base, stats: { downloads: 99, stars: 7, score: 12345.6 } });
+  assert.equal(statsOnly.downloads, 99, '镜像把数字放在 stats 下时同样读得到（与 SkillHub 同形）');
+  assert.equal(statsOnly.saves, 7, '收藏数同理');
+  assert.equal(statsOnly.score, 12345.6, '评分不截断');
 });

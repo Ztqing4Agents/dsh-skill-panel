@@ -56,34 +56,32 @@
 
 | 能力 | skillhub | clawhub |
 | --- | --- | --- |
-| `list` | `GET /api/skills?page&pageSize&sortBy&order` | `GET /api/v1/skills?limit&cursor&sort` |
-| `search` | 同一端点 + `keyword=`（因此能翻页） | `GET /api/v1/search?q&limit`（**无游标**，`next` 恒 `null`） |
-| 游标形状 | `{page: number}`（1 起） | `{cursor: string}`（上游 `nextCursor` 原样装袋） |
-| `detail` | `GET /api/v1/skills/<slug>?namespace=&version=` + 清单 + `SKILL.md` | `GET /api/v1/skills/<slug>?ownerHandle=`（`skill.description` 就是 `SKILL.md` 全文）+ 一次 zip（只为列文件） |
-| `plan` | `GET …/files?namespace=&version=`（清单） | `GET /api/v1/download?slug=&ownerHandle=&version=`（zip 读中央目录，不算校验和） |
+| `list` | `GET /api/skills?page&pageSize&sortBy&order` | `GET {镜像}/api/skills?page&pageSize&sortBy&order&category&keyword&source=clawhub`（**镜像 = `api.skillhub.cn`，与 SkillHub 同一 origin**；见 §7.8） |
+| `search` | 同一端点 + `keyword=`（因此能翻页） | 同一端点 + `keyword=`（**能翻页**，`next` 按 §7.8 的规则） |
+| 游标形状 | `{page: number}`（1 起） | **`{page: number}`（同上；两个适配器共用 `query.js` 的 `pageOf`）** |
+| `detail` | `GET /api/v1/skills/<slug>?namespace=&version=` + 清单 + `SKILL.md` | `GET /api/v1/skills/<slug>?ownerHandle=`（`skill.description` 就是 `SKILL.md` 全文）**+ 一次镜像列表查询（`keyword=<slug>&pageSize=20&source=clawhub`，按 `slug` + `upstream_owner_login` 双匹配）覆盖 icon / 下载 / 收藏 / 评分 / 分类** + 一次 zip（只为列文件） |
+| `plan` | `GET …/files?namespace=&version=`（清单） | `GET /api/v1/download?slug=&ownerHandle=&version=`（zip 读中央目录，不算校验和；**version 恒由 clawhub.ai 解析，镜像给的只上屏**） |
 | `fetchFile` | `GET …/file?path=&namespace=&version=`（302 → COS，见 §3.7.3 第 4 条） | 从 `plan` 已取到的 zip buffer 里 inflate（**一包一次下载**） |
 | `categories` | `GET /api/v1/categories`，滤 `pay-skill`，10 分钟内存缓存 | 无（`caps.categories = false`） |
 | `caps` | `{search:true, paged:true, categories:true, package:'files'}` | `{search:true, paged:true, categories:false, package:'zip'}` |
-| `total` | 上游 `data.total`（数字） | 恒 `null` |
-| 图标 | `iconUrl`：实测前 100 条约 **八成**有图（COS 的 `/skill-icons/uploads/…` 与 `cloudcache.tencent-cloud.com` 的 `other_external_resource/…` **两者都是该技能自己的图**），其余为空 ⇒ **绝对 `https:` 即接受，不做 host/path 白名单**。列表阶段直接带出，无需二次请求 | **列表端点没有 `icon` 字段**（实测 49 条 0 条有此键），**详情端点有**：`/api/v1/skill-icons/<64 位 hex>` 或 `lucide:<Name>` 或 `null`。实测 35 条里只有 2 条有图（1 上传 / 1 lucide），故列表阶段一律 `null`，由 `POST /market/icons` 渐进补；两种真形状都转成**我方代理 URL**（见 §7.5） |
-| 图标补齐 | 市场列表**自带** `iconUrl`；已安装行只有身份 ⇒ 走一次 detail 单查（见 §7.5 第 3 段） | **列表不再等图标**（ClawHub 详情单条实测 2.27–3.02s，等它等于每页白等 1–3s）。改由 `POST /market/icons` 渐进补齐：≤24 条、并发 4、整批 6s、单条 5s、正向 10min / 负向 60s 缓存，键 `clawhub:<owner>:<slug>`；失败只让该条 `null`，**绝不抛** |
-| 计数 | `counts`：13 次 `GET /api/skills?page=1&pageSize=1(&category=)` 取 `data.total`（12 个分类 + 1 个「全部」），并发 6、单项 6s、整体 10s 预算、10 分钟缓存；**每个 `count` 是该过滤条件的独立总数，不保证 12 类相加等于 `total`**（实测差几十条，上游按请求时刻统计、且一条技能可归属多个分类），界面不得用「合计」校验它 | 无 |
-| 一次 `list` 的上游请求数 | 1 | 1（**不再为图标额外请求**） |
-| 一次 `POST icons` 的上游请求数 | 每条一次 detail（**不带 `version`**，实测 0.26s），并发 6，6s 整批预算内 | 每条一次详情，并发 4，6s 整批预算内 |
-| 一次 `detail` 的上游请求数 | 3（详情 + 清单 + `SKILL.md`） | 2（详情 + zip） |
+| `total` | 上游 `data.total`（数字） | **镜像 `data.total`（实测 63,381）** |
+| 图标 | `iconUrl`：实测前 100 条约 **八成**有图（COS 的 `/skill-icons/uploads/…` 与 `cloudcache.tencent-cloud.com` 的 `other_external_resource/…` **两者都是该技能自己的图**），其余为空 ⇒ **绝对 `https:` 即接受，不做 host/path 白名单**。列表阶段直接带出，无需二次请求 | **镜像列表自带 `iconUrl`（cloudcache 的绝对 `https:`，与 SkillHub 同一判据）**，所以卡片不再等图标；`icons()` 与两条代理仍在，服务对象改为「已安装行」（§7.5） |
+| 图标补齐 | 市场列表**自带** `iconUrl`；已安装行只有身份 ⇒ 走一次 detail 单查（见 §7.5 第 3 段） | **ClawHub 卡片不再需要补齐**（列表自带图）；`POST /market/icons` 的 clawhub 半边只服务**已安装行**与偶发无图的条目（并发 4、整批 6s、单条 5s、正向 10min / 负向 60s 缓存，键 `clawhub:<owner>:<slug>` 不变） |
+| 计数 | `counts`：13 次 `GET /api/skills?page=1&pageSize=1(&category=)` 取 `data.total`（12 个分类 + 1 个「全部」），并发 6、单项 6s、整体 10s 预算、10 分钟缓存；**每个 `count` 是该过滤条件的独立总数，不保证 12 类相加等于 `total`**（实测差几十条，上游按请求时刻统计、且一条技能可归属多个分类），界面不得用「合计」校验它 | **无**（计数仍只有 SkillHub 一份；ClawHub 的分类与计数见 §7.8「已知未做」） |
+| 一次 `list` 的上游请求数 | 1 | 1（**一次镜像请求**，数字与图随条目一起到） |
+| 一次 `POST icons` 的上游请求数 | 每条一次 detail（**不带 `version`**，实测 0.26s），并发 6，6s 整批预算内 | 每条一次详情（`clawhub.ai`），并发 4，6s 整批预算内 |
+| 一次 `detail` 的上游请求数 | 3（详情 + 清单 + `SKILL.md`） | **3（详情 + 镜像列表 + zip）** |
 | 一次 `bootstrap` 的上游请求数 | 冷缓存 **14**（分类表 1 + 计数 13），10 分钟内 0 | 0（不参与 bootstrap） |
 
 sort 映射（`sort` 只有三个值，路由层已白名单化）：
 
 | `sort` | skillhub | clawhub |
 | --- | --- | --- |
-| `recommended`（默认） | `sortBy=score&order=desc` | 不带 `sort`（上游默认序 = 最近活跃在前） |
-| `updated` | `sortBy=updated_at&order=desc` | 不带 `sort`，页内再按 `updatedAt` 降序 |
-| `downloads` | `sortBy=downloads&order=desc` | `sort=downloads` |
+| 三个值同一张表 | `recommended` → `sortBy=score&order=desc`；`updated` → `sortBy=updated_at&order=desc`（页内再按 `updatedAt` 降序）；`downloads` → `sortBy=downloads&order=desc` | **与 skillhub 逐字相同**（镜像同一端点，`query.js` 的 `SORT_PARAMS` 一处定义、两个适配器共用） |
 
-**`paged` 的分裂不特殊处理**：clawhub 的 list 能翻、search 不能，统一由「本次 `next` 是否为 `null`」表达。客户端只问一句「还有 next 吗」，不读 `caps.paged`。
+**`paged` 的分裂不特殊处理**：clawhub 的 list 与 search **都能翻页**（镜像同一端点），统一由「本次 `next` 是否为 `null`」表达；客户端只问一句「还有 next 吗」，不读 `caps.paged`。
 
-**分类只有一个源有表**：`caps.categories === false` 的源收到 `category` 时返回空页（不静默忽略过滤条件，避免「筛了却没生效」的假象）；界面侧由 `visibleCategories` 决定整行是否渲染。
+**分类只有一个源有表**：`caps.categories === false` 的源**仍收到过** `category`（镜像本身支持），界面侧由 `visibleCategories` 决定整行是否渲染；适配器不因此返回空页——**转发即生效**，UI 后接（§7.8）。
 
 **声明名为什么是硬约束**：安装目录名取包内 `SKILL.md` 的 `name`，而宿主的技能加载器用 `SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/`（`EX/dsh-skill/lib/index.js`，与 `lib/names.js` 的 `isSkillName` 同一文法）判定一个目录能不能成为技能。声明 `Design` 的包即使被强行写进 `skills/`，宿主也不会加载它——所以 `422 E_SKILL_NAME_INVALID` 是**对齐宿主**，不是保守：改名或用 slug 顶替只会产出一个"看得见、永远不生效"的目录。
 
@@ -106,19 +104,19 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 | --- | --- | --- |
 | `sourceId` | 本地算 | 适配器 id |
 | `id` | 本地算 | `${sourceId}:${owner}:${slug}`，去重键与 React key（上游 id 两源不通用） |
-| `owner` | 上游 | SkillHub `namespace.handle`（实测含下划线）／ClawHub `ownerHandle` |
-| `slug` | 上游 | ClawHub 搜索结果缺 slug 时取 `canonicalUrl` 的最后一段 |
+| `owner` | 上游 | SkillHub `namespace.handle`（实测含下划线）／ClawHub **镜像行的 `upstream_owner_login`**（原生 handle；缺则剥 `clawhub_` 前缀，剥不出来整条丢弃，见 §7.8） |
+| `slug` | 上游 | 两源的 `slug`；ClawHub 为空即**丢弃该条**（拼不出身份就装不上） |
 | `displayName` | 上游 | `name`／`displayName`；缺则回落 `slug`，再缺为空串 |
 | `iconUrl` | 上游 / 本地算 | 四种合法形态：① **绝对 `https:`**（SkillHub 两个图床都算，不做 host/path 白名单；`http:` 与非字符串归 `null`）；② `lucide:<Name>` → 我方文档相对路径 `api/dsh-skill-center/market/lucide?name=<kebab>`（`FileText`→`file-text`，#10 是唯一实现）；③ ClawHub 上传图标 `/api/v1/skill-icons/<64hex>` → `api/dsh-skill-center/market/clawhub-icon?hash=<64hex>`（#12）；④ `null`。其余（`//host/x`、未知站内路径、裸词、空值）归 `null`。`null` 与**加载失败**都是「回落首字母头像」，破图由浏览器侧 `onError` 兜住 |
 | `summary` | 上游 | 折叠成一行、≤ 400 字符（超长截断） |
 | `author` | 上游 | 三级回落：`publisher.name/displayName` → `namespace.displayName` → `owner` |
-| `version` | 上游 | **缺失如实为 `null`**（ClawHub 搜索结果必为 `null`，因为该端点不给版本号） |
-| `downloads` | 上游 | SkillHub `downloads`／ClawHub `stats.downloads`；缺失 `null` |
-| `saves` | 上游 | SkillHub `stars`（小整数，实测 37 / 99 / 158）；ClawHub 恒 `null`。**卡片把它显示成「收藏」**——这是上游的收藏数，与本地收藏（§7.7）不是一个东西；缺失 `null`，绝不补 `0`，上游真给 `0` 就显示 `0` |
-| `score` | 上游 | SkillHub `score`（0–100000 连续分，实测 `95757.41562195931`）；ClawHub 恒 `null`。**只作原料**：卡上的 4.0–5.0 是客户端 `ratingOf()` 的折算，Host 不解释、不格式化 |
-| `tags` | 上游 | **`string[]`，≤ 3 条、单条 ≤ 24 字符**；SkillHub 取 `subCategories[].name`（保留大小写），ClawHub 取 `topics` 前 3 并**转小写**；两源都不保证有 ⇒ **`[]`**（列表型字段的缺值是空数组，不是 `null`） |
+| `version` | 上游 | **缺失如实为 `null`**。ClawHub 卡片用镜像的 `version` 过 `versionLike()`（像 id 的串 ⇒ `null`；可能比详情旧）；**详情与安装的版本恒来自 `clawhub.ai`** |
+| `downloads` | 上游 | SkillHub `downloads`／ClawHub **镜像 `downloads`**（口径见 §7.8 第 2 条）；缺失 `null` |
+| `saves` | 上游 | SkillHub `stars`（小整数，实测 37 / 99 / 158）／ClawHub **镜像 `stars`**（同一列，不另立字段）。**卡片把它显示成「收藏」**——这是上游的收藏数，与本地书签（§7.7）不是一个东西；缺失 `null`，绝不补 `0`，上游真给 `0` 就显示 `0` |
+| `score` | 上游 | SkillHub `score`（0–100000 连续分，实测 `95757.41562195931`）／ClawHub **镜像 `score`**（同口径）。**只作原料**：卡上的 4.0–5.0 是客户端 `ratingOf()` 的折算，Host 不解释、不格式化 |
+| `tags` | 上游 | **`string[]`，≤ 3 条、单条 ≤ 24 字符**；两源的**卡片**都取 `subCategories[].name`（保留大小写，中文分类名照用），`clawhub.ai` 的**详情**取 `topics` 前 3 并转小写；都不保证有 ⇒ **`[]`**（列表型字段的缺值是空数组，不是 `null`） |
 | `updatedAt` | 上游 | epoch 毫秒，**只用于排序，不上屏** |
-| `category` | 上游 | 仅 SkillHub 有；ClawHub 恒 `null` |
+| `category` | 上游 | 两源都有：SkillHub 自带；ClawHub 来自镜像（详情端点没有，由适配器那次覆盖补上，见 §7.8） |
 | `packageKind` | 本地算 | 来自 `caps.package`，决定详情页「文件」从哪来 |
 
 `MarketDetail`（`market/detail` 的 `data`）：`item`（上表）、`overview`（`stripFrontmatter(SKILL.md)` 的正文，≤ 8000 字符；正文为空时回落 `summary`）、`declaredName`（`parseFrontmatter(SKILL.md).name`，不合规也原样给出）、`nameValid`（`isSkillName(declaredName)`）、`installTo`（`nameValid ? join(skillsRoot, declaredName) : skillsRoot`，由路由补，适配器不碰磁盘）、`files[{path, size}]`（按清单顺序，`sha256` 不下发）、`filesComplete`（zip 读不全时为 `false`）。
@@ -140,7 +138,7 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 图标分三段拿，**任何列表路径都不许等后两段**：
 
 1. **随列表拿**：SkillHub 的 `iconUrl` 就在列表条目里，直接用。
-2. **渐进补齐**：ClawHub 的列表没有 `icon`（实测 49 条 0 条有此键），只有详情有，而详情单条实测 **2.27–3.02s** —— 等它等于每页白等 1–3s，且实测 35 条里只补得出 2 条。所以列表阶段 ClawHub 的 `iconUrl` 一律 `null`，客户端渲染出一页卡片后，把这一页的 `{owner, slug}` 打一次 `POST /market/icons`（≤ 24 条），拿回 `{'clawhub:<owner>:<slug>': iconUrl|null}` 自己 patch 卡片。
+2. **渐进补齐（服务已安装行）**：ClawHub 的**列表**自 U6 起由 SkillHub 镜像提供、自带 `iconUrl`（§7.8），所以一页卡片不再需要补图；`POST /market/icons` 的 clawhub 半边现在服务**已安装行**（它们只有 `_meta.json` 的身份，没有列表载荷）与偶发无图的条目。客户端拿回 `{'clawhub:<owner>:<slug>': iconUrl|null}` 后按需 patch，跳过的规则不变（有图的条目压根不会被问）。
 
 3. **已安装行按身份单查**：已安装行手上只有 `_meta.json` 的身份（`Row.upstream`），没有市场列表载荷，所以 SkillHub 那一侧也要一条通道：`skillhub.icons()` 走**同一条 detail** `GET /api/v1/skills/<slug>?namespace=<owner>`（**不带 `version`**——图标与标题都属于技能而非某个版本，还能吃上游 CDN 缓存），只读 `skill.iconUrl` 与 `skill.displayName`，**不拉清单、不拉 `SKILL.md`**（那会变成 3 次请求）。实测单条 **0.26s**，12 条 / 并发 6 ≈ 0.6s。
 
@@ -165,6 +163,25 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 **两条同名不同源**：卡片上的「收藏 N」是上游 `stars`（别人收藏了多少），你自己的书签（**U5 起卡片上没有入口**，见 `docs/contracts/decisions.md` 附录 L；这份集合与写路由原样保留）。界面**不合并、不互相修正**，数字段的 `aria-label` 说清它是上游收藏数——否则「我收藏了它为什么显示 0」是一定的投诉。
 
 **降级 / 上限 / 幂等 / 并发**：文件**缺失** ⇒ 空集 + `readable:true`（全新安装没写过这个文件，**缺失 ≠ 损坏**，`favoritesOk` 的唯一语义是「书签可能丢了」）；**只有**解析失败或不可读（非 JSON、顶层非对象、`favorites` 非数组、EACCES/EISDIR…）才 `readable:false`，此时 `bootstrap` 照常 `200`（`favoritesOk:false`），**绝不让市场页失败**；读侧逐条丢弃「不是 `sourceId:owner:slug` 三元组或超过 200 字符」的条目与重复项，手改坏了只丢坏行；上限 **500**，满时新增 `409 E_FAVORITE_FULL`，取消永远允许；与现状一致的写入不落盘（幂等）；写盘复用 `store.js` 的 `writeAtomic`（临时文件 + fsync + rename，临时名带 `favorites` 前缀），进程内一条 Promise 链把读-改-写串行化。跨进程并发不处理：与 `install.js` 一样按「本机单宿主」设计。路由细节见 `docs/contracts/routes.md` §3.7.6。
+
+### 7.8 ClawHub 走 SkillHub 镜像（混合适配器）
+
+ClawHub 的**目录**改由 SkillHub 的镜像接口发布（`api.skillhub.cn/api/skills?source=clawhub`，实测 `total` = 63,381，分页 / 关键词 / 分类 / 四种排序全支持，每条带 `downloads`、`stars`、`score`、`iconUrl`、`category`、`subCategories`、`upstream_owner_login`）；**安装包仍只从 `clawhub.ai` 取**。一个适配器、两个上游，按方法切：
+
+| 方法 | 上游 | 因为 |
+| --- | --- | --- |
+| `list` / `search` | 镜像 | 只有镜像带数字与图；同一端点带 `keyword`，因此**搜索也能翻页** |
+| `detail` | `clawhub.ai` + 镜像（用 `keyword=<slug>` 的列表查询覆盖 5 个字段） | `skill.description` 就是完整的 `SKILL.md`（镜像的 `overviewMd` 是空的）；镜像补的是 icon / 下载 / 收藏 / 评分 / 分类，让卡片与详情同数 |
+| `plan` / `fetchFile` | **只有 `clawhub.ai`** | 见下面第 1 条 |
+
+四条硬规矩（破一条就是事故或撒谎）：
+
+1. **安装绝不走镜像**：镜像的 `/api/v1/skills/<slug>/files` 实测三种形状都出现过——17 个文件（完整）、只有 `SKILL.md`+`_meta.json`、**0 个文件**。走它会装出残包并记成成功。`plan()` / `fetchFile()` 的每一次 `io` 调用，目标 origin 必须是 `clawhub.ai`。
+2. **数字取镜像口径**：`agent-browser` 镜像 `downloads` = 1,258,479、`clawhub.ai` 详情 = 4,347（差约 290 倍）。卡片照用户参照的站点（skillhub.cn）取镜像；详情页**用一次镜像列表查询（`keyword=<slug>&pageSize=20&source=clawhub`）按 `slug` + `upstream_owner_login` 双匹配取那一条**覆盖，**同一个数字在两处一致**。**不许按 `namespace` 查镜像 detail**：认领过的 namespace 不带 `clawhub_` 前缀（实测 `find-skills` 在 `indiv-guipi` 里），猜前缀会漏掉这 5%。
+3. **identity = `clawhub:<upstream_owner_login>:<slug>`**（不是 `namespace.handle` 的 `clawhub_<owner>`）：它是原生的 ClawHub handle，`clawhub.ai` 的 `ownerHandle=` 认它，已安装行的 `_meta.json`、图标缓存键也一直是它——**零迁移**。缺 `upstream_owner_login` 时剥 `clawhub_` 前缀；剥不出来就**丢掉这一条**（宁缺一张卡，不多一张装不上的卡）。
+4. **镜像的 `version` 只上屏、不取包**：`plan()` 恒向 `clawhub.ai` 解析 `latestVersion`（多 1 次 detail），所以镜像的版本号错、滞后、或根本不是 semver 时，安装仍然装到正确的版本；`fromClawhubMirrorItem` 还用 `versionLike()` 把非版本号的串挡在卡片之外。
+
+**已知未做**：ClawHub 的分类与计数（`caps.categories` 仍 `false`、chips 行仍隐藏）。原因是 `bootstrap` 的分类表与 13 个计数写死取自 SkillHub 本体，翻 `caps` 会让 ClawHub 页签显示 SkillHub 的数字——假数字比没有数字更糟。做对的方案（按源返回 `counts` + 客户端按 `filter.source` 取值 + 每源 14 次请求）记在 `docs/contracts/decisions.md` 附录 N，留给下一轮。
 
 ## 附录 F 市场视觉刻度
 

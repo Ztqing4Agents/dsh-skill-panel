@@ -2,7 +2,8 @@
  * `lib/market/sources/index.js` — the registry and the one place the market assembly happens.
  *
  * Contract: docs/contracts/market.md §7.1 (`MarketSource` shape), §7.3 (adding a source
- * costs one file + one line + two keys), §7.2 (caps per source); case id K42.
+ * costs one file + one line + two keys), §7.2 (caps per source), §7.8 (the mirror's paging
+ * rule); case ids K42, K87.
  *
  * The point of these assertions is the *shape*, not the adapters' behaviour: a third
  * source must be able to plug in without touching the page, the merge, the routes or
@@ -11,6 +12,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { clawhubSource } from '../lib/market/sources/clawhub.js';
 import { SOURCES, descriptors, descriptorsOf, getSource, ids, makeMarketDeps } from '../lib/market/sources/index.js';
 import { tempDir } from './helpers/tree.mjs';
 
@@ -100,4 +102,175 @@ test('K42 未注入 io 时自建一个上游客户端，dispose 会释放它', a
   } finally {
     await cleanup();
   }
+});
+
+/**
+ * A fake mirror that answers one page and logs every URL it was asked for.
+ * @param {{rows?: object[], total?: number|null, fail?: boolean}} [options] - the page.
+ * @returns {{io: object, urls: URL[]}} the client and its log.
+ */
+function mirrorIo(options = {}) {
+  const urls = [];
+  const io = {
+    /**
+     * Answer one mirror page.
+     * @param {URL|string} url - request URL.
+     * @returns {Promise<object>} the body.
+     */
+    async getJson(url) {
+      const parsed = new URL(String(url));
+      urls.push(parsed);
+      if (options.fail === true) throw new Error('mirror down');
+      return { data: { skills: options.rows ?? [], total: options.total === undefined ? null : options.total } };
+    },
+    /**
+     * The mirror never answers bytes in these cases.
+     * @returns {Promise<never>} always throws.
+     */
+    async getBytes() {
+      throw new Error('the mirror is not a package host');
+    },
+  };
+  return { io, urls };
+}
+
+/** One mirror row that can be identified (`upstream_owner_login` present). */
+const mirrorRow = (slug, extra = {}) => ({
+  slug,
+  name: slug,
+  namespace: { handle: `clawhub_owner` },
+  upstream_owner_login: 'owner',
+  downloads: 10,
+  stars: 2,
+  score: 1000,
+  ...extra,
+});
+
+/** The query the route hands a ClawHub adapter. */
+const CLAW_QUERY = {
+  sourceId: 'clawhub', sort: 'recommended', keyword: '', category: null, limit: 4, cursor: null,
+};
+
+test('K87 ClawHub 的 list 只打镜像一次，参数齐全、游标是 {page}', async () => {
+  const { io, urls } = mirrorIo({ rows: [mirrorRow('a'), mirrorRow('b')], total: 63381 });
+  const page = await clawhubSource.list(CLAW_QUERY, io);
+  assert.equal(urls.length, 1, '一页只发一次请求');
+  assert.equal(urls[0].origin, 'https://api.skillhub.cn', '打的是镜像主机');
+  assert.equal(urls[0].pathname, '/api/skills', '镜像的列表端点');
+  assert.equal(urls[0].searchParams.get('source'), 'clawhub', '只要 ClawHub 目录');
+  assert.equal(urls[0].searchParams.get('page'), '1', '页码从 1 起');
+  assert.equal(urls[0].searchParams.get('pageSize'), '4', '页大小透传');
+  assert.equal(urls[0].searchParams.get('sortBy'), 'score', '默认排序按评分');
+  assert.equal(urls[0].searchParams.get('order'), 'desc', '降序');
+  assert.equal(urls[0].searchParams.get('keyword'), null, '空关键词不发');
+  assert.equal(urls[0].searchParams.get('category'), null, '没选分类不发');
+  assert.equal(page.items.length, 2, '两条都归一了');
+  assert.equal(page.total, 63381, 'total 原样透传（不再是 null）');
+  assert.equal(JSON.parse(Buffer.from(page.next, 'base64url').toString('utf8')).page, 2, '游标是 {page:2}');
+});
+
+test('K87 末页只看 total 与空页：丢条目造成的短页仍然给下一页', async () => {
+  // 12 rows, 2 of them unidentifiable -> 10 items, total 100: a short page is NOT the end.
+  const dirty = [];
+  for (let index = 0; index < 10; index += 1) dirty.push(mirrorRow(`ok-${index}`));
+  dirty.push({ slug: 'no-owner', namespace: { handle: 'guessable' } });
+  dirty.push({ slug: '', upstream_owner_login: 'owner' });
+  const first = await clawhubSource.list(CLAW_QUERY, mirrorIo({ rows: dirty, total: 100 }).io);
+  assert.equal(first.items.length, 10, '两条身份拼不出来的被丢掉');
+  assert.notEqual(first.next, null, '短页不是末页（total 还有 88 条）');
+
+  const exact = await clawhubSource.list(CLAW_QUERY, mirrorIo({ rows: [mirrorRow('a')], total: 4 }).io);
+  assert.equal(exact.next, null, 'page*limit(4) >= total(4) ⇒ 末页');
+
+  const beyond = await clawhubSource.list(
+    { ...CLAW_QUERY, cursor: { page: 3 } },
+    mirrorIo({ rows: [mirrorRow('a')], total: 9 }).io,
+  );
+  assert.equal(beyond.next, null, '越界页（12 >= 9）也是末页');
+
+  const empty = await clawhubSource.list(CLAW_QUERY, mirrorIo({ rows: [], total: 63381 }).io);
+  assert.equal(empty.next, null, '真空页 ⇒ 末页（total 再大也不翻）');
+  assert.equal(empty.items.length, 0, '没有条目');
+
+  const unknownTotal = await clawhubSource.list(CLAW_QUERY, mirrorIo({ rows: [mirrorRow('a')] }).io);
+  assert.notEqual(unknownTotal.next, null, 'total 缺失时不拿本页条数当末页信号（宁可多翻一页）');
+  assert.equal(unknownTotal.total, null, 'total 缺失就是 null');
+});
+
+test('K87 游标与失败：非本源游标报 E_BAD_QUERY，坏载荷报 E_SOURCE_BAD_RESPONSE', async () => {
+  await assert.rejects(
+    () => clawhubSource.list({ ...CLAW_QUERY, cursor: { cursor: 'x' } }, mirrorIo().io),
+    (error) => error.code === 'E_BAD_QUERY',
+    '旧形状的 {cursor} 游标不再被接受',
+  );
+  await assert.rejects(
+    () => clawhubSource.list({ ...CLAW_QUERY, cursor: { page: 0 } }, mirrorIo().io),
+    (error) => error.code === 'E_BAD_QUERY',
+    '页码不在 1..1000',
+  );
+  const { io } = mirrorIo();
+  await assert.rejects(
+    () => clawhubSource.list(CLAW_QUERY, { ...io, getJson: async () => ({ data: {} }) }),
+    (error) => error.code === 'E_SOURCE_BAD_RESPONSE',
+    'data.skills 不是数组就是上游坏了（502 而不是空页）',
+  );
+  await assert.rejects(
+    () => clawhubSource.search({ ...CLAW_QUERY, keyword: '' }, mirrorIo().io),
+    (error) => error.code === 'E_BAD_QUERY',
+    '空关键词的搜索是本端拒绝，不浪费一次请求',
+  );
+});
+
+test('K87 search 复用同一个镜像端点并带上 keyword（因此能翻页）', async () => {
+  const { io, urls } = mirrorIo({ rows: [mirrorRow('one')], total: 200 });
+  const page = await clawhubSource.search({ ...CLAW_QUERY, keyword: 'cad viewer' }, io);
+  assert.equal(urls.length, 1, '搜索一次请求');
+  assert.equal(urls[0].pathname, '/api/skills', '不是 /api/v1/search：镜像的列表端点就带关键词');
+  assert.equal(urls[0].searchParams.get('keyword'), 'cad viewer', '关键词原样带上');
+  assert.equal(page.items.length, 1, '条目照常归一');
+  assert.notEqual(page.next, null, '搜索结果也能翻页（U6 之前恒 null）');
+});
+
+test('K87 镜像的 total 只认数字，分类原样透传，第二页的游标接着排', async () => {
+  // A string total is "no total": the end-of-list rule must not compare a string to a number
+  // (`'9' >= 4` is true by coercion, which would cut the list short after one page).
+  const stringTotal = mirrorIo({ rows: [mirrorRow('a')], total: /** @type {any} */ ('9') });
+  const page = await clawhubSource.list(CLAW_QUERY, stringTotal.io);
+  assert.equal(page.total, null, '非数字的 total 不透传');
+  assert.notEqual(page.next, null, '也不拿它判末页（只按空页/真实 total 判）');
+
+  const categorised = mirrorIo({ rows: [mirrorRow('a')], total: 63381 });
+  await clawhubSource.list({ ...CLAW_QUERY, category: 'dev-tools' }, categorised.io);
+  assert.equal(categorised.urls[0].searchParams.get('category'), 'dev-tools', '有分类就转发（caps 不翻，但镜像支持）');
+
+  const second = mirrorIo({ rows: [mirrorRow('b')], total: 63381 });
+  const paged = await clawhubSource.list({ ...CLAW_QUERY, cursor: { page: 2 } }, second.io);
+  assert.equal(second.urls[0].searchParams.get('page'), '2', '游标页码原样带给镜像');
+  assert.equal(
+    JSON.parse(Buffer.from(paged.next, 'base64url').toString('utf8')).page,
+    3,
+    '下一页是 page+1（游标同形，客户端只回传不解析）',
+  );
+});
+
+test('K87 镜像的失败不会被吞成空页：带码的上游错误照实往上抛', async () => {
+  // `detail` swallows its mirror lookup (decoration); `list` must not - an empty page would
+  // read as "this source has nothing", which is a different and false statement.
+  const { io } = mirrorIo({ fail: true });
+  await assert.rejects(
+    () => clawhubSource.list(CLAW_QUERY, io),
+    /mirror down/,
+    'list 的镜像失败照实抛出（由路由映射成 502/503/504）',
+  );
+  const coded = {
+    ...io,
+    getJson: async () => {
+      throw Object.assign(new Error('mirror timed out'), { code: 'E_SOURCE_TIMEOUT' });
+    },
+  };
+  await assert.rejects(
+    () => clawhubSource.list(CLAW_QUERY, coded),
+    (error) => error.code === 'E_SOURCE_TIMEOUT',
+    '带错误码的失败同样不被吞',
+  );
 });

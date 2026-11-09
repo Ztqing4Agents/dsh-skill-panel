@@ -2,14 +2,16 @@
  * ClawHub icons: the four shapes that upstream hands out, and the batch that resolves them.
  *
  * Contract: docs/contracts/market.md §7.4 (the `iconUrl` column and its four values) and
- * §7.5 (the icon pipeline: the list carries no icon, the card paints with letters first and
- * the panel fills icons afterwards through `POST market/icons`); docs/contracts/routes.md
- * §3.7.1 route #11; case id K57.
+ * §7.5 (the icon pipeline); docs/contracts/routes.md §3.7.1 route #11; case id K57.
  *
  * Two properties make the pipeline affordable, and both are asserted here: a page of cards
- * costs **exactly one** upstream request (the detail endpoint answers in two to three
- * seconds on this source, so nothing may wait on it), and the batch that does ask is
- * bounded - 24 refs, four at a time, six seconds for the batch, five per lookup.
+ * costs **exactly one** upstream request, and the batch that resolves icons is bounded -
+ * 24 refs, four at a time, six seconds for the batch, five per lookup.
+ *
+ * U6 moved the catalogue to the SkillHub mirror, which publishes a real `iconUrl` per row:
+ * a page of cards therefore still costs one request and asks for no detail at all. The
+ * batch below is what an **installed row** still needs - it has an identity and nothing
+ * else (`_meta.json`), so its icon can only come from a per-skill detail call.
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -58,6 +60,11 @@ function fakeIo(options = {}) {
     async getJson(url) {
       const parsed = new URL(String(url));
       calls.push(parsed.pathname + (parsed.search || ''));
+      // The mirror: `GET /api/skills?...&source=clawhub` (U6). Rows are SkillHub-shaped and
+      // carry `upstream_owner_login`, so the adapter can build a ClawHub identity from them.
+      if (parsed.pathname === '/api/skills') {
+        return { code: 0, data: { total: rows.length, skills: rows } };
+      }
       if (parsed.pathname === '/api/v1/skills' && parsed.searchParams.get('cursor') === null) {
         return { items: rows, nextCursor: null };
       }
@@ -134,30 +141,50 @@ test('K57 lucideNameOf：PascalCase / kebab / 非法名', () => {
   }
 });
 
-test('K57 列表与搜索**零额外请求**：图标只为「载荷自带」的条目填，其余留 null', async () => {
+test('K57 列表与搜索**零额外请求**：图标随镜像条目一起到，一条详情都不问', async () => {
   resetIconCache();
+  const mirrorRow = (slug, iconUrl) => ({
+    slug,
+    name: slug,
+    namespace: { handle: 'clawhub_ivangdavila' },
+    upstream_owner_login: 'ivangdavila',
+    summary: 'A fixture skill.',
+    downloads: 1,
+    stars: 2,
+    score: 3,
+    category: 'dev-tools',
+    subCategories: [{ key: 'a', name: '开发工具' }],
+    ...(iconUrl === undefined ? {} : { iconUrl }),
+  });
   const rows = [
-    row('carried', { icon: 'lucide:Zap' }),
-    row('uploaded', { icon: `/api/v1/skill-icons/${HASH}` }),
-    row('nested', { native: { skill: { icon: 'lucide:FileText' } } }),
-    row('none'),
-    row('nested-null', { native: { skill: { icon: null } } }),
+    mirrorRow('carried', 'https://cloudcache.tencent-cloud.com/qcloud/ui/x.png'),
+    mirrorRow('insecure', 'http://cdn.example.com/a.png'),
+    mirrorRow('relative', '/skill-icons/x.png'),
+    mirrorRow('none'),
   ];
-  const list = fakeIo({ rows, icons: { none: 'lucide:Palette' } });
+  const list = fakeIo({ rows });
   const page = await clawhubSource.list({ ...QUERY, limit: 10 }, list.io);
-  assert.equal(page.items.length, 5, '五条都回来了');
-  assert.equal(page.items[0].iconUrl, 'api/dsh-skill-center/market/lucide?name=zap', '平铺 icon 直接用');
-  assert.equal(page.items[1].iconUrl, `api/dsh-skill-center/market/clawhub-icon?hash=${HASH}`, '上传图标直接用');
-  assert.equal(page.items[2].iconUrl, 'api/dsh-skill-center/market/lucide?name=file-text', 'native.skill.icon 也算自带');
-  assert.equal(page.items[3].iconUrl, null, '没有图标 ⇒ null（等批量补）');
-  assert.equal(page.items[4].iconUrl, null, '显式 null ⇒ null');
-  assert.deepEqual(list.calls, ['/api/v1/skills?limit=10'], '列表只发一次请求，一条详情都不问');
+  assert.equal(page.items.length, 4, '四条都回来了（身份都能拼出来）');
+  assert.equal(
+    page.items[0].iconUrl,
+    'https://cloudcache.tencent-cloud.com/qcloud/ui/x.png',
+    '镜像给的绝对 https 图原样上屏（与 SkillHub 同一判据）',
+  );
+  assert.equal(page.items[1].iconUrl, null, '非 https ⇒ null（卡片留字母头像）');
+  assert.equal(page.items[2].iconUrl, null, '相对路径不是图片地址 ⇒ null');
+  assert.equal(page.items[3].iconUrl, null, '没有图标 ⇒ null（已安装行才需要批量补）');
+  assert.deepEqual(list.calls, ['/api/skills?page=1&pageSize=10&sortBy=score&order=desc&source=clawhub'], '列表只发一次请求');
   assert.equal(list.peak(), 0, '没有任何详情请求在飞');
 
-  const search = fakeIo({ results: [{ ownerHandle: 'o', native: { skill: { slug: 'one', icon: 'lucide:Zap' } } }] });
+  const search = fakeIo({ rows: [mirrorRow('one', 'https://cdn.example.com/one.png')] });
   const found = await clawhubSource.search({ ...QUERY, keyword: 'one' }, search.io);
-  assert.equal(found.items[0].iconUrl, 'api/dsh-skill-center/market/lucide?name=zap', '搜索页同样只认自带的');
-  assert.deepEqual(search.calls, ['/api/v1/search?q=one&limit=4'], '搜索也是一次请求');
+  assert.equal(found.items[0].iconUrl, 'https://cdn.example.com/one.png', '搜索结果同样自带图标');
+  assert.deepEqual(
+    search.calls,
+    ['/api/skills?page=1&pageSize=4&sortBy=score&order=desc&keyword=one&source=clawhub'],
+    '搜索也是一次请求（同一个镜像端点）',
+  );
+  assert.equal(detailCalls(search.calls).length, 0, '一条详情都不问');
 });
 
 test('K57 批量补齐：并发 ≤4、按请求顺序返回、单条失败只 null、整批不抛', async () => {

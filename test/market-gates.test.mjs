@@ -4,7 +4,7 @@
  *
  * Contracts: AGENTS.md rules 2 / 4 / 9 / 13 (no CJK in sources, no host hash class
  * names, click affordance boundaries, the browser never calls an upstream), and
- * docs/contracts/acceptance.md 附录 D.5 numbering; case ids K40, K41, K81, K83, K84, K85.
+ * docs/contracts/acceptance.md 附录 D.5 numbering; case ids K40, K41, K81, K83, K84, K85, K89.
  *
  * The three scripts are executed as subprocesses, exactly as `npm run check` runs
  * them: importing them would skip their `process.exitCode` handling, which is the
@@ -462,4 +462,47 @@ test('K85 客户端一行都不许提到收藏写入口：连 ROUTES 的字面�
   const styles = await readFile(join(clientDir, 'styles.js'), 'utf8');
   assert.equal(styles.includes('marketFavorite'), false, '样式表里没有收藏控件的任何类');
   assert.equal(styles.includes('marketFavoriteOn'), false, '已收藏态的 -On 类也一并消失');
+});
+
+test('K89 图标管道与分类开关不回归：三条路由、icons()、caps、计数各就各位', async () => {
+  // U6 moved the catalogue to the mirror; none of this may move with it. An installed row
+  // still has an identity and nothing else, so `icons()` and its two proxies are the only
+  // way its tile and upstream title exist at all - deleting them would be a silent loss.
+  const { clawhubSource } = await import('../lib/market/sources/clawhub.js');
+  assert.equal(typeof clawhubSource.icons, 'function', 'clawhubSource.icons 仍是函数');
+
+  const { ROUTES } = await import('../lib/routes.js');
+  for (const name of ['marketIcons', 'marketClawhubIcon', 'marketLucide']) {
+    assert.equal(typeof ROUTES[name], 'string', `${name} 这条路由仍在`);
+  }
+  assert.equal(Object.keys(ROUTES).length, 13, '路由仍是 13 条（4 本地 + 9 市场）');
+  const indexText = await readFile(join(ROOT, 'index.js'), 'utf8');
+  assert.match(indexText, /import \{ makeRoutes \} from '\.\/lib\/routes\.js'/, 'index.js 仍从 routes.js 取路由表');
+  assert.match(indexText, /makeRoutes\(ctx, \{/, '仍然一次装配、逐条 register');
+  const { makeRoutes } = await import('../lib/routes.js');
+  assert.equal(typeof makeRoutes, 'function', '装配函数导出着（路由条数由 K76 逐条断言）');
+
+  // Caps: categories stays OFF. Turning it on would paint SkillHub's per-category counts and
+  // total onto the ClawHub tab (63,381 vs the real ~4,000), which is worse than no number.
+  const { descriptors } = await import('../lib/market/sources/index.js');
+  const clawhub = descriptors().find((entry) => entry.id === 'clawhub');
+  assert.equal(clawhub.hasCategories, false, 'caps.categories 本轮不翻（分类与计数留给 U7）');
+  assert.equal(clawhub.packageKind, 'zip', '包型仍是 zip');
+  const skillhub = descriptors().find((entry) => entry.id === 'skillhub');
+  assert.equal(skillhub.hasCategories, true, 'SkillHub 的分类表不受影响');
+
+  // Bootstrap keeps counting SkillHub only.
+  const routesText = await readFile(join(ROOT, 'lib', 'routes.js'), 'utf8');
+  assert.match(routesText, /market\.sourceById\('skillhub'\)/, 'bootstrap 的分类表与计数仍写死取自 SkillHub 本体');
+  assert.match(routesText, /countsOk: counted\.ok === true/, 'countsOk 语义未变');
+});
+
+test('K89 镜像 origin 不在 clawhub.js 里重复声明（K41 的「三条常量」靠这条维持）', async () => {
+  // Importing SkillHub's ORIGIN is a hard requirement, not a style choice: a second literal
+  // would make the "exactly three files know an upstream host" assertion in K41 vacuous.
+  const text = await readFile(join(ROOT, 'lib', 'market', 'sources', 'clawhub.js'), 'utf8');
+  const code = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.equal(code.includes('api.skillhub.cn'), false, 'clawhub.js 里没有镜像主机字面量');
+  assert.match(code, /import \{ ORIGIN as SKILLHUB_ORIGIN \} from '\.\/skillhub\.js'/, '镜像 origin 从 skillhub.js 导入');
+  assert.match(code, /export const ORIGIN = 'https:\/\/clawhub\.ai'/, '自己那半边的 origin 仍是导出常量');
 });
