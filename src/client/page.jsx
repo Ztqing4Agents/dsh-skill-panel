@@ -19,6 +19,7 @@ import {
 
 import { cn } from './styles.js';
 import { attachHeader } from './header-scroll.js';
+import { MarketPanel } from './market-panel.jsx';
 import { ListSkeleton } from './skeleton.jsx';
 import { SkillRow } from './row.jsx';
 import {
@@ -92,6 +93,14 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
     void load('initial');
   }, [load, store]);
 
+  // An install writes a new directory into the skills root, so the installed tab has to
+  // re-read it - but only when the user actually goes there, and only once.
+  useEffect(() => {
+    if (state.tab !== TAB_INSTALLED || store.getSnapshot().market.installedDirty !== true) return;
+    store.actions.marketClearInstalledDirty();
+    void load('initial');
+  }, [load, state.tab, store]);
+
   const onToggle = useCallback(async (row, enabled) => {
     const key = rowKey(row);
     store.actions.pending(key);
@@ -114,6 +123,9 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
   const showsInstalled = state.tab === TAB_INSTALLED;
   const loadingFirst = state.status === 'loading' && state.payload === null;
   const failedFirst = state.status === 'error' && state.payload === null;
+  // The header's one refresh button follows the tab: the installed list below, the
+  // market's first page above.
+  const marketBusy = !showsInstalled && state.market.listStatus === 'loading';
 
   const renderGroup = (group) => (
     <section className={cn('group')} data-skc-group={group.key} key={group.key}>
@@ -167,11 +179,10 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
             <div
               className={cn('toolbar')}
               data-skc-header-part="toolbar"
-              hidden={!showsInstalled}
             >
-              {state.payload === null
-                ? null
-                : <span className={cn('status')}>{statusLine(counts, t)}</span>}
+              {showsInstalled && state.payload !== null
+                ? <span className={cn('status')}>{statusLine(counts, t)}</span>
+                : null}
               <Tooltip
                 label={t('page.refresh')}
                 delayMs={500}
@@ -185,37 +196,42 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
                   size="sm"
                   className={cn('addButton')}
                   aria-label={t('page.refresh')}
-                  aria-busy={refreshing}
-                  disabled={refreshing}
-                  onClick={() => void load('refresh')}
-                  icon={refreshing
+                  aria-busy={refreshing || marketBusy}
+                  disabled={refreshing || marketBusy}
+                  onClick={() => {
+                    if (showsInstalled) void load('refresh');
+                    else store.actions.marketReload();
+                  }}
+                  icon={refreshing || marketBusy
                     ? <StateDot state="ongoing" size={13} />
                     : <IconRefreshOutlineRegular size={13} />}
                 >
                   <span className={cn('toolbarLabel')}>{t('page.refresh')}</span>
                 </Button>
               </Tooltip>
-              <span className={cn('addGroup')} role="group" aria-label={t('add.label')} title={t('add.comingSoon')}>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  className={cn('addPrimary')}
-                  aria-label={t('add.label')}
-                  disabled
-                  icon={<IconPlusOutlineRegular size={13} />}
-                >
-                  <span className={cn('toolbarLabel')}>{t('add.label')}</span>
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  className={cn('addMore')}
-                  aria-label={t('add.comingSoon')}
-                  disabled
-                >
-                  <IconChevronDownOutlineRegular size={13} aria-hidden="true" />
-                </Button>
-              </span>
+              {showsInstalled ? (
+                <span className={cn('addGroup')} role="group" aria-label={t('add.label')} title={t('add.comingSoon')}>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className={cn('addPrimary')}
+                    aria-label={t('add.label')}
+                    disabled
+                    icon={<IconPlusOutlineRegular size={13} />}
+                  >
+                    <span className={cn('toolbarLabel')}>{t('add.label')}</span>
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className={cn('addMore')}
+                    aria-label={t('add.comingSoon')}
+                    disabled
+                  >
+                    <IconChevronDownOutlineRegular size={13} aria-hidden="true" />
+                  </Button>
+                </span>
+              ) : null}
             </div>
             <div className={cn('pageTabs')} data-skc-header-part="tabs">
               <SegmentedTabs
@@ -269,7 +285,7 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
             id={`${tabsId}-${TAB_MARKET}-panel`}
             aria-labelledby={`${tabsId}-${TAB_MARKET}`}
           >
-            <p className={cn('empty')}>{t('market.placeholder')}</p>
+            <MarketPanel store={store} api={api} t={t} />
           </div>
         )}
       </div>

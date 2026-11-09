@@ -5,7 +5,9 @@
  * route that merges a fresh scan of $DSH_HOME/skills with the skill registry and
  * the install ledgers, one write route that rewrites the `disable-model-invocation`
  * field of a local SKILL.md byte for byte, one write route for the panel-owned
- * provider toggle store, and one health route.
+ * provider toggle store, one health route, and the five market routes (discovery,
+ * detail, installed map, install) that talk to the two upstream sources through
+ * lib/market/upstream.js.
  *
  * The browser half (./client) renders the sidebar entry and the global page; the
  * two halves meet only at the JSON envelope below.
@@ -15,6 +17,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { makeRoutes } from './lib/routes.js';
+import { makeMarketDeps } from './lib/market/sources/index.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('./package.json');
@@ -55,18 +58,22 @@ export function apply(ctx, config) {
   const dshHome = resolveDshHome(config);
   const configuredRoot = typeof config?.skillsRoot === 'string' ? config.skillsRoot.trim() : '';
   const skillsRoot = configuredRoot !== '' ? configuredRoot : join(dshHome, 'skills');
+  const logger = { warn: (entry) => ctx.logger.warn(entry) };
+  const market = makeMarketDeps({ dshHome, skillsRoot, logger });
   const routes = makeRoutes(ctx, {
     dshHome,
     skillsRoot,
     version: pkg.version,
     registry: ctx.skills,
     sessions: ctx.sessions,
-    logger: { warn: (error) => ctx.logger.warn(error) },
+    logger,
+    market,
   });
   ctx.effect(() => {
     const disposers = routes.map((route) => ctx.webServer.register(route));
     return () => {
       for (const dispose of disposers) dispose();
+      market.dispose();
     };
   }, 'dsh-skill-center: routes');
 }

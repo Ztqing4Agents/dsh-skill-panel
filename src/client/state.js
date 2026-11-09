@@ -6,8 +6,15 @@
  * must return to the same tab with the same list, and the refresh-failure toast
  * must still be visible after the page is gone.
  *
- * No optimistic UI: a row's `enabled` only changes when the host confirms it.
+ * The market sub-state lives here for the same reason, one step stronger: leaving
+ * the market tab and coming back must return to the same filters, the same loaded
+ * pages and the same scroll offset. That is why the detail view, the install states
+ * and the scroll offset are store fields and not component state.
+ *
+ * No optimistic UI: a row's `enabled` only changes when the host confirms it, and a
+ * card reads "installed" only after the install route answered.
  */
+import { marketKeyOf } from './market-model.js';
 import { rowKey, TAB_INSTALLED } from './model.js';
 
 /**
@@ -18,7 +25,38 @@ import { rowKey, TAB_INSTALLED } from './model.js';
  * @property {{code: string, message: string}|null} error  last list failure
  * @property {Map<string, {pending: boolean, reason: string|null}>} rows per-row write state
  * @property {{kind: string, code: string, message: string, seq: number}|null} notice transient notice
+ * @property {object} market                        the market sub-state (see `initialMarket`)
  */
+
+/**
+ * The market sub-state: boot, filters, the merged list, its cursors, the detail view
+ * and the per-item install states.
+ * @returns {object} fresh market state.
+ */
+function initialMarket() {
+  return {
+    boot: 'idle',
+    sources: [],
+    categories: [],
+    categoriesOk: true,
+    filters: { source: 'all', category: null, sort: 'recommended' },
+    keyword: '',
+    input: '',
+    items: [],
+    pages: 0,
+    cursors: {},
+    exhausted: {},
+    page: { status: 'idle', code: null, message: null },
+    sourceErrors: [],
+    listStatus: 'idle',
+    detail: null,
+    installed: {},
+    installedReady: false,
+    installs: {},
+    installedDirty: false,
+    scrollTop: 0,
+  };
+}
 
 /**
  * The initial state: nothing loaded, nothing selected but the default tab.
@@ -32,6 +70,7 @@ function initialState() {
     error: null,
     rows: new Map(),
     notice: null,
+    market: initialMarket(),
   };
 }
 
@@ -64,6 +103,37 @@ function withEnabled(payload, key, enabled) {
 }
 
 /**
+ * Drop the paging cursors so the next effect run fetches page one again.
+ * `items` and `listStatus` are the caller's business: a filter change clears the list,
+ * a keyword change keeps it on screen (the host does the same, to avoid a flash).
+ * @param {object} market - current market state.
+ * @returns {object} the pagination patch.
+ */
+function clearedPaging(market) {
+  return {
+    pages: 0,
+    cursors: {},
+    exhausted: {},
+    page: { status: 'idle', code: null, message: null },
+    sourceErrors: [],
+    listStatus: market.items.length > 0 ? 'ready' : 'idle',
+  };
+}
+
+/**
+ * Replace one per-source error entry, or drop it when the source answered again.
+ * @param {{sourceId: string, code: string}[]} current - the errors on screen.
+ * @param {string[]} answered - sources that answered this round.
+ * @param {{sourceId: string, code: string}[]} failed - sources that failed this round.
+ * @returns {{sourceId: string, code: string}[]} the deduplicated error list.
+ */
+function withSourceErrors(current, answered, failed) {
+  const next = current.filter((entry) => !answered.includes(entry.sourceId)
+    && !failed.some((failure) => failure.sourceId === entry.sourceId));
+  return [...next, ...failed];
+}
+
+/**
  * Create a store with the shape the page binds to.
  * @returns {{getSnapshot: Function, subscribe: Function, actions: object}} the store.
  */
@@ -83,6 +153,15 @@ export function createStore() {
     if (entry === null) rows.delete(key);
     else rows.set(key, entry);
     set({ rows });
+  };
+  const setMarket = (patch) => {
+    set({ market: { ...state.market, ...patch } });
+  };
+  const setInstall = (id, entry) => {
+    const installs = { ...state.market.installs };
+    if (entry === null) delete installs[id];
+    else installs[id] = entry;
+    setMarket({ installs });
   };
   const actions = {
     /**
@@ -164,6 +243,292 @@ export function createStore() {
      */
     fail: (key, reason) => {
       setRow(key, { pending: false, reason });
+    },
+
+    /* ------------------------------------------------------------------ market */
+
+    /** The first market visit is asking for sources and categories. @returns {void} */
+    marketBootLoading: () => {
+      setMarket({ boot: 'loading' });
+    },
+    /**
+     * `bootstrap` answered: the panel now knows which sources exist and which
+     * categories they publish.
+     * @param {{sources?: object[], categories?: object[], categoriesOk?: boolean}} data - route payload.
+     * @returns {void}
+     */
+    marketBootReady: (data) => {
+      setMarket({
+        boot: 'ready',
+        sources: Array.isArray(data?.sources) ? data.sources : [],
+        categories: Array.isArray(data?.categories) ? data.categories : [],
+        categoriesOk: data?.categoriesOk !== false,
+      });
+    },
+    /**
+     * `bootstrap` failed. Not an error state: the list still works with the built-in
+     * source list, only the category row disappears.
+     * @param {object[]} sources - descriptors to fall back to.
+     * @returns {void}
+     */
+    marketBootFallback: (sources) => {
+      setMarket({
+        boot: 'ready',
+        sources: Array.isArray(sources) ? sources : [],
+        categories: [],
+        categoriesOk: false,
+      });
+    },
+    /**
+     * The search box's current text, before any debounce is decided.
+     * @param {string} text - raw input value.
+     * @returns {void}
+     */
+    marketSetInput: (text) => {
+      setMarket({ input: typeof text === 'string' ? text : '' });
+    },
+    /**
+     * Commit a keyword: it becomes the query, and paging restarts. The list stays on
+     * screen until the answer arrives, so the page does not flash a skeleton.
+     * @param {string} text - the keyword to send.
+     * @returns {void}
+     */
+    marketCommitKeyword: (text) => {
+      const keyword = typeof text === 'string' ? text : '';
+      setMarket({ keyword, input: keyword, ...clearedPaging(state.market) });
+    },
+    /**
+     * Narrow the query by source, category or sort. Changing any of them empties the
+     * list (the old results belong to the old query) and closes an open detail view.
+     * @param {{source?: string, category?: string|null, sort?: string}} patch - the filters to change.
+     * @returns {void}
+     */
+    marketSetFilter: (patch) => {
+      if (patch === null || typeof patch !== 'object') return;
+      const filters = { ...state.market.filters };
+      let changed = false;
+      for (const key of ['source', 'category', 'sort']) {
+        if (!(key in patch)) continue;
+        if (patch[key] === filters[key]) continue;
+        filters[key] = patch[key];
+        changed = true;
+      }
+      if (!changed) return;
+      setMarket({
+        filters,
+        items: [],
+        detail: null,
+        ...clearedPaging({ ...state.market, items: [] }),
+      });
+    },
+    /**
+     * The header's refresh button was pressed on the market tab: forget the loaded
+     * pages so the list starts over, exactly as a filter change would.
+     * @returns {void}
+     */
+    marketReload: () => {
+      setMarket({
+        items: [],
+        detail: null,
+        ...clearedPaging({ ...state.market, items: [] }),
+      });
+    },
+    /**
+     * A page-one fan-out is in flight.
+     * @returns {void}
+     */
+    marketListLoading: () => {
+      setMarket({
+        listStatus: 'loading',
+        page: { status: 'loading', code: null, message: null },
+        sourceErrors: [],
+      });
+    },
+    /**
+     * Every source of a page-one fan-out failed: this is a failure, not an empty list.
+     * @param {{code?: string, message?: string}} error - failure code and note.
+     * @returns {void}
+     */
+    marketListFailed: (error) => {
+      setMarket({
+        listStatus: 'error',
+        page: { status: 'error', code: error?.code ?? null, message: error?.message ?? null },
+        items: [],
+        pages: 0,
+      });
+    },
+    /**
+     * An append fan-out is in flight. The cards already on screen stay where they are.
+     * @returns {void}
+     */
+    marketPageStart: () => {
+      setMarket({ page: { status: 'loading', code: null, message: null } });
+    },
+    /**
+     * One fan-out answered: adopt the merged list, remember each source's cursor, and
+     * keep the sources that failed this round in the notice strip.
+     * @param {{pages: {sourceId: string, page: object}[], merged: object[],
+     *   errors?: {sourceId: string, code: string}[]}} result - the settled fan-out.
+     * @returns {void}
+     */
+    marketPageAppended: (result) => {
+      const pages = Array.isArray(result?.pages) ? result.pages : [];
+      const errors = Array.isArray(result?.errors) ? result.errors : [];
+      const cursors = { ...state.market.cursors };
+      const exhausted = { ...state.market.exhausted };
+      for (const entry of pages) {
+        const next = entry?.page?.next ?? null;
+        cursors[entry.sourceId] = next;
+        exhausted[entry.sourceId] = next === null;
+      }
+      const more = Object.values(cursors).some((cursor) => cursor !== null);
+      const answered = pages.map((entry) => entry.sourceId);
+      setMarket({
+        items: Array.isArray(result?.merged) ? result.merged : state.market.items,
+        pages: state.market.pages + (pages.length > 0 ? 1 : 0),
+        cursors,
+        exhausted,
+        page: { status: more ? 'more' : 'done', code: null, message: null },
+        listStatus: 'ready',
+        sourceErrors: withSourceErrors(state.market.sourceErrors, answered, errors),
+      });
+    },
+    /**
+     * An append fan-out failed: the loaded cards stay, the tail says so.
+     * @param {{code?: string, message?: string}} error - failure code and note.
+     * @returns {void}
+     */
+    marketPageFailed: (error) => {
+      setMarket({ page: { status: 'error', code: error?.code ?? null, message: error?.message ?? null } });
+    },
+    /**
+     * The install ledger answered: which market items are already on this machine.
+     * @param {Record<string, {name: string, version: string|null, path: string, exists: boolean}>} map - installed map.
+     * @returns {void}
+     */
+    marketInstalledLoaded: (map) => {
+      setMarket({ installed: map !== null && typeof map === 'object' ? map : {}, installedReady: true });
+    },
+    /**
+     * Open the inline detail view. The scroll offset is written by the panel first,
+     * so "back to the market" can restore it.
+     * @param {object} item - the market item that was opened.
+     * @returns {void}
+     */
+    marketDetailOpen: (item) => {
+      setMarket({ detail: { id: marketKeyOf(item), item, status: 'loading', data: null, code: null } });
+    },
+    /**
+     * The detail route answered.
+     * @param {object} data - MarketDetail.
+     * @returns {void}
+     */
+    marketDetailReady: (data) => {
+      const current = state.market.detail;
+      if (current === null) return;
+      setMarket({
+        detail: {
+          ...current,
+          item: data?.item ?? current.item,
+          status: 'ready',
+          data,
+          code: null,
+        },
+      });
+    },
+    /**
+     * The detail route failed. The way back stays usable.
+     * @param {{code?: string, message?: string}} error - failure code and note.
+     * @returns {void}
+     */
+    marketDetailFailed: (error) => {
+      const current = state.market.detail;
+      if (current === null) return;
+      setMarket({
+        detail: { ...current, status: 'error', code: error?.code ?? null, message: error?.message ?? null },
+      });
+    },
+    /** Close the detail view (the panel restores the scroll offset). @returns {void} */
+    marketDetailClose: () => {
+      setMarket({ detail: null });
+    },
+    /**
+     * Ask before installing. No request is sent until the dialog is confirmed.
+     * @param {string} id - the item's market key.
+     * @returns {void}
+     */
+    marketInstallConfirm: (id) => {
+      if (state.market.installs[id]?.state === 'installing') return;
+      setInstall(id, { state: 'confirm' });
+    },
+    /**
+     * Dismiss the confirm dialog without installing.
+     * @param {string} id - the item's market key.
+     * @returns {void}
+     */
+    marketInstallCancel: (id) => {
+      if (state.market.installs[id]?.state !== 'confirm') return;
+      setInstall(id, null);
+    },
+    /**
+     * The install route is being called. Idempotent: a second call while installing
+     * does nothing, so a double click cannot send two requests.
+     * @param {string} id - the item's market key.
+     * @returns {void}
+     */
+    marketInstallStart: (id) => {
+      if (state.market.installs[id]?.state === 'installing') return;
+      seq += 1;
+      setInstall(id, { state: 'installing', seq });
+    },
+    /**
+     * The skill is on disk. The card flips, the installed tab is marked stale, and a
+     * toast says where it went and when it takes effect.
+     * @param {string} id - the item's market key.
+     * @param {{name?: string, path?: string, version?: string|null}} result - route payload.
+     * @returns {void}
+     */
+    marketInstallOk: (id, result) => {
+      const name = typeof result?.name === 'string' ? result.name : '';
+      const path = typeof result?.path === 'string' ? result.path : '';
+      const version = typeof result?.version === 'string' ? result.version : null;
+      seq += 1;
+      const installs = { ...state.market.installs, [id]: { state: 'installed', path, version } };
+      // The toast is not part of the market sub-state: `ToastHost` reads the top-level
+      // `notice` (same field `refreshFailed` writes), so this is one atomic update of both.
+      set({
+        market: {
+          ...state.market,
+          installs,
+          installed: { ...state.market.installed, [id]: { name, version, path, exists: true } },
+          installedDirty: true,
+        },
+        notice: { kind: 'install-ok', name, path, code: '', message: '', seq },
+      });
+    },
+    /**
+     * The install failed: the card keeps its place and explains itself, with a retry.
+     * @param {string} id - the item's market key.
+     * @param {string} reason - localized reason.
+     * @returns {void}
+     */
+    marketInstallFail: (id, reason) => {
+      setInstall(id, { state: 'failed', reason: typeof reason === 'string' ? reason : '' });
+    },
+    /**
+     * Remember the list's scroll offset before the detail view replaces it.
+     * @param {number} top - scroll offset in pixels.
+     * @returns {void}
+     */
+    marketSetScroll: (top) => {
+      setMarket({ scrollTop: Number.isFinite(top) && top > 0 ? top : 0 });
+    },
+    /**
+     * The installed tab reloaded, so the "something was installed" flag can go.
+     * @returns {void}
+     */
+    marketClearInstalledDirty: () => {
+      setMarket({ installedDirty: false });
     },
   };
   return {

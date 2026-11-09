@@ -142,6 +142,111 @@ sequenceDiagram
 
 单实例守卫：`apply` 里若检测到同名路由已存在（重复加载同一包），第二次注册会抛错并打断启动 —— 因此 `index.js` 用一个模块级 `let applied = false` 做幂等（`PROF/@linxin666/dsh-client-ui-skill-explorer/lib/index.js` 的 `mountOnce(...)` 是同一目的的更完整实现，我们只需要最简单的形态）。
 
+### 4.5 市场浏览与跨源搜索
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as 用户
+    participant MP as MarketPanel
+    participant ST as store.market
+    participant API as SkillCenterApi
+    participant RT as 路由 market/bootstrap|list
+    participant SRC as sources 适配器
+    participant IO as upstream(io)
+    participant NH as normalize.js
+    participant MM as market-model.js
+
+    U->>MP: 切到「技能市场」页签
+    MP->>ST: 记 boot=loading
+    MP->>API: marketBootstrap()
+    API->>RT: GET market/bootstrap
+    RT->>SRC: skillhub.categories(io)（10min 缓存，6s 超时）
+    alt 分类读不到
+        SRC-->>RT: {items:[], ok:false}
+        Note over RT: 仍 200：categoriesOk:false，列表照常
+    end
+    RT-->>API: 200 {sources[], categories[], categoriesOk}
+    API-->>MP: descriptors → 来源筛选项由数据渲染
+
+    MP->>ST: 记 filters（source=all, sort=recommended）
+    MP->>API: marketList({source:'skillhub',…}) 与 marketList({source:'clawhub',…})（并行）
+    API->>RT: GET market/list?source=…&sort=…&limit=12(&cursor)
+    RT->>SRC: search(q) 当 keyword 非空，否则 list(q)
+    SRC->>IO: getJson(白名单过的 URL)
+    IO-->>SRC: JSON（超时 10s / 体积上限）
+    SRC->>NH: 原始条目 → MarketItem
+    NH-->>SRC: items（缺 = null）
+    SRC-->>RT: {items, next, total}
+    RT-->>API: 200 {sourceId, sort, keyword, category, items, next, total}
+    API-->>MP: 单源一页
+    MP->>MM: mergeBatches([{sourceId,items}…], {existing, sort})
+    MM-->>MP: 交错 / 去重 / 让位后的列表
+    MP-->>U: 首屏骨架 → 卡片网格
+
+    alt 某一源 rejected（503/502/504）
+        MP->>ST: sourceErrors 记该源
+        MP-->>U: 顶部提示条 + 另一源结果照常渲染
+    else 两源都 rejected
+        MP-->>U: 整页错误态 + 重试（不显示空态：空 ≠ 失败）
+    end
+
+    U->>MP: 输入关键词（250ms 防抖）/ 回车（立即）/ 清空（立即）
+    MP->>ST: keyword 变化 → 清分页
+    Note over MP,ST: 请求中保留旧 items，只有筛选切换才回骨架
+
+    U->>MP: 触底（距底 200px）
+    MP->>API: 只向 cursor !== null 的源各发一次
+    Note over MP: next === null 的源不再打扰；两源都 null 才显示「没有更多了」
+```
+
+四条分支与两条失败分支的判据：切来源 / 切分类 / 切排序 ⇒ 清 `items/pages/cursors/exhausted/detail` 并重拉第一页；换关键词 ⇒ 同上但**不清**来源与分类；部分源失败 ⇒ 该源进 `sourceErrors`、另一源照常（`market/list` 用 HTTP 状态码表达失败，见 `docs/contracts/routes.md` §3.7.2）；两源同时失败 ⇒ 整页错误态。
+
+### 4.6 市场安装
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as 用户
+    participant MP as MarketPanel / Confirm
+    participant API as SkillCenterApi
+    participant RT as 路由 market/install
+    participant IN as install.js
+    participant SRC as sources 适配器
+    participant T as skillsRoot/.skc-install-*
+    participant L as market/store.js
+
+    U->>MP: 点「安装」→ 确认弹窗 → 确认
+    MP->>API: marketInstall({source, owner, slug, version?})
+    API->>RT: POST market/install（≤ 64 KiB）
+    RT->>RT: guard → 白名单（§3.7.3）→ source 在注册表
+    RT->>IN: install(ref)
+    IN->>IN: 加锁 source:owner:slug；全局在跑超 2 个 ⇒ 429
+    IN->>SRC: plan(ref)  → 版本 + 包形态 + 清单
+    alt 包里 _meta.json 的版本与请求版本不符
+        IN-->>RT: 422 E_PACKAGE_INVALID（一个文件都没下）
+    end
+    IN->>SRC: fetchFile(plan, 'SKILL.md')（只这一个）
+    IN->>IN: 校验 sha256/CRC + size ⇒ 422
+    IN->>IN: parseFrontmatter → name ⇒ 不合规 422 E_SKILL_NAME_INVALID
+    IN->>IN: lstat(skillsRoot/name) 存在 ⇒ 409 E_ALREADY_INSTALLED（不动一个字节）
+    IN->>T: mkdir .skc-install-<pid>-<rand>
+    IN->>SRC: fetchFile 其余文件（4 路并发）
+    IN->>T: 逐文件 wx 写入 + 校验 + fsync
+    IN->>T: 写 _meta.json（source/ownerId/slug/version/name/installedAt）
+    IN->>IN: mkdir(skillsRoot/name) 占位 claim → rename(tmp, target)
+    IN->>IN: 回读 SKILL.md 与 _meta.json 断言一致（不一致则删目录）
+    IN->>L: append 安装记录（原子写）
+    L-->>IN: ok
+    IN-->>RT: {name, path, version, source, owner, slug, files, bytes}
+    RT-->>API: 200 OK
+    API-->>MP: 结果
+    MP-->>U: toast「已安装 name · 新会话生效」+ 卡片转「已安装」+ 已安装页签标脏
+    Note over IN,T: 任一步失败 → finally 删临时目录 → 不写台账 →<br/>skillsRoot 条目集合与安装前逐字节相同
+```
+
+唯一的例外窗口：台账写失败时目录保留（否则用户装好的技能凭空消失），返回 `500 E_INSTALL_IO` 并在 `message` 里说明「技能已落位、台账未写」——后果只是卡片显示未安装，下次安装会被同名检查拦下，不产生坏数据。分阶段失败码全表见 `docs/contracts/routes.md` §3.7.4。
+
 ---
 
 ---

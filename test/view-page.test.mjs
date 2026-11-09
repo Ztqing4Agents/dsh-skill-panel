@@ -245,12 +245,19 @@ test('K25 页签：两个 tab，默认选中已安装', () => {
   assert.ok(html.includes('aria-label="技能分区"'), '页签组有分组名');
 });
 
-test('K25 切到市场页签：只渲染占位文案，工具栏隐藏', () => {
+test('K25/K28 切到市场页签：挂载市场面板，已安装面整块退场（占位文案已按设计删除）', () => {
   const html = renderPage({ after: (store) => store.actions.setTab('market') });
-  assert.ok(html.includes('技能市场将在后续版本提供。'), '市场页签渲染占位文案');
-  assert.equal(html.includes('data-skc-group='), false, '市场页签不渲染任何分区');
-  assert.ok(/class="skc_toolbar"[^>]*hidden=""/.test(html), '市场页签下工具栏被 hidden');
+  // 本轮把占位文案换成了真市场：判据从「有无占位文案」改成「装了谁的哪一面」。
+  assert.equal(html.includes('技能市场将在后续版本提供。'), false, '旧的占位文案按设计删除');
   assert.ok(html.includes('class="skc_tabPanel"'), '市场页签用自己的面板容器');
+  assert.ok(html.includes('class="skc_marketSection"'), '市场面板挂载（skc_marketSection）');
+  assert.ok(/role="tabpanel"[^>]*id="[^"]*-market-panel"/.test(html), '市场面板是 tabpanel 且 id 按 market 页签拼');
+  assert.equal(html.includes('data-skc-group='), false, '市场页签不渲染任何已安装分区');
+  assert.equal(html.includes('class="skc_status"'), false, '市场页签的页头不显示「共 N 个技能」状态行');
+  assert.equal(html.includes('skc_addPrimary'), false, '市场页签不显示「添加技能」（它只属于已安装面）');
+  // 页头的刷新按钮属于两页签共用：市场页签下它刷新市场首页，因此仍在原位可见。
+  assert.equal(html.includes('class="skc_toolbar"'), true, '工具栏保留（刷新按钮对市场页签同样有效）');
+  assert.ok(html.includes('aria-label="刷新"'), '市场页签下刷新按钮仍可点');
 });
 
 test('页脚只在有被排除的技能时出现，并给出数量', () => {

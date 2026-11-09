@@ -21,6 +21,10 @@ const ROUTE_CODES = [
   'E_FORBIDDEN', 'E_NOT_FOUND', 'E_STALE_PATH', 'E_SYMLINK_READONLY',
   'E_FILE_CHANGED', 'E_NOT_WRITABLE', 'E_WRITE_FAILED', 'E_VERIFY_FAILED',
   'E_BAD_NAME', 'E_BAD_PATH', 'E_UNKNOWN',
+  // 市场面（routes.md §8.6）。界面按 code 取文案，缺一条就会把英文原句丢给中文用户。
+  'E_BAD_QUERY', 'E_SOURCE_UNKNOWN', 'E_SOURCE_UNAVAILABLE', 'E_SOURCE_TIMEOUT',
+  'E_SOURCE_BAD_RESPONSE', 'E_SKILL_NAME_INVALID', 'E_ALREADY_INSTALLED',
+  'E_PACKAGE_INVALID', 'E_DOWNLOAD_FAILED', 'E_INSTALL_IO', 'E_INSTALL_BUSY',
 ];
 
 /** CJK blocks the gate rejects inside source files. */
@@ -114,12 +118,36 @@ test('设计 §8.3 键表要求的每一个键都在（按名字断言，不按�
     'tabs.label', 'tabs.installed', 'tabs.market',
     'group.builtin', 'group.local', 'group.installed',
     'group.builtinEmpty', 'group.localEmpty', 'group.installedEmpty',
-    'footer.excluded', 'status.count', 'status.offSuffix', 'market.placeholder',
+    'footer.excluded', 'status.count', 'status.offSuffix',
+    // 市场面：本轮用真市场替换了 `market.placeholder` 占位键。下面这批键名是 locale/zh.json
+    // 的实际键（不是设计稿里的示意名），覆盖面板/筛选/卡片/详情/确认/空态/失败态各一处。
+    'market.sectionLabel', 'market.searchLabel', 'market.searchPlaceholder', 'market.clearSearch',
+    'market.sourceLabel', 'market.source.all', 'market.source.skillhub', 'market.source.clawhub',
+    'market.sortLabel', 'market.sort.recommended', 'market.sort.updated', 'market.sort.downloads',
+    'market.categoriesLabel', 'market.category.all', 'market.categoryScope',
+    'market.loading', 'market.loadingMore', 'market.endOfList', 'market.moreFailed',
+    'market.emptyTitle', 'market.emptySearchTitle', 'market.emptySearchHint',
+    'market.emptyCategoryTitle', 'market.emptyCategoryAction',
+    'market.errorTitle', 'market.errorHint', 'market.retry',
+    'market.partialSource', 'market.categoriesUnavailable',
+    'market.cardOpen', 'market.metaAuthor', 'market.metaVersion', 'market.metaDownloads',
+    'market.install', 'market.installing', 'market.installed', 'market.installedTitle', 'market.retryInstall',
+    'market.detailBack', 'market.detailLoading', 'market.detailError',
+    'market.detailOverview', 'market.detailFiles', 'market.detailNoOverview', 'market.detailFilesEmpty',
+    'market.factSource', 'market.factAuthor', 'market.factVersion', 'market.factDownloads',
+    'market.factCategory', 'market.factInstallTo', 'market.factUnknown',
+    'market.confirmTitle', 'market.confirmTrust', 'market.confirmCancel', 'market.confirmInstall',
+    'market.installStarted', 'market.installOk', 'market.installOkHint', 'market.nameInvalidNote',
     'row.enable', 'row.disable', 'row.applying', 'row.symlinkReadonly', 'row.symlinkTitle',
     'add.label', 'add.comingSoon',
     'error.E_NOT_FOUND', 'error.E_BAD_NAME', 'error.E_BAD_PATH', 'error.E_STALE_PATH',
     'error.E_SYMLINK_READONLY', 'error.E_FILE_CHANGED', 'error.E_NOT_WRITABLE',
     'error.E_WRITE_FAILED', 'error.E_VERIFY_FAILED', 'error.E_FORBIDDEN', 'error.E_UNKNOWN',
+    // 市场面错误码（routes.md §8.6）：装不上/查不到时界面按 code 取这几条文案。
+    'error.E_BAD_QUERY', 'error.E_SOURCE_UNKNOWN', 'error.E_SOURCE_UNAVAILABLE',
+    'error.E_SOURCE_TIMEOUT', 'error.E_SOURCE_BAD_RESPONSE', 'error.E_SKILL_NAME_INVALID',
+    'error.E_ALREADY_INSTALLED', 'error.E_PACKAGE_INVALID', 'error.E_DOWNLOAD_FAILED',
+    'error.E_INSTALL_IO', 'error.E_INSTALL_BUSY',
   ];
   for (const language of ['zh', 'en']) {
     const keys = new Set(flatten(language === 'zh' ? zh : en));

@@ -15,16 +15,36 @@ export class ApiError extends Error {
   /**
    * @param {string} code - `E_*` code from the route, or E_UNKNOWN for a local failure.
    * @param {string} message - English developer note.
+   * @param {unknown} [data] - the envelope's `data`, when the route explained itself there
+   *   (an install failure names the colliding path, for instance).
    */
-  constructor(code, message) {
+  constructor(code, message, data) {
     super(message === '' ? code : message);
     this.name = 'ApiError';
     this.code = code;
+    this.data = data ?? null;
   }
 }
 
 /** The route prefix, document-relative on purpose. */
 const BASE = 'api/dsh-skill-center';
+
+/**
+ * Build a query string from the values that are actually present.
+ *
+ * Empty values are dropped rather than sent as empty parameters: a market page is
+ * identified by the absence of a cursor, and `cursor=` would be a different request.
+ * @param {Record<string, string|null|undefined>} values - one entry per parameter.
+ * @returns {string} `?a=b`, or the empty string when no parameter has a value.
+ */
+function queryString(values) {
+  const params = new URLSearchParams();
+  for (const [name, value] of Object.entries(values)) {
+    if (typeof value === 'string' && value !== '') params.set(name, value);
+  }
+  const search = params.toString();
+  return search === '' ? '' : `?${search}`;
+}
 
 /** The client half of the skill center data plane. */
 export class SkillCenterApi {
@@ -59,7 +79,11 @@ export class SkillCenterApi {
       throw new ApiError('E_UNKNOWN', `unexpected response (${response.status})`);
     }
     if (body.code !== 'OK') {
-      throw new ApiError(body.code, typeof body.message === 'string' ? body.message : '');
+      throw new ApiError(
+        body.code,
+        typeof body.message === 'string' ? body.message : '',
+        body.data ?? null,
+      );
     }
     return body.data;
   }
@@ -95,6 +119,73 @@ export class SkillCenterApi {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ provider: payload.provider ?? '', name: payload.name, enabled: payload.enabled === true }),
+    });
+  }
+
+  /**
+   * Read the market's source list and category table. A failed category read is not
+   * an error: the route answers `categoriesOk: false` and the list still works.
+   * @returns {Promise<object>} `{sources, categories, categoriesOk, categoriesStale}`.
+   */
+  async marketBootstrap() {
+    return this.request('market/bootstrap');
+  }
+
+  /**
+   * Read one page of one source. One source per request, because each source has its
+   * own cursor; the panel merges the answers.
+   * @param {{source: string, sort?: string, category?: string|null, keyword?: string,
+   *   cursor?: string|null, limit?: number}} query - the query.
+   * @returns {Promise<object>} `{sourceId, sort, keyword, category, items, next, total}`.
+   */
+  async marketList(query) {
+    return this.request(`market/list${queryString({
+      source: query?.source,
+      sort: query?.sort,
+      category: query?.category,
+      keyword: typeof query?.keyword === 'string' ? query.keyword.trim() : '',
+      cursor: query?.cursor,
+      limit: Number.isInteger(query?.limit) && query.limit > 0 ? String(query.limit) : '',
+    })}`);
+  }
+
+  /**
+   * Read one item's detail: overview text, declared name, target directory, file list.
+   * @param {{source: string, owner: string, slug: string, version?: string|null}} ref - the item.
+   * @returns {Promise<object>} MarketDetail.
+   */
+  async marketDetail(ref) {
+    return this.request(`market/detail${queryString({
+      source: ref?.source,
+      owner: ref?.owner,
+      slug: ref?.slug,
+      version: ref?.version,
+    })}`);
+  }
+
+  /**
+   * Read which market items this machine already installed, keyed by market item id.
+   * @returns {Promise<object>} `{items, readable}`.
+   */
+  async marketInstalled() {
+    return this.request('market/installed');
+  }
+
+  /**
+   * Install one item. The body carries identity only: the file list and the target
+   * path are the host's business, never the browser's.
+   * @param {{source: string, owner: string, slug: string, version?: string|null}} ref - the item.
+   * @returns {Promise<object>} `{name, path, version, source, owner, slug, files, bytes}`.
+   */
+  async marketInstall(ref) {
+    const body = { source: ref?.source ?? '', owner: ref?.owner ?? '', slug: ref?.slug ?? '' };
+    // The route validates `version` with its own grammar, so an unknown version is left
+    // out entirely instead of being sent as null ("install this source's current one").
+    if (typeof ref?.version === 'string' && ref.version !== '') body.version = ref.version;
+    return this.request('market/install', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
     });
   }
 }

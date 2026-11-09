@@ -140,7 +140,7 @@ react, react/jsx-runtime, react-dom, react-dom/client, @deepseek-ai/cordis, zod,
 
 依据：`SHELL/index-BgUyXZcc.js` 里 `function YZ(){return{react:…,"react/jsx-runtime":…,…,"@deepseek-ai/dsh-client-ui-dockkit":…}}`（宿主传给 `__ModuleLoader__.create` 的 seed map）。
 
-因此：**客户端代码只允许 `require` 上面 11 个**（我们实际用 `react`、`react/jsx-runtime`、`@deepseek-ai/dsh-client-ui-primitives`），其它一律走 `ctx.*` 服务或 `fetch` 自己的路由。
+因此：**客户端代码只允许 `require` 上面 11 个**（我们实际用 `react`、`react/jsx-runtime`、`@deepseek-ai/dsh-client-ui-primitives`），其它一律走 `ctx.*` 服务或 `fetch` 自己的路由。市场半部不引入任何新的 `require`：一切都是本插件自己的路由，网络能力全在 Host 侧（`lib/market/upstream.js` 用 `node:https`），详见 `docs/contracts/market.md` §7。
 
 #### 1.2.5 接线相关的硬事实（不照做就会白屏）
 
@@ -316,7 +316,8 @@ ledger.readAll() ─────────────────┘   （R5�
 | `lib/registry.js` | `snapshotRegistry(ctx.skills, cwd)` + `rankOfSummary(summary)`（= 先按 `source`/`provider` 映射成 level，再调 `classify.rankOf(level)`；映射表见 1.4.3） |
 | `lib/classify.js` | **纯函数核心**：`rankOf(level)`、`classifySkill(input)`、`mergeCatalog({scanned, registry, ledger})`、`buildGroups()` |
 | `lib/provider-toggles.js` | 自有存储 `$DSH_HOME/dsh-skill-center/provider-toggles.json`：`deserialize`/`serialize`/`read`/`setEnabled`（原子写、损坏降级） |
-| `lib/routes.js` | `makeRoutes(ctx, deps) → WebRoute[]`：`list` / `toggle` / `provider-toggle` / `health` 四条 exact 路由 + 围栏 + 身份校验 |
+| `lib/routes.js` | `makeRoutes(ctx, deps) → WebRoute[]`：`list` / `toggle` / `provider-toggle` / `health` 四条本地面 exact 路由 + 市场面 5 条 + 围栏 + 身份校验 |
+| `lib/market/`（市场面） | 源适配器、上游客户端、ZIP 读取、安装链路与自有台账，共 10 个文件；本表不展开，逐个职责见 `docs/contracts/market.md` 附录 G |
 
 ### 2.3 Client 半部源码（`src/client/`，ESM + JSX，esbuild 打包）
 
@@ -333,6 +334,7 @@ ledger.readAll() ─────────────────┘   （R5�
 | `src/client/header-scroll.js` | `attachHeader(bar)`（克隆量测 + 观测）+ **纯函数** `interpolateParts(parts, offset)` |
 | `src/client/styles.js` | 单一 CSS 字符串（`docs/contracts/visual.md` 的全文）+ `injectStyles()`（按 `data-plugin-css` 去重） |
 | `src/client/toast.jsx` | `shell.overlay` 占位者：渲染刷新失败 toast（primitives `Toast`），离开页面后仍可见 |
+| `src/client/` 下的 `market-*` 文件 | 市场页的纯函数模块与 6 个组件（列表 / 筛选 / 卡片 / 详情 / 骨架 / 确认）；职责见 `docs/contracts/market.md` 附录 G |
 
 ### 2.4 构建与门禁脚本（`scripts/`）
 
@@ -382,6 +384,8 @@ react-dom                              ^18.2.0
 ```
 
 依据：`PROF/@michengai/dsh-skills-manager/package.json` 与 `PROF/@linxin666/dsh-client-ui-skill-explorer/package.json` 的 peer 集合（我们只取真正用到的子集），版本区间取本机实测可用的 `0.2.2-rc.1` 系列。
+
+市场面同样**不新增任何 dependency / devDependency**：`node:https`、`node:zlib`、`node:crypto`、`node:fs/promises` 都是 node 内置，zip 读取器自己写（`lib/market/zip.js`）。
 
 ---
 

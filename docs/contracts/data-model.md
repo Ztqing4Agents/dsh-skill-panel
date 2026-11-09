@@ -156,6 +156,8 @@ classDiagram
 ## 3.2 纯函数契约（QA 可直接单测）
 
 > 全部为**无 I/O、无 DOM、无时间依赖**的函数。参数/返回值即断言面。
+>
+> 市场面**不参与这里的 9 级阶梯**：装出来的目录靠 R5/R6（台账与 `_meta.json` 的 `source`）命中 `installed`，**不加第 10 级**。市场侧的类型与纯函数见 §3.8。
 
 #### 3.2.1 `lib/names.js`
 
@@ -166,6 +168,11 @@ isSkillName(name: string): boolean
 
 isWithin(root: string, target: string): boolean     // path.relative 结果不以 '..' 开头且非绝对
 identityKey(provider: string, name: string): string // `${provider || ''}#${name}`
+
+isSafeRelativePath(value: string): boolean
+// 真: 'SKILL.md' | 'references/a.md' | '.gitignore'
+// 假: '' | '/abs' | '../x' | 'a/../b' | 'a\\b' | 'C:x' | 'a//b' | 段长 >100 | 整体 >240
+// 用途：zip 条目与安装清单的唯一路径闸（市场侧，见 §3.8）
 ```
 
 #### 3.2.2 `lib/classify.js`
@@ -291,6 +298,98 @@ rowViewState(row: Row, rows: Map<string,RowRuntime>): 'idle'|'pending'|'failed'
 groupEmptyKey(key: 'builtin'|'local'|'installed'): string             // 'group.builtinEmpty' 等
 interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几何插值，无 DOM
 ```
+
+---
+
+## 3.8 市场类型与归一化纯函数
+
+市场面**不进**上面的 9 级阶梯：`classifySkill` 一行不改，装出来的目录靠 `_meta.json` 的 `source`（R6）与自有台账（R5）命中 `installed`。
+
+#### 3.8.1 `MarketItem` / `MarketDetail` / `SourcePage`
+
+```jsonc
+// MarketItem —— 市场页唯一的渲染输入，也是去重键的来源
+{
+  "sourceId": "skillhub",            // 本地算：适配器 id
+  "id": "skillhub:ake:dev-god",      // 本地算：`${sourceId}:${owner}:${slug}`
+  "owner": "ake",                    // 上游；缺失 null
+  "slug": "dev-god",                 // 上游；缺失 null
+  "displayName": "编程大神.Skill",   // 上游；缺则回落 slug，再缺为空串
+  "summary": "≤ 400 字符单行",        // 上游；超长截断，缺失为空串
+  "author": "阿客实验室",             // 上游；三级回落，全缺 null
+  "version": "1.2.4",                // 上游；**缺失如实 null**（ClawHub 搜索结果必为 null）
+  "downloads": 11340092,             // 上游；缺失 null（**绝不补 0**）
+  "updatedAt": 1794205858796,        // 上游；epoch 毫秒，只用于排序，**不上屏**
+  "category": "dev-programming",     // 上游；仅 SkillHub 有，ClawHub 恒 null
+  "packageKind": "files"             // 本地算：'files' | 'zip'
+}
+```
+
+```jsonc
+// MarketDetail —— market/detail 的 data
+{
+  "item": MarketItem,
+  "overview": "SKILL.md 正文（≤ 8000 字符）",   // stripFrontmatter 后；正文为空则回落 summary
+  "declaredName": "dev-god",                  // parseFrontmatter(SKILL.md).name；不合规也原样给出
+  "nameValid": true,                          // isSkillName(declaredName)
+  "installTo": "/Users/…/.dsh/skills/dev-god", // nameValid ? join(skillsRoot, declaredName) : skillsRoot
+  "files": [{ "path": "SKILL.md", "size": 7953 }], // 清单顺序；sha256 不下发
+  "filesComplete": true                        // zip 读不全时为 false
+}
+```
+
+`SourcePage`（`list` / `search` 的返回）= `{items: MarketItem[], next: string|null, total: number|null}`：`next` 由 `encodeCursor` 产出、客户端原样回传（`null` = 没有下一页），`total` 只有 SkillHub 给。
+
+「缺 = null」不变式（逐条可断言）：
+
+1. 每个字段都存在，不出现 `undefined`；上游没给的一律 `null`，`downloads` 不补 `0`、`version` 不补 `'latest'`、`category` 不补 `''`。
+2. `id` 全仓库唯一；同一 `id` 出现两次时保留第一次出现的那条（浏览器侧 `mergeBatches` 负责）。
+3. `installTo` 在 `nameValid === false` 时等于 `skillsRoot` 本身（不吃掉最后一级目录名），界面据此显示「不能安装」。
+4. `overview` 不含 frontmatter 分隔行与 `name:`/`description:` 头字段。
+5. 卡片与详情**不显示任何时间**：`updatedAt` 只影响顺序。
+
+#### 3.8.2 `lib/market/normalize.js` 与 `mergeBatches` 的纯函数契约
+
+```js
+// lib/market/normalize.js —— 无 I/O、无时钟
+textOrNull(value): string|null            // trim 后为空 → null
+numberOrNull(value): number|null          // 非有限数 → null；小数截断
+timestampOrNull(value): number|null        // epoch 毫秒或 ISO 串 → 毫秒；不可解析 → null
+clampLine(value, max): string              // 折叠空白、超长按字符截断并以 '...' 结尾
+clampBlock(value, max): string             // 保留换行，超长截断
+marketId(sourceId, owner, slug): string    // `${sourceId}:${owner ?? ''}:${slug ?? ''}`
+marketItem(fields): MarketItem              // 字段补齐（上表）
+fromSkillhubListItem(raw, packageKind?): MarketItem|null
+fromSkillhubDetail(raw, packageKind?): MarketItem|null
+fromClawhubListItem(raw, packageKind?): MarketItem|null      // version 取 latestVersion.version
+fromClawhubSearchItem(raw, packageKind?): MarketItem|null    // version 恒 null
+fromClawhubDetail(raw, packageKind?): MarketItem|null
+overviewOf(sourceText, fallback?): string   // stripFrontmatter → 正文；空则回落 fallback
+declaredNameOf(sourceText): string / nameIsValid(name): boolean   // 声明名，及其是否合文法
+sortByUpdatedDesc(items): MarketItem[]      // 新的降序数组；null 时间排最后，相等时保持原序
+slugFromUrl(value): string|null             // URL 最后一段（ClawHub 搜索结果缺 slug 时的回落）
+```
+
+契约要点：
+
+1. **同一个上游响应重复喂进去，输出必须逐字段相同**（无随机、无时钟、无缓存）。
+2. `fromSkillhubListItem` 的 `owner` 取自 `namespace.handle`；缺失时 `owner = null` 且该条不可安装（不猜、不补）。`summary` 超 400 字符时截断并以 ASCII `...` 结尾。
+3. `fromClawhubSearchItem` 的 `version` **恒 `null`**：该端点不给版本号，猜一个比缺一个更糟。
+
+```js
+// src/client/market-model.js —— 合并只在这里发生，纯函数、node 可直测
+marketKeyOf(item): string                    // item.id，缺则 `${sourceId}:${owner}:${slug}`
+mergeBatches(pages: {sourceId: string, items: MarketItem[]}[],
+             options?: {existing?: MarketItem[], sort?: string}): MarketItem[]
+```
+
+`mergeBatches` 的语义（每条都是断言）：
+
+- `existing` 原样保留在前，新一页的条目追加在后；**已有项的相对顺序绝不重排**（用户正在看）。
+- `recommended` / `downloads`：按 `pages` 给的顺序 `1:1` 交错取出；某一源先耗尽时**让位**给另一源连续填充（不补空位）。
+- `updated`：忽略交错，整个列表（含 `existing`）按 `updatedAt` 降序；`null` 时间排最后，相等时间保持稳定序。
+- 去重按 `marketKeyOf`：同一个 key 第二次出现即丢弃，**保留第一次出现的条目**。
+- 输入为空数组时返回 `existing` 的副本；函数不修改任何入参。
 
 ---
 

@@ -1,7 +1,8 @@
 /**
  * `src/client/state.js` — the page store that outlives the page.
  *
- * Contract: docs/contracts/client.md §3.5 (state machine, no optimistic UI, store scope).
+ * Contract: docs/contracts/client.md §3.5 (state machine, no optimistic UI, store scope)
+ * and §3.9.3 (the 27 market actions); case id K45.
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -137,4 +138,209 @@ test('每次 createStore 都是独立实例（页面重建不共享行状态）'
   first.actions.pending('filesystem#a');
   assert.equal(first.getSnapshot().rows.size, 1, '第一个实例记下了行状态');
   assert.equal(second.getSnapshot().rows.size, 0, '第二个实例没有那条行状态');
+});
+
+/* ------------------------------------------------------------------ market */
+
+/** A market item with the fields the store reads. */
+function marketItem(id, sourceId = 'skillhub') {
+  return {
+    sourceId,
+    id,
+    owner: 'ake',
+    slug: id.split(':').at(-1),
+    displayName: id,
+    summary: '',
+    author: null,
+    version: null,
+    downloads: null,
+    updatedAt: null,
+    category: null,
+    packageKind: 'files',
+  };
+}
+
+test('K45 初始 market 子状态：默认「全部来源 / 推荐 / 未筛分类」，什么都没加载', () => {
+  const market = createStore().getSnapshot().market;
+  assert.deepEqual(market.filters, { source: 'all', category: null, sort: 'recommended' }, '默认筛选与设计一致');
+  assert.equal(market.boot, 'idle', 'bootstrap 还没发');
+  assert.equal(market.listStatus, 'idle', '列表还没请求');
+  assert.deepEqual(market.items, [], '没有卡片');
+  assert.equal(market.detail, null, '没有打开的详情');
+  assert.equal(market.pages, 0, '一页都没加载');
+  assert.deepEqual(market.cursors, {}, '没有游标');
+  assert.equal(market.installedReady, false, '台账还没读');
+  assert.equal(market.scrollTop, 0, '滚动位置 0');
+  assert.equal(market.installedDirty, false, '没有「刚装完」标记');
+});
+
+test('K45 marketSetFilter 过滤空操作：同一个值再设一次不产生新快照（不会白重拉一页）', () => {
+  const store = createStore();
+  const before = store.getSnapshot().market;
+  store.actions.marketSetFilter({ source: 'all' });
+  assert.equal(store.getSnapshot().market, before, '值没变 ⇒ 状态对象不变（引用相等）');
+  store.actions.marketSetFilter(null);
+  assert.equal(store.getSnapshot().market, before, '非对象入参被忽略');
+  store.actions.marketSetFilter({ source: 'clawhub', sort: 'updated' });
+  const changed = store.getSnapshot().market;
+  assert.equal(changed.filters.source, 'clawhub', '改变来源生效');
+  assert.equal(changed.filters.sort, 'updated', '同一补丁里的排序也生效');
+  assert.deepEqual(changed.items, [], '换筛选后旧结果被清空（属于旧查询）');
+  assert.equal(changed.pages, 0, '分页从头再来');
+  assert.equal(changed.detail, null, '换筛选会关掉详情');
+});
+
+test('K45 marketCommitKeyword：关键词落定、输入框同步、分页重置但列表先留着（不闪骨架）', () => {
+  const store = createStore();
+  store.actions.marketPageAppended({
+    pages: [{ sourceId: 'skillhub', page: { items: [marketItem('skillhub:ake:a')], next: 'c2' } }],
+    merged: [marketItem('skillhub:ake:a')],
+  });
+  store.actions.marketSetInput('ui');
+  assert.equal(store.getSnapshot().market.keyword, '', '输入还不算关键词（等防抖/回车）');
+  store.actions.marketCommitKeyword('ui');
+  const market = store.getSnapshot().market;
+  assert.equal(market.keyword, 'ui', '关键词落定');
+  assert.equal(market.input, 'ui', '输入框与关键词同步');
+  assert.equal(market.pages, 0, '分页重置');
+  assert.deepEqual(market.cursors, {}, '游标清空');
+  assert.equal(market.listStatus, 'ready', '列表状态保持 ready（旧内容还在屏幕上，不闪骨架）');
+  assert.equal(market.items.length, 1, '旧结果暂留');
+});
+
+test('K45 marketReload：清空列表与详情、回到待拉状态（页头刷新按钮走这条路）', () => {
+  const store = createStore();
+  store.actions.marketPageAppended({
+    pages: [{ sourceId: 'skillhub', page: { items: [marketItem('skillhub:ake:a')], next: 'c2' } }],
+    merged: [marketItem('skillhub:ake:a')],
+  });
+  store.actions.marketDetailOpen(marketItem('skillhub:ake:a'));
+  store.actions.marketReload();
+  const market = store.getSnapshot().market;
+  assert.deepEqual(market.items, [], '卡片清空');
+  assert.equal(market.detail, null, '详情关闭');
+  assert.equal(market.pages, 0, '分页重置');
+  assert.equal(market.listStatus, 'idle', '回到待拉状态（由面板的 effect 重新拉第一页）');
+});
+
+test('K45 marketListFailed 与 marketPageFailed 语义不同：前者清列表，后者保留已加载卡片', () => {
+  const store = createStore();
+  store.actions.marketListLoading();
+  store.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 't' });
+  let market = store.getSnapshot().market;
+  assert.equal(market.listStatus, 'error', '第一页全失败 ⇒ listStatus=error');
+  assert.deepEqual(market.items, [], '第一页失败没有卡片');
+  assert.equal(market.page.code, 'E_SOURCE_TIMEOUT', '错误码留在 page 上');
+
+  store.actions.marketPageAppended({
+    pages: [{ sourceId: 'skillhub', page: { items: [marketItem('skillhub:ake:a')], next: 'c2' } }],
+    merged: [marketItem('skillhub:ake:a')],
+  });
+  store.actions.marketPageStart();
+  store.actions.marketPageFailed({ code: 'E_SOURCE_UNAVAILABLE', message: 'down' });
+  market = store.getSnapshot().market;
+  assert.equal(market.items.length, 1, '追加失败不影响已加载卡片');
+  assert.equal(market.listStatus, 'ready', '整页仍然是 ready');
+  assert.equal(market.page.status, 'error', '失败挂在尾部');
+});
+
+test('K45 marketInstalledLoaded：台账缺失时给空表且标记 ready（界面不会一直转圈）', () => {
+  const store = createStore();
+  store.actions.marketInstalledLoaded(null);
+  assert.deepEqual(store.getSnapshot().market.installed, {}, '非对象入参归一成空表');
+  assert.equal(store.getSnapshot().market.installedReady, true, '读过一次就不再重复读');
+});
+
+test('K45 详情四步：打开→就绪→失败→关闭，关闭后列表与游标不受影响', () => {
+  const store = createStore();
+  const a = marketItem('skillhub:ake:a');
+  store.actions.marketPageAppended({
+    pages: [{ sourceId: 'skillhub', page: { items: [a], next: 'c2' } }],
+    merged: [a],
+  });
+  const before = store.getSnapshot().market;
+  store.actions.marketDetailOpen(a);
+  assert.equal(store.getSnapshot().market.detail.id, 'skillhub:ake:a', '详情以市场键标识');
+  assert.equal(store.getSnapshot().market.detail.status, 'loading', '打开时是 loading（先给壳再填内容）');
+  store.actions.marketDetailReady({ item: a, overview: 'x', files: [] });
+  assert.equal(store.getSnapshot().market.detail.status, 'ready', '就绪');
+  store.actions.marketDetailFailed({ code: 'E_SOURCE_TIMEOUT', message: 't' });
+  assert.equal(store.getSnapshot().market.detail.status, 'error', '失败后仍停在详情（返回可用）');
+  store.actions.marketDetailClose();
+  const after = store.getSnapshot().market;
+  assert.equal(after.detail, null, '关闭后没有详情');
+  assert.equal(after.items.length, 1, '返回后列表还在（不重新拉）');
+  assert.equal(after.cursors.skillhub, 'c2', '返回后游标还在（已加载页数不丢）');
+  assert.equal(after.pages, before.pages, '返回后页数不变');
+
+  store.actions.marketDetailReady({ item: a });
+  assert.equal(store.getSnapshot().market.detail, null, '没有打开的详情时，迟到的响应不会凭空造一个');
+});
+
+test('K45 安装四步：确认→开始（幂等）→成功→失败；成功会标脏已安装页签并写 toast', () => {
+  const store = createStore();
+  const id = 'skillhub:ake:a';
+  store.actions.marketInstallConfirm(id);
+  assert.equal(store.getSnapshot().market.installs[id].state, 'confirm', '先弹确认，不发请求');
+  store.actions.marketInstallCancel(id);
+  assert.equal(id in store.getSnapshot().market.installs, false, '取消后该卡的安装状态被删掉');
+  store.actions.marketInstallCancel(id);
+  assert.equal(id in store.getSnapshot().market.installs, false, '重复取消也不抛');
+
+  store.actions.marketInstallConfirm(id);
+  store.actions.marketInstallStart(id);
+  const firstSeq = store.getSnapshot().market.installs[id].seq;
+  store.actions.marketInstallStart(id);
+  assert.equal(store.getSnapshot().market.installs[id].seq, firstSeq, '连点两次只发一次（幂等）');
+  assert.equal(store.getSnapshot().market.installs[id].state, 'installing', '状态是 installing');
+
+  store.actions.marketInstallOk(id, { name: 'a', path: '/skills/a', version: '1.0.0' });
+  let market = store.getSnapshot().market;
+  assert.equal(market.installs[id].state, 'installed', '成功后卡片变已安装');
+  assert.equal(market.installed[id].exists, true, '台账视图同步标记存在');
+  assert.equal(market.installedDirty, true, '已安装页签标脏（切回去要重读）');
+  // 顶层 notice（toast 读的那个字段）见 K46：本轮实现把它写进了 market 子状态，
+  // 与 client.md §3.9.3「推 notice{kind:'install-ok'}」不符，已作为缺陷单交回。
+  store.actions.marketClearInstalledDirty();
+  assert.equal(store.getSnapshot().market.installedDirty, false, '重读之后脏标记清掉');
+
+  store.actions.marketInstallFail(id, '名字被占用');
+  market = store.getSnapshot().market;
+  assert.equal(market.installs[id].state, 'failed', '失败后卡片可重试');
+  assert.equal(market.installs[id].reason, '名字被占用', '失败原因留在卡片上');
+});
+
+test('K45 marketSetScroll：只记正的有限数，详情返回时用它回到原位', () => {
+  const store = createStore();
+  store.actions.marketSetScroll(420);
+  assert.equal(store.getSnapshot().market.scrollTop, 420, '记录滚动偏移');
+  store.actions.marketSetScroll(-5);
+  assert.equal(store.getSnapshot().market.scrollTop, 0, '负数归一成 0');
+  store.actions.marketSetScroll(Number.NaN);
+  assert.equal(store.getSnapshot().market.scrollTop, 0, '非数归一成 0');
+});
+
+test('K45 marketBootFallback：bootstrap 失败不是错误态，用内置来源继续', () => {
+  const store = createStore();
+  store.actions.marketBootLoading();
+  store.actions.marketBootFallback([{ id: 'skillhub' }, { id: 'clawhub' }]);
+  const market = store.getSnapshot().market;
+  assert.equal(market.boot, 'ready', '仍然算 boot 完成（不卡在 loading）');
+  assert.equal(market.sources.length, 2, '用兜底来源继续');
+  assert.deepEqual(market.categories, [], '没有分类表');
+  assert.equal(market.categoriesOk, false, '分类行显示不可用');
+});
+
+test('K45 两个来源一好一坏：好的一页照常渲染，坏的记在 sourceErrors 里', () => {
+  const store = createStore();
+  store.actions.marketListLoading();
+  store.actions.marketPageAppended({
+    pages: [{ sourceId: 'skillhub', page: { items: [marketItem('skillhub:ake:a')], next: null } }],
+    merged: [marketItem('skillhub:ake:a')],
+    errors: [{ sourceId: 'clawhub', code: 'E_SOURCE_TIMEOUT' }],
+  });
+  const market = store.getSnapshot().market;
+  assert.equal(market.listStatus, 'ready', '一源成功就是 ready（不是 error）');
+  assert.deepEqual(market.sourceErrors, [{ sourceId: 'clawhub', code: 'E_SOURCE_TIMEOUT' }], '失败的源记在提示条上');
+  assert.equal(market.items.length, 1, '成功的源照常上屏');
 });

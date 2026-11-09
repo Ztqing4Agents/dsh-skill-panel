@@ -1,8 +1,9 @@
 /**
  * `src/client/api.js` — the browser's only door to the host half.
  *
- * Contract: docs/contracts/client.md §8.2 (document-relative route prefix) and docs/contracts/routes.md §8.1
- * (the envelope is normalised here, so nothing above sees an HTTP status).
+ * Contract: docs/contracts/client.md §3.9.4 (the five market methods) and §8.2
+ * (document-relative route prefix); docs/contracts/routes.md §8.1 (the envelope is
+ * normalised here, so nothing above sees an HTTP status); case ids K44.
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -97,4 +98,76 @@ test('ApiError 没有 message 时用 code 作为 message', () => {
   const error = new ApiError('E_FORBIDDEN', '');
   assert.equal(error.message, 'E_FORBIDDEN', 'message 为空时用 code 顶替');
   assert.equal(error.name, 'ApiError', '错误名是 ApiError');
+});
+
+test('K44 五个市场方法的 URL 都是文档相对的 market/* 路由', async () => {
+  const cases = [
+    ['marketBootstrap', (api) => api.marketBootstrap(), 'market/bootstrap'],
+    ['marketList', (api) => api.marketList({ source: 'skillhub' }), 'market/list?source=skillhub'],
+    ['marketDetail', (api) => api.marketDetail({ source: 'skillhub', owner: 'ake', slug: 'dev-god' }), 'market/detail?source=skillhub&owner=ake&slug=dev-god'],
+    ['marketInstalled', (api) => api.marketInstalled(), 'market/installed'],
+    ['marketInstall', (api) => api.marketInstall({ source: 'skillhub', owner: 'ake', slug: 'dev-god' }), 'market/install'],
+  ];
+  for (const [name, run, expected] of cases) {
+    const { fetchImpl, calls } = fetchStub({ body: { code: 'OK', data: {}, message: '' } });
+    const api = new SkillCenterApi(fetchImpl);
+    await run(api);
+    assert.equal(calls[0].url, `api/dsh-skill-center/${expected}`, `${name} 的 URL 是文档相对的 ${expected}`);
+    assert.equal(calls[0].url.startsWith('/'), false, `${name} 不以 / 开头（GUI 可能挂在路径前缀下）`);
+  }
+});
+
+test('K44 marketList 只发送有值的参数：空的值一律不出现在 URL 里', async () => {
+  const { fetchImpl, calls } = fetchStub({ body: { code: 'OK', data: {}, message: '' } });
+  const api = new SkillCenterApi(fetchImpl);
+  await api.marketList({ source: 'clawhub', sort: 'updated', category: null, keyword: '  ', cursor: null, limit: 12 });
+  assert.equal(
+    calls[0].url,
+    'api/dsh-skill-center/market/list?source=clawhub&sort=updated&limit=12',
+    '空分类 / 空白关键词 / 空游标都不出现在查询串里',
+  );
+  await api.marketList({ source: 'skillhub', limit: 0 });
+  assert.equal(calls[1].url, 'api/dsh-skill-center/market/list?source=skillhub', 'limit=0 当作没给（由 Host 夹取）');
+});
+
+test('K44 marketDetail 没有版本时不传 version 参数', async () => {
+  const { fetchImpl, calls } = fetchStub({ body: { code: 'OK', data: {}, message: '' } });
+  const api = new SkillCenterApi(fetchImpl);
+  await api.marketDetail({ source: 'skillhub', owner: 'ake', slug: 'dev-god', version: null });
+  assert.equal(calls[0].url.includes('version='), false, 'version 是 null 时不发空参数（「装当前版本」）');
+  await api.marketDetail({ source: 'skillhub', owner: 'ake', slug: 'dev-god', version: '1.2.3' });
+  assert.equal(calls[1].url.endsWith('&version=1.2.3'), true, '有版本时带上');
+});
+
+test('K44 marketInstall 的正文只有身份四件：没有 path、没有 files、没有 name', async () => {
+  const { fetchImpl, calls } = fetchStub({ body: { code: 'OK', data: { name: 'dev-god' }, message: '' } });
+  const api = new SkillCenterApi(fetchImpl);
+  await api.marketInstall({ source: 'skillhub', owner: 'ake', slug: 'dev-god', version: '1.0.0', path: '/tmp/x', files: ['a'], name: 'hijack' });
+  assert.equal(calls[0].init.method, 'POST', 'install 是 POST');
+  assert.equal(calls[0].init.headers['content-type'], 'application/json', '声明 JSON 正文');
+  assert.deepEqual(
+    JSON.parse(calls[0].init.body),
+    { source: 'skillhub', owner: 'ake', slug: 'dev-god', version: '1.0.0' },
+    '正文只有四个身份字段（客户端不能指定落盘内容）',
+  );
+  await api.marketInstall({ source: 'clawhub', owner: 'o', slug: 's', version: null });
+  assert.deepEqual(JSON.parse(calls[1].init.body), { source: 'clawhub', owner: 'o', slug: 's' }, '未知版本时整条不传');
+});
+
+test('K44 市场失败把信封里的 data 交给调用方（已装路径与声明名要能显示）', async () => {
+  const body = {
+    code: 'E_ALREADY_INSTALLED',
+    data: { path: '/skills/dev-god', existing: { name: 'dev-god', version: '0.9.0' } },
+    message: 'exists',
+  };
+  const { fetchImpl } = fetchStub({ status: 409, body });
+  await assert.rejects(
+    new SkillCenterApi(fetchImpl).marketInstall({ source: 'skillhub', owner: 'ake', slug: 'dev-god' }),
+    (error) => {
+      assert.equal(error.code, 'E_ALREADY_INSTALLED', '错误码透出');
+      assert.equal(error.data.path, '/skills/dev-god', 'data.path 透出（界面要显示已装在哪）');
+      assert.deepEqual(error.data.existing, { name: 'dev-god', version: '0.9.0' }, 'data.existing 透出');
+      return true;
+    },
+  );
 });
