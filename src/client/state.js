@@ -58,6 +58,8 @@ function initialMarket() {
     installed: {},
     installedReady: false,
     installs: {},
+    // Kept for the bookmark entry point (M8): `bootstrap` already returns the list and no
+    // component reads it yet - it is not dead code, do not delete it.
     favorites: {},
     favoritesOk: true,
     icons: {},

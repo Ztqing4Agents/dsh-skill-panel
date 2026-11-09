@@ -85,7 +85,7 @@ sort 映射（`sort` 四个值，路由层已白名单化；**默认仍是 `reco
 
 **`paged` 的分裂不特殊处理**：clawhub 的 list 与 search **都能翻页**（镜像同一端点），统一由「本次 `next` 是否为 `null`」表达；客户端只问一句「还有 next 吗」，不读 `caps.paged`。
 
-**三个 scope 都有分类表**（同一张：13 个 key，不带 `source`），计数按 scope 各自算；`caps.categories` 恒 `true`，chips 行恒渲染（U8 之前 ClawHub 那一档没有类别，用户问的就是这句）。
+**三个 scope 都有分类表**（同一张：**12 类**——上游 `/api/v1/categories` 给 13 个 key，商业档 `pay-skill` 被 `HIDDEN_CATEGORIES` 滤掉；表本身不带 `source`），计数按 scope 各自算；`caps.categories` 恒 `true`，chips 行恒渲染（U8 之前 ClawHub 那一档没有类别，用户问的就是这句）。
 
 **声明名为什么是硬约束**：安装目录名取包内 `SKILL.md` 的 `name`，而宿主的技能加载器用 `SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/`（`EX/dsh-skill/lib/index.js`，与 `lib/names.js` 的 `isSkillName` 同一文法）判定一个目录能不能成为技能。声明 `Design` 的包即使被强行写进 `skills/`，宿主也不会加载它——所以 `422 E_SKILL_NAME_INVALID` 是**对齐宿主**，不是保守：改名或用 slug 顶替只会产出一个"看得见、永远不生效"的目录。
 
@@ -231,7 +231,6 @@ ClawHub 的**目录、详情、安装包**三条链路都由 SkillHub 的镜像�
 | `.skc_marketFiles` | `li`：`border-bottom:.5px solid var(--dsw-alias-border-l2); justify-content:space-between; align-items:center; gap:16px; min-height:32px; padding:6px 2px; display:flex; font-size:13px; line-height:20px` | **新刻度**（行配方取自 `.facts div`，行高与内边距压密） |
 | `.skc_marketFileName` | `overflow-wrap:anywhere; min-width:0; font-family:var(--ds-font-family-code); font-size:12px; line-height:18px` | `.facts code` 的字体族 |
 | `.skc_marketDialog` / `ConfirmBody` / `ConfirmHead` | `width:min(480px, 100vw - 32px)` / `flex-direction:column; gap:12px; display:flex` / `align-items:center; gap:14px; display:flex` | `.dialog` / `.dialogBody` / `.confirmHead` |
-| `.skc_marketSkeletonBar` | `margin:4px 0; display:block`；底色与呼吸动画复用既有 `.skc_skeletonFill`（**不新增色值与动画**） | `.skeletonBar` |
 | `.skc_marketSkeletonChip` | `border-radius:var(--dsw-radius-lg); width:64px; height:26px` | 分类 chips 占位（对齐 `Button size="sm"` 的静态尺寸） |
 | `.skc_marketSkeletonAction` | `border-radius:var(--dsw-radius-md); width:64px; height:24px` | 安装按钮占位（同上） |
 | `.skc_marketToastHint` | `color:var(--dsw-alias-label-secondary); overflow-wrap:anywhere; margin-top:2px; font-size:12px; line-height:18px; display:block` | 安装 toast 的副行（安装路径），12/18 secondary |

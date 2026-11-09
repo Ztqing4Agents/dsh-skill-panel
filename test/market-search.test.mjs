@@ -22,6 +22,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { createStore } from '../src/client/state.js';
 import { ROOT, loadClientModules, zhTranslator } from './helpers/ssr.mjs';
+import { mountHooks } from './helpers/hooks.mjs';
 
 const require = createRequire(import.meta.url);
 const ReactCjs = require('react');
@@ -58,55 +59,6 @@ async function render(prepare, handlers = {}) {
     onFilter: handlers.onFilter ?? ((patch) => { calls.push(['filter', patch]); }),
   }));
   return { html, store, calls };
-}
-
-/**
- * Mount one component with a minimal hook dispatcher.
- *
- * `renderToStaticMarkup` cannot fire an event, and this repo has no DOM, so the component
- * under test is called directly with the three hooks it uses. That is enough to reach the
- * props it hands the input and the clear button - which is exactly where the behaviour
- * under contract lives (an event handler, not a rendering rule).
- * @param {Function} component - the component.
- * @param {object} initialProps - its props.
- * @returns {{render: (nextProps?: object) => object}} a handle.
- */
-function mountHooks(component, initialProps) {
-  const slots = [];
-  const refs = [];
-  const internals = ReactCjs.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
-  const holder = internals.ReactCurrentDispatcher;
-  const previous = holder.current;
-  let props = initialProps;
-  const render = (nextProps) => {
-    if (nextProps !== undefined) props = nextProps;
-    let index = 0;
-    let refIndex = 0;
-    holder.current = {
-      useEffect: () => {},
-      useRef(initial) {
-        const at = refIndex;
-        refIndex += 1;
-        if (!(at in refs)) refs[at] = { current: initial };
-        return refs[at];
-      },
-      useState(initial) {
-        const at = index;
-        index += 1;
-        if (!(at in slots)) slots[at] = typeof initial === 'function' ? initial() : initial;
-        const set = (next) => {
-          slots[at] = typeof next === 'function' ? next(slots[at]) : next;
-        };
-        return [slots[at], set];
-      },
-    };
-    try {
-      return component(props);
-    } finally {
-      holder.current = previous;
-    }
-  };
-  return { render };
 }
 
 /**

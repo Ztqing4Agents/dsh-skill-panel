@@ -15,12 +15,12 @@ import assert from 'node:assert/strict';
 import test, { before } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import ReactCjs from 'react';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { injectStyles } from '../src/client/styles.js';
 import { ROOT, loadClientModules, zhTranslator } from './helpers/ssr.mjs';
+import { mountHooks } from './helpers/hooks.mjs';
 
 /** Bundled modules under test. */
 let modules;
@@ -37,46 +37,6 @@ before(async () => {
   css = capturedCss();
   t = await zhTranslator();
 });
-
-/**
- * Render a component through React's hook dispatcher, so `useState` works without a DOM.
- *
- * Same harness the market-view tests use: two state slots are enough for `useIconState`
- * (failed URL, loaded URL), and `render()` re-runs the component against the slots so a
- * handler can be fired between renders.
- * @param {Function} component - the component to drive.
- * @param {object} initialProps - props of the first render.
- * @returns {{render: (nextProps?: object) => object}} the harness.
- */
-function mountHooks(component, initialProps) {
-  const slots = [];
-  const internals = ReactCjs.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
-  const holder = internals.ReactCurrentDispatcher;
-  const previous = holder.current;
-  let props = initialProps;
-  const render = (nextProps) => {
-    if (nextProps !== undefined) props = nextProps;
-    let index = 0;
-    holder.current = {
-      useEffect: () => {},
-      useState(initial) {
-        const at = index;
-        index += 1;
-        if (!(at in slots)) slots[at] = typeof initial === 'function' ? initial() : initial;
-        const set = (next) => {
-          slots[at] = typeof next === 'function' ? next(slots[at]) : next;
-        };
-        return [slots[at], set];
-      },
-    };
-    try {
-      return component(props);
-    } finally {
-      holder.current = previous;
-    }
-  };
-  return { render };
-}
 
 /**
  * The non-null children of one rendered tile, flattened.

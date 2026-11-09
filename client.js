@@ -430,7 +430,6 @@ var __defProp=Object.defineProperty;var __getOwnPropDesc=Object.getOwnPropertyDe
 .skc_marketDialog{ width: min(480px, 100vw - 32px) }
 .skc_marketConfirmBody{ flex-direction: column; gap: 12px; display: flex }
 .skc_marketConfirmHead{ align-items: center; gap: 14px; display: flex }
-.skc_marketSkeletonBar{ margin: 4px 0; display: block }
 .skc_marketSkeletonChip{ border-radius: var(--dsw-radius-lg); width: 64px; height: 26px }
 .skc_marketSkeletonAction{ border-radius: var(--dsw-radius-md); width: 64px; height: 24px }
 /* three figure placeholders in the real row's rhythm; the bed is the shared skeleton fill */

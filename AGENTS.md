@@ -81,7 +81,7 @@ npm test             # node --test test/（测试由 QA 维护）
     （`dsh-app-boot` 的 `dictionariesOf` 读 `parsed.meta.title`），`src/client/index.jsx` 在
     `register` 前会把它滤掉，不进运行时字典；**不要**把 `meta` 改成 `"meta.title"` 扁平键，
     那会让插件列表里的名字掉回包名。`npm run check:i18n` 与 `test/i18n.test.mjs` 双向守这条。
-13. **浏览器半部不直连上游**：SkillHub 没有 `access-control-allow-origin`，两源一律走 Host 代理（`lib/market/upstream.js` 是唯一出口）；`src/client/**` 里出现 `fetch('https://api.skillhub.cn…')` 即返工。
+13. **浏览器半部不直连上游**：单上游 `api.skillhub.cn`（三个 scope）一律走 Host 代理（`lib/market/upstream.js` 是唯一出口）；`src/client/**` 里出现 `fetch('https://api.skillhub.cn…')` 即返工。
 14. **安装只写清单里的文件**：不执行包内脚本、不跟随包内符号链接、不写包外路径；任一步失败必须删掉 `.skc-install-*` 临时目录，`skills/<name>` 与自有台账要么都有、要么都没有（唯一例外：台账写失败时目录保留并报 `E_INSTALL_IO`，见 `docs/contracts/routes.md` §3.7）。`files` 形态下**空清单 / 无 `SKILL.md` / 路径不安全**三态一律 `E_PACKAGE_INVALID`——镜像单源之后这是唯一的包闸。
 
 ## 四处容易踩的真机坑

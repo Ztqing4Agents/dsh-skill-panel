@@ -247,3 +247,40 @@ test('K96 按 scope 计数：请求带各自的 source，缓存按 sourceParam �
   await skillhubSource.counts(io, { sourceParam: 'community', refresh: true });
   assert.equal(calls.length > 0, true, 'refresh 之后重新问');
 });
+
+test('K53 分类表是 12 类而不是 13：上游 13 个 key 里滤掉商业档，13 个请求 = 12 类 + 总数', async () => {
+  resetCategoryCache();
+  resetCountCache();
+  // The live table, verbatim (api.skillhub.cn/api/v1/categories, count 13) - including the
+  // commercial tier the panel never shows. Docs that say "13 类" are counting this payload,
+  // or counting requests; the chips row the user sees is 「全部」+ the twelve below.
+  const upstream = [
+    'pay-skill', 'office-efficiency', 'content-creation', 'dev-programming', 'data-analysis',
+    'design-media', 'ai-agent', 'knowledge-management', 'business-ops', 'education',
+    'professional', 'it-ops-security', 'life-service',
+  ].map((key) => ({ key, name: key, nameEn: key }));
+
+  const calls = [];
+  const io = {
+    async getJson(url) {
+      const parsed = new URL(String(url));
+      // The table read is not a count request: only `/api/skills` rows cost a `pageSize=1`.
+      if (parsed.pathname !== '/api/v1/categories') calls.push(parsed.searchParams.get('category'));
+      if (parsed.pathname === '/api/v1/categories') return { count: upstream.length, items: upstream };
+      return { data: { total: 1000 } };
+    },
+  };
+
+  const table = await skillhubSource.categories(io, { now: () => 0, refresh: true });
+  assert.equal(upstream.length, 13, '上游原始表 13 个 key');
+  assert.equal(table.items.length, 12, '客户端拿到 12 个（商业档被滤掉）');
+  assert.equal(table.items.some((entry) => entry.key === 'pay-skill'), false, 'pay-skill 不在表里');
+  assert.equal(table.items[0].key, 'office-efficiency', '滤完后顺序不变（上游 sortOrder）');
+
+  calls.length = 0;
+  const counted = await skillhubSource.counts(io, { now: () => 0, refresh: true });
+  assert.equal(calls.length, 13, '13 个计数请求 = 12 个分类各一次 + 「全部」一次');
+  assert.equal(calls.filter((key) => key === null).length, 1, '「全部」只问一次');
+  assert.equal(Object.keys(counted.counts).length, 12, '12 个分类各有一个数字');
+  assert.equal(counted.ok, true, '全部答上 ⇒ ok');
+});

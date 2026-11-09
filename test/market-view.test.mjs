@@ -15,7 +15,6 @@
  */
 import assert from 'node:assert/strict';
 import test, { before } from 'node:test';
-import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createElement } from 'react';
@@ -23,6 +22,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { createStore } from '../src/client/state.js';
 import { ROOT, loadClientModules, zhTranslator } from './helpers/ssr.mjs';
+import { mountHooks } from './helpers/hooks.mjs';
 
 /** The bundled client page. */
 let page;
@@ -37,51 +37,6 @@ before(async () => {
   card = modules.card;
   t = await zhTranslator();
 });
-
-const require = createRequire(import.meta.url);
-const ReactCjs = require('react');
-
-/**
- * Render one function component that only uses `useState`, with a controllable slot.
- *
- * `renderToStaticMarkup` can prove what a state *renders* but cannot fire an event into
- * it, and this repo has no DOM (no jsdom) - so the one transition that matters here
- * ("the image 404s, the tile must fall back to the letter") is driven through React's
- * own hook dispatcher, which is what a test renderer does internally. The component
- * under test is the real one; only the reconciler is replaced.
- * @param {Function} component - the component to mount.
- * @param {object} initialProps - its props.
- * @returns {{render: (nextProps?: object) => object}} a handle whose `render` can be called again after a state write.
- */
-function mountHooks(component, initialProps) {
-  const slots = [];
-  const internals = ReactCjs.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
-  const holder = internals.ReactCurrentDispatcher;
-  const previous = holder.current;
-  let props = initialProps;
-  const render = (nextProps) => {
-    if (nextProps !== undefined) props = nextProps;
-    let index = 0;
-    holder.current = {
-      useEffect: () => {},
-      useState(initial) {
-        const at = index;
-        index += 1;
-        if (!(at in slots)) slots[at] = typeof initial === 'function' ? initial() : initial;
-        const set = (next) => {
-          slots[at] = typeof next === 'function' ? next(slots[at]) : next;
-        };
-        return [slots[at], set];
-      },
-    };
-    try {
-      return component(props);
-    } finally {
-      holder.current = previous;
-    }
-  };
-  return { render };
-}
 
 /**
  * The non-null children of one rendered tile, flattened.
