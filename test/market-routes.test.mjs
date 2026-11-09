@@ -157,11 +157,15 @@ async function mount(options = {}) {
   if (skillhub.icons === undefined) {
     skillhub.icons = options.skillhubIcons ?? (async (refs) => {
       skillhubIconCalls.push(refs.map((ref) => `${ref.owner}:${ref.slug}`));
-      const out = {};
+      const icons = {};
+      const names = {};
       for (const ref of refs) {
-        out[`skillhub:${ref.owner}:${ref.slug}`] = ref.slug.startsWith('has-icon') ? 'https://cdn.skillhub.example/icon.png' : null;
+        const key = `skillhub:${ref.owner}:${ref.slug}`;
+        icons[key] = ref.slug.startsWith('has-icon') ? 'https://cdn.skillhub.example/icon.png' : null;
+        // R9：标题与图标同一次 detail 出来，两张图逐键同序
+        names[key] = ref.slug.startsWith('has-icon') ? `Skill ${ref.slug}` : null;
       }
-      return out;
+      return { icons, names };
     });
   }
   const resets = [];
@@ -171,9 +175,14 @@ async function mount(options = {}) {
   if (clawhub.icons === undefined) {
     clawhub.icons = async (refs) => {
       iconCalls.push(refs);
-      const out = {};
-      for (const ref of refs) out[`clawhub:${ref.owner}:${ref.slug}`] = ref.slug.startsWith('has-icon') ? 'api/dsh-skill-center/market/lucide?name=zap' : null;
-      return out;
+      const icons = {};
+      const names = {};
+      for (const ref of refs) {
+        const key = `clawhub:${ref.owner}:${ref.slug}`;
+        icons[key] = ref.slug.startsWith('has-icon') ? 'api/dsh-skill-center/market/lucide?name=zap' : null;
+        names[key] = ref.slug.startsWith('has-icon') ? `Claw ${ref.slug}` : null;
+      }
+      return { icons, names };
     };
   }
   const sources = [skillhub, clawhub];
@@ -801,7 +810,9 @@ test('K57 POST market/icons：批量语义（≤24、去重、按请求顺序、
     assert.equal(good.status, 200, '200');
     assert.deepEqual(Object.keys(good.json), ['code', 'data', 'message'], '信封还是 code/data/message');
     assert.equal(good.json.code, 'OK', '成功信封 code OK');
-    assert.deepEqual(Object.keys(good.json.data), ['icons'], 'data 只有 icons 一个键');
+    // R9：图标与标题一起回，两张图逐键同序
+    assert.deepEqual(Object.keys(good.json.data), ['icons', 'names'], 'data 是 icons + names');
+    assert.deepEqual(Object.keys(good.json.data.names), Object.keys(good.json.data.icons), '两张图逐键同序');
     assert.deepEqual(
       Object.keys(good.json.data.icons),
       ['clawhub:o:has-icon-one', 'clawhub:o:plain'],
@@ -809,6 +820,8 @@ test('K57 POST market/icons：批量语义（≤24、去重、按请求顺序、
     );
     assert.equal(good.json.data.icons['clawhub:o:has-icon-one'], 'api/dsh-skill-center/market/lucide?name=zap', '有图标的那条');
     assert.equal(good.json.data.icons['clawhub:o:plain'], null, '没有图标的那条是 null，不是缺键');
+    assert.equal(good.json.data.names['clawhub:o:has-icon-one'], 'Claw has-icon-one', '标题也回来了');
+    assert.equal(good.json.data.names['clawhub:o:plain'], null, '没有标题的那条是 null（键在）');
     assert.deepEqual(mounted.iconCalls[0], [{ owner: 'o', slug: 'has-icon-one' }, { owner: 'o', slug: 'plain' }], '去重后才交给适配器');
 
     const tooMany = JSON.stringify({ source: 'clawhub', items: Array.from({ length: 25 }, (_, i) => ({ owner: 'o', slug: `s-${i}` })) });
@@ -837,6 +850,7 @@ test('K57 POST market/icons：批量语义（≤24、去重、按请求顺序、
     });
     assert.equal(skillhubBatch.status, 200, 'SkillHub 批次 ⇒ 200（不再被当成未注册源）');
     assert.deepEqual(Object.keys(skillhubBatch.json.data.icons), ['skillhub:ake:has-icon-skill'], '键带源前缀');
+    assert.deepEqual(Object.keys(skillhubBatch.json.data.names), ['skillhub:ake:has-icon-skill'], '标题图同键');
 
     const notJson = await callRoute(route, { method: 'POST', headers: LOOPBACK_HEADERS, body: 'not json' });
     assert.equal(notJson.status, 400, '非 JSON ⇒ 400');
@@ -929,6 +943,7 @@ test('K64 POST market/icons 收 per-item source：混合批次两源都在、按
       ['skillhub:ake:has-icon-hub', 'clawhub:awspace:has-icon-one', 'skillhub:ake:plain-hub', 'clawhub:awspace:plain'],
       '两源的键都在，按请求顺序，完整键去重（重复的 skillhub 条目只出现一次）',
     );
+    assert.deepEqual(Object.keys(response.json.data), ['icons', 'names'], 'K64 的 data 也是两张图');
     assert.equal(response.json.data.icons['skillhub:ake:has-icon-hub'], 'https://cdn.skillhub.example/icon.png', 'SkillHub 那条取到图');
     assert.equal(response.json.data.icons['clawhub:awspace:has-icon-one'], 'api/dsh-skill-center/market/lucide?name=zap', 'ClawHub 那条照旧');
     assert.equal(response.json.data.icons['skillhub:ake:plain-hub'], null, 'SkillHub 没图 ⇒ null');
@@ -1028,6 +1043,18 @@ test('K66 单源失败不连坐：SkillHub 整体抛错 ⇒ 200、skillhub 键�
       },
       '失败的源全 null，另一个照常',
     );
+    // R9：标题跟着图标一起走 —— 单源失败时它那一侧的 names 也必须是 null，
+    // 不能出现「图标是 null、标题却还在」的错位（同一个 values 条目同时喂两张图）。
+    assert.deepEqual(
+      response.json.data.names,
+      {
+        'skillhub:ake:has-icon-hub': null,
+        'clawhub:awspace:has-icon-one': 'Claw has-icon-one',
+        'skillhub:ake:plain-hub': null,
+      },
+      '失败源的标题也一起 null，另一源标题照常',
+    );
+    assert.deepEqual(Object.keys(response.json.data.names), Object.keys(response.json.data.icons), '两张图同键同序');
     assert.equal(response.json.code, 'OK', '信封仍是 OK');
   } finally {
     await mounted.close();

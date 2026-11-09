@@ -81,6 +81,7 @@ market = {
   installed / installedReady,                     // 安装台账 × item.id；只读一次
   installs: {[id]: {state, reason?, path?, version?, seq?}},   // 确认/安装中/已安装/失败
   icons / iconsTried,                             // 图标缓存 {[key]: url} 与「本会话已问过」{[key]: true}；两个消费者共用（市场条目 + 已装行的 upstream）
+  names,                                          // 上游标题缓存 {[key]: title}；与 icons 同键空间、同生命周期
   installedDirty,                                 // 已安装页签标脏
   scrollTop,                                      // 进详情前记下，返回时恢复
 }
@@ -157,6 +158,8 @@ icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安�
 | `marketInstallStart(id)` | id | `state='installing'`（幂等） |
 | `marketInstallOk(id,{name,path,version})` | —— | `installed` + `installed[id]` + `installedDirty` + 推 `notice{kind:'install-ok', name, path, seq}` |
 | `marketInstallFail(id, reason)` | 本地化原因 | `state='failed'` + `reason` |
+| `marketNamesSeeded(names)` | `{[id]: title}` | 只合并进 `names`（空值忽略、已有键不覆盖），**不写 `iconsTried`**：列表里的 `displayName` 是已知答案 |
+| `marketNamesReady(names)` | `{[id]: title\|null}` | 批量端点回填：非空才写（覆盖同名种子），`null` 忽略——名字缺失不影响图标 |
 | `marketIconsSeeded(icons)` | `{[id]: url}` | 只合并进 `icons`（已有键不覆盖），**不写 `iconsTried`**：列表内联的图标是已知答案，不是一次上游提问 |
 | `marketIconsReady(icons)` | `{[id]: url|null}` | 合并进 `icons`（非空才存），每个 id 记进 `iconsTried`（**null 也记**，负结果同样只问一次） |
 | `marketIconsAttempted(ids)` | `string[]` | 批次整体失败：只记 `iconsTried`、不写 `icons`，静默保持字母 |
@@ -202,7 +205,8 @@ icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安�
 | 身份 | `Row.upstream = {sourceId, owner, slug} \| null`（Host 从 `_meta.json` 带出）；`null` ⇒ 该行永远是字母瓦片，不按名字猜 |
 | 视觉单元 | `icon-tile.jsx`：`tileElement()`（无 hook，返回瓦片元素）+ `useIconState()`（按 URL 记 loaded/failed，未 loaded 时返回探测图 URL）；`IconTile` 是组件形态，`MarketIcon` 解析 URL 后调同一对函数。`.skc_cardIcon` 与 `.skc_marketIconImg` 声明零改动 |
 | 失败 | 单条 → `null`；整批失败 → `marketIconsAttempted` 记 tried，不重试、不弹 toast、不写行内原因 |
-| 失效 | 切页签不动 · 已安装页签刷新不动 · `marketReload()` 清空（一次性、下一批自愈）· 安装成功后不动（新技能与市场条目同键）· 新会话清空（不落盘） |
+| 标题优先级 | `rowTitleOf(row, market)`：`names[marketKeyOf(row.upstream)]` → `row.displayName`（本地 `metadata.displayName`）→ `row.name`。**kebab 名退到 tooltip**（`title` 属性仍是 `row.name`），因为它是模型调用技能时用的那个字符串，换了可见标题后仍要随手可查 |
+| 失效 | 切页签不动 · 已安装页签刷新不动 · `marketReload()` 清空（`icons`/`iconsTried`/`names` 一起，一次性、下一批自愈）· 安装成功后不动（新技能与市场条目同键）· 新会话清空（不落盘） |
 
 
 

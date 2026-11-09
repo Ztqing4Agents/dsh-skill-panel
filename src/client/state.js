@@ -56,6 +56,7 @@ function initialMarket() {
     installs: {},
     icons: {},
     iconsTried: {},
+    names: {},
     installedDirty: false,
     scrollTop: 0,
   };
@@ -331,10 +332,12 @@ export function createStore() {
       setMarket({
         items: [],
         detail: null,
-        // A reload is "start over": the icons fetched so far are dropped with the list, so
-        // the new entries get a fresh chance. Filter and keyword changes keep them.
+        // A reload is "start over": the icons and titles fetched so far are dropped with
+        // the list, so the new entries get a fresh chance. Filter and keyword changes keep
+        // them.
         icons: {},
         iconsTried: {},
+        names: {},
         ...clearedPaging({ ...state.market, items: [] }),
       });
     },
@@ -355,6 +358,39 @@ export function createStore() {
         nextIcons[id] = url;
       }
       setMarket({ icons: nextIcons });
+    },
+    /**
+     * Cache titles the market list already carries (its `displayName`). A known answer,
+     * not an upstream question, so `iconsTried` is left alone - same rule as
+     * `marketIconsSeeded`.
+     * @param {Record<string, string>} names - title keyed by market id; empties ignored.
+     * @returns {void}
+     */
+    marketNamesSeeded: (names) => {
+      const entries = names !== null && typeof names === 'object' ? Object.entries(names) : [];
+      const usable = entries.filter(([, title]) => typeof title === 'string' && title !== '');
+      if (usable.length === 0) return;
+      const nextNames = { ...state.market.names };
+      for (const [id, title] of usable) {
+        if (Object.prototype.hasOwnProperty.call(nextNames, id)) continue;
+        nextNames[id] = title;
+      }
+      setMarket({ names: nextNames });
+    },
+    /**
+     * Fold the titles that came back with a batch of icons. Missing or null titles are
+     * skipped: an unknown title simply leaves the row on its own `displayName`/`name`, and
+     * a missing title must not block the icons that did arrive.
+     * @param {Record<string, string|null>|null} names - title (or null) keyed by market id.
+     * @returns {void}
+     */
+    marketNamesReady: (names) => {
+      const entries = names !== null && typeof names === 'object' ? Object.entries(names) : [];
+      const usable = entries.filter(([, title]) => typeof title === 'string' && title !== '');
+      if (usable.length === 0) return;
+      const nextNames = { ...state.market.names };
+      for (const [id, title] of usable) nextNames[id] = title;
+      setMarket({ names: nextNames });
     },
     /**
      * Fold one batch of progressively fetched icons into the market state.

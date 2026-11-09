@@ -149,7 +149,9 @@ test('K22 行结构：图标 + 名称 + 描述 + 右侧控件', () => {
   assert.equal(letter, 'U', '图标里是名字的大写首字母');
   assert.equal([...letter].length, 1, '图标里只有一个字符');
   assert.equal(rowHtml.includes('data-icon='), false, '不再渲染宿主通用技能字形');
-  assert.ok(rowHtml.includes('class="skc_cardTitle">ui-design<'), '行有名称');
+  // R9：页面总传 `title`（rowTitleOf 的结果），tooltip 因此是 kebab 名 —— 这一行没有上游标题，
+  // 所以可见文字仍是 kebab 名，只是多了一个 title 属性（模型调用用的就是这串）。
+  assert.ok(rowHtml.includes('class="skc_cardTitle" title="ui-design">ui-design<'), '行有名称，tooltip 是 kebab 名');
   assert.ok(rowHtml.includes('class="skc_cardDesc" title="A local skill."'), '行有描述，且 title 也是描述');
   assert.ok(rowHtml.includes('class="skc_cardEnd"'), '行有右侧控件位');
   assert.ok(rowHtml.includes('class="skc_cardMain"'), '名称与描述在中间列');

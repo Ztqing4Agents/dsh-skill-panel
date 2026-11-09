@@ -163,7 +163,7 @@ return concat(bom, block, body.subarray(block.end))   // 其余字节一个不�
 | 8 | `GET /api/dsh-skill-center/market/installed` | 无 | `{items:{[id]:{name,version,path,exists:boolean}}, readable:boolean}` | `403`、`405`、`500 E_INTERNAL` |
 | 9 | `POST /api/dsh-skill-center/market/install` | `{source, owner, slug, version?}`（`objectOnly`，≤ 64 KiB；**没有 path / files / name 字段**） | `{name, path, version, source, owner, slug, files:number, bytes:number}` | `403`、`405`、`400 E_BAD_REQUEST`、`400 E_BAD_QUERY`、`409 E_ALREADY_INSTALLED`、`422 E_SKILL_NAME_INVALID`、`422 E_PACKAGE_INVALID`、`429 E_INSTALL_BUSY`、`502 E_DOWNLOAD_FAILED`、`502 E_SOURCE_BAD_RESPONSE`、`503 E_SOURCE_UNAVAILABLE`、`504 E_SOURCE_TIMEOUT`、`500 E_INSTALL_IO`、`500 E_INTERNAL` |
 | 10 | `GET /api/dsh-skill-center/market/lucide?name=<kebab>` | `name` 白名单 `^[a-z0-9]+(?:-[a-z0-9]+){0,5}$` | **SVG 字节，不走信封**（见下） | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_QUERY`（`name` 缺/不合白名单）、`404`（无此图标或 CDN 不可用，空 body） |
-| 11 | `POST /api/dsh-skill-center/market/icons` | body `{items:[{source?, owner, slug}], source?}`：`items` ≤ **24**，每条 `source`/`owner`/`slug` 走 §3.7.3 的上游白名单；`source` 逐条给，顶层 `source` 只是**兼容默认值**（item 优先，详见 §3.7.5） | `{icons:{'<source>:<owner>:<slug>': iconUrl\|null}}`——**形状不变**，键按请求顺序 | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_REQUEST`（`items` 缺失/为空/超 24）、`400 E_BAD_QUERY`（标识符不合白名单，或 `source` 未注册）、`500 E_INTERNAL`。单条失败只让该项 `null`，**单源失败只让该源 `null`**，整体仍 `200` |
+| 11 | `POST /api/dsh-skill-center/market/icons` | body `{items:[{source?, owner, slug}], source?}`：`items` ≤ **24**，每条 `source`/`owner`/`slug` 走 §3.7.3 的上游白名单；`source` 逐条给，顶层 `source` 只是**兼容默认值**（item 优先，详见 §3.7.5） | `{icons:{'<source>:<owner>:<slug>': iconUrl\|null}, names:{同键→上游标题\|null}}`——两图的**键集合与顺序逐键相同**，缺名也是「键在、值 `null`」 | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_REQUEST`（`items` 缺失/为空/超 24）、`400 E_BAD_QUERY`（标识符不合白名单，或 `source` 未注册）、`500 E_INTERNAL`。单条失败只让该项 `null`，**单源失败只让该源 `null`**，整体仍 `200` |
 | 12 | `GET /api/dsh-skill-center/market/clawhub-icon?hash=<64hex>` | `hash` 白名单 `^[a-f0-9]{64}$`；`?refresh=1` 清缓存 | **图片字节，不走信封**（见下） | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_QUERY`（hash 不合白名单）、`404`（上游无此图或不可用，空 body） |
 
 **#10 与 #12 是本插件仅有的两个非信封路由**：`<img>` 读不了 `{code,data,message}`，所以它们直接回图片字节，并统一补 `X-Content-Type-Options: nosniff` 与 `Content-Security-Policy: default-src 'none'`（**不透传上游的 CSP**）；命不中或上游不可用一律 `404` 空 body（不回 HTML，也不回信封），让浏览器的 `onError` 把卡片退回首字母头像。
@@ -289,8 +289,9 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 
 - **能力**：`MarketSource.icons?(refs, io, {now})` 是**可选能力**。有 `icons` 的源按自己的并发/预算/缓存实现；没有该能力的源，它的条目在本批里全部 `null`（不进错误分支）。今天 `skillhub` 与 `clawhub` 都有。
 - **分发**：路由把 `items` 按 `source` 分组，**各组并行**发起，两源各自计时（各 6s），所以混合批次 ≈ `max(两源耗时)`，不是相加。
-- **回填**：先把各源结果收进一张 `Map`，再按 `items` **原序**逐条写进 `icons`——并发完成顺序不影响出参顺序，两次相同请求逐字节可比。
-- **失败隔离**：一个源整体失败（超时、域名不可达、适配器抛错）只让**该源**的条目 `null`，另一个源照常返回；`200` 不变。**任何图标失败都不升级成路由错误**。
+- **出参**：`data` 是 `{icons, names}` 两张同键图。`names[key]` 是**上游标题**（SkillHub 的 `data.skill.displayName`、ClawHub 的 `skill.displayName`），与图标同一条 detail 请求带出，**零额外请求**；归一规则与图标一致（非空字符串才收，否则 `null`）。
+- **回填**：先把各源结果收进一张 `Map`，再按 `items` **原序**逐条写进 `icons` 与 `names`——并发完成顺序不影响出参顺序，两次相同请求逐字节可比；两图的键序列由同一个循环产出，**逐键相同**（缺名是 `null` 不是缺键），客户端可遍历一张、索引另一张。
+- **失败隔离**：一个源整体失败（超时、域名不可达、适配器抛错）只让**该源**的条目 `null`（图标与标题一起），另一个源照常返回；`200` 不变。**任何图标失败都不升级成路由错误**，标题失败同理——标题缺失只是显示 slug，不是错误。
 - **`source` 的优先级**：每条的 `source` 优先；缺省时用顶层 `source`（这是**兼容默认值**，旧页面握旧 `client.js` 时只会发 `{source:'clawhub', items:[{owner,slug}]}`，保留它等于「永不为此 400」）。两者都缺 ⇒ 该条 `source` 为空 ⇒ 不合白名单 ⇒ `400 E_BAD_QUERY`。
 - **每源每批 12** 是**客户端的选批口径**（`ICON_PER_SOURCE_LIMIT`），不是服务端上限：服务端只认 §3.7.1 #11 的合计 ≤ 24，因此一条 24 条的 ClawHub 批次（旧客户端的合法请求）**依然被接受**。客户端两侧各取 12 的理由是「一个慢源不许吃掉整批额度」。
 - **不新增端点**：已安装行与市场卡片共用这一条；`market/installed`（#7）**不返回图标**，也不为图标加请求。

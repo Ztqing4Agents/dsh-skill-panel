@@ -58,16 +58,22 @@ export function EnableSwitch({ row, t, pending, onToggle }) {
 /**
  * Render one row of the list.
  * @param {{row: object, t: Function, rows: Map<string, object>, onToggle: Function,
- *   iconUrl?: string|null}} props - the row, the translate function, per-row runtime state,
- *   the switch handler, and the icon its `upstream` identity resolved to (null when it has
- *   no identity or no icon - the tile then draws the letter, exactly as before).
+ *   iconUrl?: string|null, title?: string}} props - the row, the translate function,
+ *   per-row runtime state, the switch handler, the icon its `upstream` identity resolved to
+ *   (null when it has no identity or no icon - the tile then draws the letter), and the
+ *   visible title when the caller resolved one (see `rowTitleOf`).
  * @returns {import('react').ReactElement} the row.
  */
-export function SkillRow({ row, t, rows, onToggle, iconUrl = null }) {
+export function SkillRow({ row, t, rows, onToggle, iconUrl = null, title }) {
   const key = rowKey(row);
   const view = rowViewState(row, rows);
   const reason = rows?.get?.(key)?.reason ?? null;
   const mode = switchMode(row);
+  // Without a resolved title the row is exactly what it used to be: the kebab name in the
+  // text, the local display name (if any) in the tooltip. The page always passes a title,
+  // and then the tooltip carries the kebab name - the string the model is invoked by.
+  const label = title ?? row.name;
+  const tooltip = title === undefined ? (row.displayName ?? undefined) : row.name;
   const end = mode === null
     ? (row.readonlyReason === 'symlink' ? <ReadonlyTag row={row} t={t} /> : null)
     : <EnableSwitch row={row} t={t} pending={isPending(rows, key)} onToggle={onToggle} />;
@@ -77,7 +83,7 @@ export function SkillRow({ row, t, rows, onToggle, iconUrl = null }) {
         <IconTile iconUrl={iconUrl} title={row.name} />
         <div className={cn('cardMain')}>
           <div className={cn('titleRow')}>
-            <span className={cn('cardTitle')} title={row.displayName ?? undefined}>{row.name}</span>
+            <span className={cn('cardTitle')} title={tooltip}>{label}</span>
           </div>
           <span className={cn('cardDesc')} title={row.description}>{row.description}</span>
         </div>

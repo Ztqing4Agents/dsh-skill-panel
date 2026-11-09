@@ -186,14 +186,15 @@ sequenceDiagram
 
     opt 页面上有缺图标的条目（两个页签共用一条循环，非阻塞）
         MP->>ST: iconSeeds(market) 先播种：列表里 iconUrl 非空、图标缓存还没有该键的条目<br/>（marketIconsSeeded，不写 iconsTried）
+        MP->>ST: nameSeeds(market) 同步播种标题：列表 displayName 非空、names 还没有该键<br/>（marketNamesSeeded，同样不写 iconsTried）；两者任一非空 ⇒ 播完 return，等下一轮
         Note over MP: 播种是本地动作，写完缓存会再触发一轮 effect，那一轮才走网络<br/>所以「从市场装 SkillHub 技能 → 切已安装」是 0 次请求
         Note over MP: 候选 = iconBatch(payload, market)：市场半边是 ClawHub 无图条目，<br/>已安装半边是 row.upstream 有身份却还没问过的行；坏 owner/slug 跳过；每源 ≤12、总 ≤24
         alt 已安装页签（默认页签，市场面板根本没挂）
             MP->>API: marketIcons({items:[{source,owner,slug}…]})
             API->>RT: POST market/icons（混源，Host 分组分发）
-            RT-->>API: { icons: { "source:owner:slug": url|null } }
-            API-->>MP: 每个身份的 url 或 null
-            MP->>ST: marketIconsReady（null 也记 iconsTried）
+            RT-->>API: { icons: { "source:owner:slug": url|null }, names: { …: title|null } }
+            API-->>MP: 每个身份的 url 与上游标题（各自可为 null）
+            MP->>ST: marketIconsReady（null 也记 iconsTried）+ marketNamesReady（null 忽略）
             MP-->>U: 已安装行的字母瓦片换成市场那张图；拿不到就保持字母
         end
         MP->>API: marketIcons({source:'clawhub', items:[{owner,slug}…]}) ≤24 条

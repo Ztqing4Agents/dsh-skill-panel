@@ -160,8 +160,9 @@ export class SkillCenterApi {
    * `source` travels per item: one batch may mix the two sources, and the route groups
    * them itself (at most 12 per source, 24 in total).
    * @param {{items: {source: string, owner: string, slug: string}[]}} query - the batch.
-   * @returns {Promise<{icons: Record<string, string|null>}>} icon URL (or null) keyed by
-   *   `source:owner:slug`.
+   * @returns {Promise<{icons: Record<string, string|null>, names: Record<string, string|null>}>}
+   *   icon URL and upstream title (each maybe null), both keyed by `source:owner:slug` with
+   *   one entry per requested identity.
    */
   async marketIcons(query) {
     const items = Array.isArray(query?.items) ? query.items : [];

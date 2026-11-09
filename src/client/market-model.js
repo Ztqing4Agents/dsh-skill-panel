@@ -176,6 +176,67 @@ export function iconSeeds(market) {
 }
 
 /**
+ * The upstream title cached for one identity key, or null.
+ *
+ * Same key space as the icons (`source:owner:slug`), same lifetime: a market title fetched
+ * once shows on the market card and on the installed row without a second request.
+ * @param {string} key - a `marketKeyOf()` product.
+ * @param {object} market - the market sub-state.
+ * @returns {string|null} the cached title, or null when there is none.
+ */
+export function nameFor(key, market) {
+  if (typeof key !== 'string' || key === '') return null;
+  const cached = market?.names?.[key];
+  return typeof cached === 'string' && cached !== '' ? cached : null;
+}
+
+/**
+ * Titles the market list already carries, reshaped into the cache's key space.
+ *
+ * `market/list` items carry `displayName` (on SkillHub that is the market title), so an
+ * installed row can show the upstream title without any request as soon as the list is in.
+ * Like the icon seeds, a seed is a known answer and therefore does not touch
+ * `iconsTried`.
+ * @param {object} market - the market sub-state.
+ * @returns {Record<string, string>|null} `{[key]: title}` to seed, or null when nothing new.
+ */
+export function nameSeeds(market) {
+  const items = Array.isArray(market?.items) ? market.items : [];
+  const seeds = {};
+  let count = 0;
+  for (const item of items) {
+    if (typeof item?.displayName !== 'string' || item.displayName === '') continue;
+    const key = marketKeyOf(item);
+    if (nameFor(key, market) !== null) continue;
+    seeds[key] = item.displayName;
+    count += 1;
+  }
+  return count === 0 ? null : seeds;
+}
+
+/**
+ * The title an installed row shows, in priority order.
+ *
+ *   1. the upstream title, once this session has it (market list seed, or the batch that
+ *      fills `market.names`);
+ *   2. the local `metadata.displayName` the Host parsed out of `SKILL.md` (offline fallback);
+ *   3. the skill's own `name` - the kebab-case id the model actually calls.
+ *
+ * Rows with no `upstream` identity simply start at step 2. The kebab name never disappears
+ * from the row: it becomes the tooltip, because that is the string used in prompts.
+ * @param {object} row - a catalog row.
+ * @param {object} market - the market sub-state.
+ * @returns {string} the visible title (never empty unless the row itself is empty).
+ */
+export function rowTitleOf(row, market) {
+  const upstream = row?.upstream ?? null;
+  const fromUpstream = upstream === null ? null : nameFor(marketKeyOf(upstream), market);
+  if (fromUpstream !== null) return fromUpstream;
+  if (typeof row?.displayName === 'string' && row.displayName !== '') return row.displayName;
+  return typeof row?.name === 'string' ? row.name : '';
+}
+
+/**
  * The one selector both surfaces feed: which icons to ask for next.
  *
  * Two halves, market first (a market entry that still has no icon is the case the list

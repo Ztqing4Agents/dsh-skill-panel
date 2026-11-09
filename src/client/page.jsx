@@ -19,7 +19,7 @@ import {
 
 import { cn } from './styles.js';
 import { attachHeader } from './header-scroll.js';
-import { iconBatch, iconSeeds, iconUrlFor, marketKeyOf } from './market-model.js';
+import { iconBatch, iconSeeds, iconUrlFor, marketKeyOf, nameSeeds, rowTitleOf } from './market-model.js';
 import { MarketPanel } from './market-panel.jsx';
 import { ListSkeleton } from './skeleton.jsx';
 import { SkillRow } from './row.jsx';
@@ -115,9 +115,14 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
     // an icon the page already had). Seeding is local, so it returns before the network
     // step; writing the cache re-runs this effect, and *that* pass is the network one.
     // It cannot loop: the seeded keys are skipped by `iconSeeds` from then on.
+    // Titles ride along: `market/list` carries `displayName`, which is the market title on
+    // SkillHub, so an installed row can show the upstream title before any request. Both
+    // seeds are local; writing them re-runs this effect, and that pass is the network one.
     const seeds = iconSeeds(state.market);
-    if (seeds !== null) {
-      store.actions.marketIconsSeeded(seeds);
+    const titles = nameSeeds(state.market);
+    if (seeds !== null || titles !== null) {
+      if (seeds !== null) store.actions.marketIconsSeeded(seeds);
+      if (titles !== null) store.actions.marketNamesSeeded(titles);
       return;
     }
     if (iconsInFlight.current) return;
@@ -135,6 +140,9 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
           icons[entry.key] = typeof url === 'string' && url !== '' ? url : null;
         }
         store.actions.marketIconsReady(icons);
+        // One response, two maps: a missing title leaves the row on its own name and must
+        // never hold back the icons.
+        store.actions.marketNamesReady(data?.names ?? null);
       } catch {
         // Silent by design: the tiles keep their letters, nothing is announced.
         store.actions.marketIconsAttempted(batch.map((entry) => entry.key));
@@ -142,7 +150,7 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
         iconsInFlight.current = false;
       }
     })();
-  }, [api, state.payload, state.market.icons, state.market.iconsTried, store]);
+  }, [api, state.payload, state.market.icons, state.market.iconsTried, state.market.names, store]);
 
   const onToggle = useCallback(async (row, enabled) => {
     const key = rowKey(row);
@@ -193,6 +201,7 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
                 rows={state.rows}
                 onToggle={onToggle}
                 iconUrl={rowIconUrl(row)}
+                title={rowTitleOf(row, state.market)}
               />
             ))}
           </ul>

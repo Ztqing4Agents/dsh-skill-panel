@@ -7,11 +7,13 @@
  */
 import assert from 'node:assert/strict';
 import test, { before } from 'node:test';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { avatarOf } from '../src/client/avatar.js';
-import { loadClientModules, zhTranslator } from './helpers/ssr.mjs';
+import { loadClientModules, ROOT, zhTranslator } from './helpers/ssr.mjs';
 
 /** Bundled row module. */
 let modules;
@@ -152,4 +154,79 @@ test('内置行渲染开关，而不是只读标记', () => {
   const html = render(row({ partition: 'builtin', provider: 'runtime', path: null, writable: false, readonlyReason: 'provider-store' }));
   assert.ok(html.includes('role="switch"'), '内置行有开关');
   assert.equal(html.includes('skc_roTag'), false, '内置行没有只读标记');
+});
+
+/* ------------------------------------------------------------------ K74 · title */
+
+/**
+ * Render one row with an explicit `title` (what `page.jsx` passes from `rowTitleOf`).
+ * @param {object} target - the row.
+ * @param {string|undefined} title - resolved title; undefined means "caller gave none".
+ * @returns {string} markup.
+ */
+function renderTitled(target, title) {
+  const props = { row: target, t, rows: new Map(), onToggle: () => {} };
+  if (title !== undefined) props.title = title;
+  return renderToStaticMarkup(createElement(modules.row.SkillRow, props));
+}
+
+test('K74 传 title：可见文字是上游标题，tooltip 是 kebab 名', () => {
+  const html = renderTitled(row({ name: 'dev-expert-pro' }), '编程专家Pro.Skill');
+  assert.ok(html.includes('class="skc_cardTitle" title="dev-expert-pro">编程专家Pro.Skill<'), '文字换成上游标题，tooltip 保留 kebab 名');
+  assert.equal(html.includes('>dev-expert-pro<'), false, 'kebab 名不再是可见文字');
+  assert.ok(html.includes('Comprehensive UI design skill.'), '描述不受影响');
+  // 标题只是文字：不新增可点区域、不换容器
+  assert.equal(/<a\b/.test(html), false, '没有 <a>');
+  assert.equal(/tabindex=/i.test(html), false, '没有 tabindex');
+  assert.equal((html.match(/role="switch"/g) ?? []).length, 1, '仍然只有一个开关');
+});
+
+test('K74 不传 title：输出与改动前逐字节相同（tooltip 仍是本地 displayName）', () => {
+  // 改动前的形状：可见文字 = row.name，tooltip = row.displayName ?? 无
+  assert.equal(renderTitled(row({ displayName: null }), undefined), render(row({ displayName: null })), '无 displayName 时逐字节相同');
+  assert.equal(
+    renderTitled(row({ displayName: '本地名' }), undefined),
+    render(row({ displayName: '本地名' })),
+    '有 displayName 时也逐字节相同（tooltip 是本地名，可见文字仍是 kebab）',
+  );
+  const withLocal = renderTitled(row({ displayName: '本地名' }), undefined);
+  assert.ok(withLocal.includes('class="skc_cardTitle" title="本地名">ui-design<'), 'tooltip 是本地 displayName、文字是 kebab 名');
+  assert.equal(withLocal.includes('title="ui-design"'), false, '不传 title 时不会把 kebab 名塞进 tooltip');
+});
+
+test('K74 长标题仍单行省略：条目标题只占一行，容器样式没被改', async () => {
+  const long = '编程专家Pro.Skill 这是一个非常长的上游标题用来确认它不会把行撑高也不会换行显示成两三行';
+  const html = renderTitled(row({ name: 'dev-expert-pro' }), long);
+  assert.ok(html.includes(`>${long}<`), '整串都在（不截断内容，交给 CSS 省略）');
+  // 只渲染一次标题：不会为了省略而拆成两段
+  assert.equal((html.match(/class="skc_cardTitle"/g) ?? []).length, 1, '标题元素只有一个');
+  assert.equal(html.includes('skc_cardTitleLine'), false, '没有为长标题新增元素/类');
+
+  const css = await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8');
+  const start = css.indexOf('.skc_cardTitle{');
+  assert.notEqual(start, -1, '样式表里有 .skc_cardTitle 规则');
+  const rule = css.slice(start, css.indexOf('}', start) + 1);
+  assert.match(rule, /white-space:\s*nowrap/, '不换行');
+  assert.match(rule, /text-overflow:\s*ellipsis/, '超出显示省略号');
+  assert.match(rule, /overflow:\s*hidden/, '超出部分裁掉');
+  // 标题规则本身一个字节都没被 R9 动过：换文字不许顺手动字号/行高/内外边距
+  assert.match(rule, /font-size:\s*14px/, '字号仍是 14px');
+  assert.match(rule, /line-height:\s*20px/, '行高仍是 20px（单行 20px，行高不因标题变长而变）');
+  assert.equal(/max-height|min-height|padding|margin|display:\s*(-webkit-)?box/.test(rule), false, '没有多行截断/内边距一类的新声明');
+});
+
+/**
+ * Render a row and return its markup (alias used by the long-title case).
+ * @param {object} target - the row.
+ * @param {string} title - resolved title.
+ * @returns {string} markup.
+ */
+const renderTitledRow = (target, title) => renderTitled(target, title);
+
+test('K74 标题里带 HTML 元字符时被转义，不会破坏行结构', () => {
+  const html = renderTitledRow(row({ name: 'x' }), '<img src=x onerror=alert(1)> & "quoted"');
+  assert.equal(html.includes('<img src=x'), false, '尖括号被转义');
+  assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;'), '按文本转义后原样显示');
+  assert.ok(html.includes('&amp;'), '& 被转义');
+  assert.equal(/onerror=/.test(html.replace(/&lt;[^&]*&gt;/g, '')), false, '不会变成真的属性');
 });

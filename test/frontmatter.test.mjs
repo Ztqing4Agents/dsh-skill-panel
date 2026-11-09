@@ -308,3 +308,101 @@ test('空值的 disable 行被补成显式布尔，而不是留空', () => {
   assert.ok(text.includes('disable-model-invocation: true'), '空值行被写成 true');
   assert.equal(parseFrontmatter(text).disableModelInvocation, true, '回读是停用');
 });
+
+/* ------------------------------------------------------------------ K73 · nested displayName */
+
+test('K73 metadata.displayName：带引号/不带引号都读，顶层 display-name 优先', () => {
+  assert.equal(
+    parseFrontmatter(doc(['name: dev-expert-pro', 'metadata:', '  displayName: 编程专家 Pro'])).displayName,
+    '编程专家 Pro',
+    '块内不带引号',
+  );
+  assert.equal(
+    parseFrontmatter(doc(['name: dev-expert-pro', 'metadata:', '  displayName: "编程专家Pro.Skill"'])).displayName,
+    '编程专家Pro.Skill',
+    '块内带双引号（引号被剥掉）',
+  );
+  assert.equal(
+    parseFrontmatter(doc(['name: dev-expert-pro', 'metadata:', "  displayName: '单引号名'"])).displayName,
+    '单引号名',
+    '块内带单引号',
+  );
+  // 顶层是契约里的规范位（`display-name`），块内只是兼容 SkillHub/ClawHub 的写法
+  assert.equal(
+    parseFrontmatter(doc(['name: x', 'display-name: 顶层名', 'metadata:', '  displayName: 块内名'])).displayName,
+    '顶层名',
+    '顶层优先（不管谁在前）',
+  );
+  assert.equal(
+    parseFrontmatter(doc(['name: x', 'metadata:', '  displayName: 块内名', 'display-name: 顶层名'])).displayName,
+    '顶层名',
+    '顶层在后也优先',
+  );
+  assert.equal(
+    parseFrontmatter(doc(['name: x', 'metadata:', '  summary: 一句话', '  version: 1.0.0'])).displayName,
+    undefined,
+    'metadata 块里没有该键 ⇒ undefined（不是空串）',
+  );
+  // 显式写空串时解析值就是 `''`：读侧不做「空串折成 undefined」的加工，消费方
+  // （`nameFor` / `rowTitleOf`）只认非空字符串，所以行为上等价于「没有标题」。
+  assert.equal(
+    parseFrontmatter(doc(['name: x', 'metadata:', '  displayName: ""'])).displayName,
+    '',
+    '显式空串 ⇒ 空串（下游按「非空才算有标题」处理）',
+  );
+  assert.equal(parseFrontmatter(doc(['name: x', 'description: y'])).displayName, undefined, '完全没有 metadata 块 ⇒ undefined');
+});
+
+test('K73 嵌套块标量正文里的伪键不会被当成真键', () => {
+  const parsed = parseFrontmatter(doc([
+    'name: x',
+    'metadata:',
+    '  summary: >',
+    '    First line of the summary.',
+    '    displayName: this is prose, not a key',
+    '    Last line.',
+    '  displayName: 真名',
+  ]));
+  assert.equal(parsed.displayName, '真名', '块标量正文里的 `displayName:` 被跳过');
+  assert.match(parsed.description ?? '', /^$|^$/, '（没有 top-level description 时就是空/缺省）');
+  // 正文里只有伪键、块里没有真键 ⇒ 仍然没有标题
+  const only = parseFrontmatter(doc([
+    'name: x',
+    'metadata:',
+    '  summary: >',
+    '    displayName: prose',
+  ]));
+  assert.equal(only.displayName, undefined, '正文里的伪键不算标题');
+});
+
+test('K73 CRLF + BOM 的 metadata 也照读；写侧一个字节都不动', () => {
+  const frontmatter = [
+    '---',
+    'name: dev-expert-pro',
+    'metadata:',
+    '  displayName: 编程专家 Pro',
+    '  summary: >',
+    '    Line one.',
+    '    displayName: prose',
+    'disable-model-invocation: false',
+    '---',
+    '',
+    'body',
+    '',
+  ].join('\r\n');
+  const bytes = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(frontmatter, 'utf8')]);
+  // 读侧只接字符串（传 Buffer 会得到一份空结果），所以这里先解码：BOM 由 locateBlock 跳过。
+  const parsed = parseFrontmatter(bytes.toString('utf8'));
+  assert.equal(parsed.displayName, '编程专家 Pro', 'BOM + CRLF 下也读到嵌套标题');
+  assert.equal(parsed.disableModelInvocation, false, '同一份文件的布尔位照旧');
+
+  const rewrite = setDisableModelInvocation(bytes, true);
+  assert.equal(rewrite.changed, true, '写侧仍然只改开关');
+  assert.equal(rewrite.next.includes(Buffer.from('\n')), true, '写回后仍有换行');
+  const text = rewrite.next.toString('utf8');
+  assert.equal(/[^\r]\n/.test(text.replace(/\r\n/g, '')), false, '仍然是纯 CRLF（没有裸 LF）');
+  assert.ok(text.includes('  displayName: 编程专家 Pro\r\n'), '嵌套标题原样保留');
+  assert.ok(text.includes('    displayName: prose\r\n'), '块标量正文原样保留');
+  assert.ok(text.includes('disable-model-invocation: true\r\n'), '开关改成 true');
+  assert.equal(parseFrontmatter(rewrite.next.toString('utf8')).displayName, '编程专家 Pro', '写完再读，标题还是同一个');
+});

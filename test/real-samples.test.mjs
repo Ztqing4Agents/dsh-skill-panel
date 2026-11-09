@@ -1,18 +1,20 @@
 /**
- * The five real-machine samples (collected 2026-11-08), twice: once against the trees
- * committed as fixtures, once against this machine's real `~/.dsh/skills`.
+ * The five real-machine samples (collected 2026-11-08), asserted against the trees
+ * committed as fixtures - never against this machine's `~/.dsh/skills`.
  *
- * Which half is real: `realSkillsRoot()` prefers `$DSH_HOME/skills` and falls back to
- * `~/.dsh/skills`. When that directory exists the cases assert on the machine's own
- * bytes; when it does not (a clean CI box), the same cases run against
- * `test/fixtures/skills-plain` + `target-repo` and say so through `t.diagnostic`, so
- * the count never changes between machines and nothing is silently skipped.
+ * Why fixture-only (R9): the earlier version also read the live directory and asserted
+ * on whatever was there. That turned the user's skill inventory into a test input: when
+ * `ui-design` / `indiv-guipi--find-skills` were uninstalled the suite went red for a
+ * reason no code change could fix, and on a box without the directory the same cases
+ * quietly asserted the fallback instead. The committed fixtures are byte copies of those
+ * samples (`skills-plain`, `skills-crlf`, `target-repo`), so nothing is lost by dropping
+ * the live half - and the result no longer depends on the machine.
  *
  * Contract: docs/contracts/data-model.md §3.2.3 invariant 4, docs/contracts/acceptance.md 附录 D.4 A1.
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { existsSync } from 'node:fs';
+import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -21,19 +23,7 @@ import { readLedger } from '../lib/ledger.js';
 import { scanUserSkills } from '../lib/scan.js';
 import { setDisableModelInvocation } from '../lib/frontmatter.js';
 import { ROOT } from './helpers/ssr.mjs';
-import { countBareLf, linesOf, sampleTree } from './helpers/tree.mjs';
-
-/**
- * The skills root of this machine, or null when it is absent.
- * @returns {string|null} absolute path.
- */
-function realSkillsRoot() {
-  const candidates = [
-    process.env.DSH_HOME === undefined ? null : join(process.env.DSH_HOME, 'skills'),
-    join(process.env.HOME ?? '/nonexistent', '.dsh', 'skills'),
-  ].filter((candidate) => candidate !== null && existsSync(candidate));
-  return candidates[0] ?? null;
-}
+import { countBareLf, FIXTURES, linesOf, sampleTree } from './helpers/tree.mjs';
 
 /**
  * Merge one skills tree the way the list route does.
@@ -120,65 +110,56 @@ test('A1 五条真机样本在 fixture 树上 5/5 命中三分区', async (t) =>
   }
 });
 
-test('A1 本机真实 ~/.dsh/skills 同样 5/5（无该目录时用 fixture 等价树，并如实标注）', async (t) => {
-  const real = realSkillsRoot();
-  if (real === null) {
-    const tree = await sampleTree();
-    try {
-      t.diagnostic('本机没有 ~/.dsh/skills，本条改用 fixture 等价树断言（结论只覆盖 fixture）');
-      const { byName } = await catalogueOf(tree.skillsRoot, tree.dshHome);
-      for (const [name, partition, rule] of EXPECTED) {
-        assert.equal(byName.get(name)?.partition, partition, `${name} 归入 ${partition}（fixture）`);
-        assert.equal(byName.get(name)?.rule, rule, `${name} 由 ${rule} 判定（fixture）`);
-      }
-    } finally {
-      await tree.cleanup();
+test('A1 五条样本的判定与机器无关：临时目录里的 fixture 树给出同样的 5/5', async (t) => {
+  const tree = await sampleTree();
+  try {
+    // 这一步同时证明「结果只取决于树里的字节」：树在 mkdtemp 出来的临时目录里，
+    // 不碰 ~/.dsh，也没有任何本机状态参与。
+    assert.equal(tree.skillsRoot.includes('.dsh'), false, '技能根在临时目录里（本条读数不来自本机 ~/.dsh）');
+    t.diagnostic(`fixture tree: ${tree.skillsRoot}`);
+    const { byName, scanned } = await catalogueOf(tree.skillsRoot, tree.dshHome);
+    for (const [name, partition, rule, confidence, symlink] of EXPECTED) {
+      const row = byName.get(name);
+      assert.ok(row !== undefined, `${name} 出现在列表里`);
+      assert.equal(row.partition, partition, `${name} 归入 ${partition}`);
+      assert.equal(row.rule, rule, `${name} 由 ${rule} 判定`);
+      assert.equal(row.confidence, confidence, `${name} 的置信度是 ${confidence}`);
+      assert.equal(row.symlink, symlink, `${name} 的软链事实是 ${symlink}`);
     }
-    return;
+    const names = scanned.map((candidate) => candidate.declaredName).sort();
+    assert.deepEqual(
+      names,
+      ['dev-docs-standards', 'dev-expert-pro', 'find-skills', 'frontend-design', 'ui-design'],
+      '扫描出的正好是这五条（.DS_Store 与别的目录没有变成幽灵行）',
+    );
+  } finally {
+    await tree.cleanup();
   }
-  t.diagnostic(`真实样本目录: ${real}`);
-  const { byName, scanned } = await catalogueOf(real, join(real, '..'));
-  for (const [name, partition, rule, confidence, symlink] of EXPECTED) {
-    const row = byName.get(name);
-    assert.ok(row !== undefined, `真实目录里的 ${name} 出现在列表里`);
-    assert.equal(row.partition, partition, `真实 ${name} 归入 ${partition}`);
-    assert.equal(row.rule, rule, `真实 ${name} 由 ${rule} 判定`);
-    assert.equal(row.confidence, confidence, `真实 ${name} 的置信度是 ${confidence}`);
-    assert.equal(row.symlink, symlink, `真实 ${name} 的软链事实是 ${symlink}`);
-  }
-  const names = scanned.map((candidate) => candidate.declaredName).sort();
-  assert.deepEqual(names, ['dev-docs-standards', 'dev-expert-pro', 'find-skills', 'frontend-design', 'ui-design'], '真实目录扫描出的正好是这五条（.DS_Store 没有变成幽灵行）');
 });
 
-test('A1 软链样本给出的真实路径指向本机 git 仓库（而不是技能根下的副本）', async (t) => {
-  const real = realSkillsRoot();
-  if (real === null) {
-    const tree = await sampleTree();
-    try {
-      t.diagnostic('本机没有 ~/.dsh/skills，本条改用 fixture 软链树断言');
-      const { byName } = await catalogueOf(tree.skillsRoot, tree.dshHome);
-      const row = byName.get('dev-docs-standards');
-      assert.equal(row.path, null, '软链行没有可写路径（fixture）');
-      assert.ok(row.realPath.endsWith(join('target-repo', 'SKILL.md')), 'realPath 指向链接目标（fixture）');
-    } finally {
-      await tree.cleanup();
-    }
-    return;
+test('A1 软链样本的真实路径指向链接目标（而不是技能根下的一份副本）', async (t) => {
+  const tree = await sampleTree();
+  try {
+    t.diagnostic(`fixture 软链树: ${tree.skillsRoot}`);
+    const { byName } = await catalogueOf(tree.skillsRoot, tree.dshHome);
+    const row = byName.get('dev-docs-standards');
+    assert.equal(row.symlink, true, '样本是软链');
+    assert.equal(row.path, null, '软链行没有可写路径');
+    assert.equal(row.writable, false, '软链行不可写');
+    // macOS 的 /var 是 /private/var 的软链，临时目录会因此有两种写法：两边都过一遍 realpath 再比。
+    assert.equal(realpathSync(row.realPath), realpathSync(join(tree.targetRepo, 'SKILL.md')), 'realPath 是链接目标里的 SKILL.md，不是根下的副本');
+    // 反例守卫：这个路径必须真的在技能根之外（真机 bug 就是「以为在根下」）
+    assert.equal(row.realPath.startsWith(tree.skillsRoot), false, 'realPath 不在技能根之下');
+  } finally {
+    await tree.cleanup();
   }
-  const { byName } = await catalogueOf(real, join(real, '..'));
-  const row = byName.get('dev-docs-standards');
-  assert.equal(row.symlink, true, '真实样本是软链');
-  assert.equal(row.path, null, '软链行没有可写路径');
-  assert.equal(row.writable, false, '软链行不可写');
-  assert.ok(row.realPath.endsWith(join('Agents', 'Skills', 'dev-docs-standards', 'SKILL.md')), 'realPath 指向 ~/Documents/Agents/Skills 下的仓库');
 });
 
-test('A3 真实 CRLF 样本改写后行尾不变、只改开关键一行（无该样本时用 CRLF fixture）', async (t) => {
-  const real = realSkillsRoot();
-  const crlfFile = real === null ? null : join(real, 'indiv-guipi--find-skills', 'SKILL.md');
-  const hasRealCrlf = crlfFile !== null && existsSync(crlfFile);
-  const file = hasRealCrlf ? crlfFile : join(ROOT, 'test', 'fixtures', 'skills-crlf', 'indiv-guipi--find-skills', 'SKILL.md');
-  t.diagnostic(hasRealCrlf ? `真实 CRLF 样本: ${file}` : '本机没有 CRLF 样本，本条改用 fixture');
+test('A3 CRLF 样本改写后行尾不变、只改开关键一行', async (t) => {
+  // fixture 是那份真机样本的逐字节副本（skills-crlf），所以这条既确定又不丢覆盖：
+  // 真机样本被用户移走后，测试不该跟着红。
+  const file = join(FIXTURES, 'skills-crlf', 'indiv-guipi--find-skills', 'SKILL.md');
+  t.diagnostic(`CRLF 样本: ${file}`);
   const before = await readFile(file);
   assert.equal(countBareLf(before), 0, '样本本身没有裸换行');
   const rewrite = setDisableModelInvocation(before, true);
@@ -213,35 +194,28 @@ test('A3 反例守卫：CRLF 被洗成 LF、开关没被改写、或顺带改了
   );
 });
 
-test('KI-2 回归：真机 ui-design 的行描述是三句完整正文，末尾一个换行', async (t) => {
-  const real = realSkillsRoot();
-  if (real === null) {
-    const tree = await sampleTree();
-    try {
-      t.diagnostic('本机没有 ~/.dsh/skills，本条改用 fixture 的折叠标量技能断言');
-      const scanned = await scanUserSkills(join(ROOT, 'test', 'fixtures', 'skills-messy'));
-      const folded = scanned.find((candidate) => candidate.dirName === 'folded-desc');
-      assert.equal(
-        folded.description,
-        'Folded first sentence. Folded second sentence. Folded third sentence.\n',
-        '折叠标量被折成一句话（fixture）',
-      );
-    } finally {
-      await tree.cleanup();
-    }
-    return;
-  }
-  t.diagnostic(`真实样本目录: ${real}`);
-  const { byName, scanned } = await catalogueOf(real, join(real, '..'));
-  const uiDesign = byName.get('ui-design');
+test('KI-2 回归：折叠标量折成正文（三句 + 一个换行），单行描述原样保留', async (t) => {
+  // 真机样本被用户移走后这条不该跟着红，所以两份样本都用提交在 fixture 里的副本：
+  //   - skills-messy/folded-desc 是 `description: >` 的三句折叠块（KI-2 的原始现场）
+  //   - skills-plain/clawhub-wpank--ui-design 是同一批样本里的单行描述
+  const messy = await scanUserSkills(join(FIXTURES, 'skills-messy'));
+  const folded = messy.find((candidate) => candidate.dirName === 'folded-desc');
+  t.diagnostic(`折叠标量样本: ${join(FIXTURES, 'skills-messy', 'folded-desc')}`);
+  assert.equal(
+    folded.description,
+    'Folded first sentence. Folded second sentence. Folded third sentence.\n',
+    '三句正文折成一句话、末尾一个换行',
+  );
+  assert.notEqual(folded.description, '>', '指示符本身不再被当成描述');
+  assert.equal(folded.description.startsWith('Folded first sentence.'), true, '原始候选就已经是正文');
+
+  const fixtureRoot = join(FIXTURES, 'skills-plain');
+  const scanned = await scanUserSkills(fixtureRoot);
+  const uiDesign = scanned.find((candidate) => candidate.dirName === 'clawhub-wpank--ui-design');
+  assert.ok(uiDesign !== undefined, 'ui-design 样本出现在扫描结果里');
   assert.equal(
     uiDesign.description,
-    'Comprehensive UI design skill covering fundamentals, patterns, and anti-patterns. '
-      + 'Layout, typography, color, spacing, accessibility, motion, and component design. '
-      + 'Use when building any web interface, reviewing design quality, or creating distinctive UIs.\n',
-    '真机 ui-design 的行描述是三句正文 + 一个 clip 换行（与宿主 yaml.parse 读同一文件的结果一致）',
+    'Comprehensive UI design skill covering fundamentals, patterns, and anti-patterns.',
+    '单行描述原样保留（这条样本本身只有一句话，不要再被折一次）',
   );
-  assert.notEqual(uiDesign.description, '>', '指示符本身不再被当成描述');
-  const raw = scanned.find((candidate) => candidate.dirName === 'clawhub-wpank--ui-design');
-  assert.equal(raw.description.startsWith('Comprehensive UI design skill'), true, '扫描层的原始候选就已经是正文');
 });

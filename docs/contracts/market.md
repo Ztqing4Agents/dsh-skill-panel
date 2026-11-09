@@ -38,7 +38,8 @@
  * @property {(io: UpstreamIo, options: {now: () => number, refresh?: boolean}) => Promise<{items: Category[]}>} [categories]
  * @property {(io: UpstreamIo, options: {now: () => number, refresh?: boolean}) => Promise<{counts: Record<string, number|null>, total: number|null, ok: boolean}>} [counts]
  * @property {(refs: {owner: string, slug: string}[], io: UpstreamIo, options: {now?: () => number}) =>
- *   Promise<Record<string, string|null>>} [icons]  // 批量图标：键 `sourceId:owner:slug`，值同 MarketItem.iconUrl
+ *   Promise<{icons: Record<string, string|null>, names: Record<string, string|null>}>} [icons]
+ *   // 批量图标与上游标题：两图同键（`sourceId:owner:slug`）、同序；值分别是 MarketItem.iconUrl 的编码与上游 displayName
  */
 ```
 
@@ -138,7 +139,9 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 1. **随列表拿**：SkillHub 的 `iconUrl` 就在列表条目里，直接用。
 2. **渐进补齐**：ClawHub 的列表没有 `icon`（实测 49 条 0 条有此键），只有详情有，而详情单条实测 **2.27–3.02s** —— 等它等于每页白等 1–3s，且实测 35 条里只补得出 2 条。所以列表阶段 ClawHub 的 `iconUrl` 一律 `null`，客户端渲染出一页卡片后，把这一页的 `{owner, slug}` 打一次 `POST /market/icons`（≤ 24 条），拿回 `{'clawhub:<owner>:<slug>': iconUrl|null}` 自己 patch 卡片。
 
-3. **已安装行按身份单查**：已安装行手上只有 `_meta.json` 的身份（`Row.upstream`），没有市场列表载荷，所以 SkillHub 那一侧也要一条通道：`skillhub.icons()` 走**同一条 detail** `GET /api/v1/skills/<slug>?namespace=<owner>`（**不带 `version`**——图标是技能级的，还能吃上游 CDN 缓存），只读 `skill.iconUrl`，**不拉清单、不拉 `SKILL.md`**（那会变成 3 次请求）。实测单条 **0.26s**，12 条 / 并发 6 ≈ 0.6s。
+3. **已安装行按身份单查**：已安装行手上只有 `_meta.json` 的身份（`Row.upstream`），没有市场列表载荷，所以 SkillHub 那一侧也要一条通道：`skillhub.icons()` 走**同一条 detail** `GET /api/v1/skills/<slug>?namespace=<owner>`（**不带 `version`**——图标与标题都属于技能而非某个版本，还能吃上游 CDN 缓存），只读 `skill.iconUrl` 与 `skill.displayName`，**不拉清单、不拉 `SKILL.md`**（那会变成 3 次请求）。实测单条 **0.26s**，12 条 / 并发 6 ≈ 0.6s。
+
+**标题搭顺风车**：这两个字段在同一条 detail 里，所以 `icons()` 一次返回 `{icons, names}`，`POST market/icons` 的响应也就带出**上游标题**（SkillHub 的 `displayName` 就是市场卡片上那行字，如 `dev-expert-pro` → 「编程专家Pro.Skill」）。缓存一次存 `{at, iconUrl, displayName}`，命中时两个值一起回——不存在「有图无题」的中间态。这条**不新增任何请求**，也不需要新路由。
 
 两源共用 `POST /market/icons`（§3.7.5），各自计时、各自缓存：SkillHub 并发 **6** / 单条 **5s**、ClawHub 并发 **4** / 单条 **5s**，**每源各自 6s 预算**（混合批次 ≈ `max(两源)`，不是相加）；超预算的条目返回 `null`（卡片保持首字母头像），整批仍 `200`；单条失败只让该项 `null`，一个源整体失败只让该源 `null`，**绝不 5xx**。缓存键 `skillhub:<owner>:<slug>` / `clawhub:<owner>:<slug>`，正向 10 分钟、负向 60 秒（负向短，上游补上图标后能很快看见）；命中不打上游。`bootstrap?refresh=1` 清空全部图标缓存。
 
