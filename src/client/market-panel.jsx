@@ -327,7 +327,6 @@ export function MarketPanel({ store, api, t }) {
           <MarketFilters
             market={market}
             t={t}
-            busy={market.page.status === 'loading' && market.items.length > 0}
             onInput={(text) => store.actions.marketSetInput(text)}
             onCommit={(text) => store.actions.marketCommitKeyword(text)}
             onFilter={(patch) => store.actions.marketSetFilter(patch)}
@@ -366,6 +365,16 @@ export function MarketPanel({ store, api, t }) {
               {market.page.status === 'loading' ? <MarketTailSkeleton /> : null}
             </ul>
           )}
+          {/* The "loading more" row belongs to the list, not to the toolbar: as a fourth
+              toolbar child it narrowed the search box by 21px for the duration of every
+              page load. The dot and the words are decoration - the sr-only `role="status"`
+              above is what a screen reader hears, so this row is not announced twice. */}
+          {market.page.status === 'loading' && market.items.length > 0 ? (
+            <div className={cn('marketLoadMore')} aria-hidden="true">
+              <StateDot state="ongoing" size={13} />
+              <span>{t('market.loadingMore')}</span>
+            </div>
+          ) : null}
           {market.page.status === 'error' && market.items.length > 0 ? (
             <p className={cn('marketMore')}>
               <Button variant="ghost" size="sm" onClick={() => void loadMore()}>

@@ -254,7 +254,6 @@
 .skc_empty{ color: var(--dsw-alias-label-tertiary); margin: 0; font-size: 13px; line-height: 20px }
 .skc_failure{ color: var(--dsw-alias-state-error-primary); align-items: center; gap: 10px; display: flex }
 .skc_failure p{ color: var(--dsw-alias-label-tertiary); margin: 0; font-size: 13px; line-height: 20px }
-.skc_statusWithDot{ align-items: center; gap: 6px; display: inline-flex }
 .skc_reason{
   color: var(--dsw-alias-state-error-primary); overflow-wrap: anywhere; white-space: pre-wrap;
   margin: 0; font-size: 12px; line-height: 18px;

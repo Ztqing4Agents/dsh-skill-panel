@@ -96,7 +96,7 @@ market = {
 | 首次进入市场页签 | `boot=loading`，并发发 `bootstrap` + `installed` + 第一页（默认 scope「所有来源」） | 骨架（分类条也是占位） |
 | `bootstrap` 成功 | `boot=ready` | 填 `sources/categories`；`categoriesOk=false` 时分类行换成一句说明 |
 | `bootstrap` 失败 | `boot=ready`（**不是 error**） | `sources` 回落内置三 scope，列表照打，分类行换成一句说明 |
-| 关键词变化 | 250ms 防抖后提交；**IME 组字期间先攒着，组字结束才提交**（否则中文用户会被半成品过滤） | 请求中**保留旧 items**（`aria-busy` + 搜索框旁 ongoing 点），不换骨架 |
+| 关键词变化 | 250ms 防抖后提交；**IME 组字期间先攒着，组字结束才提交**（否则中文用户会被半成品过滤） | 请求中**保留旧 items**（`aria-busy`），不换骨架；工具栏不动 |
 | 回车（非组字）/ 点 × / 清空输入 | 立刻提交，不经防抖（× 与回车都取消在飞的防抖） | × 在**框内**（`.skc_marketSearchField` 里绝对定位），同时清 `input` 与 `keyword` 并把焦点送回输入框；不动 scope 与分类 |
 | 切 scope / 分类 / 排序（或关键词） | 清 `items/pages/cursors/exhausted/detail`，滚回顶部；`bootScope !== filters.source` 时补一次 `bootstrap?source=`（带 token 守卫，旧响应不覆盖新数字） | 值没变时不重拉；切 scope 只让 chips 进骨架 |
 | 一页返回 | `listStatus=ready`，`page` 进 `more` 或 `done` | 列表 = 已有项 + 这一页按序拼接（`mergeBatches` 仍接受多源数组，但市场一次只看一个源，只喂一项）；不跨源重排 |
@@ -118,9 +118,10 @@ market = {
 SkillsPage (page.jsx：页头 + 两个页签)
 ├─ toolbar：刷新（恒在，行为跟随当前页签）｜计数 + ＋添加技能（仅「已安装」页签渲染）
 └─ tabPanel(market) → MarketPanel (market-panel.jsx)
-    ├─ MarketFilters (market-filters.jsx)：Input(250ms 防抖) / Menu(来源 = SkillHub｜ClawHub) / Menu(排序) / Pill(分类 chips + 数量)
+    ├─ MarketFilters (market-filters.jsx)：Input(250ms 防抖，× 在框内) / Menu(来源 = 所有来源｜SkillHub｜ClawHub) / Menu(排序) —— **工具栏恒三个子元素** / Pill(分类 chips + 数量)
     ├─ 首屏骨架｜整页错误态（当前源失败）｜空态
     ├─ ul.skc_marketGrid → MarketCard (market-card.jsx) × N（**头部 = 48 头像 + 标题行（标题 + 来源图）/ 作者行 + 安装位**；正文 = 描述 2 行 / 标签 chips / 三段 `评分·下载·收藏`；动作位只有安装；尾部 3 张骨架；头像位是 MarketIcon → tileElement）
+    ├─ ul 之后：加载更多一行（`skc_marketLoadMore` = 圆点 + `market.loadingMore`，**视觉件 `aria-hidden`**，只在「已有卡片 + 正在追加」时出现；播报仍由上面那条 sr-only `role="status"` 负责）
     ├─ MarketDetail (market-detail.jsx)：面包屑 + 头 + 事实表 + 概览 + 文件
     └─ MarketConfirm (market-confirm.jsx)：Modal（width:min(480px,100vw - 32px)）
 MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
@@ -280,7 +281,7 @@ icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安�
 | `market.searchLabel` | 搜索技能 |
 | `market.searchPlaceholder` | 搜索技能… |
 | `market.clearSearch` | 清除搜索 |
-| `market.searching` | 正在搜索 |
+| `market.searching` | 正在搜索（**U10 起无消费者**：工具栏那条圆点播报已删，键留着备用，不动键数） |
 | `market.sourceLabel` | 来源 |
 | `market.source.all` | 所有来源 |
 | `market.source.skillhub` | SkillHub |

@@ -16,7 +16,6 @@ import {
   Input,
   Menu,
   Pill,
-  StateDot,
   IconChevronDownOutlineRegular,
   IconCloseOutlineRegular,
   IconSearchOutlineRegular,
@@ -79,12 +78,11 @@ function Select({ name, label, value, items, menu, className, onToggle, onSelect
 
 /**
  * Render the market toolbar and the category row.
- * @param {{market: object, t: Function, busy: boolean, onInput: Function, onCommit: Function,
- *   onFilter: Function}} props - market state, translate, whether a request is in flight,
- *   and the three handlers.
+ * @param {{market: object, t: Function, onInput: Function, onCommit: Function,
+ *   onFilter: Function}} props - market state, translate, and the three handlers.
  * @returns {import('react').ReactElement} the toolbar.
  */
-export function MarketFilters({ market, t, busy, onInput, onCommit, onFilter }) {
+export function MarketFilters({ market, t, onInput, onCommit, onFilter }) {
   const [menu, setMenu] = useState(null);
   /** The field container, so the clear button can hand focus back to the input. */
   const fieldRef = useRef(null);
@@ -227,12 +225,6 @@ export function MarketFilters({ market, t, busy, onInput, onCommit, onFilter }) 
           onToggle={onToggle}
           onSelect={onSelect}
         />
-        {busy ? (
-          <span className={cn('statusWithDot')} role="status">
-            <span className={cn('progressAnnouncement')}>{t('market.searching')}</span>
-            <StateDot state="ongoing" size={13} />
-          </span>
-        ) : null}
       </div>
       {chips.visible ? (
         <div className={cn('marketChips')} role="group" aria-label={t('market.categoriesLabel')}>

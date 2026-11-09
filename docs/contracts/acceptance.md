@@ -152,7 +152,9 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 
 | **K99** | 搜索框：× 在框内、清空即提交、IME 不误提交 | 字符串渲染 + hooks 直驱（无 DOM） | `.skc_marketSearchField` 在工具栏里、宿主 `Input` 与 `button` 都是它的子节点、按钮在容器闭合之前（不是工具栏的兄弟）；× 只在有文字时渲染、`type=button` + `aria-label`/`title`；样式断言：容器 `position:relative`/`flex:1`/`min-width:120px`、搜索框 `padding-right:32px`+`box-sizing:border-box`+`width:100%`（且不再自己吃 `flex:1`）、按钮 `position:absolute;right:5px;top:50%;translateY(-50%)`+24×24+`border:0`+无颜色字面量；点 × ⇒ `onInput('')` 后 `onCommit('')`，store 的 `input` 与 `keyword` 同时为空，且焦点回到输入框（`querySelector('input').focus()`）；组字中回车不提交、`onCompositionEnd` 后回车立即提交、`keyCode 229` 也算组字、非 Enter 键永不提交 | L3 · `test/market-search.test.mjs` |
 
-**红绿口径**（Round 15 终态，搜索框轮）：K28–K49 与 K52–**K99** 全部绿（**K33 / K58 / K60 / K80 已退役、不计入**；`node --test test/` 共 **671** 例，K 系列零红；K94–K99 的落点见上表末六行，K29/K35/K36/K37/K38/K42/K45/K55/K89/K93 的用例体按 U8 改写而编号未变）；K50 / K51 不进 `npm test`（要像素级命中、滚动容器与真实上游），由 agent 驱动无头浏览器在隔离 `DSH_HOME` 上验。
+| **K100** | 工具栏恒三子元素；加载更多提示在列表底部 | 字符串渲染（同一 store 的加载 / 空闲两态） | 工具栏的子元素恰好 3 个（搜索框 + 来源菜单 + 排序菜单）；工具栏里**没有**状态圆点、也没有加载提示；**加载态与空闲态的工具栏逐字相同**（搜索框不再被挤窄 21px）；`.skc_marketLoadMore` 出现在 `</ul>` 之后、带 `aria-hidden="true"`、文案复用 `market.loadingMore`；同一状态下 `role="status"` 只比空闲态多一条（sr-only 播报，视觉件不重复朗读）；`items` 为空的首屏加载**不画**这一行（那是骨架的事） | L3 · `test/market-view.test.mjs` |
+
+**红绿口径**（Round 16 终态，加载提示轮）：K28–K49 与 K52–**K100** 全部绿（**K33 / K58 / K60 / K80 已退役、不计入**；`node --test test/` 共 **675** 例，K 系列零红；K94–K100 的落点见上表末七行，K29/K35/K36/K37/K38/K42/K45/K55/K89/K93 的用例体按 U8 改写而编号未变）；K50 / K51 不进 `npm test`（要像素级命中、滚动容器与真实上游），由 agent 驱动无头浏览器在隔离 `DSH_HOME` 上验。
 
 ---
 

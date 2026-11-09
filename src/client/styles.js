@@ -196,7 +196,6 @@ const CSS = `
 .skc_empty{ color: var(--dsw-alias-label-tertiary); margin: 0; font-size: 13px; line-height: 20px }
 .skc_failure{ color: var(--dsw-alias-state-error-primary); align-items: center; gap: 10px; display: flex }
 .skc_failure p{ color: var(--dsw-alias-label-tertiary); margin: 0; font-size: 13px; line-height: 20px }
-.skc_statusWithDot{ align-items: center; gap: 6px; display: inline-flex }
 .skc_reason{
   color: var(--dsw-alias-state-error-primary); overflow-wrap: anywhere; white-space: pre-wrap;
   margin: 0; font-size: 12px; line-height: 18px;
@@ -402,7 +401,14 @@ const CSS = `
   margin: 0; font-size: 13px; line-height: 20px; display: inline-flex;
 }
 .skc_marketFailure{ align-items: center; gap: 10px; display: flex }
+/* The list's own footers. skc_marketMore carries "no more" and the retry button;
+   skc_marketLoadMore is the "loading" row - same rhythm, but it holds a dot and words
+   rather than a control, so it centres them itself. */
 .skc_marketMore{ align-self: center }
+.skc_marketLoadMore{
+  align-items: center; justify-content: center; gap: 6px; padding-top: 8px; display: flex;
+  color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px;
+}
 
 /* market: the inline detail */
 .skc_marketDetail{ flex-direction: column; gap: 16px; display: flex }

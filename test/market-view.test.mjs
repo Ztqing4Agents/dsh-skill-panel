@@ -1161,3 +1161,152 @@ test('K84 四态下动作位都待在唯一那一层里：安装按钮始终落�
     );
   }
 });
+
+test('K100 工具栏恒为三个子元素：加载更多提示挪到列表底部（视觉件 aria-hidden）', () => {
+  /** The toolbar's own markup, so its children can be counted and compared. */
+  const toolbarOf = (html) => {
+    const start = html.indexOf('class="skc_marketToolbar"');
+    assert.equal(start > 0, true, '工具栏存在');
+    return html.slice(start, html.indexOf('</div>', start) + 6);
+  };
+
+  const idle = renderMarket((store) => {
+    store.actions.marketPageAppended({ pages: [{ sourceId: 'all', page: { items: [item()], next: 'c2' } }], merged: [item()] });
+  });
+  const loading = renderMarket((store) => {
+    store.actions.marketPageAppended({ pages: [{ sourceId: 'all', page: { items: [item()], next: 'c2' } }], merged: [item()] });
+    store.actions.marketPageStart();
+  });
+
+  // Three children: the search field, the source menu, the sort menu. A fourth (the old
+  // status dot) narrowed the search box by 21px for the duration of every page load.
+  const toolbar = toolbarOf(loading);
+  assert.equal(matches(toolbar, /<(span|button) class="[^"]*skc_market(SearchField|Select)[^"]*"/g).length, 3,
+    '工具栏恰好三个子元素（搜索框 + 两个菜单）');
+  assert.equal(toolbar.includes('skc_statusWithDot'), false, '工具栏里没有状态圆点');
+  assert.equal(toolbar.includes('skc_marketLoadMore'), false, '加载提示不在工具栏里');
+  assert.equal(toolbarOf(idle), toolbar, '加载态与空闲态的工具栏逐字相同（搜索框不再忽宽忽窄）');
+
+  // The row itself: after the grid, decorative, and paired with the one live announcement.
+  const gridEnd = loading.indexOf('</ul>', loading.indexOf('class="skc_marketGrid"'));
+  const rowAt = loading.indexOf('class="skc_marketLoadMore"');
+  assert.equal(rowAt > gridEnd, true, '加载更多提示在卡片列表之后');
+  const row = loading.slice(loading.lastIndexOf('<', rowAt), loading.indexOf('</div>', rowAt) + 6);
+  assert.match(row, /aria-hidden="true"/, '视觉件对屏幕阅读器隐藏（避免与下方播报重复）');
+  assert.equal(row.includes('正在加载更多'), true, '文案复用 market.loadingMore');
+  assert.equal(
+    matches(loading, /role="status"/g).length,
+    matches(idle, /role="status"/g).length + 1,
+    '只多出那一条 sr-only 播报（视觉件不算）',
+  );
+
+  // An empty list loading its first page is the skeleton's job, not this row's.
+  const firstPage = renderMarket((store) => {
+    store.actions.marketListLoading();
+  });
+  assert.equal(firstPage.includes('skc_marketLoadMore'), false, '首屏骨架不画这条（items 为空）');
+});
+
+test('K100 三个页脚互斥：正在加载 / 追加失败 / 到底，任何时刻只有一条', () => {
+  const count = (html, needle) => html.split(needle).length - 1;
+  const withOnePage = (store) => store.actions.marketPageAppended({
+    pages: [{ sourceId: 'all', page: { items: [item()], next: 'c2' } }],
+    merged: [item()],
+  });
+
+  const loading = renderMarket((store) => { withOnePage(store); store.actions.marketPageStart(); });
+  const failed = renderMarket((store) => {
+    withOnePage(store);
+    store.actions.marketPageFailed({ code: 'E_SOURCE_TIMEOUT', message: 'upstream timed out' });
+  });
+  const ended = renderMarket((store) => store.actions.marketPageAppended({
+    pages: [{ sourceId: 'all', page: { items: [item()], next: null } }],
+    merged: [item()],
+  }));
+
+  assert.equal(count(loading, 'skc_marketLoadMore'), 1, '加载中：一条加载提示');
+  assert.equal(count(loading, 'skc_marketMore'), 0, '加载中不出现「没有更多了」/重试');
+  assert.equal(count(loading, 'skc_marketFailure'), 0, '加载中不出现失败提示');
+
+  assert.equal(count(failed, 'skc_marketLoadMore'), 0, '失败时加载提示必须消失');
+  assert.equal(count(failed, 'skc_marketMore'), 1, '失败时只有那一条重试页脚');
+  assert.equal(failed.includes('正在加载更多'), false, '失败页脚里没有加载文案');
+
+  assert.equal(count(ended, 'skc_marketLoadMore'), 0, '到底时没有加载提示');
+  assert.equal(count(ended, 'skc_marketMore'), 1, '到底时只有「没有更多了」');
+  assert.equal(ended.includes('正在加载更多'), false, '到底文案与加载文案不混');
+
+  // The invariant in one sentence: at most one footer, whichever state the page is in.
+  for (const [label, html] of [['加载中', loading], ['失败', failed], ['到底', ended]]) {
+    const footers = count(html, 'skc_marketLoadMore') + count(html, 'skc_marketMore');
+    assert.equal(footers, 1, `${label}：页脚总数恰好一条`);
+  }
+});
+
+test('K100 连续触发两次追加：工具栏仍逐字相同，底部仍只有一行提示', () => {
+  const toolbarOf = (html) => {
+    const start = html.indexOf('class="skc_marketToolbar"');
+    return html.slice(start, html.indexOf('</div>', start) + 6);
+  };
+  const count = (html, needle) => html.split(needle).length - 1;
+  const seed = (store) => {
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'all', page: { items: [item()], next: 'c2' } }],
+      merged: [item()],
+    });
+  };
+
+  const idle = renderMarket(seed);
+  // Two scroll-triggered appends in the same frame: the state machine may be asked twice.
+  const twice = renderMarket((store) => { seed(store); store.actions.marketPageStart(); store.actions.marketPageStart(); });
+  assert.equal(toolbarOf(twice), toolbarOf(idle), '两次追加请求后工具栏依旧逐字相同（搜索框不再抖 21px）');
+  assert.equal(count(twice, 'skc_marketLoadMore'), 1, '提示只有一行（不是每触发一次多一行）');
+
+  // The row is a loading state, not a permanent footer: the next answer replaces it.
+  const answered = renderMarket((store) => {
+    seed(store);
+    store.actions.marketPageStart();
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'all', page: { items: [item({ id: 'skillhub:ake:next' })], next: null } }],
+      merged: [item(), item({ id: 'skillhub:ake:next' })],
+    });
+  });
+  assert.equal(count(answered, 'skc_marketLoadMore'), 0, '答案到了，加载提示消失');
+  assert.equal(count(answered, 'skc_marketMore'), 1, '取而代之是「没有更多了」');
+
+  // And a scope/filter change empties the list: the loading row must not survive it.
+  const switched = renderMarket((store) => {
+    seed(store);
+    store.actions.marketPageStart();
+    store.actions.marketSetFilter({ source: 'clawhub' });
+  });
+  assert.equal(count(switched, 'skc_marketLoadMore'), 0, '切来源清空列表后不画这条（items 已空）');
+});
+
+test('K100 无障碍只播报一次：视觉行 aria-hidden，sr-only role="status" 恰好一条且在行外', () => {
+  const html = renderMarket((store) => {
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'all', page: { items: [item()], next: 'c2' } }],
+      merged: [item()],
+    });
+    store.actions.marketPageStart();
+  });
+
+  const at = html.indexOf('class="skc_marketLoadMore"');
+  assert.ok(at > 0, '加载行存在');
+  const row = html.slice(html.lastIndexOf('<', at), html.indexOf('</div>', at) + 6);
+  // The row's own tag carries it; the icon inside carries its own (every svg here does), so
+  // the assertion is on the element, not on the count of the attribute in its subtree.
+  const rowTag = html.slice(html.lastIndexOf('<', at), html.indexOf('>', at) + 1);
+  assert.match(rowTag, /aria-hidden="true"/, '视觉行本身 aria-hidden（读屏不念这句话）');
+  assert.equal(rowTag.includes('role='), false, '视觉行没有角色（不给读屏第二个入口）');
+
+  const statuses = html.split('role="status"').length - 1;
+  assert.equal(statuses, 1, '整页只有一条 role="status"（多于一条就是重复播报）');
+  assert.equal(row.includes('role="status"'), false, '播报器不在视觉行里（二者是两件事）');
+  assert.ok(
+    html.indexOf('role="status"') < at,
+    'sr-only 播报在列表之前（加载一开始就能被听到）',
+  );
+  assert.match(row, /正在加载更多/, '视觉行仍给人看得见的那句话');
+});
