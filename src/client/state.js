@@ -42,6 +42,10 @@ function initialMarket() {
     total: null,
     countsOk: true,
     filters: { source: MARKET_DEFAULT_SOURCE, category: null, sort: 'recommended' },
+    // The scope the current `categories` + counts belong to, and whether a scope change is
+    // waiting for its numbers: only the chips row goes to skeleton, the cards stay put.
+    bootScope: '',
+    categoriesLoading: false,
     keyword: '',
     input: '',
     items: [],
@@ -247,14 +251,24 @@ export function createStore() {
 
     /* ------------------------------------------------------------------ market */
 
-    /** The first market visit is asking for sources and categories. @returns {void} */
+    /**
+     * `bootstrap` is in flight. A first visit has nothing to draw yet; a scope change keeps
+     * the cards on screen and only puts the chips row into its skeleton - the numbers for
+     * the new scope are a different query, not a different list.
+     * @returns {void}
+     */
     marketBootLoading: () => {
-      setMarket({ boot: 'loading' });
+      const known = state.market.boot === 'ready';
+      setMarket({
+        boot: known ? 'ready' : 'loading',
+        ...(known ? { categoriesLoading: true } : {}),
+      });
     },
     /**
-     * `bootstrap` answered: the panel now knows which sources exist and which
-     * categories they publish.
-     * @param {{sources?: object[], categories?: object[], categoriesOk?: boolean}} data - route payload.
+     * `bootstrap` answered: the panel now knows which scopes exist, which categories they
+     * publish, and - through `source` - which scope these counts belong to.
+     * @param {{source?: string, sources?: object[], categories?: object[], categoriesOk?: boolean}} data -
+     *   route payload.
      * @returns {void}
      */
     marketBootReady: (data) => {
@@ -265,6 +279,8 @@ export function createStore() {
         categoriesOk: data?.categoriesOk !== false,
         total: Number.isFinite(data?.total) ? data.total : null,
         countsOk: data?.countsOk !== false,
+        bootScope: typeof data?.source === 'string' ? data.source : '',
+        categoriesLoading: false,
       });
     },
     /**
@@ -276,6 +292,7 @@ export function createStore() {
     marketBootFallback: (sources) => {
       setMarket({
         boot: 'ready',
+        categoriesLoading: false,
         sources: Array.isArray(sources) ? sources : [],
         categories: [],
         categoriesOk: false,
@@ -318,10 +335,15 @@ export function createStore() {
         changed = true;
       }
       if (!changed) return;
+      // Every filter change restarts the list (the cursor holds a page number, not a
+      // filter signature). A scope change also invalidates the counts on screen: they
+      // belong to the previous scope until the new ones arrive.
+      const scopeChanged = filters.source !== state.market.filters.source;
       setMarket({
         filters,
         items: [],
         detail: null,
+        ...(scopeChanged ? { categoriesLoading: true } : {}),
         ...clearedPaging({ ...state.market, items: [] }),
       });
     },

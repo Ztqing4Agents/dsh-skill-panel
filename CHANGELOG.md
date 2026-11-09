@@ -17,7 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 市场卡片与详情显示上游技能图标（SkillHub 的 `/skill-icons/` 图，约占四成条目）；没有图标、或图标加载失败时仍是首字母头像，不会出现空白方块。
 - 市场卡片可以**收藏**技能：书签按钮在标题行右端，收藏存在本插件自己的目录里（`~/.dsh/dsh-skill-center/favorites.json`），重启后仍在；上限 500 条，写盘失败与上限都有一句 toast 说明。
 
+### Added
+
+- 来源筛选补上「**所有来源**」并设为默认（与 skillhub.cn 一致：22.4 万条，含 ClawHub）；排序补上「**收藏量**」。
+- ClawHub 页签顶部现在也有**场景分类**（13 类，与 SkillHub 同一张表）。
+
 ### Changed
+
+- 「SkillHub」这一档现在只列 SkillHub 自己的目录（16.1 万条）——以前它其实列的是「所有来源」。分类计数按来源分别计算，切来源时先出现骨架再出数字；排序菜单的「推荐」「下载最多」按站点改叫「默认排序」「下载量」。
 
 - ClawHub 的**详情与安装**也改由 SkillHub 镜像提供：一条上游、一套口径，卡片与详情不再有两套下载量；安装改成逐文件下载（与 SkillHub 同一条链路），装进去的文件就是镜像清单里的文件。
 - ClawHub 的**版本号以镜像为准**（卡片 / 详情 / 安装三处一致）。镜像可能比 ClawHub 官方慢一版；要装官方最新版请用 ClawHub 官网。

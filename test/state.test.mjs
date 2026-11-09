@@ -161,10 +161,12 @@ function marketItem(id, sourceId = 'skillhub') {
   };
 }
 
-test('K45 初始 market 子状态：默认「SkillHub / 推荐 / 未筛分类」，什么都没加载', () => {
+test('K45 初始 market 子状态：默认「所有来源 / 默认排序 / 未筛分类」，什么都没加载', () => {
   const market = createStore().getSnapshot().market;
-  // 用户去掉了「全部来源」（市场一次只问一个源），默认停在 SkillHub（market-model §3.8.2）。
-  assert.deepEqual(market.filters, { source: 'skillhub', category: null, sort: 'recommended' }, '默认筛选与设计一致');
+  // U8：与站点一致，默认是「所有来源」（不传上游 source），排序默认仍是 score。
+  assert.deepEqual(market.filters, { source: 'all', category: null, sort: 'recommended' }, '默认筛选与设计一致');
+  assert.equal(market.bootScope, '', '还没有哪一档的计数');
+  assert.equal(market.categoriesLoading, false, '没有在等计数');
   assert.equal(market.total, null, 'bootstrap 之前没有总数');
   assert.equal(market.countsOk, true, '计数默认可用（没数就不渲染，但不用报错态）');
   assert.equal(market.boot, 'idle', 'bootstrap 还没发');
@@ -181,18 +183,18 @@ test('K45 初始 market 子状态：默认「SkillHub / 推荐 / 未筛分类」
 test('K45 marketSetFilter 过滤空操作：同一个值再设一次不产生新快照（不会白重拉一页）', () => {
   const store = createStore();
   const before = store.getSnapshot().market;
-  store.actions.marketSetFilter({ source: 'skillhub' });
-  assert.equal(store.getSnapshot().market, before, '值没变 ⇒ 状态对象不变（引用相等）');
-  // `{source:'all'}` 不再是「默认值」：它现在是一个普通（不存在的）源 id，设它会真的改状态。
   store.actions.marketSetFilter({ source: 'all' });
-  assert.equal(store.getSnapshot().market.filters.source, 'all', 'all 不再是特殊值，照字面生效');
+  assert.equal(store.getSnapshot().market, before, '值没变 ⇒ 状态对象不变（引用相等）');
   store.actions.marketSetFilter({ source: 'skillhub' });
+  assert.equal(store.getSnapshot().market.filters.source, 'skillhub', '换 scope 生效');
+  assert.equal(store.getSnapshot().market.categoriesLoading, true, '切 scope 先让 chips 进骨架（卡片不动）');
   const reset = store.getSnapshot().market;
   store.actions.marketSetFilter(null);
   assert.equal(store.getSnapshot().market, reset, '非对象入参被忽略');
   store.actions.marketSetFilter({ source: 'clawhub', sort: 'updated' });
   const changed = store.getSnapshot().market;
   assert.equal(changed.filters.source, 'clawhub', '改变来源生效');
+  assert.equal(changed.categoriesLoading, true, '切 scope ⇒ 计数待补');
   assert.equal(changed.filters.sort, 'updated', '同一补丁里的排序也生效');
   assert.deepEqual(changed.items, [], '换筛选后旧结果被清空（属于旧查询）');
   assert.equal(changed.pages, 0, '分页从头再来');

@@ -14,11 +14,16 @@ import test from 'node:test';
 import {
   LIMIT,
   MAX_KEYWORD,
+  SCOPE_PARAM,
+  SCOPES_OF_LIST,
+  SORT_PARAMS,
   SORTS,
+  SOURCE_IDS,
   buildUrl,
   decodeCursor,
   encodeCursor,
   parseDetailQuery,
+  parseIconRequest,
   parseInstallBody,
   parseListQuery,
 } from '../lib/market/query.js';
@@ -51,27 +56,45 @@ function assertBadQuery(run, hint) {
   assert.equal(MARKET_STATUS[error.code], 400, `${hint} 的 HTTP 状态是 400`);
 }
 
-test('K29 三档排序是白名单：recommended/updated/downloads，缺省 recommended', () => {
-  assert.deepEqual([...SORTS].sort(), ['downloads', 'recommended', 'updated'], '排序选项恰好三个');
+test('K29 四档排序是白名单：recommended/updated/downloads/stars，缺省 recommended', () => {
+  assert.deepEqual([...SORTS].sort(), ['downloads', 'recommended', 'stars', 'updated'], '排序选项恰好四个');
   assert.equal(parseListQuery({ source: 'skillhub' }).sort, 'recommended', '不传 sort 时用 recommended');
   assert.equal(parseListQuery({ source: 'skillhub', sort: '' }).sort, 'recommended', '空串等同不传');
-  for (const sort of ['downloads', 'updated']) {
+  for (const sort of ['downloads', 'updated', 'stars']) {
     assert.equal(parseListQuery({ source: 'skillhub', sort }).sort, sort, `${sort} 被接受`);
   }
   assertBadQuery(() => parseListQuery({ source: 'skillhub', sort: 'popular' }), '未知 sort');
   assertBadQuery(() => parseListQuery({ source: 'skillhub', sort: 'Recommended' }), '大小写不宽容');
 });
 
-test('K29 source 只过文法（all 能过文法但注册表会拒），不合文法的 400', () => {
-  assert.equal(parseListQuery({ source: 'clawhub' }).sourceId, 'clawhub', '注册过的源被接受');
-  assert.equal(
-    parseListQuery({ source: 'all' }).sourceId,
-    'all',
-    "'all' 只是文法合法：query.js 不管注册表，`all` 由路由的 requireSource 判 400（见 market-routes）",
+test('K94 范围轴：source 可缺省（= all），三值白名单映射到上游参数', () => {
+  const plain = parseListQuery({ source: 'skillhub' });
+  assert.equal(plain.scope, 'skillhub', 'skillhub 被接受');
+  assert.equal(plain.sourceParam, 'community', 'SkillHub 这一档问的是 community');
+
+  assert.deepEqual(
+    (({ scope, sourceParam }) => ({ scope, sourceParam }))(parseListQuery({ source: 'clawhub' })),
+    { scope: 'clawhub', sourceParam: 'clawhub' },
+    'ClawHub 这一档问的是 clawhub',
   );
-  for (const source of [undefined, null, '', 'SkillHub', 'skill hub', '-x', 'x'.repeat(33)]) {
+  for (const params of [{}, { source: '' }, { source: 'all' }]) {
+    const query = parseListQuery(params);
+    assert.equal(query.scope, 'all', `${JSON.stringify(params)} ⇒ all（站点「所有来源」就是不传参数）`);
+    assert.equal(query.sourceParam, null, `${JSON.stringify(params)} 的上游不带 source`);
+  }
+  for (const source of ['bogus', 'SkillHub', 'skill hub', '-x', 'x'.repeat(33), 'community']) {
     assertBadQuery(() => parseListQuery({ source }), `source=${JSON.stringify(source)}`);
   }
+});
+
+test('K94 all 不属于身份轴：detail / install / icons 收到 all 一律 400', () => {
+  const ref = { source: 'all', owner: 'ake', slug: 'x' };
+  assertBadQuery(() => parseDetailQuery(ref), 'detail 的 source=all');
+  assertBadQuery(() => parseInstallBody(ref), 'install 的 source=all');
+  assertBadQuery(() => parseIconRequest({ items: [ref] }), 'icons 的 source=all');
+  // The two identity ids still pass, unchanged.
+  assert.equal(parseDetailQuery({ ...ref, source: 'clawhub' }).sourceId, 'clawhub', 'clawhub 仍是合法身份');
+  assert.equal(parseInstallBody({ ...ref, source: 'skillhub' }).sourceId, 'skillhub', 'skillhub 仍是合法身份');
 });
 
 test('K29 limit 夹到 1..24（不报错），非数字才 400', () => {
@@ -175,12 +198,11 @@ test('K29 install 的 body 只认四个字段：path / files / name 一律忽略
   for (const body of [null, undefined, 'text', 42, []]) {
     assertBadQuery(() => parseInstallBody(body), `body=${JSON.stringify(body)}`);
   }
-  // 注册表检查在路由层（§3.7.4 S0），query.js 只判文法：'nope' 文法合法，故这里不抛。
-  assert.deepEqual(
-    parseInstallBody({ source: 'nope', owner: 'a', slug: 'b' }),
-    { sourceId: 'nope', owner: 'a', slug: 'b', version: null },
-    '未注册但文法合法的源留给路由的 requireSource 判 400',
-  );
+  // U8: the identity whitelist lives here now (two ids, `all` excluded), so a name that is
+  // merely well-formed - an unregistered source, or the list's own `all` scope - is a 400
+  // before the route ever looks at its registry.
+  assertBadQuery(() => parseInstallBody({ source: 'nope', owner: 'a', slug: 'b' }), '未注册的源');
+  assertBadQuery(() => parseInstallBody({ source: 'all', owner: 'a', slug: 'b' }), 'all 不是身份 id');
   assertBadQuery(() => parseInstallBody({ source: 'skillhub', owner: 'a', slug: '../b' }), 'slug 里的 ..');
 });
 
@@ -198,4 +220,69 @@ test('K29 buildUrl 拒绝逃出源 origin 的路径（编程错误走 E_INTERNAL
   const error = thrownBy(() => buildUrl('https://api.skillhub.cn', 'https://evil.example.com/steal'));
   assert.equal(error.code, 'E_INTERNAL', '换 origin 是内部错误，不是用户可纠正的参数错误');
   assert.equal(MARKET_STATUS[error.code], 500, 'E_INTERNAL 是 500');
+});
+
+test('K97 四档排序映射到上游参数，可与分类和 source 组合', () => {
+  const cases = [
+    ['recommended', 'score'],
+    ['updated', 'updated_at'],
+    ['downloads', 'downloads'],
+    ['stars', 'stars'],
+  ];
+  for (const [sort, sortBy] of cases) {
+    assert.deepEqual(SORT_PARAMS[sort], { sortBy, order: 'desc' }, `${sort} ⇒ ${sortBy} 降序`);
+  }
+  // The site's own order: score first, and the panel's default is that first item.
+  assert.equal(SORTS.has('recommended'), true, 'recommended 仍在白名单里');
+  assertBadQuery(() => parseListQuery({ source: 'all', sort: 'rating' }), '未知 sort');
+});
+
+test('K97 三个筛选参数同时在 URL 里：scope 的 source、category、sort 互不覆盖', () => {
+  const query = parseListQuery({ source: 'clawhub', category: 'ai-agent', sort: 'stars', limit: '6' });
+  const params = {
+    page: 1,
+    pageSize: query.limit,
+    ...(query.sourceParam === null ? {} : { source: query.sourceParam }),
+    ...SORT_PARAMS[query.sort],
+    category: query.category,
+    keyword: query.keyword,
+  };
+  const url = new URL(buildUrl('https://api.skillhub.cn', '/api/skills', params));
+  assert.equal(url.searchParams.get('source'), 'clawhub', 'scope 的 source 在');
+  assert.equal(url.searchParams.get('category'), 'ai-agent', '分类在');
+  assert.equal(url.searchParams.get('sortBy'), 'stars', '排序在');
+  assert.equal(url.searchParams.get('order'), 'desc', '方向在');
+  assert.equal(url.searchParams.get('pageSize'), '6', '页大小在');
+
+  const allQuery = parseListQuery({ category: 'ai-agent', sort: 'stars' });
+  const allUrl = buildUrl('https://api.skillhub.cn', '/api/skills', {
+    page: 1,
+    ...(allQuery.sourceParam === null ? {} : { source: allQuery.sourceParam }),
+    ...SORT_PARAMS[allQuery.sort],
+    category: allQuery.category,
+  });
+  assert.equal(new URL(allUrl).searchParams.get('source'), null, 'all 这一档不带 source（= 站点的所有来源）');
+});
+
+test('K94 范围轴的其余边界：大小写、空白、enterprise 都不是 scope，且与身份轴互不相交', () => {
+  // Fail closed: the upstream's own value (`community`) is not a scope either - only the
+  // three ids the menu draws are, and the identity whitelist is a different set.
+  for (const [source, hint] of [
+    ['ALL', '大写不等于 all'],
+    ['SkillHub', '标签名不是机器值'],
+    [' all ', '不修剪空白（契约没有「trim 后接受」这一条，宁可 400）'],
+    ['community', '上游值不是范围轴的值'],
+    ['enterprise', 'enterprise 是 community 的子筛选，不是一档'],
+    ['skillhub,clawhub', '逗号分隔不是这个端点的语法'],
+  ]) {
+    assertBadQuery(() => parseListQuery({ source }), `${hint}（source=${JSON.stringify(source)}）`);
+  }
+
+  // The two sets are disjoint on purpose: a value in one must never leak into the other.
+  assert.deepEqual([...SCOPES_OF_LIST], ['all', 'skillhub', 'clawhub'], '范围轴恰好三值');
+  assert.deepEqual([...SOURCE_IDS], ['skillhub', 'clawhub'], '身份轴恰好两值');
+  assert.equal(SCOPES_OF_LIST.has('all') && SOURCE_IDS.has('all'), false, 'all 只在范围轴里');
+  for (const id of SOURCE_IDS) {
+    assert.equal(SCOPES_OF_LIST.has(id), true, `${id} 同时是范围轴的一档（两轴用同一组词，语义不同）`);
+  }
 });

@@ -54,36 +54,38 @@
 3. **适配器不知道「来源筛选」「跨源合并顺序」「分页大小」。** 它只接受 `ListQuery` 并返回 `{items, next, total}`；`next` 是它自己的不透明游标（`null` = 没有下一页）。
 4. **安装只认清单。** `plan()` 返回的 `files[{path, size, sha256|null}]` 是唯一合法的取文件集合；客户端永远不传文件路径，`install` 的请求体只有 `{source, owner, slug, version}`。
 
-### 7.2 两源能力对照、游标与 sort 映射
+### 7.2 三个 scope 的能力对照、游标与 sort 映射
 
-| 能力 | skillhub | clawhub |
-| --- | --- | --- |
-| `list` | `GET /api/skills?page&pageSize&sortBy&order` | `GET /api/skills?page&pageSize&sortBy&order&category&keyword&source=clawhub`（同端点、同形状，只多一个 `source`；见 §7.8） |
-| `search` | 同一端点 + `keyword=`（因此能翻页） | 同一端点 + `keyword=`（同上，**能翻页**） |
-| 游标形状 | `{page: number}`（1 起） | **`{page: number}`（同上；两个适配器共用 `query.js` 的 `pageOf`）** |
-| `detail` | `GET /api/v1/skills/<slug>?namespace=&version=` + 清单 + `SKILL.md` | 同左（`namespace` 由一次 `keyword=<slug>` 的列表查询按 `slug`+`upstream_owner_login` 双匹配解析，**不猜前缀**；评分也用那一行补，见 §7.8） |
-| `plan` | `GET …/files?namespace=&version=`（清单） | 同左（version 由镜像 detail 解析；清单无 `SKILL.md` ⇒ `E_PACKAGE_INVALID`） |
-| `fetchFile` | `GET …/file?path=&namespace=&version=`（302 → COS，见 §3.7.3 第 4 条） | 同左：一条路、一套白名单（`REDIRECT_HOST`），**没有 zip 分支** |
-| `categories` | `GET /api/v1/categories`，滤 `pay-skill`，10 分钟内存缓存 | 无（`caps.categories = false`） |
-| `caps` | `{search:true, paged:true, categories:true, package:'files'}` | `{search:true, paged:true, categories:false, package:'files'}` |
-| `total` | 上游 `data.total`（数字） | 镜像 `data.total`（数字，实测 63,381） |
+| 能力 | `all`（默认） | `skillhub` | `clawhub` |
+| --- | --- | --- | --- |
+| `list` | `GET /api/skills?page&pageSize&sortBy&order`（**不带 `source`** = 站点的「所有来源」，实测 224,219） | 同端点 + `source=community`（实测 160,838，**含 `enterprise`**） | 同端点 + `source=clawhub`（实测 63,381） |
+| `search` | 同一端点 + `keyword=` | 同一端点 + `keyword=` | 同一端点 + `keyword=` |
+| 游标形状 | `{page: number}`（1 起） | 同上（三档共用 `query.js` 的 `pageOf`） | 同上 |
+| `detail` | `GET /api/v1/skills/<slug>?namespace=&version=` + 清单 + `SKILL.md`（**身份按行判定**，与 scope 无关；见 §7.9） | 同左（`namespace` = 行的 `namespace.handle`） | 同左，`namespace` 由一次 `keyword=<slug>` 的列表查询按 `slug`+`upstream_owner_login` 双匹配解析（**不猜前缀**；评分也用那一行补，见 §7.8） |
+| `plan` / `fetchFile` | `GET …/files?namespace=&version=` + `GET …/file?path=`（302 → COS，见 §3.7.3 第 4 条） | 同左 | 同左（version 由镜像 detail 解析；清单无 `SKILL.md` ⇒ `E_PACKAGE_INVALID`） |
+| `categories` | `GET /api/v1/categories`（不带 `source`），滤 `pay-skill`，10 分钟内存缓存 | 同一张表 | 同一张表（U8 起 `caps.categories = true`） |
+| `caps` | `{search:true, paged:true, categories:true, package:'files'}` | 同左 | 同左 |
+| `total` | `data.total`（实测 224,219） | `data.total`（实测 160,838） | `data.total`（实测 63,381） |
 | 图标 | `iconUrl`：实测前 100 条约 **八成**有图（COS 的 `/skill-icons/uploads/…` 与 `cloudcache.tencent-cloud.com` 的 `other_external_resource/…` **两者都是该技能自己的图**），其余为空 ⇒ **绝对 `https:` 即接受，不做 host/path 白名单**；列表阶段直接带出 | **镜像列表行的 `iconUrl`（cloudcache 的绝对 `https:`，与 SkillHub 同一判据）**；`icons()` 只服务已安装行（§7.5） |
 | 图标补齐 | 市场列表**自带** `iconUrl`；已安装行只有身份 ⇒ 走一次 detail 单查（§7.5） | 市场列表**自带** `iconUrl`；已安装行 ⇒ 每条一次 `keyword=<slug>` 列表查询（§7.5、§7.8） |
-| 计数 | `counts`：13 次 `GET /api/skills?page=1&pageSize=1(&category=)` 取 `data.total`（12 个分类 + 1 个「全部」），并发 6、单项 6s、整体 10s 预算、10 分钟缓存；**每个 `count` 是该过滤条件的独立总数，不保证 12 类相加等于 `total`**（实测差几十条，上游按请求时刻统计、且一条技能可归属多个分类），界面不得用「合计」校验它 | **无**（`bootstrap` 只算 SkillHub；按源计数见 §7.8「已知未做」） |
-| 一次 `list` 的上游请求数 | 1 | 1（**一次镜像请求**，数字与图随条目一起到） |
-| 一次 `POST icons` 的上游请求数 | 每条一次 detail（**不带 `version`**，实测 0.26s），并发 6，6s 整批预算内 | 每条一次列表查询（列表行同时带图与标题），并发 6，6s 整批预算内 |
-| 一次 `detail` 的上游请求数 | 3（详情 + 清单 + `SKILL.md`） | **4（解析 namespace + 详情 + 清单 + `SKILL.md`）** |
-| 一次 `bootstrap` 的上游请求数 | 冷缓存 **14**（分类表 1 + 计数 13），10 分钟内 0 | 0（不参与 bootstrap） |
+| 计数 | **每个 scope 各算各的**：13 次 `GET /api/skills?page=1&pageSize=1(&category=)[&source=]` 取 `data.total`（12 分类 + 1 个「全部」），并发 6、单项 6s、整体 10s、10 分钟缓存，**缓存 key = `sourceParam`（`all` 用空串）**；同一分类三档数字天然不同（`ai-agent` → 23,193 / 10,145 / 13,048），共用一份必有一处是假的。**每个 `count` 是该过滤条件的独立总数，不保证 12 类相加等于 `total`**（一条技能可归属多个分类），界面不得用「合计」校验它 | 同左，`source=community` | 同左，`source=clawhub` |
+| 一次 `list` 的上游请求数 | 1 | 1 | 1 |
+| 一次 `POST icons` 的上游请求数 | 每条一次 detail（**不带 `version`**，实测 0.26s）或一次列表查询，并发 6、6s 整批 | 同左（detail） | 同左（列表查询，行同时带图与标题） |
+| 一次 `detail` 的上游请求数 | 3（详情 + 清单 + `SKILL.md`） | 3 | **4**（解析 namespace + 详情 + 清单 + `SKILL.md`） |
+| 一次 `bootstrap?source=<scope>` 的上游请求数 | 冷缓存 **14**（分类表 1 + 计数 13），10 分钟内 0；**只算被问的那一档** | 同左 | 同左 |
 
-sort 映射（`sort` 只有三个值，路由层已白名单化）：
+sort 映射（`sort` 四个值，路由层已白名单化；**默认仍是 `recommended`**，即站点的 `score`）：
 
-| `sort` | skillhub | clawhub |
-| --- | --- | --- |
-| 三个值同一张表 | `recommended` → `sortBy=score&order=desc`；`updated` → `sortBy=updated_at&order=desc`（页内再按 `updatedAt` 降序）；`downloads` → `sortBy=downloads&order=desc` | **与 skillhub 逐字相同**（镜像同一端点，`query.js` 的 `SORT_PARAMS` 一处定义、两个适配器共用） |
+| `sort` | 三档共用一张表（`query.js` 的 `SORT_PARAMS` 一处定义） |
+| --- | --- |
+| `recommended`（默认，显示「默认排序」） | `sortBy=score&order=desc` |
+| `updated` | `sortBy=updated_at&order=desc`（页内再按 `updatedAt` 降序） |
+| `downloads`（显示「下载量」） | `sortBy=downloads&order=desc` |
+| `stars`（显示「收藏量」） | `sortBy=stars&order=desc` |
 
 **`paged` 的分裂不特殊处理**：clawhub 的 list 与 search **都能翻页**（镜像同一端点），统一由「本次 `next` 是否为 `null`」表达；客户端只问一句「还有 next 吗」，不读 `caps.paged`。
 
-**分类只有一个源有表**：`caps.categories === false` 的源**仍收到过** `category`（镜像本身支持），界面侧由 `visibleCategories` 决定整行是否渲染；适配器不因此返回空页——**转发即生效**，UI 后接（§7.8）。
+**三个 scope 都有分类表**（同一张：13 个 key，不带 `source`），计数按 scope 各自算；`caps.categories` 恒 `true`，chips 行恒渲染（U8 之前 ClawHub 那一档没有类别，用户问的就是这句）。
 
 **声明名为什么是硬约束**：安装目录名取包内 `SKILL.md` 的 `name`，而宿主的技能加载器用 `SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/`（`EX/dsh-skill/lib/index.js`，与 `lib/names.js` 的 `isSkillName` 同一文法）判定一个目录能不能成为技能。声明 `Design` 的包即使被强行写进 `skills/`，宿主也不会加载它——所以 `422 E_SKILL_NAME_INVALID` 是**对齐宿主**，不是保守：改名或用 slug 顶替只会产出一个"看得见、永远不生效"的目录。
 
@@ -94,9 +96,10 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 | 1 | 在 `lib/market/sources/` 下新增一个 `<id>.js`：**配置** `createMirrorAdapter(config)`（`id` / `source` / 归一化 / `resolve` / `facts` / `caps` / `counts`），不用重写 HTTP 那半 | 1 个文件，约 60–130 行 |
 | 2 | `lib/market/sources/index.js` 的 `SOURCES` 数组加一项 | **1 行** |
 | 3 | `locale/zh.json` 与 `locale/en.json` 各加一条 `market.source.<id>` | **1 键 × 2 文件** |
-| 4 | 源的启停与排序（设置面）本轮不做，也不预留占位 UI | 0 |
+| 4 | （只在要加**筛选范围**时）`SCOPES` 加一项 + 一个文案键；`all` 这类跨身份的范围**永远不进 `SOURCES`**（它没有身份） | **1 行 + 1 键 × 2 文件** |
+| 5 | 源的启停与排序（设置面）本轮不做，也不预留占位 UI | 0 |
 
-页面骨架、卡片渲染、合并逻辑、安装流程、路由**一行都不用改**：来源筛选项由 `market/bootstrap` 返回的 `sources[]` 渲染（不是枚举），`caps.categories=false` 的源自动不进分类过滤，包形态由 `caps.package` 决定（当前两源都是 `files`；`zip` 分支已于 U7 退役，`install.js` 只走清单那条路）。
+页面骨架、卡片渲染、合并逻辑、安装流程、路由**一行都不用改**：来源筛选项由 `market/bootstrap` 返回的 `sources[]`（三个 scope）渲染，`caps.categories` 恒 `true`，包形态由 `caps.package` 决定（当前两源都是 `files`；`zip` 分支已于 U7 退役，`install.js` 只走清单那条路）。
 
 ### 7.4 归一化字段表与「缺 = null」不变式
 
@@ -104,7 +107,7 @@ sort 映射（`sort` 只有三个值，路由层已白名单化）：
 
 | 字段 | 来源 | 说明 |
 | --- | --- | --- |
-| `sourceId` | 本地算 | 适配器 id |
+| `sourceId` | 本地算（**按行折叠**） | `community`/`enterprise` → `skillhub`，`clawhub` → `clawhub`，缺/不认识 ⇒ **丢条目**（`fromMirrorRow`）；它是 `marketKeyOf`、图标缓存、收藏与已安装 `_meta.source` 的键，**跨 scope 必须逐字相同**（§7.9） |
 | `id` | 本地算 | `${sourceId}:${owner}:${slug}`，去重键与 React key（上游 id 两源不通用） |
 | `owner` | 上游 | SkillHub `namespace.handle`（实测含下划线）／ClawHub **镜像行的 `upstream_owner_login`**（原生 handle；缺则剥 `clawhub_` 前缀，剥不出来整条丢弃，见 §7.8） |
 | `slug` | 上游 | 两源的 `slug`；ClawHub 为空即**丢弃该条**（拼不出身份就装不上） |
@@ -171,7 +174,26 @@ ClawHub 的**目录、详情、安装包**三条链路都由 SkillHub 的镜像�
 3. **`score` 只有列表有**：镜像 detail 的 `stats` 是 `{comments, downloads, installs, stars, versions}`。详情页的 `score` 用第 2 条那次查询的同一行补上（0 额外请求）；事实表不显示评分。
 4. **`version` 三处同源**：卡片用列表行的版本、详情用 detail 的版本、安装用 `plan()` 解析的版本，全部来自镜像。代价是可能**滞后上游真最新**（`decisions.md` 附录 N 的 N-10）；一致性优先于新鲜度。
 
-**已知未做**：ClawHub 的分类与计数（`caps.categories` 仍 `false`、chips 行仍隐藏）。`bootstrap` 的分类表与 13 个计数写死取自 SkillHub 本体，且两个 scope 的计数天然不同（63,381 vs 4,000+），翻 `caps` 就是显示别人的数字；做对要按源返回 `counts` + 客户端按源取值 + 每源 14 次请求（+0.6–1.0s 冷启动），留 U8。
+**U8 补上了这一半**：ClawHub 也有分类与计数——`bootstrap?source=<scope>` 只算被问的那一档（14 次请求，与今天同一价钱），缓存按 `sourceParam` 分开（§7.9 第 3 条）；切 scope 才补算，首屏成本零回归。
+
+**本轮仍不做**：「不限 API Key」过滤（站点有，用户明确排除，也不预留占位 UI）。
+
+### 7.9 三条轴：范围 / 身份 / 目录查询
+
+筛选与请求里有三个**不同**的东西，混用就是错的：
+
+| 轴 | 取值 | 出现在哪 | 谁决定 |
+| --- | --- | --- | --- |
+| **范围** scope | `all`（默认，= 站点「所有来源」）/ `skillhub` / `clawhub` | `market/list`、`market/bootstrap` 的 `?source=` | 用户的下拉选择 |
+| **身份** `sourceId` | `skillhub` / `clawhub`（**两个，不含 `all`**） | `MarketItem.sourceId`、`marketKeyOf`、图标/收藏键、`market/detail`、`market/install` | **上游每一行的 `source` 字段**（按行折叠） |
+| **目录查询** `sourceParam` | 不传 / `community` / `clawhub` | 只出现在上游 URL 里 | scope 映射 |
+
+四条规矩：
+
+1. **`all` 只属于范围轴**：它到不了 `detail`/`install`/`icons`（那三处的白名单只有两个身份 id，传 `all` 就是 `400 E_BAD_QUERY`）。
+2. **身份按行折叠、只在一处**：`community`/`enterprise` → `skillhub`，`clawhub` → `clawhub`（`normalize.js` 的 `fromMirrorRow`）。折叠写两处 = 键空间漂移 = 装过的技能显示成未安装。
+3. **计数按 scope 算、缓存按 `sourceParam` 存**（`all` 用空串）：三个 scope 的同一个分类计数天然不同（`ai-agent` → 23,193 / 10,145 / 13,048），共用一份必然有一处是假数字。
+4. **任何让结果集合变化的输入（scope / category / sort / keyword）都必须清 `cursor` 与 `items`**：游标只有页码，不带筛选签名；跨筛选复用属于客户端 bug。
 
 ## 附录 F 市场视觉刻度
 

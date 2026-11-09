@@ -123,20 +123,22 @@ export class SkillCenterApi {
   }
 
   /**
-   * Read the market's source list and category table. A failed category read is not
-   * an error: the route answers `categoriesOk: false` and the list still works.
-   * @returns {Promise<object>} `{sources, categories, categoriesOk, categoriesStale}`.
+   * Read the scope list and the category table of one scope. A failed category read is
+   * not an error: the route answers `categoriesOk: false` and the list still works.
+   * @param {string} [scope] - the scope whose counts to read (`all`, `skillhub`, `clawhub`).
+   * @returns {Promise<object>} `{source, sources, categories, categoriesOk, categoriesStale}`.
    */
-  async marketBootstrap() {
-    return this.request('market/bootstrap');
+  async marketBootstrap(scope) {
+    const suffix = typeof scope === 'string' && scope !== '' ? `?source=${encodeURIComponent(scope)}` : '';
+    return this.request(`market/bootstrap${suffix}`);
   }
 
   /**
-   * Read one page of one source. One source per request, because each source has its
-   * own cursor; the panel merges the answers.
+   * Read one page of one scope. One request per page: the scope picks which catalogue
+   * the mirror lists, and the page carries its own cursor.
    * @param {{source: string, sort?: string, category?: string|null, keyword?: string,
    *   cursor?: string|null, limit?: number}} query - the query.
-   * @returns {Promise<object>} `{sourceId, sort, keyword, category, items, next, total}`.
+   * @returns {Promise<object>} `{source, sort, keyword, category, items, next, total}`.
    */
   async marketList(query) {
     return this.request(`market/list${queryString({

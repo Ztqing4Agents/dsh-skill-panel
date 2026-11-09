@@ -5,19 +5,23 @@
  * merged item list, the filters, and the store's runtime flags, so the whole decision
  * surface can be unit-tested in node without a browser.
  *
- * Two sources are merged here and nowhere else (`mergeBatches`): each source answers
- * one page with its own cursor, so the per-source blocks and the deduplication both
- * live in one pure function.
+ * One query, one page: the source menu picks a *scope* ("all sources", "SkillHub",
+ * "ClawHub") and the route answers it with a single request, so `mergeBatches` only has
+ * to append and de-duplicate what came back.
  */
 
-/** The source ids the panel falls back to before `bootstrap` answers (or after it fails). */
+/**
+ * The scopes the panel falls back to before `bootstrap` answers (or after it fails).
+ *
+ * These are filters, not identities: `all` asks the mirror for its whole catalogue, the
+ * other two ask for one catalogue each. All three publish the same category table, so the
+ * chips row does not flicker while `bootstrap` is in flight.
+ */
 export const MARKET_FALLBACK_SOURCES = Object.freeze([
+  Object.freeze({ id: 'all', labelKey: 'market.source.all', hasCategories: true, packageKind: 'files' }),
   Object.freeze({ id: 'skillhub', labelKey: 'market.source.skillhub', hasCategories: true, packageKind: 'files' }),
-  Object.freeze({ id: 'clawhub', labelKey: 'market.source.clawhub', hasCategories: false, packageKind: 'zip' }),
+  Object.freeze({ id: 'clawhub', labelKey: 'market.source.clawhub', hasCategories: true, packageKind: 'files' }),
 ]);
-
-/** Source ids that publish no category table even before `bootstrap` says so. */
-const NO_CATEGORY_SOURCES = new Set(['clawhub']);
 
 /** The sources whose icons this client knows how to fetch (an installed row's identity). */
 export const MARKET_SOURCE_IDS = Object.freeze(['skillhub', 'clawhub']);
@@ -26,14 +30,14 @@ export const MARKET_SOURCE_IDS = Object.freeze(['skillhub', 'clawhub']);
 const ICONS_PER_SOURCE = 12;
 const ICONS_PER_BATCH = 24;
 
-/** The source the market opens on: the menu lists the real sources only, with no "all". */
-export const MARKET_DEFAULT_SOURCE = 'skillhub';
+/** The scope the market opens on: everything, which is what the site shows by default. */
+export const MARKET_DEFAULT_SOURCE = 'all';
 
 /** Per-source page size. Two sources therefore add 24 cards per scroll page. */
 export const MARKET_PAGE_SIZE = 12;
 
-/** The three sort orders the route accepts, in menu order. */
-export const MARKET_SORTS = Object.freeze(['recommended', 'updated', 'downloads']);
+/** The four sort orders the route accepts, in menu order (the site's own list). */
+export const MARKET_SORTS = Object.freeze(['recommended', 'updated', 'downloads', 'stars']);
 
 /** Route error codes that have their own localized sentence. */
 const MARKET_ERROR_CODES = new Set([
@@ -64,13 +68,11 @@ export function marketKeyOf(item) {
 }
 
 /**
- * Merge one round of per-source pages into the list.
+ * Append one page to the list.
  *
- * Each source keeps its own block: the new items are the pages concatenated in the order
- * the sources are given - not interleaved, and not re-sorted on this side. Upstream
- * orderings are not comparable across sources (SkillHub ranks with its own model,
- * ClawHub by recency), and every sort the user can pick is already applied per source by
- * the route, so a client-side merge order would only be a third opinion nobody asked for.
+ * The page arrives already ordered by the route (one request, one scope, one sort), so
+ * this only appends and de-duplicates: re-sorting on this side would be a second opinion
+ * on an ordering the upstream already made, and a shuffle on every scroll.
  * @param {{sourceId: string, items: object[]}[]} pages - one page per source, in render order.
  * @param {{existing?: object[]}} [options] - items already on screen, kept in front.
  * @returns {object[]} the merged list: existing items first, then each source's new ones.
@@ -433,9 +435,7 @@ export function visibleCategories(market) {
   const sources = Array.isArray(market?.sources) ? market.sources : [];
   const categories = Array.isArray(market?.categories) ? market.categories : [];
   const descriptor = sources.find((source) => source?.id === selected);
-  const hasCategories = descriptor === undefined
-    ? !NO_CATEGORY_SOURCES.has(selected)
-    : descriptor.hasCategories === true;
+  const hasCategories = descriptor === undefined ? true : descriptor.hasCategories === true;
   if (!hasCategories) return { visible: false, unavailable: false, items: [] };
   if (market?.categoriesOk === false) return { visible: false, unavailable: true, items: [] };
   if (categories.length === 0) return { visible: false, unavailable: false, items: [] };
@@ -510,7 +510,9 @@ export function emptyKindOf(market) {
   if (market?.page?.status === 'loading') return null;
   if (typeof market.keyword === 'string' && market.keyword.trim() !== '') return 'search';
   if (market?.filters?.category !== null && market?.filters?.category !== undefined) return 'category';
-  return 'source';
+  // "This source has nothing" is only true when a source was picked; under "all sources"
+  // an empty list means the whole market is empty, which the page says differently.
+  return (market?.filters?.source ?? MARKET_DEFAULT_SOURCE) === 'all' ? null : 'source';
 }
 
 /**

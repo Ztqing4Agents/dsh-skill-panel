@@ -310,7 +310,7 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
 ```jsonc
 // MarketItem —— 市场页唯一的渲染输入，也是去重键的来源
 {
-  "sourceId": "skillhub",            // 本地算：适配器 id
+  "sourceId": "skillhub",            // 本地算：按上游行的 source 折叠（community/enterprise → skillhub，clawhub → clawhub），跨 scope 恒定
   "id": "skillhub:ake:dev-god",      // 本地算：`${sourceId}:${owner}:${slug}`
   "owner": "ake",                    // 上游；缺失 null
   "slug": "dev-god",                 // 上游；缺失 null
@@ -318,11 +318,11 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
   "iconUrl": "https://…png | null",                          // 两种形态，见不变式 6
   "summary": "≤ 400 字符单行",        // 上游；超长截断，缺失为空串
   "author": "阿客实验室",             // 上游；三级回落，全缺 null
-  "version": "1.2.4",                // 上游；**缺失如实 null**（ClawHub 搜索结果必为 null）
+  "version": "1.2.4",                // 上游；**缺失如实 null**（镜像缺版本时就是 null）
   "downloads": 11340092,             // 上游；缺失 null（**绝不补 0**）
-  "saves": 99, "score": 100000, "tags": ["代码生成", "Bug 修复"],   // 上游 stars/score（缺失 null，绝不补 0；**ClawHub 由镜像提供，不再恒 null**）/ subCategories.name 或 topics 前 3（≤3 条、单条 ≤24 字符、**缺 = []**）
+  "saves": 99, "score": 100000, "tags": ["代码生成", "Bug 修复"],   // 上游 stars/score（缺失 null，绝不补 0）/ subCategories.name 前 3（≤3 条、单条 ≤24 字符、保留大小写、**缺 = []**）
   "updatedAt": 1794205858796,        // 上游；epoch 毫秒，只用于排序，**不上屏**
-  "category": "dev-programming",     // 上游；仅 SkillHub 有，ClawHub 恒 null
+  "category": "dev-programming",     // 上游；两源都有（U8 起 ClawHub 也有分类）
   "packageKind": "files"             // 本地算：当前两源恒 'files'（'zip' 已于 U7 退役）
 }
 ```
@@ -360,7 +360,7 @@ textOrNull(value): string|null / numberOrNull(value): number|null / finiteOrNull
 clampLine(value, max) / clampBlock(value, max): string / tagListOf(value): string[]   // 单行折叠 / 保留换行，超长截断 / 标签：≤3 条、取 subCategories[].name、去重、保留大小写
 marketId(sourceId, owner, slug): string    // `${sourceId}:${owner ?? ''}:${slug ?? ''}`
 marketItem(fields): MarketItem              // 字段补齐（上表）
-fromSkillhubListItem(raw, packageKind?): MarketItem|null
+fromSkillhubListItem(raw, packageKind?): MarketItem|null / fromMirrorRow(raw): MarketItem|null   // 后者按 raw.source 折叠身份（两个适配器共用）
 fromSkillhubDetail(raw, packageKind?): MarketItem|null
 fromClawhubMirrorItem(raw, packageKind?): MarketItem|null   // 镜像条目：复用 fromSkillhubListItem 的字段读取，owner 取 upstream_owner_login，id 重拼，version 过 versionLike
 fromClawhubMirrorDetail(raw, owner): MarketItem|null        // 镜像详情：字段同 SkillHub，身份用调用方解析出的原生 owner（detail() 用）

@@ -166,13 +166,28 @@
 | N-2 | 两套下载量口径取哪个 | `agent-browser` 镜像 1,258,479 vs `clawhub.ai` 详情 4,347（≈290 倍） | 取**镜像**（用户参照的是 skillhub.cn），并在 `detail()` 里用一次镜像**列表**查询（`keyword=<slug>`，按 `slug` + `upstream_owner_login` 双匹配）覆盖五个字段，保证**卡片与详情同数**；零命中或失败退回 `clawhub.ai` 的数、不抛。**不按 `namespace` 查镜像 detail**：认领过的 namespace 没有 `clawhub_` 前缀（实测 `find-skills` → `indiv-guipi`），猜前缀会漏 5% |
 | ~~N-3~~ | 安装能不能走镜像 | 曾经「不能」：`buzzmark` 当时查到 0 个文件 | **推翻（U7）**：那批 0 文件是查了镜像里不存在的 slug（80/80 抽样 manifest 完整且含 `SKILL.md`）⇒ 现在**只走镜像**；12 文件差的是元数据（见 ~~N-9~~），不影响运行 |
 | N-4 | identity 用什么 | 镜像给 `upstream_owner_login`（100/100 有值）与 `namespace.handle`（`clawhub_<owner>`，95/100 带前缀） | 用 `upstream_owner_login`（原生 handle，`clawhub.ai` 的 `ownerHandle=` 认它，已安装行与图标缓存键零迁移）；缺则剥前缀，剥不出就丢条目 |
-| N-5 | `caps.categories` 翻不翻 | `bootstrap` 的分类表与 13 个计数写死取自 SkillHub 本体 | **不翻**：翻了就是让 ClawHub 页签显示 SkillHub 的数字。做对要按源计数（每源 14 次请求）+ 客户端按源取值，留给下一轮（方案见 U6 设计 §8） |
+| ~~N-5~~ | `caps.categories` 翻不翻 | 当时分类表与 13 个计数写死取自 SkillHub 本体 | **推翻（U8）**：`caps.categories` 翻成 `true`，计数按 scope 各算各的、缓存 key 用 `sourceParam`（附录 O-3） |
 | ~~N-6~~ | 图标管道全留还是删两条代理 | 曾经「全留」 | **部分推翻（U7）**：`market/lucide` 与 `market/clawhub-icon` 的**唯一**上游是 `clawhub.ai` 的两种图标形态，随它一起退场；`icons()` 与 `market/icons` **留下**（服务已安装行，见 N-11） |
 | ~~N-7~~ | 卡片的版本号还在不在 | 镜像给的是真 semver 但**会滞后**（实测 `self-improving-agent` 3.0.24 vs 上游 4.0.5） | **被 N-10 覆盖**：U7 之后不再有「卡片旧、包装新」的分裂，三处都取镜像 |
 | N-8 | 双匹配的样本 owner 是谁 | 设计期记的三个样本 owner 里 `cad-viewer` 记为 `pskoett`；实测镜像与 `clawhub.ai` 都说是 **`sanshuili334-code`**（`self-improving-agent` 才是 `pskoett`） | 双匹配按**镜像行的 `upstream_owner_login`** 比，而不是按设计稿里的样本值——卡片与详情的 owner 本来就同源，永远自洽；`keyword=cad-viewer` / `find-skills` / `self-improving-agent` 三次实测均命中，且 `clawhub.ai` 认这个 handle |
 | ~~N-9~~ | 镜像与包的完整度差多少 | `agent-browser`：镜像 `/files` 2 个、旧 zip 3 个（多 `skill-card.md`，元数据）；`self-improving-agent` 两边都是 17 | **不再是取舍（U7）**：zip 整条退役，装的就是镜像那 2 个；`skill-card.md` 不参与运行 |
 | **N-10** | 版本口径 | 卡片 / 详情 / 安装三处**都取镜像版本**。镜像可能滞后上游真最新（实测 `self-improving-agent` 镜像 3.0.24 / 上游 4.0.5） | 取舍：**一致性优先于新鲜度**——用户要「全部交由镜像」，三处同数比「卡片旧、包装新」可解释。要装官方最新版只能去 ClawHub 官网（`CHANGELOG` 已写明） |
 | **N-11** | 两条图片代理为什么删 | 它们的唯一上游是 `clawhub.ai`（`lucide:<Name>` 与 `/api/v1/skill-icons/<hash>` 两种形态）。镜像给的是 cloudcache 的绝对 `https`，`<img>` 直连可画（U6 真机 24/24 有图已证），不需要本机转发；`_meta.json` 也不存图标地址，**没有旧缓存要照顾** | 删两条路由（13 → 11）与 `upstream.js` 的 8 个常量、2 个工厂、`normalize.js` 的 3 个 URL 函数；`icons()` 与 `market/icons` 留下服务已安装行 |
+
+---
+
+## 附录 O 筛选向 skillhub.cn 靠拢（2026-11-10）
+
+> 用户原话：「ClawHub 顶部的类别是不是应该有，另外，你看下镜像站的 skillhub 和 clawhub 及其所有来源，是怎么排的（比如所有来源），我想完全向它靠拢」。完整设计见 `.agents/work/wip/U8-source-and-sort-align.md`。
+
+| # | 事项 | 站点做法（bundle 抠出 / 实测） | 我们的处置 |
+| --- | --- | --- | --- |
+| O-1 | 「所有来源」怎么表达 | `source` 为空就不传（`"all" !== e.source` 才 `set`） | **`all` 是新默认 scope**，上游不传 `source` ⇒ 224,219 条（含 ClawHub） |
+| O-2 | SkillHub 这一档是什么 | `source=community`，160,838 条，**本身含 `enterprise`** | 我们的 `skillhub` scope 传 `community`；`enterprise` 行折叠成 `skillhub` 身份（不进键） |
+| O-3 | 分类是否与来源正交 | 是，ClawHub 也有分类 | 三个 scope 都渲染 chips，**计数按 scope 各算**（同一分类三档数字不同：23,193 / 10,145 / 13,048） |
+| O-4 | 排序几项 | 默认 `score`，另有 `updated_at` / `downloads` / `stars` | 四项全上；**只改文案值、不改键名**（`recommended` 显示成「默认排序」，新增 `stars`=「收藏量」），`sort` 的机器值不漂 |
+| O-5 | 旧游标怎么办 | 站点每次改筛选都重新拉第一页 | 契约写死「任何筛选变化必清 cursor+items」；**游标形状仍是 `{page}`**，不加筛选签名（客户端已经清，加签名只盖 bug 不修 bug） |
+| O-6 | 「不限 API Key」过滤 | 站点有 | **本轮不做**（用户明确排除），也不预留占位 UI |
 
 ---
 

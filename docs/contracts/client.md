@@ -71,7 +71,8 @@ market = {
   boot: 'idle'|'loading'|'ready',                 // bootstrap；失败也进 ready，不是 error
   sources / categories / categoriesOk,            // 失败时 sources 回落内置双源、categoriesOk=false
   total / countsOk,                               // 分类 chip 的数量：'全部' 用 total，各分类用 categories[].count
-  filters: {source, category, sort},              // source 是机器值 'skillhub'|'clawhub'，默认 'skillhub'，没有 'all'
+  filters: {source, category, sort},              // source 是 **scope**：'all'（默认）|'skillhub'|'clawhub'；sort 四值
+  bootScope / categoriesLoading,                  // 这份 categories+counts 属于哪个 scope；切 scope 只让 chips 进骨架（卡片不动）
   keyword / input,                                // 已提交关键词 / 输入框现值（防抖在组件里，store 不持定时器）
   items / pages,                                  // 已合并去重后的列表、已加载页数（返回详情后要恢复）
   cursors / exhausted,                            // 每源自己的不透明游标与「已耗尽」
@@ -97,7 +98,7 @@ market = {
 | `bootstrap` 失败 | `boot=ready`（**不是 error**） | `sources` 回落内置双源，列表照打，分类行隐藏 |
 | 关键词变化 | 250ms 防抖后提交 | 请求中**保留旧 items**（`aria-busy` + 搜索框旁 ongoing 点），不换骨架 |
 | 回车 / 清空输入 | 立刻提交，不经防抖 | 清空只清关键词，不动来源与分类 |
-| 切来源 / 分类 / 排序 | 清 `items/pages/cursors/exhausted/detail`，滚回顶部 | 值没变时不重拉 |
+| 切 scope / 分类 / 排序（或关键词） | 清 `items/pages/cursors/exhausted/detail`，滚回顶部；`bootScope !== filters.source` 时补一次 `bootstrap?source=`（带 token 守卫，旧响应不覆盖新数字） | 值没变时不重拉；切 scope 只让 chips 进骨架 |
 | 一页返回 | `listStatus=ready`，`page` 进 `more` 或 `done` | 列表 = 已有项 + 这一页按序拼接（`mergeBatches` 仍接受多源数组，但市场一次只看一个源，只喂一项）；不跨源重排 |
 | 请求失败 | `listStatus=error` | 整页错误态 + 重试；**不出空态**（空 ≠ 失败）。单源没有「部分源失败」这种中间态 |
 | 追加返回 | `page` 进 `more` 或 `done` | 当前源 `cursor !== null` 才追加；`items` 追加去重，不重排已有项 |
@@ -132,7 +133,7 @@ icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安�
 2. **详情就地替换网格**（`detail !== null` 时返回详情而不是网格），与宿主的页内详情同构；返回不重拉任何东西。
 3. 详情正文用宿主 primitives 的 `MarkdownText` 渲染（与对话里的第三方 markdown 同一个渲染器，不自造 sanitizer）；渲染抛错或正文为空时回落纯文本 + `market.detailNoOverview`。
 4. 组件只读 props（`store/api/t`）写 `store.actions`，不直接 `fetch`；只有滚动位置恢复与触底预取读 DOM，且都在 `useEffect` 里（字符串渲染不触发）。
-5. **来源只有一个**：来源菜单就是 `SkillHub` 与 `ClawHub` 两项，默认 `skillhub`，没有「全部来源」；因此不存在「两源同屏」「部分源失败提示条」这两种中间态——当前源失败即整页错误态（可重试）。分类行只在当前源发布分类时出现（ClawHub 直接隐藏），选中的分类也不会跨源。
+5. **一次只问一个 scope**：来源菜单是 `所有来源`（默认）/`SkillHub`/`ClawHub` 三项——`all` 上游就是一次不带 `source` 的请求，所以仍不存在「两源同屏」「部分源失败提示条」，当前 scope 失败即整页错误态（可重试）。分类行三个 scope 都渲染（同一张 13 类表，计数按 scope 各算），menu 选项与计数来自 `bootScope` 那一份；`all` 下不判「这个来源暂时没有技能」。
 6. **分类 chip 带数量**：`全部` 用 `bootstrap.total`，各分类用 `categories[].count`；`count` 为 `null` 时数字位整段不渲染（不写 0、不写破折号），`countsOk:false` 时所有数字位都不出现。格式是 `Intl.NumberFormat(undefined, {notation:'compact'})`（运行时默认语言，`try/catch` 兜底成原数字），样式见 §8.5。
 7. **头像只有两态**（卡片、详情头、确认弹窗共用一个 `MarketIcon`）：**瓦片任何时候都不空**——URL 有值但还没 `onload` 时画字母 + 一张 `display:none` + `loading="eager"` 的探测图（同 `src`/同 `referrerPolicy`），图片只在 `onload` 之后才换成可见的 `<img class="skc_marketIconImg">`；探测图与可见图同一个 URL，浏览器只发一次请求（实测 `display:none` 的 eager 图会加载并触发 `onload`，`loading="lazy"` 的不会）。取值顺序 **`item.iconUrl` → `market.icons[marketKeyOf(item)]` → `null`**（`iconUrlOf()`，纯函数），拿到非空字符串就画图（`<img>` + `skc_marketIconImg`、`alt=""`、`loading="lazy"`、`referrerPolicy="no-referrer"`），否则画首字母；**图片 `onError` 也回落首字母**，任何情况下都不留空白方块。ClawHub 的图标是**后到的**：列表先给 `iconUrl:null`，页面渲染完成后由 `market/icons` 批量补齐，所以同一张卡会先字母、后换图。
 8. **图标补齐不阻塞渲染**：`market/list` 回来后先画卡片，再由面板 effect 把「ClawHub + 无图标 + 本会话没问过」的条目打包（≤24）调 `market/icons`；**同一 id 只问一次**（`iconsTried` 同时记正负结果），请求失败静默保持字母；切来源 / 搜索 / 刷新**不清**已拿到的图标，只有 `marketReload()` 清。图片是 `.skc_cardIcon` 的 flex 子项、只填满内容盒，所以宿主那条 `.5px` 描边始终压在图片之上；头像盒既有声明（48×48 / `border .5px` / `radius-lg` / `background-clip: padding-box` / 粉彩底）一字不改。
@@ -246,7 +247,7 @@ icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安�
 - `client/src/**` 与 `lib/**` **不得出现 CJK 字面量**（`check:i18n` 强制）；界面文案一律 `t('key')`。
 - 占位符用 `{name}`（宿主同款：`t('partToggle', { name: title })`）。
 - 入口标题**只允许**通过 `panel.label` 表达：改名 = 改 `locale/*.json` 的 `panel.label` + `meta.title`，代码零改动（这是「不硬编码中文」的可验收形态）。两处都要改的理由：`meta.title` 是插件列表里的显示名（`PROF/*/locale/zh.json` 四家都是 `{meta:{title,description}}`），`panel.label` 是侧栏行标题。`check-i18n` 会校验两者都存在。
-- 市场面沿用两族键：`market.*`（61 个 → **64 个**）与 `error.E_*`（11 个 → **13 个**），全字典 111 → **116**；**`market.placeholder` 已删除**（市场页签不再是占位文案）。下表有几行把同族的新键合并成一行，这是为了守住 400 行上限（`check-docs` 的 R11），键与值逐条列出、语义不变。
+- 市场面沿用两族键：`market.*`（61 个 → **66 个**）与 `error.E_*`（11 个 → **13 个**），全字典 111 → **118**；**`market.placeholder` 已删除**（市场页签不再是占位文案）。下表有几行把同族的新键合并成一行，这是为了守住 400 行上限（`check-docs` 的 R11），键与值逐条列出、语义不变。
 - 键表（P0 全集 + 市场轮；`zh` 值逐字来自 `PRD` §3.3.5 与本设计）：
 
 | key | zh |
@@ -281,12 +282,14 @@ icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安�
 | `market.clearSearch` | 清除搜索 |
 | `market.searching` | 正在搜索 |
 | `market.sourceLabel` | 来源 |
+| `market.source.all` | 所有来源 |
 | `market.source.skillhub` | SkillHub |
 | `market.source.clawhub` | ClawHub |
 | `market.sortLabel` | 排序 |
-| `market.sort.recommended` | 推荐 |
+| `market.sort.recommended` | 默认排序 |
 | `market.sort.updated` | 最近更新 |
-| `market.sort.downloads` | 下载最多 |
+| `market.sort.downloads` | 下载量 |
+| `market.sort.stars` | 收藏量 |
 | `market.categoriesLabel` | 分类 |
 | `market.category.all` | 全部 |
 | `market.loading` | 正在读取技能市场… |

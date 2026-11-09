@@ -301,8 +301,9 @@ test('K38 双源卡片：两源各出一张，来源 Tag 各自本地化', () =>
   const html = renderMarket((store) => {
     store.actions.marketBootReady({
       sources: [
+        { id: 'all', labelKey: 'market.source.all', hasCategories: true, packageKind: 'files' },
         { id: 'skillhub', labelKey: 'market.source.skillhub', hasCategories: true, packageKind: 'files' },
-        { id: 'clawhub', labelKey: 'market.source.clawhub', hasCategories: false, packageKind: 'zip' },
+        { id: 'clawhub', labelKey: 'market.source.clawhub', hasCategories: true, packageKind: 'files' },
       ],
       categories: [],
       categoriesOk: true,
@@ -450,7 +451,7 @@ test('K38 三类失败态：整页失败、追加失败、搜索无结果', () =
   assert.ok(empty.includes('class="skc_marketEmpty"'), '空结果给空态容器');
 });
 
-test('K38 三种空态：搜索无结果带清空、分类为空带复位、来源为空只说明', () => {
+test('K38 空态：搜索无结果带清空、分类为空带复位、all 下不判「来源为空」', () => {
   const search = renderMarket((store) => {
     store.actions.marketCommitKeyword('no-such-skill');
     store.actions.marketPageAppended({ pages: [{ sourceId: 'skillhub', page: { items: [], next: null } }], merged: [] });
@@ -466,12 +467,19 @@ test('K38 三种空态：搜索无结果带清空、分类为空带复位、来�
   assert.ok(category.includes('这个分类下暂时没有技能'), '分类空态文案');
   assert.ok(category.includes('看全部分类'), '分类空态给复位按钮');
 
-  const source = renderMarket((store) => {
-    store.actions.marketPageAppended({ pages: [{ sourceId: 'skillhub', page: { items: [], next: null } }], merged: [] });
+  // Under "all sources" an empty list is not "this source has nothing" (U8).
+  const allScope = renderMarket((store) => {
+    store.actions.marketPageAppended({ pages: [{ sourceId: 'all', page: { items: [], next: null } }], merged: [] });
   });
-  assert.ok(source.includes('class="skc_marketEmptyTitle"'), '来源空态有标题');
-  assert.equal(source.includes('清除搜索'), false, '来源空态不给清空按钮');
-  assert.equal(source.includes('看全部分类'), false, '来源空态不给分类复位按钮');
+  assert.equal(allScope.includes('这个来源还没有技能'), false, 'all 下不说「这个来源还没有技能」');
+
+  const oneScope = renderMarket((store) => {
+    store.actions.marketSetFilter({ source: 'clawhub' });
+    store.actions.marketPageAppended({ pages: [{ sourceId: 'clawhub', page: { items: [], next: null } }], merged: [] });
+  });
+  assert.ok(oneScope.includes('class="skc_marketEmptyTitle"'), '选中某个 scope 且为空 ⇒ 有标题');
+  assert.equal(oneScope.includes('清除搜索'), false, '来源空态不给清空按钮');
+  assert.equal(oneScope.includes('看全部分类'), false, '来源空态不给分类复位按钮');
 });
 
 test('K38 到底与追加中：尾部提示与骨架互斥', () => {
@@ -496,12 +504,13 @@ test('K38 到底与追加中：尾部提示与骨架互斥', () => {
   assert.equal(more.includes('没有更多了'), false, '追加中不说到底');
 });
 
-test('K38 工具栏：搜索框、来源与排序菜单、分类 chips；选 ClawHub 时分类行消失', () => {
+test('K38 工具栏：搜索框、来源与排序菜单、分类 chips；ClawHub 也有 chips', () => {
   const skillhub = renderMarket((store) => {
     store.actions.marketBootReady({
       sources: [
+        { id: 'all', labelKey: 'market.source.all', hasCategories: true, packageKind: 'files' },
         { id: 'skillhub', labelKey: 'market.source.skillhub', hasCategories: true, packageKind: 'files' },
-        { id: 'clawhub', labelKey: 'market.source.clawhub', hasCategories: false, packageKind: 'zip' },
+        { id: 'clawhub', labelKey: 'market.source.clawhub', hasCategories: true, packageKind: 'files' },
       ],
       categories: [{ key: 'dev-tools', name: '开发工具', count: 137000 }],
       categoriesOk: true,
@@ -517,10 +526,9 @@ test('K38 工具栏：搜索框、来源与排序菜单、分类 chips；选 Cla
   // 菜单选项只在展开时渲染（Menu 是本组件的 useState），字符串渲染拿到的是锚点上的当前值。
   // 这里断言锚点形状与当前值；点开之后的三个选项由真机抽查覆盖。
   assert.equal(matches(skillhub, /aria-haspopup="menu"/g).length, 2, '两个锚点都声明自己是 menu（来源 / 排序）');
-  // 「全部来源」这个选项已删：来源锚点显示的就是当前那个真实源，缺省是 SkillHub。
-  assert.ok(skillhub.includes('>SkillHub<'), '来源锚点显示当前值「SkillHub」（默认源）');
-  assert.equal(skillhub.includes('全部来源'), false, '不再有「全部来源」这个选项');
-  assert.ok(skillhub.includes('>推荐<'), '排序锚点显示当前值「推荐」');
+  // U8: the anchor shows the scope, and the default scope is "all sources".
+  assert.ok(skillhub.includes('>所有来源<'), '来源锚点显示当前值「所有来源」（默认 scope）');
+  assert.ok(skillhub.includes('>默认排序<'), '排序锚点显示当前值「默认排序」（机器值仍是 recommended）');
   // 分类 chips 上的数字：`total` 挂在「全部」上，`count` 挂在各自 chip 上（K54）。
   assert.equal(matches(skillhub, /class="skc_marketChipCount"/g).length, 2, '「全部」与「开发工具」都带数字');
   assert.ok(
@@ -535,16 +543,19 @@ test('K38 工具栏：搜索框、来源与排序菜单、分类 chips；选 Cla
   const clawhub = renderMarket((store) => {
     store.actions.marketBootReady({
       sources: [
+        { id: 'all', labelKey: 'market.source.all', hasCategories: true, packageKind: 'files' },
         { id: 'skillhub', labelKey: 'market.source.skillhub', hasCategories: true, packageKind: 'files' },
-        { id: 'clawhub', labelKey: 'market.source.clawhub', hasCategories: false, packageKind: 'zip' },
+        { id: 'clawhub', labelKey: 'market.source.clawhub', hasCategories: true, packageKind: 'files' },
       ],
       categories: [{ key: 'dev-tools', name: '开发工具' }],
       categoriesOk: true,
+      source: 'clawhub',
     });
     store.actions.marketSetFilter({ source: 'clawhub' });
   });
-  assert.equal(clawhub.includes('class="skc_marketChips"'), false, '选 ClawHub 时分类行整行消失');
-  assert.equal(clawhub.includes('>开发工具<'), false, '分类 chip 不再渲染');
+  assert.ok(clawhub.includes('>ClawHub<'), '切到 ClawHub 后锚点跟着变');
+  assert.ok(clawhub.includes('class="skc_marketChips"'), 'U8：ClawHub 顶部也有分类 chips');
+  assert.ok(clawhub.includes('>开发工具<'), '分类 chip 照常渲染');
 
   const unavailable = renderMarket((store) => {
     store.actions.marketBootFallback([{ id: 'skillhub', labelKey: 'market.source.skillhub', hasCategories: true, packageKind: 'files' }]);
@@ -654,8 +665,9 @@ test('K54 countsOk:false ⇒ 一个数字都不渲染（chips 照常可点）', 
   const html = renderMarket((store) => {
     store.actions.marketBootReady({
       sources: [
+        { id: 'all', labelKey: 'market.source.all', hasCategories: true, packageKind: 'files' },
         { id: 'skillhub', labelKey: 'market.source.skillhub', hasCategories: true, packageKind: 'files' },
-        { id: 'clawhub', labelKey: 'market.source.clawhub', hasCategories: false, packageKind: 'zip' },
+        { id: 'clawhub', labelKey: 'market.source.clawhub', hasCategories: true, packageKind: 'files' },
       ],
       categories: [{ key: 'dev-tools', name: '开发工具', count: null }],
       categoriesOk: true,
@@ -668,12 +680,13 @@ test('K54 countsOk:false ⇒ 一个数字都不渲染（chips 照常可点）', 
   assert.ok(html.includes('>开发工具<'), '分类 chip 仍在（数字没了不影响筛选）');
 });
 
-test('K55 单源：来源锚点默认 SkillHub，没有「全部来源」；切到 ClawHub 分类行消失', () => {
+test('K55 单源：一次只问一个 scope，默认「所有来源」；切到 ClawHub 仍有分类行', () => {
   const html = renderMarket((store) => {
     store.actions.marketBootReady({
       sources: [
+        { id: 'all', labelKey: 'market.source.all', hasCategories: true, packageKind: 'files' },
         { id: 'skillhub', labelKey: 'market.source.skillhub', hasCategories: true, packageKind: 'files' },
-        { id: 'clawhub', labelKey: 'market.source.clawhub', hasCategories: false, packageKind: 'zip' },
+        { id: 'clawhub', labelKey: 'market.source.clawhub', hasCategories: true, packageKind: 'files' },
       ],
       categories: [{ key: 'dev-tools', name: '开发工具' }],
       categoriesOk: true,
@@ -682,16 +695,16 @@ test('K55 单源：来源锚点默认 SkillHub，没有「全部来源」；切�
     });
   });
   assert.ok(html.includes('aria-label="来源"'), '来源菜单在');
-  assert.ok(html.includes('>SkillHub<'), '锚点显示 SkillHub');
-  assert.equal(html.includes('全部来源'), false, '菜单里不再有「全部来源」');
+  assert.ok(html.includes('>所有来源<'), '锚点显示「所有来源」（默认 scope）');
   // 下拉里的选项在展开时渲染；这里断言「能展开」的那两个稳定钩子，选项数量由真机抽查数。
   assert.equal(matches(html, /aria-haspopup="menu"/g).length, 2, '来源与排序两个 anchor');
 
   const claw = renderMarket((store) => {
     store.actions.marketBootReady({
       sources: [
+        { id: 'all', labelKey: 'market.source.all', hasCategories: true, packageKind: 'files' },
         { id: 'skillhub', labelKey: 'market.source.skillhub', hasCategories: true, packageKind: 'files' },
-        { id: 'clawhub', labelKey: 'market.source.clawhub', hasCategories: false, packageKind: 'zip' },
+        { id: 'clawhub', labelKey: 'market.source.clawhub', hasCategories: true, packageKind: 'files' },
       ],
       categories: [{ key: 'dev-tools', name: '开发工具' }],
       categoriesOk: true,
@@ -701,7 +714,7 @@ test('K55 单源：来源锚点默认 SkillHub，没有「全部来源」；切�
     store.actions.marketSetFilter({ source: 'clawhub' });
   });
   assert.ok(claw.includes('>ClawHub<'), '切到 ClawHub 后锚点跟着变');
-  assert.equal(claw.includes('class="skc_marketChips"'), false, 'ClawHub 没有分类表 ⇒ 整行消失');
+  assert.ok(claw.includes('class="skc_marketChips"'), 'ClawHub 有分类表 ⇒ 分类行仍在（U8）');
 });
 
 test('K56 图标用 object-fit: contain（宽幅 logo 不裁切），市场块里没有 cover', async () => {

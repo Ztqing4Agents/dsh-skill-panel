@@ -246,18 +246,15 @@ test('K37 短页不等于耗尽：next 非 null 时 pagedSources 仍要这个源
   assert.equal(MARKET_PAGE_SIZE, 12, '单源每页 12 条');
 });
 
-test('K37 两源都 next=null 时才算到底：page.status 变 done，pagedSources 为空', () => {
+test('K37 next=null 就是到底：page.status 变 done，pagedSources 为空', () => {
   const store = createStore();
   store.actions.marketListLoading();
   store.actions.marketPageAppended({
-    pages: [
-      { sourceId: 'skillhub', page: { items: [item({ id: 'skillhub:ake:a' })], next: null } },
-      { sourceId: 'clawhub', page: { items: [], next: null } },
-    ],
+    pages: [{ sourceId: 'all', page: { items: [item({ id: 'skillhub:ake:a' })], next: null } }],
     merged: [item({ id: 'skillhub:ake:a' })],
   });
   const market = store.getSnapshot().market;
-  assert.equal(market.page.status, 'done', '所有源都给了 next=null 才是到底');
+  assert.equal(market.page.status, 'done', '一页 next=null 就是到底（一次请求一页）');
   assert.deepEqual(pagedSources(market), [], '到底之后不再请求任何源');
 });
 
@@ -293,15 +290,21 @@ test('K37 installViewOf 四态：ready / installing / installed / failed，运�
 });
 
 test('K37 emptyKindOf：只有 ready 且真的空才判空态，且区分为搜索 / 分类 / 来源', () => {
-  const base = { listStatus: 'ready', items: [], page: { status: 'idle' }, keyword: '', filters: { category: null } };
+  const base = { listStatus: 'ready', items: [], page: { status: 'idle' }, keyword: '', filters: { source: 'clawhub', category: null } };
   assert.equal(emptyKindOf({ ...base, keyword: 'ui' }), 'search', '有关键词 ⇒ 搜索无结果');
-  assert.equal(emptyKindOf({ ...base, filters: { category: 'dev-tools' } }), 'category', '筛了分类 ⇒ 该分类为空');
-  assert.equal(emptyKindOf(base), 'source', '什么都没筛 ⇒ 该来源为空');
+  assert.equal(emptyKindOf({ ...base, filters: { source: 'clawhub', category: 'dev-tools' } }), 'category', '筛了分类 ⇒ 该分类为空');
+  assert.equal(emptyKindOf(base), 'source', '选了某个来源且什么都没筛 ⇒ 该来源为空');
   assert.equal(emptyKindOf({ ...base, items: [item()] }), null, '有条目就没有空态');
   assert.equal(emptyKindOf({ ...base, listStatus: 'loading' }), null, '加载中不判空');
   assert.equal(emptyKindOf({ ...base, page: { status: 'loading' } }), null, '追加加载中不判空');
   assert.equal(emptyKindOf({ ...base, listStatus: 'error' }), null, '失败态不判空');
   assert.equal(emptyKindOf({ ...base, keyword: '  ' }), 'source', '纯空白的关键词不算搜索');
+  // U8: under "all sources" there is no such thing as "this source is empty".
+  assert.equal(
+    emptyKindOf({ ...base, filters: { source: 'all', category: null } }),
+    null,
+    'all 下不判「该来源为空」（整站都没东西才空，那是另一句话）',
+  );
 });
 
 test('K37 metaSegments：作者行只剩 handle 与版本，缺一项就少一段', () => {
@@ -396,17 +399,20 @@ test('K79 ratingTextOf：恒一位小数、恒用点，不依赖 locale', () => 
   }
 });
 
-test('K37 visibleCategories：选 ClawHub 时整行隐藏，bootstrap 失败时给说明，空表静默隐藏', () => {
+test('K37 visibleCategories：三个 scope 都有 chips，bootstrap 失败时给说明，空表静默隐藏', () => {
   const categories = [{ key: 'dev-tools', name: '开发工具', nameEn: 'Dev tools' }];
   const sources = [
+    { id: 'all', hasCategories: true },
     { id: 'skillhub', hasCategories: true },
-    { id: 'clawhub', hasCategories: false },
+    { id: 'clawhub', hasCategories: true },
   ];
-  assert.deepEqual(
-    visibleCategories({ filters: { source: 'clawhub' }, sources, categories, categoriesOk: true }),
-    { visible: false, unavailable: false, items: [] },
-    '选 ClawHub 时分类行隐藏（它没有分类表）',
-  );
+  for (const scope of ['all', 'skillhub', 'clawhub']) {
+    assert.deepEqual(
+      visibleCategories({ filters: { source: scope }, sources, categories, categoriesOk: true }),
+      { visible: true, unavailable: false, items: categories },
+      `${scope} 也有分类行（U8 起 ClawHub 顶部终于有类别）`,
+    );
+  }
   assert.deepEqual(
     visibleCategories({ filters: { source: 'skillhub' }, sources, categories, categoriesOk: true }),
     { visible: true, unavailable: false, items: categories },
@@ -422,22 +428,20 @@ test('K37 visibleCategories：选 ClawHub 时整行隐藏，bootstrap 失败时�
     { visible: false, unavailable: false, items: [] },
     '空分类表静默隐藏',
   );
-  // 「全部来源」这个选项已删：filters.source 永远是某个真实源。缺省（undefined）应当按
-  // default 源判，而不是当成「不过滤来源」。
   assert.deepEqual(
     visibleCategories({ filters: {}, sources, categories, categoriesOk: true }),
     { visible: true, unavailable: false, items: categories },
-    '缺省来源按 MARKET_DEFAULT_SOURCE 判（SkillHub 有分类）',
+    '缺省 scope（all）也有分类行',
   );
   assert.deepEqual(
     visibleCategories({ filters: { source: 'a-third-source' }, sources: [], categories, categoriesOk: true }),
     { visible: true, unavailable: false, items: categories },
-    '未登记的第三个源默认有分类（除非它在已知无分类名单里）',
+    '未登记的第四个 scope 默认有分类（没有「已知无分类」名单了）',
   );
   assert.deepEqual(
     visibleCategories({ filters: { source: 'clawhub' }, sources: [], categories, categoriesOk: true }),
-    { visible: false, unavailable: false, items: [] },
-    '没有来源描述符时也认得 ClawHub 无分类',
+    { visible: true, unavailable: false, items: categories },
+    '没有描述符时 ClawHub 也有分类行（U8 起它就有）',
   );
 });
 
@@ -468,14 +472,14 @@ test('K55 单源语义：市场一次只问一个源，缺省就是 MARKET_DEFAU
     { id: 'skillhub', hasCategories: true },
     { id: 'clawhub', hasCategories: false },
   ];
-  assert.equal(MARKET_DEFAULT_SOURCE, 'skillhub', '默认源是 SkillHub');
-  assert.deepEqual(queriedSources({ sources, filters: {} }), ['skillhub'], '缺省 → 只问 SkillHub');
+  assert.equal(MARKET_DEFAULT_SOURCE, 'all', '默认是「所有来源」（与站点一致）');
+  assert.deepEqual(queriedSources({ sources, filters: {} }), ['all'], '缺省 ⇒ 问所有来源');
   assert.deepEqual(queriedSources({ sources, filters: { source: 'clawhub' } }), ['clawhub'], '选中哪个就只问哪个');
   assert.deepEqual(queriedSources({ sources: [], filters: { source: 'clawhub' } }), ['clawhub'], 'bootstrap 未答时也照用户选的问');
   assert.deepEqual(
     queriedSources({ sources, filters: { source: 'all' } }),
     ['all'],
-    '不再有特殊值 all：它被当成一个普通源 id（路由会以 E_BAD_QUERY 拒掉，不是静默扇出）',
+    'all 是一个 scope（路由据此不传上游 source），仍是一次请求，不是扇出',
   );
   assert.deepEqual(
     pagedSources({ sources, filters: { source: 'skillhub' }, cursors: { skillhub: 'c2', clawhub: null } }),
@@ -497,17 +501,22 @@ test('K55 单源语义：市场一次只问一个源，缺省就是 MARKET_DEFAU
 test('K37 sourceDescriptors / sourceLabelOf / reasonKeyOf / marketKeyOf 的口径', () => {
   assert.deepEqual(
     sourceDescriptors({ sources: [] }).map((source) => source.id),
-    ['skillhub', 'clawhub'],
-    'bootstrap 未答时回落到内置两源',
+    ['all', 'skillhub', 'clawhub'],
+    'bootstrap 未答时回落到内置三个 scope',
   );
-  assert.equal(MARKET_FALLBACK_SOURCES.length, 2, '内置兜底恰好两个源');
+  assert.equal(MARKET_FALLBACK_SOURCES.length, 3, '内置兜底恰好三个 scope');
   assert.deepEqual(
     MARKET_FALLBACK_SOURCES.map((source) => source.labelKey),
-    ['market.source.skillhub', 'market.source.clawhub'],
+    ['market.source.all', 'market.source.skillhub', 'market.source.clawhub'],
     '兜底描述符也带 i18n 键（文案不在代码里）',
   );
+  assert.deepEqual(
+    MARKET_FALLBACK_SOURCES.map((source) => source.hasCategories),
+    [true, true, true],
+    '三个 scope 都有分类表，兜底时不闪',
+  );
   assert.equal(sourceLabelOf('clawhub', t), 'market.source.clawhub', '来源名走字典键');
-  assert.deepEqual(MARKET_SORTS, ['recommended', 'updated', 'downloads'], '三档排序与路由白名单一致');
+  assert.deepEqual(MARKET_SORTS, ['recommended', 'updated', 'downloads', 'stars'], '四档排序与路由白名单一致');
   assert.equal(reasonKeyOf('E_ALREADY_INSTALLED'), 'error.E_ALREADY_INSTALLED', '市场错误码有自己的文案键');
   assert.equal(reasonKeyOf('E_WHATEVER'), 'error.E_UNKNOWN', '陌生态回落 E_UNKNOWN');
   assert.equal(marketKeyOf({ id: 'skillhub:ake:x' }), 'skillhub:ake:x', '有 id 时用 id');
@@ -534,4 +543,85 @@ test('K37 detailFacts：六行固定顺序，未知就说未知，installTo 用�
   for (const row of unknownRows) {
     assert.equal(row.value, 'market.factUnknown', `${row.label} 未知时显示「未知」，不是空串`);
   }
+});
+
+test('K98 客户端三 scope + 四排序：默认 all，三个 scope 都有 chips，切 scope 清列表并等计数', () => {
+  assert.equal(MARKET_DEFAULT_SOURCE, 'all', '默认 scope 是「所有来源」');
+  assert.deepEqual(MARKET_SORTS, ['recommended', 'updated', 'downloads', 'stars'], '四档排序');
+  assert.deepEqual(
+    MARKET_FALLBACK_SOURCES.map((source) => [source.id, source.hasCategories]),
+    [['all', true], ['skillhub', true], ['clawhub', true]],
+    '三个 scope 都有分类表（ClawHub 不再是例外）',
+  );
+
+  const categories = [{ key: 'ai-agent', name: 'AI Agent', count: 23193 }];
+  const sources = MARKET_FALLBACK_SOURCES.map((source) => ({ ...source }));
+  for (const scope of ['all', 'skillhub', 'clawhub']) {
+    const row = visibleCategories({ filters: { source: scope }, sources, categories, categoriesOk: true });
+    assert.equal(row.visible, true, `${scope} 下 chips 行在`);
+    assert.equal(row.items.length, 1, `${scope} 下拿到分类表`);
+  }
+
+  // A scope change empties the list and puts only the chips row into its skeleton.
+  const store = createStore();
+  store.actions.marketPageAppended({
+    pages: [{ sourceId: 'all', page: { items: [item({ id: 'skillhub:ake:a' })], next: 'c2' } }],
+    merged: [item({ id: 'skillhub:ake:a' })],
+  });
+  store.actions.marketBootReady({ source: 'all', sources, categories, categoriesOk: true, total: 23193, countsOk: true });
+  assert.equal(store.getSnapshot().market.bootScope, 'all', '记下这份数字属于哪一档');
+  store.actions.marketSetFilter({ source: 'clawhub' });
+  const after = store.getSnapshot().market;
+  assert.deepEqual(after.items, [], '切 scope 清列表');
+  assert.deepEqual(after.cursors, {}, '切 scope 清游标');
+  assert.equal(after.categoriesLoading, true, '切 scope 让 chips 进骨架');
+  assert.equal(after.bootScope, 'all', '新数字还没到，bootScope 仍是旧的（面板据此补一次 bootstrap）');
+  store.actions.marketBootReady({ source: 'clawhub', sources, categories, categoriesOk: true, total: 13048, countsOk: true });
+  assert.equal(store.getSnapshot().market.bootScope, 'clawhub', '新 scope 的数字到了就换 bootScope');
+  assert.equal(store.getSnapshot().market.categoriesLoading, false, '骨架收起');
+  assert.equal(store.getSnapshot().market.total, 13048, 'total 也跟着换');
+});
+
+test('K98 all 档的空态语义与换 scope 的过渡：空列表不当「来源为空」，卡片留在屏上', () => {
+  const base = {
+    listStatus: 'ready',
+    items: [],
+    page: { status: 'done' },
+    keyword: '',
+    filters: { source: 'all', category: null, sort: 'recommended' },
+  };
+  assert.equal(emptyKindOf(base), null, 'all 档空列表不报「这个来源没有技能」（整站空是另一句话）');
+  assert.equal(emptyKindOf({ ...base, filters: { ...base.filters, source: 'skillhub' } }), 'source', '选了单源时才有「来源为空」');
+  assert.equal(
+    emptyKindOf({ ...base, keyword: 'nothing' }),
+    'search',
+    '关键词优先于来源（all 档也一样）',
+  );
+  assert.equal(
+    emptyKindOf({ ...base, filters: { ...base.filters, category: 'dev-tools' } }),
+    'category',
+    '分类优先于来源',
+  );
+  assert.equal(emptyKindOf({ ...base, listStatus: 'loading' }), null, '还在加载就不是空态');
+
+  // A scope change while cards are on screen: the cards stay, only the chips go to skeleton.
+  const store = createStore();
+  const seeded = [item({ id: 'skillhub:ake:a' }), item({ id: 'clawhub:ivangdavila:design' })];
+  store.actions.marketPageAppended({ pages: [{ sourceId: 'all', page: { items: seeded, next: 'c2' } }], merged: seeded });
+  store.actions.marketBootReady({ source: 'all', sources: MARKET_FALLBACK_SOURCES.map((s) => ({ ...s })), categories: [], categoriesOk: true, total: 224219, countsOk: true });
+  store.actions.marketBootLoading();
+  assert.equal(store.getSnapshot().market.boot, 'ready', '换 scope 的 bootstrap 不把整页打回骨架');
+  assert.equal(store.getSnapshot().market.categoriesLoading, true, '只有 chips 进骨架');
+  assert.equal(store.getSnapshot().market.items.length, 2, '卡片原地不动（清空发生在选完 scope 那一刻）');
+
+  // A late answer for the scope the user already left is detectable: bootScope stops
+  // matching filters.source, and the panel's effect re-boots on that mismatch.
+  store.actions.marketSetFilter({ source: 'clawhub' });
+  store.actions.marketBootReady({ source: 'all', sources: [], categories: [], categoriesOk: true, total: 224219, countsOk: true });
+  const stale = store.getSnapshot().market;
+  assert.equal(stale.bootScope, 'all', '这份数字属于 all');
+  assert.notEqual(stale.bootScope, stale.filters.source, '与当前 scope 不一致（面板据此再补一次 bootstrap）');
+  store.actions.marketBootReady({ source: 'clawhub', sources: [], categories: [], categoriesOk: true, total: 63381, countsOk: true });
+  assert.equal(store.getSnapshot().market.bootScope, 'clawhub', '正确那一档到了就对齐');
+  assert.equal(store.getSnapshot().market.categoriesLoading, false, '骨架收起');
 });

@@ -27,6 +27,7 @@ import {
   finiteOrNull,
   fromClawhubMirrorDetail,
   fromClawhubMirrorItem,
+  fromMirrorRow,
   fromSkillhubDetail,
   fromSkillhubListItem,
   isObject,
@@ -553,4 +554,63 @@ test('K86 脏数字与 stats 兜底：字符串不隐式转换、非有限数是
   assert.equal(statsOnly.downloads, 99, '镜像把数字放在 stats 下时同样读得到（与 SkillHub 同形）');
   assert.equal(statsOnly.saves, 7, '收藏数同理');
   assert.equal(statsOnly.score, 12345.6, '评分不截断');
+});
+
+test('K95 身份轴：按上游行折叠（community / enterprise → skillhub，clawhub → clawhub），缺或未知 ⇒ 丢条目', async () => {
+  const base = { slug: 'dev-god', name: 'Dev God', namespace: { handle: 'ake' }, upstream_owner_login: 'ivangdavila' };
+
+  assert.equal(fromMirrorRow({ ...base, source: 'community' }).sourceId, 'skillhub', 'community 折成 skillhub');
+  assert.equal(fromMirrorRow({ ...base, source: 'enterprise' }).sourceId, 'skillhub', 'enterprise 也是 skillhub（站点把它当子筛选）');
+  assert.equal(fromMirrorRow({ ...base, source: 'clawhub' }).sourceId, 'clawhub', 'clawhub 折成 clawhub');
+
+  // The owner comes from the row's own shape, not from the scope that asked for it.
+  assert.equal(fromMirrorRow({ ...base, source: 'enterprise' }).owner, 'ake', 'SkillHub 行的 owner 是 namespace.handle');
+  assert.equal(fromMirrorRow({ ...base, source: 'clawhub' }).owner, 'ivangdavila', 'ClawHub 行的 owner 是 upstream_owner_login');
+
+  for (const raw of [{ ...base }, { ...base, source: '' }, { ...base, source: 'bogus' }, { ...base, source: 42 }, null, 'text']) {
+    assert.equal(fromMirrorRow(raw), null, `${JSON.stringify(raw?.source)} ⇒ 丢条目（宁可不显示，也不猜身份）`);
+  }
+
+  // Key space: the same skill has the same id no matter which scope asked for it.
+  const viaAll = fromMirrorRow({ ...base, source: 'community' });
+  const viaHub = fromMirrorRow({ ...base, source: 'community', downloads: 999 });
+  assert.equal(viaAll.id, viaHub.id, '同一技能在 all 与 skillhub 两档下键逐字相同');
+  assert.equal(viaAll.id, 'skillhub:ake:dev-god', '键是 sourceId:owner:slug');
+
+  // And no fold ever produces an identity the registry does not have (no `all`).
+  const { SOURCE_IDS } = await import('../lib/market/query.js');
+  for (const row of [{ ...base, source: 'community' }, { ...base, source: 'enterprise' }, { ...base, source: 'clawhub' }]) {
+    assert.equal(SOURCE_IDS.has(fromMirrorRow(row).sourceId), true, `${row.source} 折出来的身份必须在白名单里`);
+  }
+});
+
+test('K95 all 档是混排：一批行折出两种身份，键仍按行而不是按档', async () => {
+  const batch = [
+    { source: 'community', slug: 'dev-god', name: 'Dev God', namespace: { handle: 'ake' }, downloads: 5 },
+    { source: 'enterprise', slug: 'corp-tool', name: 'Corp', namespace: { handle: 'acme' }, downloads: 7 },
+    { source: 'clawhub', slug: 'design', name: 'Design', namespace: { handle: 'indiv-guipi' }, upstream_owner_login: 'ivangdavila' },
+  ];
+  const folded = batch.map((row) => fromMirrorRow(row)).filter(Boolean);
+  assert.deepEqual(folded.map((item) => item.sourceId), ['skillhub', 'skillhub', 'clawhub'], '一次 all 里两种身份并存');
+  assert.deepEqual(
+    folded.map((item) => item.id),
+    ['skillhub:ake:dev-god', 'skillhub:acme:corp-tool', 'clawhub:ivangdavila:design'],
+    'enterprise 行的 owner 也是 namespace.handle；clawhub 行用原生 owner',
+  );
+  assert.equal(new Set(folded.map((item) => item.id)).size, 3, '三条互不撞键');
+
+  // The folded identity is what the panel sends to `install` - and the identity whitelist
+  // must accept it verbatim, so the enterprise row installs under `skillhub` (not `enterprise`,
+  // not `all`). That is the whole chain from a mixed page to `_meta.source`.
+  const { parseInstallBody } = await import('../lib/market/query.js');
+  const body = parseInstallBody({ source: folded[1].sourceId, owner: folded[1].owner, slug: folded[1].slug });
+  assert.deepEqual(body, { sourceId: 'skillhub', owner: 'acme', slug: 'corp-tool', version: null }, '企业版行装成 skillhub:acme:corp-tool');
+
+  // The same rows asked for by a single-scope list produce byte-identical keys.
+  const single = batch.slice(0, 2).map((row) => fromMirrorRow({ ...row, source: 'community' }));
+  assert.deepEqual(
+    single.map((item) => item.id),
+    ['skillhub:ake:dev-god', 'skillhub:acme:corp-tool'],
+    'all 与 skillhub 两档下，同一条技能键逐字相同（已安装记录不用迁移）',
+  );
 });

@@ -14,6 +14,7 @@ import test from 'node:test';
 
 import { clawhubSource } from '../lib/market/sources/clawhub.js';
 import { SOURCES, descriptors, descriptorsOf, getSource, ids, makeMarketDeps } from '../lib/market/sources/index.js';
+import { skillhubSource } from '../lib/market/sources/skillhub.js';
 import { tempDir } from './helpers/tree.mjs';
 
 test('K42 注册表顺序与服务端筛选顺序一致：skillhub 在前、clawhub 在后', () => {
@@ -44,14 +45,19 @@ test('K42 每个适配器都实现 §7.1 的六个函数与 caps，文案只给�
   }
 });
 
-test('K42 counts 只在有分类表的源上存在，且返回形状固定', () => {
+test('K42 两个源都带分类表与计数（三个 scope 共用一张表，数字按 scope 各算）', () => {
   const skillhub = getSource('skillhub');
   const clawhub = getSource('clawhub');
-  assert.equal(typeof skillhub.counts, 'function', 'SkillHub 有 counts');
-  assert.equal(clawhub.counts, undefined, 'ClawHub 没有分类表，也就没有 counts');
+  for (const [name, source] of [['skillhub', skillhub], ['clawhub', clawhub]]) {
+    assert.equal(typeof source.counts, 'function', `${name} 有 counts`);
+    assert.equal(typeof source.categories, 'function', `${name} 有分类表`);
+    assert.equal(source.caps.categories, true, `${name} 的 caps.categories 为真`);
+  }
+  // The registry stays two identities: `all` is a scope, never a source (K94).
+  assert.deepEqual(ids(), ['skillhub', 'clawhub'], '注册表仍是两个身份');
 });
 
-test('K42 能力对照与 §7.2 一致：两源都逐文件取包，只有 SkillHub 有分类表', () => {
+test('K42 能力对照与 §7.2 一致：两源都逐文件取包，也都有分类表', () => {
   assert.deepEqual(descriptors().map((entry) => entry.id), ['skillhub', 'clawhub'], '描述符顺序同注册表');
   const [skillhub, clawhub] = descriptors();
   assert.deepEqual(skillhub, {
@@ -63,9 +69,9 @@ test('K42 能力对照与 §7.2 一致：两源都逐文件取包，只有 Skill
   assert.deepEqual(clawhub, {
     id: 'clawhub',
     labelKey: 'market.source.clawhub',
-    hasCategories: false,
+    hasCategories: true,
     packageKind: 'files',
-  }, 'ClawHub 无分类表；U7 起包也走镜像的 /files 清单，与 SkillHub 同形');
+  }, 'U8 起 ClawHub 也有分类表（镜像的同一张）；包仍是镜像的 /files 清单');
   assert.deepEqual(descriptorsOf([]), [], '空数组 ⇒ 空描述符');
   assert.deepEqual(descriptorsOf(undefined), [], '非数组 ⇒ 空描述符（界面拿到空也不会崩）');
 });
@@ -137,6 +143,7 @@ function mirrorIo(options = {}) {
 /** One mirror row that can be identified (`upstream_owner_login` present). */
 const mirrorRow = (slug, extra = {}) => ({
   slug,
+  source: 'clawhub',
   name: slug,
   namespace: { handle: `clawhub_owner` },
   upstream_owner_login: 'owner',
@@ -281,4 +288,33 @@ test('K87 镜像的失败不会被吞成空页：带码的上游错误照实往�
     (error) => error.code === 'E_SOURCE_TIMEOUT',
     '带错误码的失败同样不被吞',
   );
+});
+
+test('K94 范围轴到得上游 URL：all 一个 source 参数都不发，skillhub 发 community，clawhub 发 clawhub', async () => {
+  // The adapter serves every scope, so the scope's `sourceParam` travels on the query and
+  // wins over the adapter's own value. `all` is "no parameter", never `source=all`.
+  const query = (sourceParam) => ({ ...CLAW_QUERY, sourceParam });
+
+  const all = mirrorIo({ rows: [], total: 224219 });
+  await skillhubSource.list(query(null), all.io);
+  assert.equal(all.urls[0].searchParams.has('source'), false, 'all 档：URL 里没有 source 这个参数');
+  assert.equal(all.urls[0].searchParams.get('pageSize'), '4', '其余参数照旧');
+
+  const hub = mirrorIo({ rows: [], total: 160838 });
+  await skillhubSource.list(query('community'), hub.io);
+  assert.equal(hub.urls[0].searchParams.get('source'), 'community', 'skillhub 档问的是 community');
+
+  const claw = mirrorIo({ rows: [], total: 63381 });
+  await clawhubSource.list(query('clawhub'), claw.io);
+  assert.equal(claw.urls[0].searchParams.get('source'), 'clawhub', 'clawhub 档问的是 clawhub');
+
+  // The four sort orders all reach the wire, and each keeps its own parameter pair.
+  for (const [sort, sortBy] of [
+    ['recommended', 'score'], ['updated', 'updated_at'], ['downloads', 'downloads'], ['stars', 'stars'],
+  ]) {
+    const run = mirrorIo({ rows: [], total: 1 });
+    await skillhubSource.list({ ...query(null), sort }, run.io);
+    assert.equal(run.urls[0].searchParams.get('sortBy'), sortBy, `${sort} ⇒ sortBy=${sortBy}`);
+    assert.equal(run.urls[0].searchParams.get('order'), 'desc', `${sort} ⇒ order=desc`);
+  }
 });

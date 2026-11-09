@@ -474,14 +474,21 @@ test('K89 图标管道与分类开关不回归：market/icons、icons()、caps�
   // Caps: categories stays OFF for ClawHub; the package shape is now 'files' for both.
   const { descriptors } = await import('../lib/market/sources/index.js');
   const clawhub = descriptors().find((entry) => entry.id === 'clawhub');
-  assert.equal(clawhub.hasCategories, false, 'caps.categories 本轮不翻（分类与计数留给 U8）');
-  assert.equal(clawhub.packageKind, 'files', '包形态改成逐文件清单（U7）');
+  assert.equal(clawhub.hasCategories, true, 'U8 起 ClawHub 也有分类表（镜像的同一张）');
+  assert.equal(clawhub.packageKind, 'files', '包形态是逐文件清单（U7）');
   const skillhub = descriptors().find((entry) => entry.id === 'skillhub');
   assert.equal(skillhub.hasCategories, true, 'SkillHub 的分类表不受影响');
+  // The scope list is a different axis: three entries, `all` first, and no `all` identity.
+  const { SCOPES, scopesFor } = await import('../lib/market/sources/index.js');
+  assert.deepEqual(SCOPES.map((scope) => scope.id), ['all', 'skillhub', 'clawhub'], '范围轴三项，all 排第一');
+  assert.deepEqual(scopesFor().map((scope) => scope.hasCategories), [true, true, true], '三个 scope 都有分类表');
+  assert.equal(SCOPES.some((scope) => scope.adapterId === 'all'), false, 'all 没有自己的适配器');
 
-  // Bootstrap keeps counting SkillHub only.
+  // Bootstrap counts one scope at a time, and maps the scope to its adapter.
   const routesText = await readFile(join(ROOT, 'lib', 'routes.js'), 'utf8');
-  assert.match(routesText, /market\.sourceById\('skillhub'\)/, 'bootstrap 的分类表与计数仍写死取自 SkillHub 本体');
+  assert.match(routesText, /scopeById/, 'bootstrap 用 scope 解析适配器');
+  assert.match(routesText, /sourceParam: scope\.sourceParam/, '计数的 source 参数来自 scope（不串号）');
+  assert.match(routesText, /sources: scopesFor\(\)/, 'bootstrap 回三个 scope 描述符');
   assert.match(routesText, /countsOk: counted\.ok === true/, 'countsOk 语义未变');
 });
 
@@ -533,4 +540,10 @@ test('K93 单源退场：lib 与 client 里没有 clawhub.ai，退役的模块�
   // Both sources report the same package shape.
   const { descriptors } = await import('../lib/market/sources/index.js');
   assert.deepEqual(descriptors().map((entry) => entry.packageKind), ['files', 'files'], '两源都是逐文件清单');
+
+  // `all` is a scope, never an identity: it must not reach detail/install/icons.
+  const { SOURCE_IDS, SCOPES_OF_LIST } = await import('../lib/market/query.js');
+  assert.deepEqual([...SOURCE_IDS].sort(), ['clawhub', 'skillhub'], '身份白名单仍只有两个 id');
+  assert.equal(SOURCE_IDS.has('all'), false, 'all 不在身份白名单里');
+  assert.deepEqual([...SCOPES_OF_LIST].sort(), ['all', 'clawhub', 'skillhub'], '范围白名单是三项');
 });

@@ -293,7 +293,7 @@ test('K35 非 loopback 请求一律 403 E_FORBIDDEN，且没有发生上游调�
   }
 });
 
-test('K35/K77 bootstrap：八个键（sources / categories / categoriesOk / categoriesStale / total / countsOk / favorites / favoritesOk）', async () => {
+test('K35/K77 bootstrap：九个键，sources 是三个 scope，source 回显算的是哪一档', async () => {
   const mounted = await mount({
     skillhub: adapter({
       id: 'skillhub',
@@ -307,16 +307,25 @@ test('K35/K77 bootstrap：八个键（sources / categories / categoriesOk / cate
     assert.equal(response.status, 200, 'bootstrap 200');
     assert.equal(response.json.code, 'OK', '信封 code 是 OK');
     assert.deepEqual(Object.keys(response.json.data).sort(),
-      ['categories', 'categoriesOk', 'categoriesStale', 'countsOk', 'favorites', 'favoritesOk', 'sources', 'total'],
-      '恰好八个键（R4 加了 total 与 countsOk；U2 加了 favorites 与 favoritesOk）');
-    assert.deepEqual(response.json.data.sources.map((source) => source.id), ['skillhub', 'clawhub'], '两个来源按注册顺序');
+      ['categories', 'categoriesOk', 'categoriesStale', 'countsOk', 'favorites', 'favoritesOk', 'source', 'sources', 'total'],
+      '恰好九个键（U8 加了 source：这三个数字属于哪一档）');
+    assert.deepEqual(
+      response.json.data.sources.map((source) => source.id),
+      ['all', 'skillhub', 'clawhub'],
+      '范围轴三项，all 排第一',
+    );
     assert.deepEqual(response.json.data.sources[0], {
-      id: 'skillhub',
-      labelKey: 'market.source.skillhub',
+      id: 'all',
+      labelKey: 'market.source.all',
       hasCategories: true,
       packageKind: 'files',
-    }, '来源描述符形状固定（界面按它渲染筛选项，不枚举）');
-    assert.equal(response.json.data.sources[1].hasCategories, false, 'ClawHub 没有分类表');
+    }, 'scope 描述符形状固定（界面按它渲染筛选项，不枚举）');
+    assert.deepEqual(
+      response.json.data.sources.map((source) => source.hasCategories),
+      [true, true, true],
+      'U8 起三个 scope 都有分类表（ClawHub 终于有 chips）',
+    );
+    assert.equal(response.json.data.source, 'all', '缺省算的是 all 这一档');
     assert.deepEqual(response.json.data.categories, [{ key: 'dev-tools', name: '开发编程', nameEn: 'Dev tools', count: 137000 }], '分类表透传并带上各自的 count');
     assert.equal(response.json.data.categoriesOk, true, '分类读成功');
     assert.equal(response.json.data.total, 2540000, 'total 是「全部」的数量');
@@ -343,7 +352,7 @@ test('K35 bootstrap 的分类失败不报错：categoriesOk=false + 空数组，
   }
 });
 
-test('K35 list：200 只含七个键，两源各自一页，服务端不合并', async () => {
+test('K35 list：200 只含七个键，一个 scope 一次请求，服务端不合并', async () => {
   const mounted = await mount();
   try {
     const skillhub = await callRoute(mounted.byPath[ROUTES.marketList], {
@@ -352,8 +361,8 @@ test('K35 list：200 只含七个键，两源各自一页，服务端不合并',
     });
     assert.equal(skillhub.status, 200, 'list 200');
     assert.deepEqual(Object.keys(skillhub.json.data).sort(),
-      ['category', 'items', 'keyword', 'next', 'sort', 'sourceId', 'total'], '恰好七个键（§3.7.1）');
-    assert.equal(skillhub.json.data.sourceId, 'skillhub', 'sourceId 回显');
+      ['category', 'items', 'keyword', 'next', 'sort', 'source', 'total'], '恰好七个键（§3.7.1）');
+    assert.equal(skillhub.json.data.source, 'skillhub', '回显的是 scope（范围轴），不是身份 id');
     assert.equal(skillhub.json.data.sort, 'recommended', 'sort 缺省 recommended');
     assert.equal(skillhub.json.data.keyword, '', '没有关键词');
     assert.equal(skillhub.json.data.category, null, '没有分类');
@@ -364,10 +373,10 @@ test('K35 list：200 只含七个键，两源各自一页，服务端不合并',
   }
 });
 
-test('K36 list：未知 source 与 source=all 都是 400 E_BAD_QUERY', async () => {
+test('K36 list：未知 source 仍是 400；缺 source 与 all 都是「所有来源」', async () => {
   const mounted = await mount();
   try {
-    for (const source of ['all', 'nope', 'SkillHub']) {
+    for (const source of ['nope', 'SkillHub', 'community']) {
       const response = await callRoute(mounted.byPath[ROUTES.marketList], {
         headers: LOOPBACK_HEADERS,
         url: `${ROUTES.marketList}?source=${encodeURIComponent(source)}`,
@@ -375,9 +384,12 @@ test('K36 list：未知 source 与 source=all 都是 400 E_BAD_QUERY', async () 
       assert.equal(response.status, 400, `source=${source} 应 400`);
       assert.equal(response.json.code, 'E_BAD_QUERY', `source=${source} 的错误码是 E_BAD_QUERY`);
     }
-    const missing = await callRoute(mounted.byPath[ROUTES.marketList], { headers: LOOPBACK_HEADERS });
-    assert.equal(missing.status, 400, '缺 source 也是 400（没有「全部来源」这一说）');
-    assert.equal(missing.json.code, 'E_BAD_QUERY', '缺 source 的错误码是 E_BAD_QUERY');
+    // "all" and "no source at all" are the same request, which is what the site does.
+    for (const url of [`${ROUTES.marketList}`, `${ROUTES.marketList}?source=all`]) {
+      const response = await callRoute(mounted.byPath[ROUTES.marketList], { headers: LOOPBACK_HEADERS, url });
+      assert.equal(response.status, 200, `${url} 200`);
+      assert.equal(response.json.data.source, 'all', `${url} 回显 scope=all`);
+    }
   } finally {
     await mounted.close();
   }
@@ -1250,6 +1262,56 @@ test('K76 body 里的 version 也不生效：收藏键只有三元组，列表�
     assert.deepEqual(response.json.data.favorites, ['skillhub:ake:dev-god'], '键里没有版本段（与图标缓存、台账同一个键）');
     const file = JSON.parse(await readFile(mounted.favoritesFile, 'utf8'));
     assert.deepEqual(file, { version: 1, favorites: ['skillhub:ake:dev-god'] }, '文件里的 version 是文档版本，不是技能版本');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K94 bootstrap 的范围轴：缺省回显 all，三档把各自的 sourceParam 交给计数，未知档 400', async () => {
+  const recorded = [];
+  /** Wrap one adapter so the scope it was counted for is visible. */
+  const withRecorder = (target) => ({
+    ...target,
+    async counts(io, options) {
+      recorded.push('sourceParam' in (options ?? {}) ? (options.sourceParam ?? null) : 'MISSING');
+      return target.counts(io, options);
+    },
+  });
+  const skillhub = withRecorder(adapter({
+    id: 'skillhub',
+    categories: [{ key: 'dev-tools', name: '开发工具', nameEn: 'Dev tools' }],
+  }));
+  // Both scopes are served by their own adapter, so both have to record.
+  const clawhub = withRecorder(adapter({ id: 'clawhub' }));
+  const mounted = await mount({ skillhub, clawhub });
+  const boot = (scope) => callRoute(mounted.byPath[ROUTES.marketBootstrap], {
+    headers: LOOPBACK_HEADERS,
+    url: scope === undefined ? ROUTES.marketBootstrap : `${ROUTES.marketBootstrap}?source=${scope}`,
+  });
+  try {
+    const plain = await boot();
+    assert.equal(plain.status, 200, '不带 source 仍是 200');
+    assert.equal(plain.json.data.source, 'all', '缺省回显 all（客户端据此知道这份数字属于哪一档）');
+    assert.deepEqual(
+      plain.json.data.sources.map((entry) => entry.id),
+      ['all', 'skillhub', 'clawhub'],
+      'sources[] 是三个 scope，all 排第一（注册表仍是两个身份）',
+    );
+
+    await boot('skillhub');
+    await boot('clawhub');
+    await boot('all');
+    assert.deepEqual(recorded, [null, 'community', 'clawhub', null], '计数拿到的是 scope 映射后的 sourceParam（all = 不带）');
+
+    for (const bad of ['unknown', 'community', 'ALL', '']) {
+      const response = await boot(bad);
+      if (bad === '') {
+        assert.equal(response.json.data.source, 'all', '空串等同不传（站点语义）');
+        continue;
+      }
+      assert.equal(response.status, 400, `source=${bad} ⇒ 400`);
+      assert.equal(response.json.code, 'E_BAD_QUERY', '不在三值白名单里就是参数错误');
+    }
   } finally {
     await mounted.close();
   }

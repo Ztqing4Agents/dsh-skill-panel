@@ -23,7 +23,7 @@ npm test             # node --test test/（测试由 QA 维护）
 | 路由表、写盘、错误码 | `docs/contracts/routes.md` | §3.3 §3.4 §8.1 |
 | 前端组件、状态机、命名与 i18n | `docs/contracts/client.md` | §3.5 §3.6 §8.2–§8.5 |
 | 调用流程与未定事项 | `docs/contracts/flows.md` | §4 §5 |
-| 验收口径、夹具、用例编号 K1–K93 | `docs/contracts/acceptance.md` | 附录 D.5（K28–K61 K75–K78 K82–K93）、D.6（K62–K74） |
+| 验收口径、夹具、用例编号 K1–K98 | `docs/contracts/acceptance.md` | 附录 D.5（K28–K61 K75–K78 K82–K98）、D.6（K62–K74） |
 | 决策登记（偏离 / 更正 / 假设） | `docs/contracts/decisions.md` | 附录 B |
 | 页面视觉刻度（px、令牌、`skc_` 类名、收拢顺序） | `docs/contracts/visual.md` | A.1–A.9 |
 | 技能市场（源适配器、数据流、市场刻度、安装链路） | `docs/contracts/market.md` | §7 附录 F 附录 G（路由见 `routes.md` §3.7 §8.6） |
@@ -33,7 +33,7 @@ npm test             # node --test test/（测试由 QA 维护）
 | 过去是什么、为什么这么定 | `git log`（`git log -S`） | 仓库里没有 `archive/`，历史交 git |
 | 现在卡在哪、还剩什么没验 | `.agents/work/BOARD.md` | 本地看板（列约定在文件头，过程产物在 wip/ 与 scratch/），不入库 |
 
-契约按**编号分区**：`§x.y` 与 `附录 X.n` 在全仓库唯一，正文里看到编号就按上表定位；编号是 `test/*.test.mjs` 头注的锚点（K1–K93），**不许重排或复用**（K33 / K58 / K60 / K80 已退役，号不复用）。
+契约按**编号分区**：`§x.y` 与 `附录 X.n` 在全仓库唯一，正文里看到编号就按上表定位；编号是 `test/*.test.mjs` 头注的锚点（K1–K98），**不许重排或复用**（K33 / K58 / K60 / K80 已退役，号不复用）。
 
 **新知识写哪**：可 grep 的断言 → 契约；不能做错的事 → 本文件「硬约束」；用户可感知的变化 → `CHANGELOG`；还没做的事 → 看板；**没定型的探索结论**才进项目记忆。文档里不放过程（PRD、测试报告、设计图）——已移出，见 commit `a8141eb`。
 
@@ -89,7 +89,7 @@ npm test             # node --test test/（测试由 QA 维护）
 - **`SkillSummary` 不暴露 `rank`**：`lib/registry.js` 用 `source`/`provider` 反推档位（表见 `docs/contracts/architecture.md` §1.4.3）；加新来源先补表，否则同名裁决会错。
 - **frontmatter 写入与读侧是两套规则**：`setDisableModelInvocation` 只做字节手术、只替换一行；`parseFrontmatter` 只负责读（含块标量，见 `docs/contracts/data-model.md` §3.2.4）。改一侧不影响另一侧；QA 踩过 `description: >`。
 - **宿主 primitives 来自浏览器 seed**，node 里 import 不到：测组件先映射（`docs/contracts/acceptance.md` 附录 D.1 的 L3 层）；`useSyncExternalStore` 必须带第三个参数，否则 SSR 直接抛。
-- **市场面只有一个上游（`api.skillhub.cn`）**：ClawHub 的目录 / 详情 / 安装包全走镜像的 `source=clawhub`，`clawhub.ai` 已退场；末页判定两档：**有 `data.total` 只看总数**（`page*limit >= total`，归一化会丢条目，所以**短页 ≠ 末页**）；**没有 `total` 才退回「短页即末页」**；`namespace` 不能猜（认领过的没有 `clawhub_` 前缀），一律 `keyword=<slug>` 列表查询按 `slug`+`upstream_owner_login` 双匹配；安装只认 `/files` 清单，空清单 / 无 `SKILL.md` / 路径不安全 ⇒ `E_PACKAGE_INVALID`。
+- **市场面只有一个上游（`api.skillhub.cn`）**：ClawHub 的目录 / 详情 / 安装包全走镜像；**三个 scope 不等于三个身份**——`all`（不传 source）/`skillhub`（`community`）/`clawhub` 只决定查询，`MarketItem.sourceId` 只有 `skillhub`/`clawhub` 两个值且**按行折叠**（`enterprise` 归 `skillhub`），`all` 传给 `detail`/`install` 就是 400；末页按 `data.total` 判（无 total 才退回短页）；分类计数**按 scope 各算、缓存 key 用 `sourceParam`**；`namespace` 不能猜（`keyword=<slug>` + 双匹配）；安装只认 `/files` 清单。
 
 ## 改完自检
 

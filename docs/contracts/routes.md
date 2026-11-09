@@ -157,8 +157,8 @@ return concat(bom, block, body.subarray(block.end))   // 其余字节一个不�
 
 | # | 方法 + 路径 | 入参 | 出参 `data` | 错误码（全量） |
 | --- | --- | --- | --- | --- |
-| 5 | `GET /api/dsh-skill-center/market/bootstrap` | 无（`?refresh=1` 绕过分类表与计数的缓存，仅调试） | `{sources:[{id,labelKey,hasCategories,packageKind}], categories:[{key,name,nameEn,count:number\|null}], categoriesOk:boolean, categoriesStale:boolean, total:number\|null, countsOk:boolean, favorites:string[], favoritesOk:boolean}` | `403 E_FORBIDDEN`、`405 E_METHOD`、`500 E_INTERNAL`。分类表失败**不报错**：`categoriesOk:false` + 空数组；计数失败**也不报错**：那一项 `count:null`、`countsOk:false`（`total:null`），两者都不影响列表；`categoriesStale:true` 表示缓存兜底 |
-| 6 | `GET /api/dsh-skill-center/market/list` | `source`（必填，单个源）、`sort=recommended\|updated\|downloads`、`category`、`keyword`（≤ 64 字符）、`limit=1..24`（默认 12）、`cursor`（该源自己的不透明游标） | `{sourceId, sort, keyword, category, items:[MarketItem], next:string\|null, total:number\|null}` | `403`、`405`、`400 E_BAD_QUERY`、`502 E_SOURCE_BAD_RESPONSE`、`503 E_SOURCE_UNAVAILABLE`、`504 E_SOURCE_TIMEOUT`、`500 E_INTERNAL` |
+| 5 | `GET /api/dsh-skill-center/market/bootstrap` | `source`（可选，`all`（缺省）/`skillhub`/`clawhub`——只算这一档的计数）；`?refresh=1` 绕过分类表与计数的缓存，仅调试 | `{source, sources:[{id,labelKey,hasCategories,packageKind}], categories:[{key,name,nameEn,count:number\|null}], categoriesOk:boolean, categoriesStale:boolean, total:number\|null, countsOk:boolean, favorites:string[], favoritesOk:boolean}`；`sources` 是**三个 scope**（`all` 排第一），`source` 回显这三个数字属于哪一档 | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_QUERY`、`500 E_INTERNAL`。分类表失败**不报错**：`categoriesOk:false` + 空数组；计数失败**也不报错**：那一项 `count:null`、`countsOk:false`（`total:null`），两者都不影响列表；`categoriesStale:true` 表示缓存兜底 |
+| 6 | `GET /api/dsh-skill-center/market/list` | `source`（可选，**scope**：缺省 = `all`，取值 `all`/`skillhub`/`clawhub`；`all` 与缺省都不给上游传 `source`，`skillhub`→`community`，`clawhub`→`clawhub`）、`sort=recommended\|updated\|downloads\|stars`、`category`、`keyword`（≤ 64 字符）、`limit=1..24`（默认 12）、`cursor`（该 scope 自己的不透明游标） | `{source, sort, keyword, category, items:[MarketItem], next:string\|null, total:number\|null}` | `403`、`405`、`400 E_BAD_QUERY`、`502 E_SOURCE_BAD_RESPONSE`、`503 E_SOURCE_UNAVAILABLE`、`504 E_SOURCE_TIMEOUT`、`500 E_INTERNAL` |
 | 7 | `GET /api/dsh-skill-center/market/detail` | `source`（必填）、`owner`、`slug`（必填）、`version`（可选） | `MarketDetail`（§3.8.1） | 同 #6 |
 | 8 | `GET /api/dsh-skill-center/market/installed` | 无 | `{items:{[id]:{name,version,path,exists:boolean}}, readable:boolean}` | `403`、`405`、`500 E_INTERNAL` |
 | 9 | `POST /api/dsh-skill-center/market/install` | `{source, owner, slug, version?}`（`objectOnly`，≤ 64 KiB；**没有 path / files / name 字段**） | `{name, path, version, source, owner, slug, files:number, bytes:number}` | `403`、`405`、`400 E_BAD_REQUEST`、`400 E_BAD_QUERY`、`409 E_ALREADY_INSTALLED`、`422 E_SKILL_NAME_INVALID`、`422 E_PACKAGE_INVALID`、`429 E_INSTALL_BUSY`、`502 E_DOWNLOAD_FAILED`、`502 E_SOURCE_BAD_RESPONSE`、`503 E_SOURCE_UNAVAILABLE`、`504 E_SOURCE_TIMEOUT`、`500 E_INSTALL_IO`、`500 E_INTERNAL` |
@@ -174,13 +174,13 @@ install 出参里两个数字的口径**不一样，别混**：`files` 是**落�
 
 #### 3.7.2 `market/list` 的语义细则
 
-1. **`source` 是必填的单个源，没有 `all`。** 两源的游标类型不同（SkillHub `page` 数字 / ClawHub 不透明串），一个请求无法定义「双源共用一个游标」。客户端要「全部来源」就按来源各发一次请求，`Promise.allSettled` 收结果。
-2. `limit` 是**该源**条数（默认 12 → 双源一页 24 张）。`1..24` 之外**夹取不报错**；非数字才是 `400 E_BAD_QUERY`。
-3. `cursor` 是该源自己的不透明游标：不传 = 第一页；传了但解码失败（或不是本插件签发的形状）→ `400 E_BAD_QUERY`，不是 500。客户端只负责原样回传，**不解析、不拼接**。
+1. **`source` 是可缺省的 scope，不是身份 id。** 取值 `all`（缺省）/`skillhub`/`clawhub`；`all` 与缺省都不给上游传 `source`（站点「所有来源」就是这个意思，224,219 条已混排），`skillhub` 传 `community`、`clawhub` 传 `clawhub`。**`all` 只在 `list`/`bootstrap` 合法**：`detail`/`install`/`icons` 的白名单只有两个身份 id，传 `all` ⇒ `400 E_BAD_QUERY`。三者共用 `{page}` 游标，一次请求一页。
+2. `limit` 是**这一页**条数（默认 12）。`1..24` 之外**夹取不报错**；非数字才是 `400 E_BAD_QUERY`。
+3. `cursor` 是该 scope 自己的不透明游标：不传 = 第一页；传了但解码失败（或不是本插件签发的形状）→ `400 E_BAD_QUERY`，不是 500。客户端只负责原样回传，**不解析、不拼接**；**scope / category / sort / keyword 任一变化都必须清游标**（游标只有页码，不带筛选签名）。
 4. 关键词非空**自动走 `source.search`**，为空走 `source.list`；`keyword` 与 `category` 可同时给。
-5. 上游失败**用 HTTP 状态码表达**（502/503/504 + `E_*`），不塞进 200 的响应体：客户端按来源分辨失败，一个源失败不影响另一个源渲染。
-6. `total` 只有 SkillHub 给；ClawHub 恒 `null`，**不上屏**（两源口径不同）。
-7. **服务端不合并、不交错、不排序跨源项**：路由返回的就是「该源自己的一页」；合并与去重在 `src/client/market-model.js` 的 `mergeBatches` 里（§3.8.2）。
+5. 上游失败**用 HTTP 状态码表达**（502/503/504 + `E_*`），不塞进 200 的响应体：一次请求就是一个 scope 的一页，失败即整页失败（可重试）。
+6. `total` 三个 scope 都给（`data.total`），是**该 scope 的**总数；`all` 是两源之和，末页判定沿用 `page*limit >= total`。
+7. **服务端不合并、不交错、不排序跨源项**：路由返回的就是「这一档的一页」，混排顺序由上游给；追加与去重在 `src/client/market-model.js` 的 `mergeBatches` 里（§3.8.2）。
 
 超时、并发与互斥：
 

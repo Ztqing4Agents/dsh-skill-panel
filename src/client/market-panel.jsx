@@ -58,11 +58,23 @@ export function MarketPanel({ store, api, t }) {
    */
   const scrollBody = () => (rootRef.current === null ? null : rootRef.current.closest(SCROLL_BODY));
 
-  /** Read the source list and category table, falling back to the built-in sources. @returns {Promise<void>} */
-  const boot = useCallback(async () => {
+  /** Which `bootstrap` answer is still wanted; an older one is dropped, not applied. */
+  const bootToken = useRef(0);
+
+  /**
+   * Read the scope list and one scope's category table, falling back to the built-in
+   * scopes. `bootScope` guards the race: a slow answer for the scope the user just left
+   * must not overwrite the numbers of the scope they are looking at.
+   * @param {string} scope - the scope whose counts to read.
+   * @returns {Promise<void>}
+   */
+  const boot = useCallback(async (scope) => {
+    bootToken.current += 1;
+    const token = bootToken.current;
     store.actions.marketBootLoading();
     try {
-      const data = await api.marketBootstrap();
+      const data = await api.marketBootstrap(scope);
+      if (token !== bootToken.current) return;
       store.actions.marketBootReady(data);
       // The bookmarks arrive with bootstrap (they are one global set, not a per-page
       // answer), so the first frame draws the right state without a second round trip.
@@ -70,7 +82,7 @@ export function MarketPanel({ store, api, t }) {
     } catch {
       // A failed bootstrap leaves the bookmark state unknown; the button draws "not
       // saved", and the first click's authoritative answer repairs it either way.
-      store.actions.marketBootFallback(MARKET_FALLBACK_SOURCES);
+      if (token === bootToken.current) store.actions.marketBootFallback(MARKET_FALLBACK_SOURCES);
     }
   }, [api, store]);
 
@@ -86,9 +98,12 @@ export function MarketPanel({ store, api, t }) {
 
   useEffect(() => {
     const current = store.getSnapshot().market;
-    if (current.boot === 'idle') void boot();
+    if (current.boot === 'idle') void boot(current.filters.source);
+    // A scope change needs that scope's own numbers: the chips row is the only thing that
+    // waits for them, and the previous scope's figures are already off screen.
+    else if (current.boot === 'ready' && current.bootScope !== current.filters.source) void boot(current.filters.source);
     if (current.installedReady !== true) void loadInstalled();
-  }, [boot, loadInstalled, store]);
+  }, [boot, loadInstalled, store, market.boot, market.bootScope, market.filters.source]);
 
   /**
    * Ask the selected source for one page. The market shows one source at a time, so this
@@ -317,7 +332,9 @@ export function MarketPanel({ store, api, t }) {
             onCommit={(text) => store.actions.marketCommitKeyword(text)}
             onFilter={(patch) => store.actions.marketSetFilter(patch)}
           />
-          {market.boot === 'loading' && market.sources.length === 0 ? <MarketChipsSkeleton /> : null}
+          {market.categoriesLoading || (market.boot === 'loading' && market.sources.length === 0)
+            ? <MarketChipsSkeleton />
+            : null}
           {loadingFirst ? <MarketSkeleton label={t('market.loading')} /> : null}
           {market.listStatus === 'error' ? (
             <div className={cn('marketFailure')}>

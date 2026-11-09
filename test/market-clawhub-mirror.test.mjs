@@ -27,6 +27,7 @@ import { tempDir } from './helpers/tree.mjs';
 /** One mirror list row for a skill, as the live endpoint publishes it. */
 const mirrorRow = (slug, owner, extra = {}) => ({
   slug,
+  source: 'clawhub',
   name: `${slug} upstream title`,
   namespace: { handle: `clawhub_${owner}` },
   upstream_owner_login: owner,

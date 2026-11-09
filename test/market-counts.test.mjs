@@ -175,3 +175,75 @@ test('K53 resetCountCache 清掉缓存（测试与 refresh 共用这个出口）
   assert.equal(after.cached, false, '清掉之后重新请求');
   assert.equal(after.counts.office, 2, '拿到新值');
 });
+
+test('K96 按 scope 计数：请求带各自的 source，缓存按 sourceParam 分开，refresh 清全部', async () => {
+  resetCategoryCache();
+  resetCountCache();
+  // Three scopes, three different answers for the same category - the whole reason the
+  // cache cannot be shared (measured: ai-agent 23,193 / 10,145 / 13,048).
+  const perScope = { '': 23193, community: 10145, clawhub: 13048 };
+  const calls = [];
+  const io = {
+    /**
+     * Answer one count request; the scope comes from the `source` parameter.
+     * @param {URL|string} url - the request URL.
+     * @returns {Promise<object>} the body.
+     */
+    async getJson(url) {
+      const parsed = new URL(String(url));
+      if (parsed.pathname === '/api/v1/categories') return { items: CATEGORIES };
+      calls.push(parsed.search);
+      const scope = parsed.searchParams.get('source') ?? '';
+      const category = parsed.searchParams.get('category');
+      return { data: { total: category === null ? (perScope[scope] ?? 0) * 10 : (perScope[scope] ?? 0) } };
+    },
+  };
+
+  const all = await skillhubSource.counts(io, { sourceParam: null });
+  assert.equal(all.counts['dev-tools'], perScope[''], 'all 这一档：不带 source，23,193 一类');
+  assert.equal(all.total, perScope[''] * 10, 'total 也来自同一档');
+  assert.equal(
+    calls.every((search) => !search.includes('source=')),
+    true,
+    'all 的请求一个 source 参数都不带（= 站点的「所有来源」）',
+  );
+
+  calls.length = 0;
+  const hub = await skillhubSource.counts(io, { sourceParam: 'community' });
+  assert.equal(hub.counts['dev-tools'], perScope.community, 'skillhub 这一档的数');
+  assert.equal(calls.every((search) => search.includes('source=community')), true, '每个请求都带 source=community');
+
+  calls.length = 0;
+  const claw = await skillhubSource.counts(io, { sourceParam: 'clawhub' });
+  assert.equal(claw.counts['dev-tools'], perScope.clawhub, 'clawhub 这一档的数');
+  assert.equal(
+    new Set([all.counts['dev-tools'], hub.counts['dev-tools'], claw.counts['dev-tools']]).size,
+    3,
+    '同一分类三个 scope 三个不同数字（共用一份缓存必错）',
+  );
+
+  // Switching back hits that scope's own cache - and only that one.
+  calls.length = 0;
+  const again = await skillhubSource.counts(io, { sourceParam: null });
+  assert.equal(again.cached, true, 'all 的数字还在缓存里');
+  assert.equal(calls.length, 0, '切回上一档不重发任何请求');
+  assert.equal(again.counts['dev-tools'], perScope[''], '拿回来的是 all 自己的数');
+
+  // A failure in one scope must not poison the others' cache entries.
+  calls.length = 0;
+  const failing = { getJson: async (url) => {
+    const parsed = new URL(String(url));
+    if (parsed.pathname === '/api/v1/categories') return { items: CATEGORIES };
+    throw new Error('count down');
+  } };
+  const broken = await skillhubSource.counts(failing, { sourceParam: 'enterprise' });
+  assert.equal(broken.ok, false, '这一档失败只让自己 ok:false');
+  const stillThere = await skillhubSource.counts(io, { sourceParam: 'community' });
+  assert.equal(stillThere.cached, true, '别的 scope 的缓存不受影响');
+
+  // `?refresh=1` clears every scope (the route calls resetIconCache + counts(refresh)).
+  resetCountCache();
+  calls.length = 0;
+  await skillhubSource.counts(io, { sourceParam: 'community', refresh: true });
+  assert.equal(calls.length > 0, true, 'refresh 之后重新问');
+});

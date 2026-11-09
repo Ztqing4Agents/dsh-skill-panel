@@ -21,6 +21,7 @@ import { clawhubSource, resetIconCache } from '../lib/market/sources/clawhub.js'
 /** One mirror list row, ClawHub-shaped (`upstream_owner_login` present). */
 const row = (slug, extra = {}) => ({
   slug,
+  source: 'clawhub',
   name: slug,
   namespace: { handle: `clawhub_ivangdavila` },
   upstream_owner_login: 'ivangdavila',
