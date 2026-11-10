@@ -251,7 +251,10 @@ test('K114 有版本才画 Tag：文本是 v{version}（走 market.metaVersion�
   // H1 起版本写成宿主的 `v{version}` 形态，并且必须复用字典键：手拼 `"v" + version` 会让
   // 英文界面与本地化脱钩，所以这里同时钉「渲染结果」和「用的是哪个键」。
   assert.ok(html.includes('<span data-tone="neutral">v2.1.0</span>'), '版本 Tag 的文本是 v2.1.0');
-  assert.equal(html.includes('>2.1.0<'), false, '不是裸版本号（前缀不是手拼丢掉的）');
+  // 标题行里不许出现裸版本号；来源信息「当前版本」那一行的 dd 本来就是裸版本号（宿主同款）。
+  const titleRowHtml = html.slice(html.indexOf('class="skc_marketTitleRow"'), html.indexOf('</h3>') + 5);
+  assert.equal(titleRowHtml.includes('>2.1.0<'), false, '标题行里不是裸版本号（前缀不是手拼丢掉的）');
+  assert.equal(html.includes(`<dt>${t('detail.factVersion')}</dt><dd><code>2.1.0</code></dd>`), true, '来源信息那句「当前版本」是裸版本号');
   const titleAt = html.indexOf('class="skc_marketDetailTitle"');
   assert.ok(titleAt !== -1 && titleAt < html.indexOf('>v2.1.0<'), 'Tag 跟标题同一行、在标题之后');
 
@@ -293,10 +296,11 @@ test('详情页头：软链行只读、没有开关，头部 roTag 是唯一说�
   assert.equal(html.includes('role="switch"'), false, '软链行的详情头没有开关（硬约束 5 的第二层）');
   assert.ok(html.includes('<span class="skc_roTag"'), '只读标记是 span，不是控件');
   assert.ok(html.includes('软链·只读'), '标记文案');
-  // 整页以宿主为准：事实表整块删掉了，软链只读只由这个标记说明。
-  assert.equal(html.includes('class="skc_marketFacts"'), false, '没有事实表');
-  assert.equal(html.includes('<dt>'), false, '一个 dt 都没有');
-  assert.equal(html.includes('真实位置'), false, '也不再出现「真实位置」文案');
+  // 整页以宿主为准：技术事实表删掉了，软链只读只由这个标记说明。
+  // 来源信息复用 `.skc_marketFacts` 那套刻度，所以这里合法的 1 个不判死，改成钉标签行。
+  assert.equal(html.includes('class="skc_marketTags"'), false, '没有标签行');
+  assert.equal(html.includes('真实位置'), false, '不出现「真实位置」文案');
+  assert.equal(html.includes(`<dt>${t('detail.factProvider')}</dt>`), false, '不出现「提供者」行');
   // 路径只留在 roTag 的 title 里（宿主同款 tooltip），不再作为可见文本上屏。
   const realPath = '/Users/me/Skills/ui-design/SKILL.md';
   assert.equal(html.includes(`>${realPath}<`), false, '真实路径不作为可见文本出现');
@@ -452,7 +456,10 @@ test('H1 页尾三段：版本区块 → 来源信息 → 查看仓库；upstrea
 
   // 路由对没有 upstream 的行给 repoUrl:null（客户端只透传，不自己拼），所以这里喂 null 看渲染。
   const bare = render({ row: marketRow({ upstream: null }), data: content({ repoUrl: null }) });
-  assert.equal(bare.includes(t('detail.sectionSource')), false, '没有 upstream 就没有来源信息整块');
+  // 来源信息恒渲染：没有 upstream 时它只剩「调用名」一行。
+  assert.notEqual(bare.indexOf(t('detail.sectionSource')), -1, '没有 upstream 也有来源信息这一段');
+  assert.equal(bare.includes(`<dt>${t('detail.callName')}</dt>`), true, '那一行是调用名');
+  assert.equal(bare.includes(`<dt>${t('detail.factCodeSource')}</dt>`), false, '没有上游就没有「代码来源」');
   assert.equal(bare.includes('class="skc_detailRepoLink"'), false, 'repoUrl 是 null 就不渲染查看仓库');
   assert.notEqual(bare.indexOf(t('detail.sectionVersion')), -1, '版本区块仍在（与 upstream 无关）');
 });
@@ -463,7 +470,15 @@ test('H1 可交互元素清单：面包屑 / 复制 / 开关 / 重新检查（�
   assert.equal(enabled.length, 4, `就绪态四个可点按钮（实测 ${enabled.length}）`);
   assert.match(enabled[0], /class="skc_marketCrumb"/, '面包屑');
   assert.match(enabled[1], /role="switch"/, '开关');
-  assert.match(enabled[2], /aria-label="复制调用名"/, '复制调用名');
+  // 顺序：复制按钮随调用名挪到来源信息，DOM 上排在「重新检查」之后。
+  assert.ok(html.includes('>重新检查</button>'), '第三个是重新检查');
+  assert.match(enabled[3], /aria-label="复制调用名"/, '复制调用名');
+  // 复制按钮现在坐在「来源信息」的第一行里（dd 内），不再在标题组。
+  const sourceBlock = html.slice(html.indexOf(t('detail.sectionSource')));
+  assert.ok(sourceBlock.includes('aria-label="复制调用名"'), '复制按钮在来源信息这一段里');
+  assert.ok(sourceBlock.indexOf('aria-label="复制调用名"') < sourceBlock.indexOf(t('detail.factCodeSource')), '就在第一行（代码来源之前）');
+  const introBlock = html.slice(html.indexOf('class="skc_detailIntro"'), html.indexOf('class="skc_detailBodyBox"'));
+  assert.equal(introBlock.includes('aria-label="复制调用名"'), false, '标题组里不再有复制按钮');
   assert.ok(html.includes('>重新检查</button>'), '重新检查按钮带文案');
   assert.equal(/<button[^>]*disabled=""[^>]*>[^<]*重新检查/.test(html), false, '空闲时重新检查可点');
   assert.equal(enabled.some((tag) => /卸载/.test(tag)), false, '卸载不在可交互清单里（它是 disabled）');
@@ -705,20 +720,21 @@ test('不再出现标签行与事实表：.skc_marketTags / .skc_marketFacts / �
     const html = render({ row: build() });
     assert.equal(html.includes('class="skc_marketTags"'), false, `${shape}：没有标签行`);
     assert.equal(html.includes('class="skc_marketTag"'), false, `${shape}：连单个 tag 也没有`);
-    // `.skc_marketFacts` 这张类被「来源信息」两行复用：没有上游的行一个都没有，
-    // 有上游的行恰好一个、里面只有 代码来源 / 当前版本（不是被删的技术事实表）。
+    // `.skc_marketFacts` 现在只属于「来源信息」这一段，而且**恒渲染**：行数看有没有上游 / 版本。
     const factsCount = (html.match(/class="skc_marketFacts"/g) ?? []).length;
-    assert.equal(factsCount, shape === '从市场安装' ? 1 : 0, `${shape}：事实表类只可能来自来源信息（实测 ${factsCount}）`);
-    if (factsCount === 1) {
-      const factsBlock = html.slice(html.indexOf('class="skc_marketFacts"'), html.indexOf('</dl>', html.indexOf('class="skc_marketFacts"')));
-      assert.equal((factsBlock.match(/<dt>/g) ?? []).length, 2, '来源信息恰好两行');
-      assert.ok(factsBlock.includes(t('detail.factCodeSource')) && factsBlock.includes(t('detail.factVersion')), '两行是代码来源 + 当前版本');
-    }
+    assert.equal(factsCount, 1, `${shape}：来源信息恒渲染，事实表类恰好 1 个（实测 ${factsCount}）`);
+    const factsBlock = html.slice(html.indexOf('class="skc_marketFacts"'), html.indexOf('</dl>', html.indexOf('class="skc_marketFacts"')));
+    const rows = (factsBlock.match(/<dt>/g) ?? []).length;
+    const expectedRows = shape === '从市场安装' ? 3 : 1;
+    assert.equal(rows, expectedRows, `${shape}：来源信息 ${expectedRows} 行（实测 ${rows}）`);
+    assert.ok(factsBlock.includes(t('detail.callName')), '第一行恒是调用名');
+    assert.equal(factsBlock.includes(t('detail.factPath')), false, '没有「技能文件」这一行');
+    assert.equal(factsBlock.includes(t('detail.factProvider')), false, '没有「提供者」这一行');
     assert.equal(html.includes(FILES_HEADING), false, `${shape}：没有「文件」区块`);
     assert.equal(html.includes('class="skc_marketFiles"'), false, `${shape}：没有文件清单`);
-    // 只剩「版本」（+ 有上游时的「来源信息」）两段。
+    // 恒两段：版本 + 来源信息。
     const sections = (html.match(/class="skc_marketDetailSection"/g) ?? []).length;
-    assert.equal(sections, shape === '从市场安装' ? 2 : 1, `${shape}：区块只剩 ${sections} 段`);
+    assert.equal(sections, 2, `${shape}：区块恰好 2 段（版本 + 来源信息），实测 ${sections}`);
   }
 });
 
@@ -731,4 +747,38 @@ test('两块被删后，那五句文案一句都不出现（分区名 / 事实�
       assert.equal(html.includes(text), false, `${shape}：不出现「${text}」`);
     }
   }
+});
+
+/* ------------- 来源信息恒渲染（调用名当第一行）与正文盒上下发丝线 ------------- */
+
+test('来源信息恒渲染：无 upstream 无 version 也有 1 行（调用名）', () => {
+  const html = render({ row: row({ upstream: null, version: null }), data: content({ repoUrl: null }) });
+  const block = html.slice(html.indexOf('class="skc_marketFacts"'), html.indexOf('</dl>', html.indexOf('class="skc_marketFacts"')));
+  assert.equal((block.match(/<dt>/g) ?? []).length, 1, '只剩调用名一行');
+  assert.ok(block.includes(`<dt>${t('detail.callName')}</dt>`), '那行是调用名');
+  assert.ok(block.includes('aria-label="复制调用名"'), '复制按钮跟着调用名进 dd');
+  assert.ok(block.includes('class="skc_detailFactValue"'), 'dd 上是 detailFactValue（等宽值 + 复制按钮的横排）');
+});
+
+test('来源信息行数随身份变化：无 upstream 有 version = 2 行；有 upstream 有 version = 3 行', () => {
+  const two = render({ row: row({ upstream: null, version: '2.1.0' }), data: content({ repoUrl: null }) });
+  const twoBlock = two.slice(two.indexOf('class="skc_marketFacts"'), two.indexOf('</dl>', two.indexOf('class="skc_marketFacts"')));
+  assert.equal((twoBlock.match(/<dt>/g) ?? []).length, 2, '调用名 + 当前版本');
+  assert.equal(twoBlock.includes(t('detail.factCodeSource')), false, '没有上游就没有代码来源');
+
+  const three = render({ row: marketRow() });
+  const threeBlock = three.slice(three.indexOf('class="skc_marketFacts"'), three.indexOf('</dl>', three.indexOf('class="skc_marketFacts"')));
+  assert.equal((threeBlock.match(/<dt>/g) ?? []).length, 3, '调用名 + 代码来源 + 当前版本');
+  const labels = [...threeBlock.matchAll(/<dt>([^<]*)<\/dt>/g)].map((match) => match[1]);
+  assert.deepEqual(labels, [t('detail.callName'), t('detail.factCodeSource'), t('detail.factVersion')], '顺序：调用名 → 代码来源 → 当前版本');
+});
+
+test('标题组只剩三段：标题+版本 → 作者 → 描述（没有调用名行）', () => {
+  const html = render({ row: marketRow() });
+  const intro = html.slice(html.indexOf('class="skc_detailIntro"'), html.indexOf('class="skc_detailBodyBox"'));
+  assert.equal(intro.includes('skc_detailIdentity'), false, '标题组里没有 detailIdentity');
+  const order = ['skc_marketTitleRow', 'skc_detailAuthor', 'skc_marketDetailDesc'].map((cls) => intro.indexOf(cls));
+  assert.ok(order.every((at) => at !== -1), '三段都在');
+  assert.ok(order[0] < order[1] && order[1] < order[2], '标题 → 作者 → 描述');
+  assert.equal(intro.includes('detailCallName'), false, '调用名等宽值不在标题组');
 });

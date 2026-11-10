@@ -196,11 +196,6 @@ export function InstalledDetail({
               {t('market.metaAuthor', { author: `${upstream.owner}/${upstream.slug}` })}
             </p>
           )}
-        <div className={cn('detailIdentity')}>
-          <span className={cn('marketScope')}>{t('detail.callName')}</span>
-          <code className={cn('detailCallName')}>{row.name}</code>
-          <CopyName name={row.name} t={t} />
-        </div>
         {row.description === '' ? null : <p className={cn('marketDetailDesc')}>{row.description}</p>}
       </div>
       {reason === null ? null : <p className={cn('reason')} role="alert">{reason}</p>}
@@ -230,23 +225,30 @@ export function InstalledDetail({
           </div>
         </div>
       </section>
-      {upstream === null ? null : (
-        <section className={cn('marketDetailSection')}>
-          <h4 className={cn('marketSectionTitle')}>{t('detail.sectionSource')}</h4>
-          <dl className={cn('marketFacts')}>
+      <section className={cn('marketDetailSection')}>
+        <h4 className={cn('marketSectionTitle')}>{t('detail.sectionSource')}</h4>
+        <dl className={cn('marketFacts')}>
+          <div>
+            <dt>{t('detail.callName')}</dt>
+            <dd className={cn('detailFactValue')}>
+              <code className={cn('detailCallName')}>{row.name}</code>
+              <CopyName name={row.name} t={t} />
+            </dd>
+          </div>
+          {upstream === null ? null : (
             <div>
               <dt>{t('detail.factCodeSource')}</dt>
               <dd><code>{version === null ? `${upstream.owner}/${upstream.slug}` : `${upstream.owner}/${upstream.slug}@${version}`}</code></dd>
             </div>
-            {version === null ? null : (
-              <div>
-                <dt>{t('detail.factVersion')}</dt>
-                <dd><code>{version}</code></dd>
-              </div>
-            )}
-          </dl>
-        </section>
-      )}
+          )}
+          {version === null ? null : (
+            <div>
+              <dt>{t('detail.factVersion')}</dt>
+              <dd><code>{version}</code></dd>
+            </div>
+          )}
+        </dl>
+      </section>
       {typeof data?.repoUrl !== 'string' ? null : (
         <a className={cn('detailRepoLink')} href={data.repoUrl} target="_blank" rel="noopener noreferrer">
           {t('detail.viewRepo')}

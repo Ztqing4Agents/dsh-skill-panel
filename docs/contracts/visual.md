@@ -220,11 +220,9 @@
    多 2px）。红用 --dsw-alias-state-error-primary（宿主同一令牌），借 primitives 两个 knob 画环 */
 .skc_detailDanger{ --dsh-button-outline-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent); --dsh-hairline-width: 1px; color: var(--dsw-alias-state-error-primary); height: 28px; padding: 0 10px; border-radius: 8px; gap: 4px; font-size: 12px; line-height: 18px }
 .skc_detailDanger:disabled{ opacity: .4 }
-/* 正文内滚动盒：宿主在 1440×920 下实测 552px（盒 height:552 + padding:12px 0、overflow-y:auto）。
-   552/920 = 0.6，所以取 60vh（推断，不是宿主声明值）。
-   **它紧跟描述、前面没有区块标题**（宿主描述下面直接是 README）；版本、来源信息与「查看仓库」
-   全在它下面、跟页面滚（整页以宿主为准：分区/软链 Tag 与事实表不再渲染）。三态在盒内就地呈现 */
-.skc_detailBodyBox{ max-height: 60vh; padding: 12px 0; overflow-y: auto }
+/* 正文盒**只有上下两条 0.5px 发丝线**（宿主实测：左右 none、圆角 0、背景透明）。颜色取「标签主色
+   5%」：浅色 ≈4% 黑、深色 ≈5% 白，随主题翻转；--dsw-alias-border-l3 约 12%，重 3 倍故不用 */
+.skc_detailBodyBox{ max-height: 60vh; padding: 12px 0; overflow-y: auto; border-top: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent); border-bottom: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent) }
 /* 版本区块：标题沿用 14/20/500、右侧小按钮是 Button size=sm；卡片 1px 描边 + radius-lg + 16
    内边距（宿主那张圆角卡，卡内 px 未采，取值按本页既有刻度定）；✓ 圆底 32、底色为 success
    令牌 12%。「来源信息」两行不新增规则：复用 .skc_marketFacts（market.md 附录 F） */
@@ -238,7 +236,8 @@
 /* 「查看仓库」是页内普通链接（不是点击层）：右下角、13/20 tertiary、hover 变主色 */
 .skc_detailRepoLink{ align-self: flex-end; display: inline-flex; align-items: center; gap: 4px; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px; text-decoration: none }
 @media (hover: hover){ .skc_detailRepoLink:hover{ color: var(--dsw-alias-label-primary) } }
-.skc_detailIdentity{ align-items: center; gap: 8px; display: flex }
+/* 调用名是来源信息第一行：值后挂复制按钮，这一格是行内 flex 贴右沿 */
+.skc_detailFactValue{ align-items: center; gap: 6px; justify-content: flex-end; display: inline-flex }
 .skc_detailCallName{ font-family: var(--ds-font-family-code) }
 .skc_detailBody{ font-size: 13px; line-height: 20px }
 ```

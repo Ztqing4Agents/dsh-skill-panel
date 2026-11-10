@@ -704,7 +704,7 @@ test('K115 visual.md A.5 有整行可点的三条刻度与「待真机取色」'
   assert.match(a5, /\.skc_cardEnd\{[^}]*z-index: 1/, 'A.5 写了 z-index:1 的动作位');
   assert.match(a5, /@media \(hover: hover\)/, 'A.5 把 hover 限定在有悬停的设备上');
   assert.match(a5, /待真机取色/, 'A.5 标注了待真机取色的刻度');
-  for (const rule of ['.skc_detailIdentity{', '.skc_detailCallName{', '.skc_detailBody{']) {
+  for (const rule of ['.skc_detailFactValue{', '.skc_detailCallName{', '.skc_detailBody{']) {
     assert.ok(a5.includes(rule), `A.5 记下详情页新增的 ${rule}`);
   }
 });

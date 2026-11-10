@@ -137,6 +137,19 @@ test('A.5 详情图标 49 走修饰类：.skc_cardIcon 仍是 48（列表行不�
   assert.match(detail, /(?:^|;)\s*height\s*:\s*49px/, '修饰类 49 高');
 });
 
+test('A.5 正文盒只有上下两条 .5px 发丝线：左右没有、无圆角（宿主 4% 黑 / 6% 白 的等价物）', () => {
+  const body = ruleBody(capturedCss(), '.skc_detailBodyBox');
+  const line = (side) => new RegExp(`border-${side}\\s*:\\s*\\.5px\\s+solid\\s+color-mix\\(in srgb, var\\(--dsw-alias-label-primary\\) 5%, transparent\\)`);
+  assert.match(body, line('top'), '上有 .5px 发丝线（5% 混色，不是 12% 的 l3）');
+  assert.match(body, line('bottom'), '下有 .5px 发丝线');
+  assert.equal(/border-(left|right)\s*:/.test(body), false, '左右没有边（宿主也是 0）');
+  assert.equal(/border\s*:/.test(body), false, '没有 border 简写把四条一起画上');
+  assert.equal(/border-radius\s*:/.test(body), false, '没有圆角（宿主是 0）');
+  assert.equal(/background(-color)?\s*:/.test(body), false, '背景保持透明（宿主也是透明）');
+  assert.match(body, /max-height\s*:\s*60vh/, '盒高仍是 60vh');
+  assert.match(body, /padding\s*:\s*12px 0/, '上下 padding 仍是 12px');
+});
+
 test('A.5/A.9 48px 是「含边框」的外框：border-box + .5px 边框 + padding-box 底色，三者缺一就变样', () => {
   const body = ruleBody(capturedCss(), '.skc_cardIcon');
   assert.match(body, /(?:^|;)\s*box-sizing\s*:\s*border-box/, 'border-box：48px 含边框，否则 48 + .5×2 会撑成 49');

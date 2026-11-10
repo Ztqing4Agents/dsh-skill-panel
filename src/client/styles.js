@@ -430,7 +430,11 @@ border-radius: 8px; gap: 4px; font-size: 12px; line-height: 18px;
 }
 .skc_detailDanger:disabled{ opacity: .4 }
 /* body scrolls here; files and source stay outside (552 = 60vh) */
-.skc_detailBodyBox{ max-height: 60vh; padding: 12px 0; overflow-y: auto }
+.skc_detailBodyBox{
+max-height: 60vh; padding: 12px 0; overflow-y: auto;
+border-top: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent);
+border-bottom: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent);
+}
 .skc_detailVersionHead{ display: flex; align-items: center; justify-content: space-between; gap: 12px }
 .skc_detailVersionCard{ border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); padding: 16px; display: flex; align-items: flex-start }
 .skc_detailVersionRow{ display: flex; align-items: flex-start; gap: 12px; min-width: 0 }
@@ -439,8 +443,9 @@ border-radius: 8px; gap: 4px; font-size: 12px; line-height: 18px;
 .skc_detailVersionTitle{ margin: 0; font-size: 14px; line-height: 22px }
 .skc_detailRepoLink{ align-self: flex-end; display: inline-flex; align-items: center; gap: 4px; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px; text-decoration: none }
 @media (hover: hover){ .skc_detailRepoLink:hover{ color: var(--dsw-alias-label-primary) } }
-.skc_detailIdentity{ align-items: center; gap: 8px; display: flex }
 .skc_detailCallName{ font-family: var(--ds-font-family-code) }
+/* the call-name row's value carries a copy button, so it is an inline flex kept at the right */
+.skc_detailFactValue{ align-items: center; gap: 6px; justify-content: flex-end; display: inline-flex }
 .skc_detailBody{ font-size: 13px; line-height: 20px }
 
 .skc_marketDialog{ width: min(480px, 100vw - 32px) }
