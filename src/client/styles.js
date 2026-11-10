@@ -435,7 +435,12 @@ const CSS = `
 }
 .skc_marketFileSize{ color: var(--dsw-alias-label-tertiary); flex: none; font-size: 12px; line-height: 18px }
 
-/* the installed detail reuses the family above; these three are all it adds */
+/* the installed detail reuses the family above; these are all it adds. The head mirrors the
+   host plugin detail page: one row of icon + actions, then the intro block underneath */
+.skc_detailTop{ display: flex; align-items: flex-start; gap: 14px }
+.skc_detailActions{ margin-left: auto; display: inline-flex; align-items: center; gap: 8px }
+.skc_detailIntro{ display: flex; flex-direction: column; gap: 6px }
+.skc_detailAuthor{ margin: 0; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px }
 .skc_detailIdentity{ align-items: center; gap: 8px; display: flex }
 .skc_detailCallName{ font-family: var(--ds-font-family-code) }
 .skc_detailBody{ font-size: 13px; line-height: 20px }

@@ -20,6 +20,7 @@ import {
   IconCheckOutlineRegular,
   IconChevronDownOutlineRegular,
   IconCopyOutlineRegular,
+  IconTrashOutlineRegular,
   fileSizeText,
 } from '@deepseek-ai/dsh-client-ui-primitives';
 
@@ -123,23 +124,41 @@ export function InstalledDetail({
   return (
     <div className={cn('marketDetail')} data-skc-installed-detail={key}>
       {crumb}
-      <div className={cn('marketDetailHead')}>
+      <div className={cn('detailTop')}>
         <IconTile iconUrl={iconUrl} title={row.name} />
-        <div className={cn('marketMain')}>
-          <div className={cn('marketTitleRow')}>
-            <h3 className={cn('marketDetailTitle')}>{title ?? row.name}</h3>
-            {typeof row.version === 'string' && row.version !== ''
-              ? <Tag tone="neutral">{row.version}</Tag>
-              : null}
-          </div>
+        <div className={cn('detailActions')}>
+          {/* Uninstall is a placeholder: visible and disabled, with no handler, because the real
+              one is a write route this version does not have (board M6). Disabled rather than
+              absent is the same call the add-skill button makes (decisions C-3). */}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled
+            title={t('detail.uninstallSoon')}
+            icon={<IconTrashOutlineRegular size={13} />}
+          >
+            {t('detail.uninstall')}
+          </Button>
+          {mode === null
+            ? (row.readonlyReason === 'symlink' ? <ReadonlyTag row={row} t={t} /> : null)
+            : <EnableSwitch row={row} t={t} pending={isPending(rows, key)} onToggle={onToggle} />}
         </div>
-        {mode === null && row.readonlyReason !== 'symlink' ? null : (
-          <div className={cn('cardEnd')}>
-            {mode === null
-              ? <ReadonlyTag row={row} t={t} />
-              : <EnableSwitch row={row} t={t} pending={isPending(rows, key)} onToggle={onToggle} />}
-          </div>
-        )}
+      </div>
+      <div className={cn('detailIntro')}>
+        <div className={cn('marketTitleRow')}>
+          <h3 className={cn('marketDetailTitle')}>{title ?? row.name}</h3>
+          {typeof row.version === 'string' && row.version !== ''
+            ? <Tag tone="neutral">{t('market.metaVersion', { version: row.version })}</Tag>
+            : null}
+        </div>
+        {upstream === null
+          ? null
+          : (
+            <p className={cn('detailAuthor')}>
+              {t('market.metaAuthor', { author: `${upstream.owner}/${upstream.slug}` })}
+            </p>
+          )}
+        {row.description === '' ? null : <p className={cn('marketDesc')} title={row.description}>{row.description}</p>}
       </div>
       {reason === null ? null : <p className={cn('reason')} role="alert">{reason}</p>}
       <div className={cn('detailIdentity')}>
@@ -147,7 +166,6 @@ export function InstalledDetail({
         <code className={cn('detailCallName')}>{row.name}</code>
         <CopyName name={row.name} t={t} />
       </div>
-      {row.description === '' ? null : <p className={cn('marketDesc')} title={row.description}>{row.description}</p>}
       {partitionKey === null && row.readonlyReason !== 'symlink' ? null : (
         <ul className={cn('marketTags')}>
           {partitionKey === null ? null : <li className={cn('marketTag')}>{t(partitionKey)}</li>}
@@ -157,12 +175,6 @@ export function InstalledDetail({
         </ul>
       )}
       <FactsTable rows={detailFactsOf(row, t)} />
-      {upstream === null ? null : (
-        <section className={cn('marketDetailSection')}>
-          <h4 className={cn('marketSectionTitle')}>{t('detail.sectionSource')}</h4>
-          <p className={cn('marketScope')}>{`${sourceLabel} · ${upstream.owner}/${upstream.slug}`}</p>
-        </section>
-      )}
       <section className={cn('marketDetailSection')}>
         <h4 className={cn('marketSectionTitle')}>{t('market.detailOverview')}</h4>
         {status === 'loading' ? <p className={cn('marketScope')}>{t('detail.loading')}</p> : null}
@@ -199,6 +211,12 @@ export function InstalledDetail({
           {data?.filesTruncated === true
             ? <p className={cn('marketScope')}>{t('detail.filesTruncated')}</p>
             : null}
+        </section>
+      )}
+      {upstream === null ? null : (
+        <section className={cn('marketDetailSection')}>
+          <h4 className={cn('marketSectionTitle')}>{t('detail.sectionSource')}</h4>
+          <p className={cn('marketScope')}>{`${sourceLabel} · ${upstream.owner}/${upstream.slug}`}</p>
         </section>
       )}
     </div>

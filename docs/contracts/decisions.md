@@ -205,18 +205,16 @@
 
 ---
 
-## 附录 Q 已安装详情页的设计参照（U1，2026-11-10）
+## 附录 Q 已安装详情页的设计参照（U1，2026-11-10；同日二核改写）
 
-> 结论先行：详情页的参照是**用户 2026-11-10 给的截图**，不是本机宿主可采的真源——「与宿主详情页 1:1」这一条**无法逐值验收**；骨架取我们既有的 `.skc_marketDetail*` 族（市场详情已用同一族），只有一处刻度没有真值。
+> 结论先行：宿主**确有**「插件详情页」，本轮已按它的**结构与顺序**重排已安装详情的头部。先前那条「本机宿主没有这一页」是**错的**，错因是采集方法而不是宿主：`grep` 对 asar 里的中文静默漏检。该结论作废，采集口径同步改成「只用 node 读 asar」。
 
 | # | 事实 | 依据 / 处理 |
 | --- | --- | --- |
-| Q-1 | 参照文档没有采集宿主的「插件详情页」 | `docs/reference/host-plugin-page.md` 一边写「没有二级页」、一边写「行本身是链接」，全文 79 行**没有任何详情页读数**（面包屑 / 身份行 / 徽章 / 版本 / 来源信息全无） |
-| Q-2 | 本机宿主没有这一页 | 实测 `app.asar`（2026-11-05，213 MB）搜「代码来源 / 来源信息 / 查看仓库 / 已是最新版本 / 重新检查」**0 命中** |
-| Q-3 | 于是参照页的四块**不实现或改写** | 版本 Tag 改由 `Row.version` 提供（有值才画，无值整块不渲染）；仓库外链、CI/评分徽章、「已是最新版本」均无数据源；正文与身份行按本地事实自建（第 12 条路由当场读盘） |
-| Q-4 | 唯一没有真值的刻度 | 宿主 `.cardLink:hover` 的确切色值：暂用市场卡同一个 `--dsw-alias-interactive-bg-hover`，在 `docs/contracts/visual.md` A.5 标「待真机取色」 |
-
-`docs/reference/host-plugin-page.md` **不改**：它是采集副本，没有真源就不许补写。
+| Q-1 | 宿主有插件详情页 | `app.asar` 内 `dsh/node_modules/@deepseek-ai/dsh-client-ui-plugin-manager/lib/client.js`（node 读 asar 实测 438 450 B，含 zh/en/ja locale 表）的详情页键：`crumbRoot:"插件"`、`backToList:"返回插件"`、`openDetail:"查看 {name}"`、`uninstall:"卸载"`、`uninstallLabel:"卸载 {name}"`、`versionTag:"v{version}"`、`sourceTitle:"来源信息"`、`sourceSpec:"代码来源"`、`sourceVersion:"当前版本"`、`sourceBuiltIn:"内置"`；渲染侧顺序是「头行（图标 + 卸载按钮(`outline/sm`, `IconTrashOutlineRegular` 13) + 开关）→ `titleRow`(`h3` + `versionTag`) → 描述 → 正文/说明 → 来源信息」 |
+| Q-2 | 上一轮判「没有」是**采集方法**错，不是宿主没有 | 同一份 213 MB asar：`grep -ac "卸载"` → **0**（假阴性）、`grep -ac "uninstall"` → 111（ASCII 正常）、node 逐字节读同一包时「卸载」「插件」各命中上百次。⇒ **对 asar 不能只用 grep 搜中文**；采集一律 node 读 asar（`u32@4 = headerSize`、`u32@12 = jsonLen`、JSON 从 byte 16 起、内容区 = `8 + headerSize`，按 offset 切片）。同一条规矩适用于以后任何「0 命中」的结论 |
+| Q-3 | 本轮按宿主重排头部 | 面包屑「技能」（对 `crumbRoot`，不是 `backToList`）→ 图标行右侧「卸载（`disabled` 占位，无 onClick）+ 开关」→ 名称 + 版本（`v{version}`）+ 作者（`@owner/slug`，仅 `upstream` 非空）+ 描述；来源信息移到页尾。真实卸载仍是看板 M6（C-3「可见的不可点」先例） |
+| Q-4 | 余项：**px 未逐值采集** | 宿主详情页的类名是构建哈希、样式在另一份产物里，本轮只对齐结构与顺序（用户也只要「先这样」）；详情页的确切 px/色值与 `.cardLink:hover` 一样标「待真机取色」（`docs/contracts/visual.md` A.5）。下次若采到样式，按 `docs/reference/host-plugin-page.md` 头注「整份重采」，不在旧的 §7 上补值 |
 
 ---
 

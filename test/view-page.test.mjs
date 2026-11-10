@@ -375,7 +375,7 @@ test('K111 详情就地替换列表：三分区不在，详情在', () => {
   assert.equal(html.includes('data-skc-installed-detail="filesystem#ui-design"'), true, '详情挂点在场');
   assert.equal(html.includes('data-skc-group='), false, '三个分区不再渲染（就地替换）');
   assert.equal(/data-skc-row=/.test(html), false, '一行都不渲染');
-  assert.ok(html.includes('返回已安装'), '面包屑是唯一返回入口');
+  assert.ok(html.includes('skc_marketCrumb') && html.includes('>技能<'), '面包屑是唯一返回入口（detail.back =「技能」）');
 });
 
 test('K111 详情打开时行消失：只有面包屑 + error.E_NOT_FOUND，页面不炸', () => {
@@ -386,7 +386,7 @@ test('K111 详情打开时行消失：只有面包屑 + error.E_NOT_FOUND，页�
   });
   assert.equal(html.includes('data-skc-detail-missing'), true, '走的是失效态挂点');
   assert.ok(html.includes(t('error.E_NOT_FOUND')), '文案是 error.E_NOT_FOUND');
-  assert.ok(html.includes('返回已安装'), '面包屑仍可回');
+  assert.ok(html.includes('skc_marketCrumb') && html.includes('>技能<'), '面包屑仍可回（detail.back =「技能」）');
 });
 
 test('K111 点行进详情：记偏移 + 只读正文，不重拉 list', async () => {

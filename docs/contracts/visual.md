@@ -192,7 +192,18 @@
 }
 
 /* 详情族（.skc_marketDetail / Crumb / DetailHead / DetailTitle / DetailSection / SectionTitle /
-   Facts / Files）的语义是「详情页骨架，两个页签共用」，**不改名**；已安装详情只补这三条 */
+   Facts / Files）的语义是「详情页骨架，两个页签共用」，**不改名**；已安装详情只补这七条 */
+/* 头部第一行：图标 + 右侧动作组。14 与宿主行内 gap 同值；图标与动作组顶端对齐，
+   所以是 flex-start（不是 center——按钮比 48 图标矮，居中会让图标看着偏下） */
+.skc_detailTop{ display: flex; align-items: flex-start; gap: 14px }
+/* 动作组的「卸载占位 + 开关」同排：margin-left:auto 把它顶到右沿，8 沿用行内动作位的间距 */
+.skc_detailActions{ margin-left: auto; display: inline-flex; align-items: center; gap: 8px }
+/* 图标下方的介绍组（标题/版本 → 作者 → 描述）：6 比标题与描述的 4 松一档，
+   因为作者行是 13/20 的次级信息。它到图标行的间距由父级 .skc_marketDetail 的 gap:16px 给，
+   自己**不再加外边距**——重复加会变成 16+12=28，比参照图松近一倍 */
+.skc_detailIntro{ display: flex; flex-direction: column; gap: 6px }
+/* 作者行 = 宿主详情页的作者行同级：tertiary + 13/20，margin 归零（行距由 .skc_detailIntro 的 gap 给） */
+.skc_detailAuthor{ margin: 0; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px }
 .skc_detailIdentity{ align-items: center; gap: 8px; display: flex }
 .skc_detailCallName{ font-family: var(--ds-font-family-code) }
 .skc_detailBody{ font-size: 13px; line-height: 20px }

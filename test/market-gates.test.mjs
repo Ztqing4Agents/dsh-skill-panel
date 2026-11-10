@@ -650,26 +650,50 @@ test('K115 §3.3.3 的读盘围栏与出参都在契约里', async () => {
   assert.match(text, /"filesTruncated": false/, '出参示例里带 filesTruncated');
 });
 
-test('K115 decisions 有附录 Q，且它写明参照是真源缺失、hover 待真机取色', async () => {
+test('K115 decisions 附录 Q：宿主确有插件详情页，上一轮判「没有」是 grep 假阴性；px 仍待采', async () => {
   const text = await readFile(join(ROOT, 'docs', 'contracts', 'decisions.md'), 'utf8');
   const appendix = sectionOf(text, '## 附录 Q', '## 验收');
   assert.match(text, /## 附录 Q 已安装详情页的设计参照/, '附录 Q 在（U1 的参照登记）');
-  assert.match(appendix, /没有任何详情页读数/, 'Q-1 记录参照文档没有详情页读数');
-  assert.match(appendix, /app\.asar/, 'Q-2 记录本机宿主没有这一页');
-  assert.match(appendix, /待真机取色/, 'Q-4 记下唯一没有真值的刻度');
-  assert.match(appendix, /不得|不(?:许|改)/, '附录 Q 明确写了采集副本不许补写');
+  // 活结论必须是「宿主确有这一页」——旧结论（真源缺失）已被同日的二次采集推翻。
+  assert.match(appendix, /宿主\*\*确有\*\*「插件详情页」/, 'Q-1 的活结论是「宿主确有插件详情页」');
+  assert.match(appendix, /crumbRoot/, 'Q-1 给出宿主详情页的实际键（crumbRoot 等），不是「没有读数」');
+  assert.match(appendix, /uninstallLabel|uninstall/, 'Q-1 记录卸载键');
+  assert.match(appendix, /versionTag/, 'Q-1 记录 v{version} 形态');
+  // 推翻的理由必须是「采集方法」，并写清以后怎么采，否则下一个人还会用 grep 得到 0。
+  assert.match(appendix, /grep/, 'Q-2 点名 grep');
+  assert.match(appendix, /假阴性|静默漏检/, 'Q-2 写明这是假阴性而不是宿主没有');
+  assert.match(appendix, /node 读 asar|node 逐字节读/, 'Q-2 给出正确采集方式');
+  // 唯一仍没有真值的刻度：px / hover 色值。
+  assert.match(appendix, /待真机取色/, 'Q-4 记下仍未采到的刻度');
+  assert.match(appendix, /px 未逐值采集|px/, 'Q-4 明确 px 没采');
 });
 
-test('K115 host-plugin-page.md 仍是那份采集副本：没有详情页读数被补写', async () => {
+test('K115 host-plugin-page.md §7：只写真采到的结构与键值，一个 px 都不许编', async () => {
   const file = join(ROOT, 'docs', 'reference', 'host-plugin-page.md');
   const text = await readFile(file, 'utf8');
-  assert.match(text, /采集日期：2026-11-08/, '采集日期还是 2026-11-08（没有重采、没有打补丁）');
-  assert.match(text, /没有二级页/, '原文那句「没有二级页」还在');
-  // 详情页的词汇一个都不许出现在采集副本里：出现就说明有人照着我们的实现补写读数。
-  for (const word of ['面包屑', '调用名', '真实位置', '版本 Tag', '文件清单', 'skc_detail', 'MAX_TEXT_BYTES']) {
-    assert.equal(text.includes(word), false, `采集副本里没有「${word}」（不许补写）`);
+  assert.match(text, /采集日期：2026-11-08/, '§1–§6 的原始采集日期不变（不在旧值上打补丁）');
+  assert.match(text, /二次采集：§7/, '头注登记了 §7 的二次采集');
+  const section = sectionOf(text, '## 7 ', undefined);
+  // 真源三件套：包路径、locale 键值、区块顺序。少一样都说明这节在凭记忆写。
+  assert.match(section, /@deepseek-ai\/dsh-client-ui-plugin-manager/, '§7 给出宿主产物里的包路径');
+  assert.match(section, /438[\s ]?450/, '§7 给出实测字节数');
+  for (const key of ['crumbRoot', 'backToList', 'uninstall', 'versionTag', 'sourceTitle']) {
+    assert.ok(section.includes(key), `§7 逐字记下 ${key}`);
   }
-  assert.equal(text.trimEnd().split('\n').length, 79, '全文仍是 79 行（U1 没有往里加行）');
+  assert.match(section, /区块顺序/, '§7 有区块顺序');
+  assert.match(section, /\n1\. .*\n2\. .*\n3\. /s, '区块顺序是编号列表（自上而下）');
+  // 采集方式必须是 node 读 asar，并且把 grep 对中文的假阴性写成警告。
+  assert.match(section, /node 读 asar/, '§7 写明采集方式是 node 读 asar');
+  assert.match(text, /grep[^\n]*假阴性|假阴性/, '全文有 grep 假阴性的警告');
+  assert.match(text, /一律用 node 读 asar/, '§1 的警告给了替代做法');
+  // 不许编尺寸：本节没有任何 px / rem / 宽高字面量。
+  const sizes = section.match(/\d+(?:\.\d+)?\s*(?:px|rem|em)\b/g) ?? [];
+  assert.deepEqual(sizes, [], `§7 里没有任何尺寸字面量（实测 ${JSON.stringify(sizes)}）`);
+  assert.match(section, /px 一个都没有|不写任何尺寸/, '§7 自己声明不写尺寸');
+  // 也不许把我们的实现细节写成宿主读数（那是「照着实现补写」）。
+  for (const word of ['skc_detail', 'skc_marketDetail', 'MAX_TEXT_BYTES']) {
+    assert.equal(section.includes(word), false, `§7 里没有我们的实现词汇「${word}」`);
+  }
 });
 
 test('K115 visual.md A.5 有整行可点的三条刻度与「待真机取色」', async () => {
@@ -685,7 +709,7 @@ test('K115 visual.md A.5 有整行可点的三条刻度与「待真机取色」'
   }
 });
 
-test('K115 体积门禁抬到 134000，locale 恰好 142 键（含 6 个 markdown.* chrome 标签）', async () => {
+test('K115 体积门禁抬到 134000，locale 恰好 144 键（含 6 个 markdown.* chrome 标签）', async () => {
   const bundleTest = await readFile(join(ROOT, 'test', 'bundle-contract.test.mjs'), 'utf8');
   assert.match(bundleTest, /size < 134_000/, '产物上限是 134000 B');
   assert.equal(/size < 128_000/.test(bundleTest), false, '旧上限 128000 已经不在（不能两个都在）');
@@ -694,14 +718,14 @@ test('K115 体积门禁抬到 134000，locale 恰好 142 键（含 6 个 markdow
   assert.equal(gate.code, 0, `check:i18n 必须 exit 0：${gate.stdout}${gate.stderr}`);
   const summary = /check-i18n: OK \((\d+) keys in both dictionaries/.exec(gate.stdout);
   assert.ok(summary !== null, '门禁输出里带键数');
-  assert.equal(Number(summary[1]), 142, `locale 恰好 142 键（实际 ${summary[1]}）`);
+  assert.equal(Number(summary[1]), 144, `locale 恰好 144 键（实际 ${summary[1]}）`);
 
-  // 口径自查：140 个扁平键 + meta 的两项 = 142（嵌套字典会让界面显示原始键名）。
+  // 口径自查：142 个扁平键 + meta 的两项 = 144（嵌套字典会让界面显示原始键名）。
   const [zh, en] = await Promise.all(['zh', 'en'].map(async (language) => (
     JSON.parse(await readFile(join(ROOT, 'locale', `${language}.json`), 'utf8'))
   )));
   const flat = (dictionary) => Object.keys(dictionary).filter((key) => key !== 'meta');
-  assert.equal(flat(zh).length + Object.keys(zh.meta).length, 142, 'zh：140 扁平 + meta 两项');
+  assert.equal(flat(zh).length + Object.keys(zh.meta).length, 144, 'zh：142 扁平 + meta 两项');
   assert.deepEqual(flat(zh).sort(), flat(en).sort(), 'zh/en 键集一致');
   assert.deepEqual(
     flat(zh).filter((key) => key.startsWith('detail.')).sort(),
@@ -710,9 +734,9 @@ test('K115 体积门禁抬到 134000，locale 恰好 142 键（含 6 个 markdow
       'detail.factProvider', 'detail.factReadonly', 'detail.factRealPath', 'detail.filesTruncated',
       'detail.loading', 'detail.noBody', 'detail.partition.builtin', 'detail.partition.installed',
       'detail.partition.local', 'detail.readonlyNoFile', 'detail.retry', 'detail.sectionSource',
-      'detail.truncated',
+      'detail.truncated', 'detail.uninstall', 'detail.uninstallSoon',
     ],
-    'detail.* 恰好 19 个键（installed-detail.md 的文案节）',
+    'detail.* 恰好 21 个键（installed-detail.md 的文案节；H1 头排加了 uninstall / uninstallSoon）',
   );
 
   // 136 → 142 的那 6 个键不是文案需求，是宿主渲染器的 chrome：`MarkdownText` 的代码块读
@@ -737,6 +761,33 @@ test('K115 体积门禁抬到 134000，locale 恰好 142 键（含 6 个 markdow
   const labelsCall = /<MarkdownText[^>]*\/>/.exec(markdownSource);
   assert.ok(labelsCall !== null, 'markdown.jsx 里有一处 MarkdownText 调用');
   assert.match(labelsCall[0], /\slabels=\{/, 'MarkdownText 收到 labels（缺了就在第一个围栏上抛错）');
+});
+
+test('K115 文档里写的 detail 键数与字典一致（19 → 21 这种漂移没人拦）', async () => {
+  const installedDetail = await readFile(join(ROOT, 'docs', 'contracts', 'installed-detail.md'), 'utf8');
+  const clientDoc = await readFile(join(ROOT, 'docs', 'contracts', 'client.md'), 'utf8');
+  const zh = JSON.parse(await readFile(join(ROOT, 'locale', 'zh.json'), 'utf8'));
+  const actual = Object.keys(zh).filter((key) => key.startsWith('detail.')).length;
+
+  // 每一处「这一页有几个键」的说法都点出来逐个核：本页键数是 21（19 + uninstall/uninstallSoon），
+  // 上一轮 17 → 19 → 21 改了两次值，改值的轮次都漏过至少一处头注。
+  const claims = [
+    ['installed-detail.md 读者行', installedDetail, /它那 (\d+) 个文案键/],
+    ['installed-detail.md 更新触发行', installedDetail, /这 (\d+) 个键时/],
+    ['installed-detail.md 文案节标题', installedDetail, /## 文案（[^）]*?(\d+) 个）/],
+    ['client.md 指针', clientDoc, /(\d+) 个文案键见/],
+    ['client.md 键族说明', clientDoc, /(\d+) 个 `detail\.\*`/],
+  ];
+  const wrong = [];
+  for (const [label, text, pattern] of claims) {
+    const found = pattern.exec(text);
+    if (found === null) {
+      wrong.push(`${label}: 找不到这句（措辞被改了就同步改这里）`);
+      continue;
+    }
+    if (Number(found[1]) !== actual) wrong.push(`${label}: 写的是 ${found[1]}，实际 ${actual}`);
+  }
+  assert.deepEqual(wrong, [], `detail.* 键数在所有文档里都是 ${actual}`);
 });
 
 test('K115 check:docs 认这份新契约：installed-detail.md 在白名单里且头注齐全', async () => {

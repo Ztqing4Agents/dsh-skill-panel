@@ -237,11 +237,18 @@ test('K112 files 为空：文件段整段不渲染，那句也不出现', () => 
 
 /* ---------------------------------------------------------- K114 · 版本 Tag */
 
-test('K114 有版本才画 Tag：值原样，位置在标题之后', () => {
+test('K114 有版本才画 Tag：文本是 v{version}（走 market.metaVersion，不自拼 v）', async () => {
   const html = render({ row: row({ version: '2.1.0' }) });
-  assert.ok(html.includes('<span data-tone="neutral">2.1.0</span>'), '版本原样进 Tag');
+  // H1 起版本写成宿主的 `v{version}` 形态，并且必须复用字典键：手拼 `"v" + version` 会让
+  // 英文界面与本地化脱钩，所以这里同时钉「渲染结果」和「用的是哪个键」。
+  assert.ok(html.includes('<span data-tone="neutral">v2.1.0</span>'), '版本 Tag 的文本是 v2.1.0');
+  assert.equal(html.includes('>2.1.0<'), false, '不是裸版本号（前缀不是手拼丢掉的）');
   const titleAt = html.indexOf('class="skc_marketDetailTitle"');
-  assert.ok(titleAt !== -1 && titleAt < html.indexOf('>2.1.0<'), 'Tag 跟标题同一行、在标题之后');
+  assert.ok(titleAt !== -1 && titleAt < html.indexOf('>v2.1.0<'), 'Tag 跟标题同一行、在标题之后');
+
+  const source = await readFile(join(ROOT, 'src', 'client', 'installed-detail.jsx'), 'utf8');
+  assert.match(source, /t\('market\.metaVersion', \{ version: row\.version \}\)/, '版本 Tag 走 market.metaVersion（不是 "v" + row.version）');
+  assert.equal(/"v" \+|`v\$\{/.test(source), false, '源码里没有手拼的 v 前缀');
 });
 
 test('K114 无版本不画 Tag：不写「未知」，也不留空壳', () => {
@@ -285,7 +292,7 @@ test('详情页头：软链行只读、没有开关，事实表里有真实位�
 test('详情页头：行没了只渲染面包屑 + E_NOT_FOUND，不抛异常', () => {
   const html = render({ row: null, status: 'ready' });
   assert.ok(html.includes('data-skc-detail-missing'), '失效态有它自己的挂点');
-  assert.ok(html.includes('返回已安装'), '面包屑仍在（唯一返回入口）');
+  assert.ok(html.includes('>技能<'), '面包屑仍在（唯一返回入口，文案是 detail.back =「技能」）');
   assert.ok(/role="alert"/.test(html), '失效信息是 alert');
   assert.ok(html.includes(t('error.E_NOT_FOUND')), '文案是 error.E_NOT_FOUND');
   assert.equal(html.includes('data-stub-markdown'), false, '失效态不渲染正文');
@@ -312,4 +319,124 @@ test('K113 宿主的 MarkdownText 必须拿到 labels：代码围栏读 `labels.
   assert.ok(call !== null, 'markdown.jsx 里有一处 MarkdownText 调用');
   assert.match(call[0], /\slabels=\{/, 'MarkdownText 收到 labels（宿主渲染代码块要读 labels.code）');
   assert.equal(/labels=\{undefined\}/.test(call[0]), false, 'labels 不是 undefined');
+});
+
+/* ------------------------------- H1 头排：按宿主「插件详情页」的结构重排（2026-11-10） */
+
+/** An installed row with an upstream identity, version and author line. */
+function marketRow(overrides = {}) {
+  return row({
+    name: 'dev-god',
+    partition: 'installed',
+    rule: 'R7',
+    upstream: { sourceId: 'skillhub', owner: 'ake', slug: 'dev-god' },
+    version: '1.2.4',
+    ...overrides,
+  });
+}
+
+test('H1 头排顺序：detailTop（图标 + 动作组）在 detailIntro（标题/作者/描述）之前', () => {
+  const html = render({ row: marketRow(), title: '编程大神' });
+  const top = html.indexOf('class="skc_detailTop"');
+  const intro = html.indexOf('class="skc_detailIntro"');
+  assert.notEqual(top, -1, '头排有 detailTop');
+  assert.notEqual(intro, -1, '第二组有 detailIntro');
+  assert.ok(top < intro, 'detailTop 在 detailIntro 之前');
+  // detailTop 里是图标 + 动作组，且顺序也是图标在前。
+  const topBlock = html.slice(top, intro);
+  assert.ok(topBlock.includes('class="skc_cardIcon"'), 'detailTop 里是 48 图标');
+  assert.ok(topBlock.indexOf('class="skc_cardIcon"') < topBlock.indexOf('class="skc_detailActions"'), '图标在动作组左边');
+  // detailIntro 里是 标题行 → 作者 → 描述。
+  const introBlock = html.slice(intro);
+  const titleRow = introBlock.indexOf('class="skc_marketTitleRow"');
+  const author = introBlock.indexOf('class="skc_detailAuthor"');
+  const desc = introBlock.indexOf('class="skc_marketDesc"');
+  assert.ok(titleRow !== -1 && titleRow < author && author < desc, '标题行 → 作者 → 描述');
+});
+
+test('H1 动作组：卸载在前、开关在后，开关仍是 role="switch"', () => {
+  const html = render({ row: marketRow() });
+  const actions = /<div class="skc_detailActions">([\s\S]*?)<\/div><\/div>/.exec(html);
+  assert.ok(actions !== null, '有动作组');
+  const block = actions[1];
+  const uninstall = block.indexOf('title="卸载功能尚未支持"');
+  const toggle = block.indexOf('skc_bundleToggle');
+  assert.notEqual(uninstall, -1, '动作组里有卸载');
+  assert.notEqual(toggle, -1, '动作组里有开关');
+  assert.ok(uninstall < toggle, '卸载在开关左边（与宿主同序）');
+  assert.equal((html.match(/role="switch"/g) ?? []).length, 1, '整页只有一个开关，且在动作组里');
+});
+
+test('H1 软链行：动作组里是只读标记，没有开关', () => {
+  const html = render({
+    row: row({
+      name: 'linked-demo',
+      partition: 'local',
+      symlink: true,
+      path: null,
+      realPath: '/Users/me/Skills/linked-demo/SKILL.md',
+      writable: false,
+      readonlyReason: 'symlink',
+    }),
+  });
+  const block = /<div class="skc_detailActions">([\s\S]*?)<\/div><\/div>/.exec(html);
+  assert.ok(block !== null, '软链行也有动作组');
+  assert.ok(block[1].includes('class="skc_roTag"'), '动作组里是 roTag');
+  assert.equal(/role="switch"/.test(block[1]), false, '动作组里没有开关');
+  assert.ok(block[1].includes('title="卸载功能尚未支持"'), '卸载占位仍在（对所有行都画）');
+});
+
+test('H1 卸载是 disabled 占位：type=button、title=卸载功能尚未支持、没有 onClick', () => {
+  const html = render({ row: marketRow() });
+  const tag = /<button type="button" disabled="" title="卸载功能尚未支持">/.exec(html);
+  assert.ok(tag !== null, '卸载渲染成 type=button + disabled + 那句 title');
+  assert.ok(html.includes('>卸载</button>'), '按钮文字是 detail.uninstall =「卸载」');
+  // SSR 会把 handler 丢掉，所以「没有 onClick」只能在元素树上验。
+  const tree = modules.installedDetail.InstalledDetail(props({ row: marketRow() }));
+  const uninstall = elementsOf(tree).find((element) => element.props?.children === t('detail.uninstall'));
+  assert.ok(uninstall !== undefined, '元素树里有卸载按钮');
+  assert.equal(uninstall.props.disabled, true, '是 disabled');
+  assert.equal(uninstall.props.onClick, undefined, '没有 onClick（点了什么都不会发生）');
+  assert.equal(uninstall.props.title, '卸载功能尚未支持', 'title 说明它还没做');
+  assert.equal(uninstall.props['aria-label'], undefined, '没有额外的 aria-label（文案就是按钮文字）');
+});
+
+test('H1 作者行：upstream 非空时是 @owner/slug，为空时整段不渲染', () => {
+  const withUpstream = render({ row: marketRow() });
+  assert.ok(withUpstream.includes('<p class="skc_detailAuthor">@ake/dev-god</p>'), '作者行是 @owner/slug');
+  assert.equal(withUpstream.includes('>@undefined'), false, '不会拼出 undefined');
+
+  const bare = render({ row: marketRow({ upstream: null }) });
+  assert.equal(bare.includes('skc_detailAuthor'), false, '没有 upstream 就没有作者行');
+  assert.equal(bare.includes('@ake'), false, '不写作者');
+  assert.equal(bare.includes('未知'), false, '也不写「未知」');
+});
+
+test('H1 来源信息在文件清单之后（页尾），upstream 为空时整块不渲染', () => {
+  const html = render({ row: marketRow() });
+  const filesAt = html.indexOf('class="skc_marketFiles"');
+  const sourceAt = html.indexOf(t('detail.sectionSource'));
+  assert.notEqual(filesAt, -1, '有文件清单');
+  assert.notEqual(sourceAt, -1, '有来源信息');
+  assert.ok(filesAt < sourceAt, '来源信息在文件清单之后');
+  assert.ok(sourceAt < html.lastIndexOf('</section>'), '来源信息是最后一段');
+  assert.ok(html.includes('SkillHub · ake/dev-god'), '来源信息写的是「来源 · owner/slug」');
+
+  const bare = render({ row: marketRow({ upstream: null }) });
+  assert.equal(bare.includes(t('detail.sectionSource')), false, '没有 upstream 就没有来源信息整块');
+});
+
+test('H1 可交互元素清单：面包屑 / 复制 / 开关（错误态再加重试），卸载不在其中', () => {
+  const html = render({ row: marketRow() });
+  const enabled = [...html.matchAll(/<button(?![^>]*\sdisabled="")[^>]*>/g)].map((match) => match[0]);
+  assert.equal(enabled.length, 3, `就绪态恰好三个可点的按钮（实测 ${enabled.length}）`);
+  assert.match(enabled[0], /class="skc_marketCrumb"/, '面包屑');
+  assert.match(enabled[1], /role="switch"/, '开关');
+  assert.match(enabled[2], /aria-label="复制调用名"/, '复制调用名');
+  assert.equal(enabled.some((tag) => /卸载/.test(tag)), false, '卸载不在可交互清单里（它是 disabled）');
+
+  const errorHtml = render({ row: marketRow(), status: 'error' });
+  const errorEnabled = [...errorHtml.matchAll(/<button(?![^>]*\sdisabled="")[^>]*>/g)];
+  assert.equal(errorEnabled.length, 4, '错误态四个：面包屑 / 开关 / 复制 / 重试');
+  assert.ok(/重试<\/button>/.test(errorHtml), '重试按钮在场');
 });

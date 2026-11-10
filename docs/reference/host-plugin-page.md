@@ -6,6 +6,7 @@
 > 更新触发：宿主升级到新的 `0.2.x-rc` 后**整份重采**，不在旧表上打补丁
 > 规模上限：600
 > 采集日期：2026-11-08
+> 二次采集：§7「插件详情页」于 2026-11-10 用 node 读 asar 补采（同日二核，见 `docs/contracts/decisions.md` 附录 Q）
 > 来源版本：DeepSeek Harness `0.2.2-rc.1`（`/Applications/DeepSeek Harness.app/Contents/Resources/app.asar`）
 
 只描述**宿主长什么样**，不写「我们应该怎么用」——复刻口径在 `docs/contracts/visual.md`。
@@ -22,6 +23,8 @@ grep -ac -- --bundle-progress-size "$A"   # 打开进度占位宽（本文 §4�
 ```
 
 本文任何一条测量都可用「重跑上面三条 + 重新截同一页」复核。宿主升级后三项若为 0，说明整份已失效，按 `来源版本` 重采。
+
+⚠️ **`grep -a` 只能用来搜 ASCII**：同一份 asar 上 `grep -ac "卸载"` 是 **0**（假阴性），而 `grep -ac "uninstall"` 有 111 —— grep 按字节匹配，对 UTF-8 中文会静默漏检。**搜中文/确认「某界面不存在」一律用 node 读 asar**（切片规则见 §1.1 的 `EX/` 行），否则「0 命中」只是采集方法在骗人（2026-11-10 踩过，结论见 `docs/contracts/decisions.md` 附录 Q-2）。
 
 截图：[宿主插件页首屏](../assets/host-plugins-page.png)（1440×920，2026-11-08）。
 
@@ -77,3 +80,29 @@ grep -ac -- --bundle-progress-size "$A"   # 打开进度占位宽（本文 §4�
 ## 6 控件由浏览器 seed 提供
 
 `SegmentedTabs` / `Switch` / `Button` / `Tooltip` / `Toast` / `StateDot` / 全部图标都是 `@deepseek-ai/dsh-client-ui-primitives` 的导出，运行时由宿主注入的 seed 提供；node 侧 import 不到，测试需要替身。
+
+## 7 插件详情页（采集 2026-11-10）
+
+> 采集方式：node 读 asar（不是 grep，理由见 §1 的警告）。目标文件 `EX/dsh/node_modules/@deepseek-ai/dsh-client-ui-plugin-manager/lib/client.js`，实测 438 450 B，含 zh / en / ja 三份 locale 表。**本轮只采到结构与文案键，px 一个都没有**（类名是构建哈希、样式在另一份产物里），所以本节不写任何尺寸。
+
+区块顺序（自上而下，用户真机截图与产物一致）：
+
+1. 面包屑：`crumbRoot`（「插件」）；列表侧的返回键是 `backToList`（「返回插件」），两者不是同一个字符串。
+2. 头行：左图标；右侧动作组 = 版本检查/更新按钮（有更新时）→ **卸载按钮** → 开关 `EnableSwitch`。
+3. 标题行：`h3`（详情标题）+ `versionTag`（`v{version}`，无版本就不画）+ 可选的状态 Tag（`statusBeta` / problem）。
+4. 描述 / 说明；再往下是 README 正文。
+5. 页尾「来源信息」技术区：`sourceTitle`（来源信息）、`sourceSpec`（代码来源）、`sourceVersion`（当前版本）、`sourceBuiltIn`（内置）。
+
+关键键值（逐字，来自该包的 locale 表）：
+
+| 键 | zh |
+| --- | --- |
+| `crumbRoot` / `backToList` | 插件 / 返回插件 |
+| `openDetail` | 查看 {name} |
+| `uninstall` / `uninstallLabel` | 卸载 / 卸载 {name} |
+| `versionTag` | v{version} |
+| `sourceTitle` / `sourceSpec` / `sourceVersion` / `sourceBuiltIn` | 来源信息 / 代码来源 / 当前版本 / 内置 |
+
+卸载按钮的形态（`react_jsx_runtime` 里的调用参数，逐字）：`Button` + `variant:"outline"` + `size:"sm"` + `className: danger` + `icon: IconTrashOutlineRegular size 13` + `aria-label: t("uninstallLabel", {name})` + `disabled: busy || !pkg.removable || pkg.readOnlyReason !== undefined` + `children: t("uninstall")` —— 即「用户不可卸载时按钮**在但禁用**」，与我们 `＋ 添加技能` 的处置一致。
+
+**余项**：详情页的 px 刻度（间距、字号、图标尺寸）与 hover 色值尚未逐值采集；要补就整份重采本节，不在旧值上打补丁。
