@@ -134,3 +134,64 @@ test('KI-2 回归：扫描层把折叠标量折成一句话（不是 ">"）', as
   );
   assert.notEqual(folded.description, '>', '指示符本身没有被当成值');
 });
+
+/* ---------------------------------------------------- K114 · `_meta.json` 的 version */
+
+/**
+ * Build a one-skill tree whose `_meta.json` carries the given value.
+ * @param {Record<string, unknown>|null} meta - the metadata object, or null for no file.
+ * @returns {Promise<{root: string, cleanup: Function}>} the tree.
+ */
+async function metaTree(meta) {
+  const { dir, cleanup } = await tempDir();
+  const root = join(dir, 'skills');
+  await mkdir(join(root, 'versioned'), { recursive: true });
+  await writeFile(join(root, 'versioned', 'SKILL.md'), '---\nname: versioned\ndescription: A versioned skill.\n---\n\n# body\n');
+  if (meta !== null) await writeFile(join(root, 'versioned', '_meta.json'), JSON.stringify(meta));
+  return { root, cleanup };
+}
+
+test('K114 version：1–64 字符的字符串原样透出，其余一律 null', async () => {
+  const cases = [
+    [{ version: '1.2.3' }, '1.2.3', '正常版本原样'],
+    [{ version: 'x'.repeat(64) }, 'x'.repeat(64), '恰好 64 字符仍算版本'],
+    [{ version: 'x'.repeat(65) }, null, '65 字符视为 null'],
+    [{ version: '' }, null, '空串是 null'],
+    [{ version: 42 }, null, '数字不是版本（不是字符串）'],
+    [{ version: null }, null, '显式 null 是 null'],
+    [{ version: { major: 1 } }, null, '对象不是版本'],
+    [{}, null, '没有 version 字段是 null'],
+    [null, null, '没有 _meta.json 是 null'],
+  ];
+  for (const [meta, expected, label] of cases) {
+    const tree = await metaTree(meta);
+    try {
+      const rows = await scanUserSkills(tree.root);
+      assert.equal(rows.length, 1, `${label}：条目仍然是一行`);
+      assert.equal(rows[0].version, expected, label);
+    } finally {
+      await tree.cleanup();
+    }
+  }
+});
+
+test('K114 version 不影响任何判定：同一个技能加不加版本，扫描事实只差这一项', async () => {
+  const bare = await metaTree({});
+  const versioned = await metaTree({ version: '9.9.9' });
+  try {
+    const [withoutVersion] = await scanUserSkills(bare.root);
+    const [withVersion] = await scanUserSkills(versioned.root);
+    assert.equal(withVersion.version, '9.9.9', '有版本的读到版本');
+    assert.equal(withoutVersion.version, null, '没有版本（同一个 _meta.json 少一行）读到 null');
+    // 两棵树在不同临时目录里，路径本来就不同：比的是「除 version 与路径外」的事实。
+    const stripVersion = (row) => {
+      const { version, instructionPath, ...rest } = row;
+      return rest;
+    };
+    assert.deepEqual(stripVersion(withVersion), stripVersion(withoutVersion), '除 version 外，两条的每一项事实都相同');
+    assert.equal(withVersion.upstream, null, '只写 version 的 _meta.json 不产生 upstream 身份');
+  } finally {
+    await bare.cleanup();
+    await versioned.cleanup();
+  }
+});

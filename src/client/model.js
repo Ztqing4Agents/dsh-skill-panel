@@ -123,3 +123,81 @@ export function reasonText(code, reason, t) {
   const known = ROW_ERRORS.has(code) ? code : 'E_UNKNOWN';
   return t(`error.${known}`, { reason: reason ?? '' });
 }
+
+/**
+ * The row one identity key still belongs to.
+ *
+ * The detail view stores a key, never a row: the list keeps changing underneath it (a
+ * switch, a refresh), and a row deleted from disk has to be noticed rather than rendered
+ * from a stale copy.
+ * @param {object|undefined} payload - ListPayload, or undefined before the first load.
+ * @param {string} key - identity key.
+ * @returns {object|null} the row, or null when the list no longer carries it.
+ */
+export function rowByKey(payload, key) {
+  const groups = Array.isArray(payload?.groups) ? payload.groups : [];
+  for (const group of groups) {
+    const skills = Array.isArray(group?.skills) ? group.skills : [];
+    for (const row of skills) if (rowKey(row) === key) return row;
+  }
+  return null;
+}
+
+/**
+ * The detail status the page shows for one identity key.
+ * @param {object} state - the page store snapshot.
+ * @param {string} key - identity key.
+ * @returns {'idle'|'loading'|'ready'|'error'} `idle` when no detail, or another skill's.
+ */
+export function detailStateOf(state, key) {
+  const detail = state?.detail ?? null;
+  if (detail === null || detail.key !== key) return 'idle';
+  return typeof detail.status === 'string' ? detail.status : 'idle';
+}
+
+/**
+ * The `detail.partition.*` translation key of one row.
+ * @param {object} row - a row from the payload.
+ * @returns {string|null} the key, or null when the partition is not one of the three.
+ */
+export function partitionTagKey(row) {
+  const partition = row?.partition;
+  return PARTITION_KEYS.includes(partition) ? `detail.partition.${partition}` : null;
+}
+
+/**
+ * Why a row has no switch, already localized - or null when it has one.
+ * @param {object} row - a row from the payload.
+ * @param {Function} t - translate function.
+ * @returns {string|null} the reason line, or null.
+ */
+function readonlyReasonText(row, t) {
+  if (switchMode(row) !== null) return null;
+  if (row?.readonlyReason === 'symlink') return t('row.symlinkReadonly');
+  if (row?.readonlyReason === 'no-file') return t('detail.readonlyNoFile');
+  return null;
+}
+
+/**
+ * The fact rows the installed detail shows.
+ *
+ * Built from the row the list carries (a snapshot), never from the detail route: the route
+ * answers the text, the row answers the identity, and a path is not a fact the page can
+ * recover from the text.
+ * @param {object} row - a row from the payload.
+ * @param {Function} t - translate function.
+ * @returns {{label: string, value: string, code?: boolean}[]} rows for `FactsTable`.
+ */
+export function detailFactsOf(row, t) {
+  const facts = [];
+  if (typeof row?.path === 'string' && row.path !== '') {
+    facts.push({ label: t('detail.factPath'), value: row.path, code: true });
+  }
+  if (typeof row?.realPath === 'string' && row.realPath !== '') {
+    facts.push({ label: t('detail.factRealPath'), value: row.realPath, code: true });
+  }
+  facts.push({ label: t('detail.factProvider'), value: typeof row?.provider === 'string' ? row.provider : '' });
+  const reason = readonlyReasonText(row, t);
+  if (reason !== null) facts.push({ label: t('detail.factReadonly'), value: reason });
+  return facts;
+}

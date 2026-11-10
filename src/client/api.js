@@ -97,6 +97,15 @@ export class SkillCenterApi {
   }
 
   /**
+   * Read one installed skill's own text and file list (the detail view's one request).
+   * @param {{name: string}} query - the skill's kebab name; never a path.
+   * @returns {Promise<object>} SkillContent.
+   */
+  async skillDetail(query) {
+    return this.request(`detail${queryString({ name: query?.name })}`);
+  }
+
+  /**
    * Enable or disable one file-backed skill.
    * @param {{name: string, path: string, enabled: boolean}} payload - the row identity and the target state.
    * @returns {Promise<object>} toggle result.

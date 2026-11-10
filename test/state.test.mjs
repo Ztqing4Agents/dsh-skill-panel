@@ -526,3 +526,121 @@ test('K108 落点键只被筛选与搜索改动：刷新 / 翻页 / 加载态 / 
   store.actions.marketSetFilter({ source: 'clawhub', sort: 'stars' });
   assert.equal(keyOf(store.getSnapshot().market), 'clawhub|dev-tools|stars|pdf', '换来源与排序同时改键');
 });
+
+/* --------------------------------------------- K111 · 已安装详情：就地替换、返回不重拉 */
+
+/** One installed row, as the payload carries it. */
+function detailRow(overrides = {}) {
+  return {
+    name: 'ui-design',
+    provider: 'filesystem',
+    partition: 'installed',
+    description: 'UI design skill.',
+    symlink: false,
+    path: '/skills/ui-design/SKILL.md',
+    realPath: null,
+    enabled: true,
+    writable: true,
+    readonlyReason: null,
+    upstream: null,
+    version: null,
+    ...overrides,
+  };
+}
+
+test('K111 openDetail：只挂详情态，payload 与市场子状态一字不动', () => {
+  const store = createStore();
+  store.actions.ready(payload());
+  const before = store.getSnapshot();
+  const target = detailRow();
+
+  store.actions.openDetail(target);
+
+  const after = store.getSnapshot();
+  assert.deepEqual(after.detail, { key: 'filesystem#ui-design', status: 'loading', data: null, code: null }, '详情是 loading 三态之一，键是 provider#name');
+  assert.equal(after.payload, before.payload, 'payload 引用不变（打开详情不重拉 list）');
+  assert.equal(after.market, before.market, '市场子状态引用不变');
+  assert.equal(after.status, before.status, '列表的加载状态也不动');
+});
+
+test('K111 rememberDetailScroll：只记正的有限数，打开前调一次', () => {
+  const store = createStore();
+  assert.equal(store.getSnapshot().detailScrollTop, 0, '初始是 0');
+  store.actions.rememberDetailScroll(300);
+  assert.equal(store.getSnapshot().detailScrollTop, 300, '记下 300');
+  for (const bad of [-1, Number.NaN, Number.POSITIVE_INFINITY, '300', null, undefined]) {
+    store.actions.rememberDetailScroll(bad);
+    assert.equal(store.getSnapshot().detailScrollTop, 0, `${String(bad)} 一律归 0（不是可用的像素偏移）`);
+  }
+  store.actions.rememberDetailScroll(228.5);
+  assert.equal(store.getSnapshot().detailScrollTop, 228.5, '小数偏移照记（浏览器的 scrollTop 就是小数）');
+});
+
+test('K111 detailReady / detailFailed / detailLoading 只认自己的 key：晚到的旧响应被丢', () => {
+  const store = createStore();
+  store.actions.ready(payload());
+  store.actions.openDetail(detailRow());
+  store.actions.detailReady('filesystem#ui-design', { body: 'text' });
+  assert.equal(store.getSnapshot().detail.status, 'ready', '自己的 key 就落地');
+  assert.deepEqual(store.getSnapshot().detail.data, { body: 'text' }, '数据落地');
+
+  // 用户已经换成另一个技能：上一个请求的答案晚到，不能覆盖当前详情。
+  const before = store.getSnapshot().detail;
+  store.actions.detailReady('filesystem#some-other', { body: 'stale' });
+  assert.equal(store.getSnapshot().detail, before, '别人的 key 落地不了（引用都不换）');
+  store.actions.detailFailed('filesystem#some-other', { code: 'E_INTERNAL' });
+  assert.equal(store.getSnapshot().detail, before, '别人的 key 也改不坏它');
+  store.actions.detailLoading('filesystem#some-other');
+  assert.equal(store.getSnapshot().detail, before, '别人的 key 更不能把它打回加载中');
+
+  // 关闭之后，还在飞的答案同样落不下来。
+  store.actions.closeDetail();
+  const closed = store.getSnapshot().detail;
+  assert.equal(closed, null, '关闭后 detail 是 null');
+  store.actions.detailReady('filesystem#ui-design', { body: 'late' });
+  assert.equal(store.getSnapshot().detail, null, '关闭后晚到的答案不会把详情又打开');
+});
+
+test('K111 detailFailed：失败只在详情里留错误码，列表与行状态都不受影响', () => {
+  const store = createStore();
+  store.actions.ready(payload());
+  const before = store.getSnapshot();
+  store.actions.openDetail(detailRow());
+  store.actions.detailFailed('filesystem#ui-design', { code: 'E_INTERNAL', message: 'boom' });
+  const after = store.getSnapshot();
+  assert.equal(after.detail.status, 'error', '状态变 error');
+  assert.equal(after.detail.code, 'E_INTERNAL', '错误码被保留');
+  assert.equal(after.payload, before.payload, 'payload 引用不变');
+  assert.equal(after.status, 'ready', '列表自己的状态仍是 ready（不是整页失败）');
+  assert.equal(after.rows.size, 0, '不往行级状态里塞东西（失败原因属于详情）');
+});
+
+test('K111 closeDetail：detail 变 null 而 payload 引用不变（返回不重拉 list）', () => {
+  const store = createStore();
+  store.actions.ready(payload());
+  store.actions.rememberDetailScroll(300);
+  store.actions.openDetail(detailRow());
+  store.actions.detailReady('filesystem#ui-design', { body: 'text' });
+  const list = store.getSnapshot().payload;
+
+  store.actions.closeDetail();
+
+  const after = store.getSnapshot();
+  assert.equal(after.detail, null, '详情关掉了');
+  assert.equal(after.payload, list, 'payload 引用不变（返回不重拉 list）');
+  assert.equal(after.detailScrollTop, 300, '偏移留着，页面的 paint effect 据此写回');
+  store.actions.closeDetail();
+  assert.equal(store.getSnapshot().detail, null, '已经关了再关一次是空操作');
+});
+
+test('K111 切页签：detail 留在 store 里，切回来还在详情', () => {
+  const store = createStore();
+  store.actions.ready(payload());
+  store.actions.openDetail(detailRow());
+  store.actions.detailReady('filesystem#ui-design', { body: 'text' });
+  store.actions.setTab('market');
+  assert.equal(store.getSnapshot().detail.status, 'ready', '切到市场页签不关详情');
+  store.actions.setTab('installed');
+  assert.equal(store.getSnapshot().detail.status, 'ready', '切回来仍是同一份正文');
+  assert.equal(store.getSnapshot().detail.key, 'filesystem#ui-design', '还是同一个技能的详情');
+});

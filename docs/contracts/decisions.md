@@ -21,7 +21,7 @@
 | B-1 | §3.3.1 状态文案 = `.status`，13px/20px | 页头状态文案在宿主是 `.updatesNote`：`color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px`；`.status` 只用于页内状态段（`partsEmpty` / `installChecking` / `unavailable`） | 采用 `.updatesNote` 的 12/18。文案本身按队长决策改为计数（`共 N 个技能`） |
 | B-2 | §3.3.1 刷新中「14px 旋转指示」 | 宿主是 `StateDot state="ongoing" size={13}` 放在按钮 `icon` 位；14px 是 `.toggleProgress` 的**开关**占位（`--bundle-progress-size:14px`） | 刷新用 `StateDot`；开关 pending 用 14px 占位 + `StateDot`。保留 PRD 的「≥400ms、重复点击忽略」行为 |
 | B-3 | PRD §3.3.5 错误态文字 = `state-error-primary` | 宿主 `.failure{color:error}` 但内部 `<p>` 被 `.failure p` 覆盖成 `label-tertiary`；错误信号由 `StateDot state="error"` 承担，`role="alert"` | 照宿主：容器 error 色 + 文字 tertiary + 红色 StateDot。若用户要求文字也变红，改 1 条规则即可 |
-| B-4 | PRD §3.3.4 行 hover/active 底色 | 宿主行是链接（`.cardLink:hover`）；我们的行**不可点击**（Q6 + 队长决策） | **不实现** hover/active；给不可点的行加 hover 反馈等于骗点击 |
+| B-4 | PRD §3.3.4 行 hover/active 底色 | 宿主行是链接（`.cardLink:hover` / `:active` 有底色反馈）；我们的行在 2026-11-09 前**不可点击**（Q6 + 队长决策） | **已安装行 U1 起可点**（进本地详情页，见 `docs/contracts/installed-detail.md`）：补 hover / `:active` / `:focus-visible` 三处可点证据，开关仍是行内**唯一独立动作位**；宿主 `.cardLink:hover` 的**确切色值没采到**，暂用市场卡同一个 `--dsw-alias-interactive-bg-hover`，标「待真机取色」（附录 Q） |
 | B-5 | PRD §3.3.2 / PRD §3.3.5 把分段控件与开关当「规格」手写 | 两者都是 primitives 导出组件（`SegmentedTabs` / `Switch`），PRD 抄的正是它们的 CSS | **直接用组件**，不手写；`className` 只调容器（`skc_pageTabList`） |
 | B-6 | §3.3.1 页签位置「`order:3`，`flex:100%`」 | 正确，但仅在「无 container query」时成立；`<600px` 时改 `flex:none; order:2`，`toolbar` 变 `order:3` | `docs/contracts/visual.md` A.8 已逐字包含 |
 | B-7 | §3.4 软链技能写 realpath + 首次确认（Q4） | 队长 2026-11-08 决策：**软链只读，不给开关** | 全文按队长决策执行；Q4 关闭 |
@@ -34,7 +34,7 @@
 | C-2 | 无「实验性插件」分区、无「更多 ›」 | PRD §3.3.7 |
 | C-3 | `＋ 添加技能 ⌄` **P0 呈现但禁用**（PRD Q3 原建议 P0 不呈现） | 队长决策 3（视觉保留 1:1）；提示用包裹 `<span title>` 的原生 tooltip |
 | C-4 | ~~技能市场页签只渲染占位文案~~ **（2026-11-09 由本轮改写，见附录 E）** | 队长决策 + PRD P0-13 |
-| C-5 | ~~全行无点击，唯一交互是开关~~ **（已改写为「按页签划边界」：已安装行不可点；市场卡片的整卡点击层 + 两个动作位（安装 / 收藏）；见附录 E、附录 J 与 `docs/contracts/market.md` 附录 F）** | PRD Q6 / D2 |
+| C-5 | ~~全行无点击，唯一交互是开关~~ **（已改写为「按页签划边界」：已安装行可点进详情、开关是行内唯一独立动作位；市场卡片的整卡点击层 + 唯一动作位（安装，U5 起收藏按钮已撤）；见附录 E、附录 J、附录 Q 与 `AGENTS.md` 硬约束 9）** | PRD Q6 / D2 |
 | C-6 | 页脚新增「另有 N 个技能…」一行 | PRD P0-14 / PRD §3.3.7 |
 | C-7 | 软链行右侧改静态标记（无开关） | 队长决策 2 |
 | C-8 | 软链行不预留 22px（不预留进度环位） | 该行永不 pending，预留只会在视觉上多一条空白；行高仍 64px（标记 18px < 20px 开关） |
@@ -202,6 +202,21 @@
 | P-3 | 关闭菜单会不会动滚动位置 | 宿主的 `Menu` 关闭时把焦点还给锚点，锚点在吸顶栏里、布局位置在容器顶部，浏览器为露出它把 `.skc_pageBody` 滚到 0（实测 300 → 0，**选同一个值也发生**，关闭后约 12 ms，且没有 JS 写 `scrollTop`）。这一跳与数据无关，U8 起就在 | `.skc_marketFilters` 在打开菜单时记下偏移，关闭后 150 ms 内监听容器的 `scroll` 事件：只要被拉到 0 就写回原偏移（只认「到 0」这一种，避免和浏览器的滚动锚定打架）。宿主没有关闭焦点的开关（`Menu` 的 props 里只有 `autoFocus`，`focusWithoutRing` 的 `preventScroll` 不外传），所以这是**对宿主行为的补偿**，不是样式改动。与 P-5 的先后：选中的值**变了**就解除补偿（`menuTop` 置 0），落点全交给 P-5；只有「选了同一个值」才用补偿（真机 4 例：同值 300 → 300，异值 → 0） |
 | P-4 | 为什么不再「收窄骨架高度」 | 骨架 6 张（2 行）、真实列表 12/24 张（4/8 行），高度随内容变；要「高度不变」得在骨架期量旧高度再撑住，多一份状态与一套失效点 | 不选。保留旧列表的收益相同、代价更小；「陈旧但稳定」的窗口就是一次请求 |
 | P-5 | 筛选后落在什么位置 | 改前靠「列表消失 → 骨架变矮 → 浏览器夹取」，落点由内容长度决定：实测切分类/排序落在 **0**、换来源那次落在 **228**（短页预取补页），同一条交互两种落点 | **自己决定落点：paint 之前瞬时写 0。** 面板用 `useLayoutEffect`，依赖只有四个查询输入 `source`/`category`/`sort`/`keyword` 拼成的键，键变了就把 `.skc_pageBody` 的 `scrollTop` 写 0（不做平滑、不 `scrollTo`、不等夹取）：跳变是那一帧的初始状态，不是动画。键没变（翻页、加载态、详情往返、刷新）一律不碰 —— 刷新的「保住你原来的位置」是 U13 的既定语义，与这条不冲突。参考实现 [dsh-market](https://github.com/dsh-market/dsh-market) 的市场页组件 `MarketSection.tsx` 正是这么做的（筛选键驱动的 `useLayoutEffect` 里 `el.scrollTop = 0`，注释写明 instant 不用 pagination 的 smooth，让跳变发生在 paint 之前），我们的容器没有宿主那种 sticky floor，所以目标就是 0 而不是「记住的 floor」 |
+
+---
+
+## 附录 Q 已安装详情页的设计参照（U1，2026-11-10）
+
+> 结论先行：详情页的参照是**用户 2026-11-10 给的截图**，不是本机宿主可采的真源——「与宿主详情页 1:1」这一条**无法逐值验收**；骨架取我们既有的 `.skc_marketDetail*` 族（市场详情已用同一族），只有一处刻度没有真值。
+
+| # | 事实 | 依据 / 处理 |
+| --- | --- | --- |
+| Q-1 | 参照文档没有采集宿主的「插件详情页」 | `docs/reference/host-plugin-page.md` 一边写「没有二级页」、一边写「行本身是链接」，全文 79 行**没有任何详情页读数**（面包屑 / 身份行 / 徽章 / 版本 / 来源信息全无） |
+| Q-2 | 本机宿主没有这一页 | 实测 `app.asar`（2026-11-05，213 MB）搜「代码来源 / 来源信息 / 查看仓库 / 已是最新版本 / 重新检查」**0 命中** |
+| Q-3 | 于是参照页的四块**不实现或改写** | 版本 Tag 改由 `Row.version` 提供（有值才画，无值整块不渲染）；仓库外链、CI/评分徽章、「已是最新版本」均无数据源；正文与身份行按本地事实自建（第 12 条路由当场读盘） |
+| Q-4 | 唯一没有真值的刻度 | 宿主 `.cardLink:hover` 的确切色值：暂用市场卡同一个 `--dsw-alias-interactive-bg-hover`，在 `docs/contracts/visual.md` A.5 标「待真机取色」 |
+
+`docs/reference/host-plugin-page.md` **不改**：它是采集副本，没有真源就不许补写。
 
 ---
 

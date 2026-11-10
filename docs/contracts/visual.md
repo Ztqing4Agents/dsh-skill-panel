@@ -149,7 +149,10 @@
 ```css
 /* [PM-CSS] .cards / .card / .cardHead / .cardIcon / .cardMain / .titleRow / .cardTitle / .cardDesc / .cardEnd */
 .skc_cards{ flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; display: flex }
-.skc_card{ border-radius: var(--dsw-radius-xl); min-width: 0; margin: 0 -8px }
+.skc_card{ border-radius: var(--dsw-radius-xl); min-width: 0; margin: 0 -8px; position: relative }
+/* 可点的行才给底色：hover 只在真有悬停的设备上，:active 是触屏唯一的可靠证据 */
+@media (hover: hover){ .skc_card:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
+.skc_card:active{ background: var(--dsw-alias-interactive-bg-hover) }
 .skc_cardHead{ align-items: center; gap: 14px; padding: 8px; display: flex }
 /* .cardIcon —— 容器逐字回归 [PM-CSS]（边框、圆角、尺寸、盒模型都是宿主的）；
    `background` / `background-clip` / `color` / `font-*` 是本插件新增的**内容层**：
@@ -177,9 +180,26 @@
   font-size: 13px; line-height: 18px;
 }
 .skc_cardEnd{ z-index: 1; flex: none; align-items: center; gap: 8px; display: inline-flex; position: relative }
+/* 整行可点的唯一手段（与市场卡的 .skc_marketCardOpen 同一条）：标题按钮铺一层 inset:0 的
+   ::after 盖住整行，开关位靠上一行的 z-index:1 浮在它上面。取值逐条照抄，不另立一套 */
+/* font: inherit 会把标题的字号冲回继承值，所以这三条必需（与 .skc_cardTitle 同值） */
+.skc_cardOpen{ flex: 0 1 auto; min-width: 0; max-width: 100%; padding: 0; border: 0; background: 0 0; color: inherit; font: inherit; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 500; line-height: 20px }
+.skc_cardOpen::after{ content: ""; border-radius: var(--dsw-radius-xl); position: absolute; inset: 0 }
+.skc_cardOpen:focus-visible{ outline: none }
+.skc_cardOpen:focus-visible::after{
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+/* 详情族（.skc_marketDetail / Crumb / DetailHead / DetailTitle / DetailSection / SectionTitle /
+   Facts / Files）的语义是「详情页骨架，两个页签共用」，**不改名**；已安装详情只补这三条 */
+.skc_detailIdentity{ align-items: center; gap: 8px; display: flex }
+.skc_detailCallName{ font-family: var(--ds-font-family-code) }
+.skc_detailBody{ font-size: 13px; line-height: 20px }
 ```
 
-> **不实现** `.cardLink:hover` / `:active`（宿主行是链接，我们的行不可点击，见附录 B-4）。行高恒 64px（48 图标 + 8×2 padding）。
+> **行可点（U1 起）**：已安装行点标题即进本地详情页，实现只有上一条 `.skc_cardOpen::after` + `.skc_cardEnd{z-index:1}`（见 `AGENTS.md` 硬约束 9 与 `docs/contracts/installed-detail.md`）；不要 `<a href>`、不要第二个可点区域。行高恒 64px（48 图标 + 8×2 padding）。
+> 宿主 `.cardLink:hover` 的**确切色值我们没采到**（`docs/reference/host-plugin-page.md` §5 只记「有底色反馈」）⇒ 暂用市场卡同一个 `--dsw-alias-interactive-bg-hover`，**待真机取色**（`docs/contracts/decisions.md` 附录 Q）。
 > 市场卡片**复用** `.skc_cardIcon`（48×48 同一条规则），其声明一字不改——改它会让「已安装」页签 11 行同时回归。来源品牌图标**不是**头像色板的第七组：它是 `src/client/market-marks.jsx` 里两段 `data:image/png;base64` 位图（16×16 显示），只在市场卡片上出现，「已安装」页签不渲染它，也不参与 `avatar.js` 的散列。
 
 头像的两种颜色**不走样式表常量，走行内自定义属性**：`row.jsx` 渲染

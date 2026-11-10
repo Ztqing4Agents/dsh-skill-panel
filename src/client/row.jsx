@@ -5,10 +5,12 @@
  * whose colour is derived from the name, so rows are told apart before they are read.
  * It is decoration only - `aria-hidden`, because the name sits right next to it.
  *
- * The row itself is not clickable - there is no detail view in this version, and a
- * hover highlight on something that does not open anything is a lie about what a
- * click will do. A symlinked skill renders a static read-only marker in the switch's
- * seat instead of a switch, because this panel never writes through a symlink.
+ * The row opens the skill's detail view, and there is exactly one way that is allowed to
+ * happen (hard constraint 9): the title is a button whose `::after` covers the whole row,
+ * while the switch seat floats above it on its own layer. Nothing else in the row is
+ * clickable, and the `<li>` itself stays a plain list item. A symlinked skill renders a
+ * static read-only marker in the switch's seat instead of a switch, because this panel
+ * never writes through a symlink - and the marker is not a control.
  */
 import { StateDot, Switch, IconLinkOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives';
 
@@ -58,13 +60,14 @@ export function EnableSwitch({ row, t, pending, onToggle }) {
 /**
  * Render one row of the list.
  * @param {{row: object, t: Function, rows: Map<string, object>, onToggle: Function,
- *   iconUrl?: string|null, title?: string}} props - the row, the translate function,
- *   per-row runtime state, the switch handler, the icon its `upstream` identity resolved to
- *   (null when it has no identity or no icon - the tile then draws the letter), and the
- *   visible title when the caller resolved one (see `rowTitleOf`).
+ *   onOpen: Function, iconUrl?: string|null, title?: string}} props - the row, the
+ *   translate function, per-row runtime state, the switch handler, the detail handler, the
+ *   icon its `upstream` identity resolved to (null when it has no identity or no icon - the
+ *   tile then draws the letter), and the visible title when the caller resolved one (see
+ *   `rowTitleOf`).
  * @returns {import('react').ReactElement} the row.
  */
-export function SkillRow({ row, t, rows, onToggle, iconUrl = null, title }) {
+export function SkillRow({ row, t, rows, onToggle, onOpen, iconUrl = null, title }) {
   const key = rowKey(row);
   const view = rowViewState(row, rows);
   const reason = rows?.get?.(key)?.reason ?? null;
@@ -83,7 +86,14 @@ export function SkillRow({ row, t, rows, onToggle, iconUrl = null, title }) {
         <IconTile iconUrl={iconUrl} title={row.name} />
         <div className={cn('cardMain')}>
           <div className={cn('titleRow')}>
-            <span className={cn('cardTitle')} title={tooltip}>{label}</span>
+            <button
+              type="button"
+              className={cn('cardTitle', 'cardOpen')}
+              title={tooltip}
+              onClick={() => onOpen?.(row)}
+            >
+              {label}
+            </button>
           </div>
           <span className={cn('cardDesc')} title={row.description}>{row.description}</span>
         </div>

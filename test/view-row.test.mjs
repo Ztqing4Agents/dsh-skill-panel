@@ -60,7 +60,7 @@ test('K22 行的四个部件齐备：图标、名称、描述、右侧控件', (
   const html = render(row());
   assert.ok(html.includes('class="skc_cardIcon"'), '有图标位');
   assert.ok(html.includes('class="skc_cardMain"'), '有中间列');
-  assert.ok(html.includes('class="skc_cardTitle">ui-design<'), '有技能名');
+  assert.ok(html.includes('class="skc_cardTitle skc_cardOpen">ui-design<'), '有技能名（标题同时是整行可点层的按钮）');
   assert.ok(html.includes('Comprehensive UI design skill.'), '有描述');
   assert.ok(html.includes('class="skc_cardEnd"'), '有右侧控件位');
 });
@@ -95,7 +95,7 @@ test('K22 displayName 不参与头像：字母与颜色仍由机器名决定', (
 
 test('displayName 只作为 title 出现，不替换显示名', () => {
   const html = render(row({ displayName: 'UI 设计规范' }));
-  assert.ok(html.includes('class="skc_cardTitle" title="UI 设计规范">ui-design<'), 'displayName 进 title，显示名仍是机器名');
+  assert.ok(html.includes('class="skc_cardTitle skc_cardOpen" title="UI 设计规范">ui-design<'), 'displayName 进 title，显示名仍是机器名');
 });
 
 test('可写行的开关：role=switch、aria-checked、aria-label 与 title 成对', () => {
@@ -172,7 +172,7 @@ function renderTitled(target, title) {
 
 test('K74 传 title：可见文字是上游标题，tooltip 是 kebab 名', () => {
   const html = renderTitled(row({ name: 'dev-expert-pro' }), '编程专家Pro.Skill');
-  assert.ok(html.includes('class="skc_cardTitle" title="dev-expert-pro">编程专家Pro.Skill<'), '文字换成上游标题，tooltip 保留 kebab 名');
+  assert.ok(html.includes('class="skc_cardTitle skc_cardOpen" title="dev-expert-pro">编程专家Pro.Skill<'), '文字换成上游标题，tooltip 保留 kebab 名');
   assert.equal(html.includes('>dev-expert-pro<'), false, 'kebab 名不再是可见文字');
   assert.ok(html.includes('Comprehensive UI design skill.'), '描述不受影响');
   // 标题只是文字：不新增可点区域、不换容器
@@ -190,7 +190,7 @@ test('K74 不传 title：输出与改动前逐字节相同（tooltip 仍是本�
     '有 displayName 时也逐字节相同（tooltip 是本地名，可见文字仍是 kebab）',
   );
   const withLocal = renderTitled(row({ displayName: '本地名' }), undefined);
-  assert.ok(withLocal.includes('class="skc_cardTitle" title="本地名">ui-design<'), 'tooltip 是本地 displayName、文字是 kebab 名');
+  assert.ok(withLocal.includes('class="skc_cardTitle skc_cardOpen" title="本地名">ui-design<'), 'tooltip 是本地 displayName、文字是 kebab 名');
   assert.equal(withLocal.includes('title="ui-design"'), false, '不传 title 时不会把 kebab 名塞进 tooltip');
 });
 
@@ -199,7 +199,7 @@ test('K74 长标题仍单行省略：条目标题只占一行，容器样式没�
   const html = renderTitled(row({ name: 'dev-expert-pro' }), long);
   assert.ok(html.includes(`>${long}<`), '整串都在（不截断内容，交给 CSS 省略）');
   // 只渲染一次标题：不会为了省略而拆成两段
-  assert.equal((html.match(/class="skc_cardTitle"/g) ?? []).length, 1, '标题元素只有一个');
+  assert.equal((html.match(/class="skc_cardTitle skc_cardOpen"/g) ?? []).length, 1, '标题元素只有一个');
   assert.equal(html.includes('skc_cardTitleLine'), false, '没有为长标题新增元素/类');
 
   const css = await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8');
@@ -229,4 +229,78 @@ test('K74 标题里带 HTML 元字符时被转义，不会破坏行结构', () =
   assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;'), '按文本转义后原样显示');
   assert.ok(html.includes('&amp;'), '& 被转义');
   assert.equal(/onerror=/.test(html.replace(/&lt;[^&]*&gt;/g, '')), false, '不会变成真的属性');
+});
+
+/* ------------------------------------------------- K110 · 行可点与开关互不触发 */
+
+/**
+ * Count the interactive elements of one fragment.
+ * @param {string} html - markup.
+ * @returns {string[]} the opening tags of every button / anchor / input.
+ */
+function interactivesOf(html) {
+  return html.match(/<(?:button|a|input)\b[^>]*>/g) ?? [];
+}
+
+test('K110 可写行：标题是整行点击层的按钮，<li> 上没有 onClick / role / tabIndex', async () => {
+  const html = renderTitled(row(), 'ui-design');
+  // 唯一的手段（AGENTS.md 硬约束 9）：标题按钮的 ::after 铺满整行，开关位靠 z-index 浮起。
+  assert.ok(
+    html.includes('<button type="button" class="skc_cardTitle skc_cardOpen" title="ui-design">ui-design</button>'),
+    '标题是 button + cardTitle + cardOpen，tooltip 是 kebab 调用名',
+  );
+  const listItem = /<li [^>]*>/.exec(html);
+  assert.equal(
+    listItem[0],
+    '<li class="skc_card" data-skc-row="filesystem#ui-design" data-skc-state="idle">',
+    '<li> 上只有类名与两个数据属性——没有 onClick、role 或 tabIndex',
+  );
+  assert.equal(/<a\b/.test(html), false, '整行没有 <a href>');
+  assert.equal(/href=/.test(html), false, '连 href 都没有');
+
+  const interactives = interactivesOf(html);
+  assert.equal(interactives.length, 2, `行内可交互元素恰 2 个（实测 ${interactives.length}）`);
+  assert.match(interactives[0], /class="skc_cardTitle skc_cardOpen"/, '第一个是标题（整行点击层）');
+  assert.match(interactives[1], /role="switch"/, '第二个是开关（唯一动作位）');
+
+  // 互不触发的结构前提：标题按钮里只有文字，开关在它外面，不是它的子节点。
+  assert.match(html, /<button type="button" class="skc_cardTitle skc_cardOpen"[^>]*>[^<]*<\/button>/, '标题按钮的子节点只有文字');
+  const titleEnd = html.indexOf('</button>', html.indexOf('skc_cardTitle skc_cardOpen'));
+  assert.ok(html.indexOf('role="switch"') > titleEnd, '开关在标题按钮闭合之后（不嵌套，点开关不会冒泡进整行点击层）');
+});
+
+test('K110 软链行：标题同样是按钮，roTag 是 span 而不是控件', () => {
+  const html = renderTitled(
+    row({ symlink: true, path: null, realPath: '/Users/me/Skills/ui-design/SKILL.md', writable: false, readonlyReason: 'symlink' }),
+    'ui-design',
+  );
+  assert.ok(
+    html.includes('<button type="button" class="skc_cardTitle skc_cardOpen" title="ui-design">ui-design</button>'),
+    '软链行的标题也是同一个按钮（行照样可点）',
+  );
+  assert.ok(html.includes('<span class="skc_roTag"'), '只读标记是 span');
+  assert.equal(/<button[^>]*class="skc_roTag"/.test(html), false, 'roTag 不是按钮');
+  assert.equal(/role="switch"/.test(html), false, '软链行没有开关');
+  const interactives = interactivesOf(html);
+  assert.equal(interactives.length, 1, `软链行只有标题一个可交互元素（实测 ${interactives.length}）`);
+  assert.match(interactives[0], /class="skc_cardTitle skc_cardOpen"/, '那一个就是标题');
+});
+
+test('K110 内置行有 provider 开关、无文件行什么都没有：可交互元素分别是 2 与 1', () => {
+  const builtin = renderTitled(row({ partition: 'builtin', provider: 'runtime', path: null, writable: false, readonlyReason: 'provider-store' }), 'ui-design');
+  assert.equal(interactivesOf(builtin).length, 2, '内置行 = 标题 + provider 开关（routes.md §3.4.1 那张表）');
+  assert.equal(/role="switch"/.test(builtin), true, '内置行的开关确实在');
+
+  const noFile = renderTitled(row({ path: null, writable: false, readonlyReason: 'no-file' }), 'ui-design');
+  assert.equal(interactivesOf(noFile).length, 1, '无文件行只剩标题（右侧整块不渲染）');
+  assert.equal(noFile.includes('class="skc_cardEnd"'), false, '右侧不留空壳');
+});
+
+test('K110 不许用 JS 拦冒泡：行组件里 stopPropagation 零出现', async () => {
+  const source = await readFile(join(ROOT, 'src', 'client', 'row.jsx'), 'utf8');
+  assert.equal(source.includes('stopPropagation'), false, 'row.jsx 没有 stopPropagation');
+  const clicks = source.match(/onClick=/g) ?? [];
+  assert.equal(clicks.length, 1, `row.jsx 里只有一个 onClick（实测 ${clicks.length}）`);
+  assert.match(source, /onClick=\{\(\) => onOpen\?\.\(row\)\}/, '那个 onClick 就是标题按钮的 onOpen');
+  assert.equal(/<li[^>]*onClick/.test(source), false, '<li> 上没有 onClick（行本身不是可点元素）');
 });

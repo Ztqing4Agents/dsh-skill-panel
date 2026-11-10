@@ -19,6 +19,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { avatarOf } from '../src/client/avatar.js';
 import { createStore } from '../src/client/state.js';
 import { loadClientModules, zhTranslator } from './helpers/ssr.mjs';
+import { mountHooks } from './helpers/hooks.mjs';
 
 /** The bundled client modules under test. */
 let modules;
@@ -26,7 +27,7 @@ let modules;
 let t;
 
 before(async () => {
-  modules = await loadClientModules(['page', 'skeleton', 'row', 'toast']);
+  modules = await loadClientModules(['page', 'skeleton', 'row', 'toast', 'installedDetail']);
   t = await zhTranslator();
 });
 
@@ -151,7 +152,8 @@ test('K22 行结构：图标 + 名称 + 描述 + 右侧控件', () => {
   assert.equal(rowHtml.includes('data-icon='), false, '不再渲染宿主通用技能字形');
   // R9：页面总传 `title`（rowTitleOf 的结果），tooltip 因此是 kebab 名 —— 这一行没有上游标题，
   // 所以可见文字仍是 kebab 名，只是多了一个 title 属性（模型调用用的就是这串）。
-  assert.ok(rowHtml.includes('class="skc_cardTitle" title="ui-design">ui-design<'), '行有名称，tooltip 是 kebab 名');
+  // U1：标题同时是「整行可点」的那一层（cardOpen 的 ::after 铺满整行），所以它有两个类。
+  assert.ok(rowHtml.includes('class="skc_cardTitle skc_cardOpen" title="ui-design">ui-design<'), '行有名称，tooltip 是 kebab 名，且名称就是整行可点层的按钮');
   assert.ok(rowHtml.includes('class="skc_cardDesc" title="A local skill."'), '行有描述，且 title 也是描述');
   assert.ok(rowHtml.includes('class="skc_cardEnd"'), '行有右侧控件位');
   assert.ok(rowHtml.includes('class="skc_cardMain"'), '名称与描述在中间列');
@@ -320,4 +322,123 @@ test('页签切回已安装后列表恢复（页签状态在 store 里）', () =
   const installed = renderToStaticMarkup(createElement(modules.page.SkillsPage, { store, api, t }));
   assert.equal(market.includes('data-skc-group='), false, '市场页签下没有分区');
   assert.equal(installed.includes('data-skc-group="local"'), true, '切回已安装后分区恢复');
+});
+
+/* ---------------------------------------- K111 · 详情就地替换、返回不重拉、刷新关详情 */
+
+/**
+ * Every element of a rendered tree, depth first.
+ * @param {import('react').ReactNode} node - element, array, or text.
+ * @param {object[]} [found] - accumulator.
+ * @returns {object[]} the elements.
+ */
+function elementsOf(node, found = []) {
+  if (node === null || node === undefined || typeof node !== 'object') return found;
+  if (Array.isArray(node)) {
+    for (const child of node) elementsOf(child, found);
+    return found;
+  }
+  found.push(node);
+  elementsOf(node.props?.children, found);
+  return found;
+}
+
+/**
+ * Mount the page so its handlers can be called (no effects, no DOM).
+ * @param {object} api - API client stub; `list` records its calls.
+ * @returns {{store: object, render: Function}} the store and a render handle.
+ */
+function mountPage(api) {
+  const store = createStore();
+  store.actions.ready(payload());
+  const mounted = mountHooks(modules.page.SkillsPage, { store, api, t });
+  return { store, render: mounted.render };
+}
+
+/** The api client stub the detail tests use; `calls` records every route touched. */
+function recordingApi(calls, detail = { body: 'text', files: [], filesTruncated: false }) {
+  return {
+    list: async () => { calls.push('list'); },
+    toggle: async () => {},
+    toggleProvider: async () => {},
+    skillDetail: async (arg) => { calls.push(`skillDetail:${arg?.name}`); return detail; },
+  };
+}
+
+test('K111 详情就地替换列表：三分区不在，详情在', () => {
+  const html = renderPage({
+    after: (store) => {
+      store.actions.openDetail(row({ name: 'ui-design', partition: 'installed', rule: 'R7' }));
+      store.actions.detailReady('filesystem#ui-design', { body: '正文', files: [], filesTruncated: false });
+    },
+  });
+  assert.equal(html.includes('data-skc-installed-detail="filesystem#ui-design"'), true, '详情挂点在场');
+  assert.equal(html.includes('data-skc-group='), false, '三个分区不再渲染（就地替换）');
+  assert.equal(/data-skc-row=/.test(html), false, '一行都不渲染');
+  assert.ok(html.includes('返回已安装'), '面包屑是唯一返回入口');
+});
+
+test('K111 详情打开时行消失：只有面包屑 + error.E_NOT_FOUND，页面不炸', () => {
+  const html = renderPage({
+    after: (store) => {
+      store.actions.openDetail(row({ name: 'ghost-skill', provider: 'filesystem' }));
+    },
+  });
+  assert.equal(html.includes('data-skc-detail-missing'), true, '走的是失效态挂点');
+  assert.ok(html.includes(t('error.E_NOT_FOUND')), '文案是 error.E_NOT_FOUND');
+  assert.ok(html.includes('返回已安装'), '面包屑仍可回');
+});
+
+test('K111 点行进详情：记偏移 + 只读正文，不重拉 list', async () => {
+  const calls = [];
+  const { store, render } = mountPage(recordingApi(calls));
+  store.actions.rememberDetailScroll(0);
+  const skillRow = elementsOf(render()).find(
+    (element) => element.type === modules.row.SkillRow && element.props.row.name === 'ui-design',
+  );
+  assert.ok(skillRow !== undefined, '页面渲染出了那一行');
+  const target = skillRow.props.row;
+
+  skillRow.props.onOpen(target);
+  assert.deepEqual(store.getSnapshot().detail, { key: 'filesystem#ui-design', status: 'loading', data: null, code: null }, '先挂 loading 三态');
+  assert.deepEqual(calls, ['skillDetail:ui-design'], '只发一次正文请求，没有 list');
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(store.getSnapshot().detail.status, 'ready', '答案落地后是 ready');
+  assert.equal(store.getSnapshot().payload.groups.length, 3, '列表快照还在（不重扫）');
+});
+
+test('K111 面包屑返回：detail 变 null 且不再请求任何路由', async () => {
+  const calls = [];
+  const { store, render } = mountPage(recordingApi(calls));
+  store.actions.openDetail(row({ name: 'ui-design', partition: 'installed', rule: 'R7' }));
+  store.actions.detailReady('filesystem#ui-design', { body: '正文', files: [], filesTruncated: false });
+  // 面包屑在详情组件内部：组件本体不含 hook，直接调用它拿到元素树再点那颗按钮。
+  const detailElement = elementsOf(render()).find((element) => element.type === modules.installedDetail.InstalledDetail);
+  assert.ok(detailElement !== undefined, '页面把详情交给了 InstalledDetail');
+  const crumb = elementsOf(modules.installedDetail.InstalledDetail(detailElement.props))
+    .find((element) => element.props?.className === 'skc_marketCrumb');
+  assert.ok(crumb !== undefined, '详情里有面包屑按钮');
+  assert.equal(crumb.props.type, 'button', '面包屑是普通按钮（不是第二套点击层）');
+  assert.equal(typeof crumb.props.onClick, 'function', '面包屑带 onClick');
+  crumb.props.onClick();
+  assert.equal(store.getSnapshot().detail, null, '返回后关掉详情');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(calls, [], '返回不重拉 list、也不重读正文');
+});
+
+test('K111 详情打开时点页头刷新：关详情 + 重扫一次 list', async () => {
+  const calls = [];
+  const { store, render } = mountPage(recordingApi(calls));
+  store.actions.openDetail(row({ name: 'ui-design', partition: 'installed', rule: 'R7' }));
+  store.actions.detailReady('filesystem#ui-design', { body: '正文', files: [], filesTruncated: false });
+  const refresh = elementsOf(render()).find((element) => element.props?.['aria-label'] === t('page.refresh'));
+  assert.ok(refresh !== undefined, '页头有刷新按钮');
+  assert.equal(refresh.props.disabled, false, '空闲时可点');
+
+  refresh.props.onClick();
+  assert.equal(store.getSnapshot().detail, null, '刷新先关详情（与市场 reload 同一条规则）');
+  assert.deepEqual(calls, ['list'], '然后走一次 list');
+  assert.equal(store.getSnapshot().status, 'loading', '列表进入加载态');
+  await new Promise((resolve) => setTimeout(resolve, 450));
 });

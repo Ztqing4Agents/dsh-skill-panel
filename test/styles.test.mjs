@@ -200,6 +200,63 @@ test('样式表遵守 reduced-motion 与响应式断点', () => {
   assert.ok(css.includes('width <= 767px'), '有窄屏断点（容器查询/媒体查询）');
 });
 
+test('K110 整行可点的三条刻度：relative 的容器 + inset:0 的点击层 + z-index:1 的动作位', () => {
+  const css = capturedCss();
+  const card = ruleBody(css, '.skc_card');
+  assert.match(card, /position:\s*relative/, '.skc_card 是定位容器（否则 ::after 的 inset:0 没有参照）');
+  assert.match(card, /margin:\s*0 -8px/, '「整行」是含负外距的那一层，行可点的范围与它一致');
+  assert.match(card, /border-radius:\s*var\(--dsw-radius-xl\)/, '点击层的圆角与行一致');
+
+  const open = ruleBody(css, '.skc_cardOpen');
+  assert.match(open, /padding:\s*0/, '按钮原生内边距清零');
+  assert.match(open, /border:\s*0/, '按钮原生边框清零');
+  assert.match(open, /background:\s*0 0/, '按钮原生底色清零');
+  assert.match(open, /cursor:\s*pointer/, '可点就有手型');
+  assert.match(open, /text-overflow:\s*ellipsis/, '标题仍单行省略');
+  assert.match(open, /white-space:\s*nowrap/, '标题不换行');
+
+  const layer = ruleBody(css, '.skc_cardOpen::after');
+  assert.match(layer, /position:\s*absolute/, '点击层是绝对定位');
+  assert.match(layer, /inset:\s*0/, '点击层铺满整行（inset: 0）');
+  assert.match(layer, /border-radius:\s*var\(--dsw-radius-xl\)/, '点击层的圆角与行一致');
+  assert.match(layer, /content:\s*""/, '伪元素有内容才生成');
+
+  const end = ruleBody(css, '.skc_cardEnd');
+  assert.match(end, /z-index:\s*1/, '唯一动作位浮在点击层之上');
+  assert.match(end, /position:\s*relative/, 'z-index 只对定位元素生效');
+});
+
+test('K110 行的 hover 只在真有悬停的设备上，:active 与 :focus-visible 都在', () => {
+  const css = capturedCss();
+  const hoverMedia = /@media \(hover: hover\)\{\s*\.skc_card:hover\{[^}]*\}\s*\}/.exec(css);
+  assert.ok(hoverMedia !== null, 'hover 包在 @media (hover: hover) 里');
+  assert.match(hoverMedia[0], /background:\s*var\(--dsw-alias-interactive-bg-hover\)/, 'hover 用的是宿主交互底色令牌');
+  const outside = css.replace(hoverMedia[0], '');
+  assert.equal(/\.skc_card:hover/.test(outside), false, '媒体查询之外没有第二处 .skc_card:hover');
+
+  const active = ruleBody(css, '.skc_card:active');
+  assert.match(active, /background:\s*var\(--dsw-alias-interactive-bg-hover\)/, ':active 是触屏唯一可靠的按下证据');
+
+  assert.ok(css.includes('.skc_cardOpen:focus-visible{'), '键盘焦点先摘掉按钮原生描边');
+  const ring = ruleBody(css, '.skc_cardOpen:focus-visible::after');
+  assert.match(ring, /outline:\s*var\(--dsw-focus-ring-width\) solid/, '焦点环画在点击层上');
+  assert.match(ring, /outline-offset:\s*2px/, '焦点环留 2px 偏移');
+});
+
+test('K110 hover / active 只跟着可点的东西走：开关位、只读标记、正文、事实表都没有底色', () => {
+  const css = capturedCss();
+  // 只列「不许有」的那一批：开关位与只读标记是整行点击层上面的动作位/静态标记，
+  // 正文与事实表是详情页的内容，谁都不该有悬停或按下反馈（看着能点、点了没反应）。
+  for (const inert of [
+    '.skc_bundleToggle', '.skc_roTag', '.skc_detailBody', '.skc_detailCallName', '.skc_marketFacts', '.skc_marketFiles',
+  ]) {
+    assert.equal(css.includes(`${inert}:hover`), false, `${inert} 没有 hover 底色`);
+    assert.equal(css.includes(`${inert}:active`), false, `${inert} 没有按下底色`);
+  }
+  const actives = [...css.matchAll(/\.(skc_[\w-]+):active/g)].map((match) => match[1]);
+  assert.deepEqual([...new Set(actives)], ['skc_card'], ':active 只出现在可点的行上');
+});
+
 /**
  * The declaration body of one rule, by selector.
  * @param {string} css - the stylesheet text.

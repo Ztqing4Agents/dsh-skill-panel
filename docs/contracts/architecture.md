@@ -29,6 +29,7 @@
 | 5 | frontmatter 改写必须**逐字节保真**，且本机真的存在 CRLF 技能文件 | 自写字节级改写器（保留 BOM、保留每行原行尾），不复用现成实现 | 本机实测：`~/.dsh/skills/indiv-guipi--find-skills/SKILL.md` 首字节为 `---\r\n`（CRLF），其余 4 条为 LF。`PROF/@linxin666/dsh-client-ui-skill-explorer/lib/index.js` 的 `setFrontmatterField` 用 `` `---\n${next.join("\n")}\n---${match[2]}` `` **会把 CRLF 与 BOM 一起洗掉**，因此不可移植 |
 | 6 | 写入要能判定「拒绝过期同名回退」 | 写路由**不接受信任的路径**：先按 name 重新扫描，再要求 `resolved.path === submitted.path`，不等即 409 | `PROF/@linxin666/dsh-client-ui-skill-explorer/lib/index.js` 的 `resolveScannedSkill`（同一模式，含 404/409 语义） |
 | 7 | 软链技能只读（队长决策 2） | 三层同时拦：扫描层给 `symlink` 事实 → 展示层渲染静态标记不渲染开关 → **写路由拒绝并发错误码** | 队长消息（2026-11-08）；`PRD` §3.1.1 R4（`lstat().isSymbolicLink()`，不是 `stat`） |
+| 8 | 已安装详情页的正文从哪来 | **本地读盘**（`lib/scan.js` 的 `readSkillContent`，第 12 条路由当场读一次），**不借** `market/detail` | 已安装详情答的是「我磁盘上这一份」，与上游那份允许不一致（`upstream === null` 是常态，见 `docs/contracts/decisions.md` 附录 I）；只有当场读盘才能反映手改 |
 
 架构模式：**分层 + 两半（dual-face）**。Host 半部 = 纯数据面（扫描/判定/写入/路由，零 React）；Client 半部 = 纯展示面（React 组件 + 一个模块级 store），二者只通过 `/api/dsh-skill-center/*` 的 JSON 契约耦合。
 
@@ -312,11 +313,11 @@ ledger.readAll() ─────────────────┘   （R5�
 | `lib/frontmatter.js` | `parseFrontmatter(text)`、`stripFrontmatter(text)`、`setDisableModelInvocation(bytes, disabled)`（**字节级纯函数**） |
 | `lib/write-skill.js` | 指纹 → 临时文件 → fsync → rename → 回读校验 → 失败回滚（`writeDisableFlag(path, disabled)`） |
 | `lib/ledger.js` | R5 四个台账的只读解析（`installed.json` / `repositories.json` / `.skills-lock.json` / 自有记录），全部损坏降级 |
-| `lib/scan.js` | 扫描 `$DSH_HOME/skills`（跳过 `.system`、点文件、非技能条目）；产出 `ScanCandidate[]`（含 `symlink`/`realPath`、`upstream` 身份三元组） |
+| `lib/scan.js` | 扫描 `$DSH_HOME/skills`（跳过 `.system`、点文件、非技能条目）；产出 `ScanCandidate[]`（含 `symlink`/`realPath`、`upstream` 身份三元组、`version`）；`readSkillContent(row)` = 详情页那一次读盘（围栏见 `docs/contracts/routes.md` §3.3.3） |
 | `lib/registry.js` | `snapshotRegistry(ctx.skills, cwd)` + `rankOfSummary(summary)`（= 先按 `source`/`provider` 映射成 level，再调 `classify.rankOf(level)`；映射表见 1.4.3） |
 | `lib/classify.js` | **纯函数核心**：`rankOf(level)`、`classifySkill(input)`、`mergeCatalog({scanned, registry, ledger})`、`buildGroups()` |
 | `lib/provider-toggles.js` | 自有存储 `$DSH_HOME/dsh-skill-center/provider-toggles.json`：`deserialize`/`serialize`/`read`/`setEnabled`（原子写、损坏降级） |
-| `lib/routes.js` | `makeRoutes(ctx, deps) → WebRoute[]`：`list` / `toggle` / `provider-toggle` / `health` 四条本地面 exact 路由 + 市场面 7 条（批量图标 `market/icons` 与本地收藏写 `market/favorite` 在内；两条图片端点已于 U7 退场）+ 围栏 + 身份校验 |
+| `lib/routes.js` | `makeRoutes(ctx, deps) → WebRoute[]`：`list` / `toggle` / `provider-toggle` / `health` / `detail` 五条本地面 exact 路由 + 市场面 7 条（批量图标 `market/icons` 与本地收藏写 `market/favorite` 在内；两条图片端点已于 U7 退场）+ 围栏 + 身份校验 |
 | `lib/market/`（市场面） | 源适配器、上游客户端、ZIP 读取、安装链路与两份自有存储（台账 / 收藏），共 11 个文件；本表不展开，逐个职责见 `docs/contracts/market.md` 附录 G |
 
 ### 2.3 Client 半部源码（`src/client/`，ESM + JSX，esbuild 打包）
@@ -324,9 +325,9 @@ ledger.readAll() ─────────────────┘   （R5�
 | 文件 | 职责 |
 | --- | --- |
 | `src/client/index.jsx` | `apply(ctx)`：注册 locale 字典、注入样式表、注册 `sidebar.panellist` + `main` + `shell.overlay`（toast），返回 disposer |
-| `src/client/api.js` | `SkillCenterApi`：`list()` / `toggle({name,path,enabled})` / `toggleProvider({provider,name,enabled})`；文档相对 URL；把 `{code,data,message}` 归一成 `ApiError{code}` |
-| `src/client/state.js` | 模块级 store（`createStore` 形状：`getSnapshot`/`subscribe`/`actions`）：`tab` / `payload` / `status` / `error` / `rows` / `notice` |
-| `src/client/model.js` | **纯函数**：`toGroups(payload)`、`statusLine(counts, t)`、`rowViewState(row, rows)`、`isPending(rows, key)`、`groupEmptyKey(key)` |
+| `src/client/api.js` | `SkillCenterApi`：`list()` / `toggle({name,path,enabled})` / `toggleProvider({provider,name,enabled})` / `skillDetail({name})`；文档相对 URL；把 `{code,data,message}` 归一成 `ApiError{code}` |
+| `src/client/state.js` | 模块级 store（`createStore` 形状：`getSnapshot`/`subscribe`/`actions`）：`tab` / `payload` / `status` / `error` / `rows` / `notice` / `detail`（详情三态）/ `detailScrollTop` |
+| `src/client/model.js` | **纯函数**：`toGroups(payload)`、`statusLine(counts, t)`、`rowViewState(row, rows)`、`isPending(rows, key)`、`groupEmptyKey(key)`、`rowByKey(payload, key)`、`detailStateOf(state, key)`、`detailFactsOf(row, t)`、`partitionTagKey(row)` |
 | `src/client/avatar.js` | **纯函数（无 React）**：`SKC_AVATAR_TONES`（12 组 `{bg, ink}` 粉彩，色相 30° 等分）+ `avatarOf(name)`（首个 `\p{L}`/`\p{N}` 大写字母 + FNV-1a 散列选色），node 可直接测 |
 | `src/client/page.jsx` | 页面组件：`page` → `pageBody` → `pageBar`(header) + 两个 `tabPanel`；骨架/空/错/页脚的组装 |
 | `src/client/row.jsx` | `SkillRow`（首字母头像/标题/描述/`cardEnd`）、`EnableSwitch`（`bundleToggle` + `toggleProgress` + primitives `Switch`）、`ReadonlyTag`（软链只读标记） |
@@ -334,7 +335,7 @@ ledger.readAll() ─────────────────┘   （R5�
 | `src/client/header-scroll.js` | `attachHeader(bar)`（克隆量测 + 观测）+ **纯函数** `interpolateParts(parts, offset)` |
 | `src/client/styles.js` | 单一 CSS 字符串（`docs/contracts/visual.md` 的全文）+ `injectStyles()`（按 `data-plugin-css` 去重） |
 | `src/client/toast.jsx` | `shell.overlay` 占位者：渲染刷新失败 toast（primitives `Toast`），离开页面后仍可见 |
-| `src/client/` 下的 `market-*` 文件 | 市场页的纯函数模块与 6 个组件（列表 / 筛选 / 卡片 / 详情 / 骨架 / 确认）加图形单元（品牌位图与三段字形）；职责见 `docs/contracts/market.md` 附录 G |
+| `src/client/` 下的 `market-*` 文件 | 市场页的纯函数模块与 6 个组件（列表 / 筛选 / 卡片 / 详情 / 骨架 / 确认）加图形单元（品牌位图与三段字形）；职责见 `docs/contracts/market.md` 附录 G。`installed-detail.jsx`（已安装详情页）与 `markdown.jsx`（两页共用的正文渲染 + 兜底）见 `docs/contracts/installed-detail.md` |
 
 ### 2.4 构建与门禁脚本（`scripts/`）
 

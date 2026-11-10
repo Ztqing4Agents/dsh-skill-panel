@@ -60,13 +60,13 @@ test('K40 check:client 绿：重打一次与 client.js 逐字节相同', async (
   assert.match(gate.stdout, /matches src\/client/, '报出与源码一致');
 });
 
-test('K40 check:docs 绿：13 份 0 warn', async () => {
+test('K40 check:docs 绿：14 份 0 warn', async () => {
   const gate = await runGate('check-docs.mjs');
   assert.equal(gate.code, 0, `check:docs 必须 exit 0（实际 ${gate.code}）：${gate.stdout}${gate.stderr}`);
   assert.match(gate.stdout, /check-docs: OK/, '门禁自报 OK');
   const summary = /check-docs: OK \((\d+) md files, (\d+) warn\)/.exec(gate.stdout);
   assert.ok(summary !== null, '门禁输出里带统计');
-  assert.equal(Number(summary[1]), 13, `文档恰好 13 份（实际 ${summary[1]}）`);
+  assert.equal(Number(summary[1]), 14, `文档恰好 14 份（实际 ${summary[1]}）`);
   assert.equal(Number(summary[2]), 0, `警告为 0（实际 ${summary[2]}）`);
 });
 
@@ -498,7 +498,7 @@ test('K89 图标管道与分类开关不回归：market/icons、icons()、caps�
   assert.equal(typeof ROUTES.marketIcons, 'string', 'market/icons 这条路由仍在');
   assert.equal(ROUTES.marketLucide, undefined, 'market/lucide 已删除（U7）');
   assert.equal(ROUTES.marketClawhubIcon, undefined, 'market/clawhub-icon 已删除（U7）');
-  assert.equal(Object.keys(ROUTES).length, 11, '路由 11 条（4 本地 + 7 市场）');
+  assert.equal(Object.keys(ROUTES).length, 12, '路由 12 条（5 本地 + 7 市场）');
   const indexText = await readFile(join(ROOT, 'index.js'), 'utf8');
   assert.match(indexText, /import \{ makeRoutes \} from '\.\/lib\/routes\.js'/, 'index.js 仍从 routes.js 取路由表');
   assert.match(indexText, /makeRoutes\(ctx, \{/, '仍然一次装配、逐条 register');
@@ -562,14 +562,14 @@ test('K93 单源退场：lib 与 client 里没有 clawhub.ai，退役的模块�
   }
   assert.equal(existsSync(join(libDir, 'market', 'zip.js')), false, 'zip 读取模块已删除');
 
-  // Routes: eleven, and neither proxy is among them.
+  // Routes: twelve, and neither proxy is among them.
   const indexText = await readFile(join(ROOT, 'index.js'), 'utf8');
   const routesText = await readFile(join(ROOT, 'lib', 'routes.js'), 'utf8');
   assert.equal(routesText.includes('market/lucide'), false, '路由表里没有 lucide 代理');
   assert.equal(routesText.includes('market/clawhub-icon'), false, '路由表里没有 clawhub-icon 代理');
   assert.match(indexText, /seven market routes/, 'index.js 的头注说的是七条市场路由');
   const { ROUTES } = await import('../lib/routes.js');
-  assert.equal(Object.keys(ROUTES).length, 11, '路由 11 条');
+  assert.equal(Object.keys(ROUTES).length, 12, '路由 12 条');
 
   // Both sources report the same package shape.
   const { descriptors } = await import('../lib/market/sources/index.js');
@@ -580,4 +580,181 @@ test('K93 单源退场：lib 与 client 里没有 clawhub.ai，退役的模块�
   assert.deepEqual([...SOURCE_IDS].sort(), ['clawhub', 'skillhub'], '身份白名单仍只有两个 id');
   assert.equal(SOURCE_IDS.has('all'), false, 'all 不在身份白名单里');
   assert.deepEqual([...SCOPES_OF_LIST].sort(), ['all', 'clawhub', 'skillhub'], '范围白名单是三项');
+});
+
+/* --------------------------------------------- K115 · 契约自洽门禁（U1 详情页） */
+
+/**
+ * One section of one contract file.
+ * @param {string} text - file contents.
+ * @param {string} start - heading that opens the section, e.g. `## 3.3 `.
+ * @param {string} [end] - heading that closes it; defaults to the next heading of the same level.
+ * @returns {string} the slice.
+ */
+function sectionOf(text, start, end) {
+  const from = text.indexOf(start);
+  assert.notEqual(from, -1, `契约里有 ${start.trim()} 这一节`);
+  const rest = text.slice(from);
+  if (end !== undefined) {
+    const to = rest.indexOf(end);
+    assert.notEqual(to, -1, `${start.trim()} 一直延伸到 ${end.trim()}`);
+    return rest.slice(0, to);
+  }
+  const next = rest.slice(start.length).search(/\n#{2,3} /);
+  return next === -1 ? rest : rest.slice(0, start.length + next);
+}
+
+/**
+ * The `#` column of the one route table in a slice.
+ * @param {string} slice - section text.
+ * @returns {string[]} the first cell of each data row.
+ */
+function routeNumbersOf(slice) {
+  return slice.split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('|'))
+    .filter((line) => !/^\|\s*#\s*\|/.test(line) && !/^\|\s*-+/.test(line))
+    .map((line) => line.split('|')[1].trim());
+}
+
+test('K115 契约自洽：ROUTES、§3.3 与 §3.7.1 两张路由表说的是同一个十二条', async () => {
+  const { ROUTES } = await import('../lib/routes.js');
+  assert.equal(Object.keys(ROUTES).length, 12, 'ROUTES 恰好 12 个键');
+
+  const text = await readFile(join(ROOT, 'docs', 'contracts', 'routes.md'), 'utf8');
+  assert.match(text, /十二条 \*\*exact\*\* 路由/, '§3.3 头注说十二条');
+  const local = routeNumbersOf(sectionOf(text, '## 3.3 ', '#### 3.3.1'));
+  const market = routeNumbersOf(sectionOf(text, '#### 3.7.1', '#### 3.7.2'));
+  assert.deepEqual(local, ['1', '2', '3', '4', '14'], '本地面五条：#1–#4 与 #14（历史编号不重排）');
+  assert.deepEqual(market, ['5', '6', '7', '8', '9', '11', '13'], '市场面七条：#10 与 #12 已退役，编号留空');
+  assert.equal(local.length + market.length, 12, '两张表的条数合计就是 12 条');
+  assert.match(text, /\| 14 \| `GET \/api\/dsh-skill-center\/detail` \|/, '#14 就是 detail（GET + ?name=）');
+  assert.match(text, /只收 name，没有任何路径 \/ 目录参数/, '#14 的入参白名单写在表里');
+});
+
+test('K115 §3.3.3 的读盘围栏与出参都在契约里', async () => {
+  const text = await readFile(join(ROOT, 'docs', 'contracts', 'routes.md'), 'utf8');
+  const detail = sectionOf(text, '#### 3.3.3', '## 3.4');
+  for (const fact of [
+    'MAX_TEXT_BYTES = 262144',
+    'filesTruncated: true',
+    'truncated: true',
+    'lstat',
+    'realPath',
+    'node_modules',
+  ]) {
+    assert.ok(detail.includes(fact), `§3.3.3 写了 ${fact}`);
+  }
+  assert.match(detail, /条目 ≤200|≤200/, '清单上限 200 条写在 §3.3.3');
+  assert.match(detail, /深度 ≤4/, '遍历深度 ≤4 写在 §3.3.3');
+  assert.match(text, /"filesTruncated": false/, '出参示例里带 filesTruncated');
+});
+
+test('K115 decisions 有附录 Q，且它写明参照是真源缺失、hover 待真机取色', async () => {
+  const text = await readFile(join(ROOT, 'docs', 'contracts', 'decisions.md'), 'utf8');
+  const appendix = sectionOf(text, '## 附录 Q', '## 验收');
+  assert.match(text, /## 附录 Q 已安装详情页的设计参照/, '附录 Q 在（U1 的参照登记）');
+  assert.match(appendix, /没有任何详情页读数/, 'Q-1 记录参照文档没有详情页读数');
+  assert.match(appendix, /app\.asar/, 'Q-2 记录本机宿主没有这一页');
+  assert.match(appendix, /待真机取色/, 'Q-4 记下唯一没有真值的刻度');
+  assert.match(appendix, /不得|不(?:许|改)/, '附录 Q 明确写了采集副本不许补写');
+});
+
+test('K115 host-plugin-page.md 仍是那份采集副本：没有详情页读数被补写', async () => {
+  const file = join(ROOT, 'docs', 'reference', 'host-plugin-page.md');
+  const text = await readFile(file, 'utf8');
+  assert.match(text, /采集日期：2026-11-08/, '采集日期还是 2026-11-08（没有重采、没有打补丁）');
+  assert.match(text, /没有二级页/, '原文那句「没有二级页」还在');
+  // 详情页的词汇一个都不许出现在采集副本里：出现就说明有人照着我们的实现补写读数。
+  for (const word of ['面包屑', '调用名', '真实位置', '版本 Tag', '文件清单', 'skc_detail', 'MAX_TEXT_BYTES']) {
+    assert.equal(text.includes(word), false, `采集副本里没有「${word}」（不许补写）`);
+  }
+  assert.equal(text.trimEnd().split('\n').length, 79, '全文仍是 79 行（U1 没有往里加行）');
+});
+
+test('K115 visual.md A.5 有整行可点的三条刻度与「待真机取色」', async () => {
+  const text = await readFile(join(ROOT, 'docs', 'contracts', 'visual.md'), 'utf8');
+  const a5 = sectionOf(text, '## A.5', '## A.6');
+  assert.match(a5, /\.skc_cardOpen\{/, 'A.5 有 .skc_cardOpen 的规则');
+  assert.match(a5, /\.skc_cardOpen::after\{[^}]*inset: 0/, 'A.5 写了 inset:0 的点击层');
+  assert.match(a5, /\.skc_cardEnd\{[^}]*z-index: 1/, 'A.5 写了 z-index:1 的动作位');
+  assert.match(a5, /@media \(hover: hover\)/, 'A.5 把 hover 限定在有悬停的设备上');
+  assert.match(a5, /待真机取色/, 'A.5 标注了待真机取色的刻度');
+  for (const rule of ['.skc_detailIdentity{', '.skc_detailCallName{', '.skc_detailBody{']) {
+    assert.ok(a5.includes(rule), `A.5 记下详情页新增的 ${rule}`);
+  }
+});
+
+test('K115 体积门禁抬到 134000，locale 恰好 142 键（含 6 个 markdown.* chrome 标签）', async () => {
+  const bundleTest = await readFile(join(ROOT, 'test', 'bundle-contract.test.mjs'), 'utf8');
+  assert.match(bundleTest, /size < 134_000/, '产物上限是 134000 B');
+  assert.equal(/size < 128_000/.test(bundleTest), false, '旧上限 128000 已经不在（不能两个都在）');
+
+  const gate = await runGate('check-i18n.mjs');
+  assert.equal(gate.code, 0, `check:i18n 必须 exit 0：${gate.stdout}${gate.stderr}`);
+  const summary = /check-i18n: OK \((\d+) keys in both dictionaries/.exec(gate.stdout);
+  assert.ok(summary !== null, '门禁输出里带键数');
+  assert.equal(Number(summary[1]), 142, `locale 恰好 142 键（实际 ${summary[1]}）`);
+
+  // 口径自查：140 个扁平键 + meta 的两项 = 142（嵌套字典会让界面显示原始键名）。
+  const [zh, en] = await Promise.all(['zh', 'en'].map(async (language) => (
+    JSON.parse(await readFile(join(ROOT, 'locale', `${language}.json`), 'utf8'))
+  )));
+  const flat = (dictionary) => Object.keys(dictionary).filter((key) => key !== 'meta');
+  assert.equal(flat(zh).length + Object.keys(zh.meta).length, 142, 'zh：140 扁平 + meta 两项');
+  assert.deepEqual(flat(zh).sort(), flat(en).sort(), 'zh/en 键集一致');
+  assert.deepEqual(
+    flat(zh).filter((key) => key.startsWith('detail.')).sort(),
+    [
+      'detail.back', 'detail.callName', 'detail.copied', 'detail.copy', 'detail.error', 'detail.factPath',
+      'detail.factProvider', 'detail.factReadonly', 'detail.factRealPath', 'detail.filesTruncated',
+      'detail.loading', 'detail.noBody', 'detail.partition.builtin', 'detail.partition.installed',
+      'detail.partition.local', 'detail.readonlyNoFile', 'detail.retry', 'detail.sectionSource',
+      'detail.truncated',
+    ],
+    'detail.* 恰好 19 个键（installed-detail.md 的文案节）',
+  );
+
+  // 136 → 142 的那 6 个键不是文案需求，是宿主渲染器的 chrome：`MarkdownText` 的代码块读
+  // `labels.code.{copyLabel,copiedLabel,toolbarLabels.{codeLabel,wrapLabel,unwrapLabel}}`，
+  // 脚注读 `labels.footnotes`——少一个就是在第一个代码围栏上抛错、整段回落成纯文本（U1 真机
+  // 踩过）。键集与 `markdown.jsx` 的 `labelsOf()` 一一对应，改名必须两边一起改。
+  assert.deepEqual(
+    flat(zh).filter((key) => key.startsWith('markdown.')).sort(),
+    [
+      'markdown.codeCopied', 'markdown.codeCopy', 'markdown.codePlain', 'markdown.codeUnwrap',
+      'markdown.codeWrap', 'markdown.footnotes',
+    ],
+    'markdown.* 恰好 6 个键：宿主 MarkdownText 的 labels（代码卡三处 + 换行两处 + 脚注一处）',
+  );
+  const markdownSource = await readFile(join(ROOT, 'src', 'client', 'markdown.jsx'), 'utf8');
+  const used = [...markdownSource.matchAll(/t\('(markdown\.[a-zA-Z]+)'\)/g)].map((match) => match[1]);
+  assert.deepEqual(
+    [...new Set(used)].sort(),
+    flat(zh).filter((key) => key.startsWith('markdown.')).sort(),
+    'labelsOf() 取的键与字典里的 markdown.* 键集逐字相同（不许多取、不许少取）',
+  );
+  const labelsCall = /<MarkdownText[^>]*\/>/.exec(markdownSource);
+  assert.ok(labelsCall !== null, 'markdown.jsx 里有一处 MarkdownText 调用');
+  assert.match(labelsCall[0], /\slabels=\{/, 'MarkdownText 收到 labels（缺了就在第一个围栏上抛错）');
+});
+
+test('K115 check:docs 认这份新契约：installed-detail.md 在白名单里且头注齐全', async () => {
+  const text = await readFile(join(ROOT, 'docs', 'contracts', 'installed-detail.md'), 'utf8');
+  for (const field of ['> 类型：', '> 读者：', '> 真源：', '> 更新触发：', '> 规模上限：']) {
+    assert.ok(text.includes(field), `头注有 ${field}`);
+  }
+  assert.match(text, /K110–K115/, '验收节指向 K110–K115');
+  const gate = await runGate('check-docs.mjs');
+  assert.equal(gate.code, 0, `check:docs 必须 exit 0：${gate.stdout}${gate.stderr}`);
+  assert.match(gate.stdout, /14 md files, 0 warn/, '文档 14 份、0 警告');
+});
+
+test('K115 契约自洽：§3.7 头注说的市场条数与共用 guard 的名单，跟两张表一致', async () => {
+  const text = await readFile(join(ROOT, 'docs', 'contracts', 'routes.md'), 'utf8');
+  const intro = sectionOf(text, '## 3.7 ', '#### 3.7.1');
+  const claim = /市场面 (\d+) 条/.exec(intro);
+  assert.ok(claim !== null, '§3.7 头注里有一个条数');
+  assert.equal(Number(claim[1]), 7, `§3.7 头注说的条数与 §3.7.1 的七行表一致（实际写的是 ${claim[1]}）`);
+  assert.match(intro, /#14/, '§3.7 头注列举「共用 guard()」的本地路由时带上 #14（detail 也走同一个 guard）');
 });

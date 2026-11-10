@@ -5,7 +5,7 @@
  * string in a test without a browser; the header's DOM measurement lives inside
  * `attachHeader`, which a string render never calls.
  */
-import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   Button,
   SegmentedTabs,
@@ -19,6 +19,7 @@ import {
 
 import { cn } from './styles.js';
 import { attachHeader } from './header-scroll.js';
+import { InstalledDetail } from './installed-detail.jsx';
 import { iconBatch, iconSeeds, iconUrlFor, marketKeyOf, nameSeeds, rowTitleOf } from './market-model.js';
 import { MarketPanel } from './market-panel.jsx';
 import { ListSkeleton } from './skeleton.jsx';
@@ -26,8 +27,10 @@ import { SkillRow } from './row.jsx';
 import {
   TAB_INSTALLED,
   TAB_MARKET,
+  detailStateOf,
   groupEmptyKey,
   reasonText,
+  rowByKey,
   rowKey,
   statusLine,
   switchMode,
@@ -40,6 +43,9 @@ const MIN_INDICATOR_MS = 400;
 /** Fallback translate used only when a seat is rendered without a locale. */
 const identityTranslate = (key) => key;
 
+/** Writes land before the frame paints; a string render has no DOM to write to. */
+const usePaintEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
+
 /**
  * Render the skill center page.
  * @param {{t?: Function, store: object, api: object}} props - locale seat, page store, and API client.
@@ -51,6 +57,8 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
   const [refreshing, setRefreshing] = useState(false);
   const busy = useRef(false);
   const disposeHeader = useRef(null);
+  /** The page's scroll container: the detail view reads and restores its offset. */
+  const bodyRef = useRef(null);
 
   useEffect(() => () => {
     disposeHeader.current?.();
@@ -88,6 +96,33 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
     }
     return failed;
   }, [api, store]);
+
+  const loadDetail = useCallback(async (row) => {
+    const key = rowKey(row);
+    store.actions.detailLoading(key);
+    try {
+      const data = await api.skillDetail({ name: row.name });
+      store.actions.detailReady(key, data ?? null);
+    } catch (error) {
+      store.actions.detailFailed(key, { code: error?.code ?? 'E_UNKNOWN', message: error?.message ?? '' });
+    }
+  }, [api, store]);
+
+  /**
+   * Open one skill's detail: remember where the list was, then read its text.
+   * @param {object} row - the row that was clicked.
+   * @returns {void}
+   */
+  const openRow = useCallback((row) => {
+    const body = bodyRef.current;
+    store.actions.rememberDetailScroll(body === null ? 0 : body.scrollTop);
+    store.actions.openDetail(row);
+    void loadDetail(row);
+  }, [loadDetail, store]);
+
+  const closeDetail = useCallback(() => {
+    store.actions.closeDetail();
+  }, [store]);
 
   useEffect(() => {
     if (store.getSnapshot().status !== 'idle') return;
@@ -168,6 +203,26 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
     }
   }, [api, store, t]);
 
+  const detailKey = state.detail === null ? null : state.detail.key;
+  const detailRow = detailKey === null ? null : rowByKey(state.payload, detailKey);
+  const detailStatus = detailKey === null ? 'idle' : detailStateOf(state, detailKey);
+  const retryDetail = useCallback(() => {
+    if (detailRow === null) return;
+    void loadDetail(detailRow);
+  }, [detailRow, loadDetail]);
+
+  // Back to the list: the offset was read before the detail replaced the rows, and it is
+  // written back once they are in the document again. No request, no smooth scroll - the
+  // restore is the frame's first state, exactly like the market's detail return.
+  usePaintEffect(() => {
+    if (detailKey !== null) return;
+    const top = store.getSnapshot().detailScrollTop;
+    if (top <= 0) return;
+    const body = bodyRef.current;
+    if (body === null) return;
+    body.scrollTop = top;
+  }, [detailKey, store]);
+
   const groups = toGroups(state.payload);
   const counts = state.payload?.counts;
   const excluded = Number.isInteger(counts?.excluded) ? counts.excluded : 0;
@@ -200,6 +255,7 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
                 t={t}
                 rows={state.rows}
                 onToggle={onToggle}
+                onOpen={openRow}
                 iconUrl={rowIconUrl(row)}
                 title={rowTitleOf(row, state.market)}
               />
@@ -211,7 +267,7 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
 
   return (
     <section className={cn('page')} data-skc-panel="" aria-busy={state.status === 'loading' || refreshing}>
-      <div className={cn('pageBody')} data-skc-body="">
+      <div className={cn('pageBody')} data-skc-body="" ref={bodyRef}>
         <div
           className={cn('pageBar', 'pageBarWithTabs')}
           data-skc-bar=""
@@ -264,8 +320,14 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
                   aria-busy={refreshing || marketBusy}
                   disabled={refreshing || marketBusy}
                   onClick={() => {
-                    if (showsInstalled) void load('refresh');
-                    else store.actions.marketReload();
+                    if (!showsInstalled) {
+                      store.actions.marketReload();
+                      return;
+                    }
+                    // A refresh re-reads the list, and the detail view is a view of that
+                    // list: closing it first is the same rule the market's reload follows.
+                    store.actions.closeDetail();
+                    void load('refresh');
                   }}
                   icon={refreshing || marketBusy
                     ? <StateDot state="ongoing" size={13} />
@@ -340,8 +402,25 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
                 </Button>
               </div>
             ) : null}
-            {state.payload === null ? null : groups.map(renderGroup)}
-            {excluded > 0 ? <p className={cn('footer')}>{t('footer.excluded', { count: excluded })}</p> : null}
+            {state.payload === null ? null : (detailKey === null ? (
+              <Fragment>
+                {groups.map(renderGroup)}
+                {excluded > 0 ? <p className={cn('footer')}>{t('footer.excluded', { count: excluded })}</p> : null}
+              </Fragment>
+            ) : (
+              <InstalledDetail
+                detail={state.detail}
+                row={detailRow}
+                rows={state.rows}
+                t={t}
+                status={detailStatus}
+                iconUrl={detailRow === null ? null : rowIconUrl(detailRow)}
+                title={detailRow === null ? '' : rowTitleOf(detailRow, state.market)}
+                onBack={closeDetail}
+                onRetry={retryDetail}
+                onToggle={onToggle}
+              />
+            ))}
           </div>
         ) : (
           <div

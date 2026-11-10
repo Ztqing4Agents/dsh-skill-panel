@@ -12,7 +12,7 @@
 
 ## 3.3 Host 路由清单
 
-十一条 **exact** 路由（`kind:'exact'`，`ctx.webServer.register(route)` 返回 disposer；重复注册同路径会抛错，见 `EX/dsh-host-webserver/README.md`「Registering routes」）。本地面 4 条（下表 #1–#4），市场面 7 条见 §3.7。
+十二条 **exact** 路由（`kind:'exact'`，`ctx.webServer.register(route)` 返回 disposer；重复注册同路径会抛错，见 `EX/dsh-host-webserver/README.md`「Registering routes」）。本地面 5 条（下表 #1–#4 与 #14；`#` 是历史编号，不重排也不复用，两条退役的图片端点不回收），市场面 7 条见 §3.7。
 
 统一信封（§8.1）：成功 `200 {code:'OK', data, message:''}`；失败 `4xx/5xx {code:'E_…', data:null, message}`。**没有例外**：U7 之后市场面的两条图片代理路由（`market/lucide` 与 `market/clawhub-icon`）随 `clawhub.ai` 一起退场，图标改为上游绝对 `https` 直连（`decisions.md` 附录 N 的 N-11），所以每条路由都回信封。
 
@@ -22,6 +22,7 @@
 | 2 | `POST /api/dsh-skill-center/toggle` | `{name, path, enabled}` | `{name, enabled, modelInvocable, path}` | `403`、`405`、`400 E_BAD_REQUEST`、`400 E_BAD_NAME`、`400 E_BAD_PATH`、`404 E_NOT_FOUND`、`409 E_STALE_PATH`、`409 E_SYMLINK_READONLY`、`409 E_FILE_CHANGED`、`409 E_NOT_WRITABLE`、`500 E_WRITE_FAILED`、`500 E_VERIFY_FAILED` |
 | 3 | `POST /api/dsh-skill-center/provider-toggle` | `{provider, name, enabled}` | `{provider, name, disabled}` | `403`、`405`、`400`、`400 E_BAD_NAME`、`404 E_NOT_FOUND`（该 (provider,name) 不再是内置行）、`500 E_WRITE_FAILED` |
 | 4 | `GET /api/dsh-skill-center/health` | 无 | `{ok, version, dshHome, skillsRoot, counts, ledger:{sources:string[]}, providerToggles:{readable:bool, disabled:int}, complete:bool}` | `403`、`405`、`500` |
+| 14 | `GET /api/dsh-skill-center/detail` | `?name=<kebab>`（必填，`isSkillName` 校验；**只收 name，没有任何路径 / 目录参数**） | `SkillContent`（§3.3.3） | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_NAME`、`404 E_NOT_FOUND`、`500 E_INTERNAL` |
 
 body 上限 **64 KiB**（`readBoundedJson(req, 65536)`；超过即 `400`，不 drain）。
 
@@ -58,9 +59,12 @@ body 上限 **64 KiB**（`readBoundedJson(req, 65536)`；超过即 `400`，不 d
   "enabled": true,                  // = !disable-model-invocation
   "writable": true,                 // false ⇒ 客户端不渲染开关
   "readonlyReason": null,           // 'symlink' | 'provider-store' | 'no-file'
-  "upstream": { "sourceId": "clawhub", "owner": "awspace", "slug": "pdf" }  // 或 null：上游身份，见下
+  "upstream": { "sourceId": "clawhub", "owner": "awspace", "slug": "pdf" }, // 或 null：上游身份，见下
+  "version": "1.2.4"                 // 或 null：_meta.json 的 version（≤64 字符），展示字段
 }
 ```
+
+`version` 同样只做展示：来源只有本插件安装器写的 `_meta.json` 的那一份，非字符串、空串或长度 >64 一律 `null`；它不进 `classifySkill`，也不参与同名裁决，界面上为空时整块不渲染（不写「未知」）。
 
 不变式：`writable === false ⇔ readonlyReason !== null`；`partition === 'builtin'` ⇒ `readonlyReason ∈ {'provider-store','no-file'}` 且 `symlink === false`；`symlink === true` ⇒ `path === null && realPath !== null && writable === false && readonlyReason === 'symlink'`；`symlink === false` ⇒ `realPath === null`。
 
@@ -83,6 +87,36 @@ if (!isWithin(skillsRoot, row.path)) return fail(res, 409, 'E_NOT_WRITABLE') // 
 - **比较用严格字符串相等**（不做 `realpath`、不做大小写折叠）：客户端回传的就是我们刚发出的绝对路径；软链已在 ② 被拒，因此不存在「同一个文件两条路径」的歧义。
 - ①②③ 的顺序不可换：先确认「这条还在」，再拒软链，最后比对路径，任何一步先返回都能给出可区分的错误码（前端文案不同）。
 - 每次 `toggle` 都**重新扫描**（不查内存缓存）：这是「磁盘是唯一真源」的落地方式，也让「面板打开后有人手改了文件」变成 409 而不是静默改错文件。
+
+#### 3.3.3 `detail` 的读盘围栏与出参
+
+```js
+if (!isSkillName(name)) return fail(res, 400, 'E_BAD_NAME')            // ① 请求里只有 name
+const row = (await mergeCatalog(freshScan())).find(r => r.name === name)
+if (!row) return fail(res, 404, 'E_NOT_FOUND')                        // ② 每次请求都重扫
+const file = row.symlink ? row.realPath : row.path                     // ③ 软链行读链路末端
+if (file === null) return ok({ ...blank, body: null, files: null })    // ④ 内置行不是错误
+const st = await lstat(file)                                           // ⑤ 末端仍是软链就不再跟随
+```
+
+- **入参白名单**：只有 `name`。没有 `path` / `dir` / `cwd`；`name` 不在扫描结果里就没有第二次磁盘访问，请求也读不到 `skillsRoot` 之外的文件（软链目标除外——那是 `realPath` 解析出来的合法目标）。
+- **`lstat` 末端**：扫描层已经把软链目录解析成 `realPath`，这里再看一次是为了拦住「`SKILL.md` 自己也是软链」的那一层；仍是软链 ⇒ **不再跟随**，按「没有可读文件」返回（`body: null`、`size: null`），不是错误。
+- **`MAX_TEXT_BYTES = 262144`（256 KiB）**：超限只读前 256 KiB，`truncated: true`、`size` 仍是截断前的真实大小。真样本最长 39 618 B（`decisions.md` 附录 E-2），上限是护栏不是功能需要。
+- **frontmatter 只走读侧解析器**：正文 = `stripFrontmatter` 的结果，实现只在 `lib/frontmatter.js`；**不许**手写正则切 `---`。
+- **文件清单**：`readdir` 递归，深度 ≤4（以技能目录里的条目为第 1 层）、条目 ≤200，跳过点开头、`node_modules` 与 `dirent.isSymbolicLink()`（与硬约束 14「不跟随包内软链」同一条线）；超限置 `filesTruncated: true` 并停，不报错；子目录在遍历期间消失按「读不到」跳过（清单是尽力而为，正文读失败才是 500）。文案与顺序按路径字符串稳定排序，路径是相对技能目录的 `/` 分隔串。
+- **读失败 = `500 E_INTERNAL`**：`readCandidate` 刚刚成功读过同一个文件（否则这一行根本不存在），所以这里失败属于真异常，不新增错误码——§8.1 的表零改动。
+
+出参 `SkillContent`：
+
+```jsonc
+{ "name": "dev-docs-standards",
+  "path": "/…/.dsh/skills/dev-docs-standards/SKILL.md", // 本次实际读的那个文件（软链行给 realPath）
+  "size": 12345,            // 文件字节数（截断前）；无可读文件时为 null
+  "truncated": false,       // 正文是否被 MAX_TEXT_BYTES 截断
+  "body": "…",              // stripFrontmatter 之后的正文；null = 这条没有可读文件
+  "files": [{ "path": "SKILL.md", "size": 12345 }],     // null = 没有可列目录（内置行）
+  "filesTruncated": false }
+```
 
 ---
 
@@ -151,7 +185,7 @@ return concat(bom, block, body.subarray(block.end))   // 其余字节一个不�
 
 ## 3.7 市场路由清单
 
-市场面 9 条 **exact** 路由，前缀 `/api/dsh-skill-center/market/*`。它们与 #1–#4 **共用同一个 `guard()`**（loopback 围栏 → 方法），共用 `writeJson` 的 `{code,data,message}` 信封与 `no-store`，但**不共用 `collect()`**：本地扫描是磁盘面，市场是网络面，混在一起会让「市场超时」连累「已安装」页签。
+市场面 7 条 **exact** 路由，前缀 `/api/dsh-skill-center/market/*`。它们与 #1–#4、#14 **共用同一个 `guard()`**（loopback 围栏 → 方法），共用 `writeJson` 的 `{code,data,message}` 信封与 `no-store`，但**不共用 `collect()`**：本地扫描是磁盘面，市场是网络面，混在一起会让「市场超时」连累「已安装」页签。
 
 #### 3.7.1 七条路由
 

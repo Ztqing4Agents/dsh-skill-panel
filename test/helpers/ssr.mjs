@@ -43,6 +43,8 @@ const SOURCES = {
   iconTile: 'icon-tile.jsx',
   detail: 'market-detail.jsx',
   filters: 'market-filters.jsx',
+  installedDetail: 'installed-detail.jsx',
+  markdown: 'markdown.jsx',
 };
 
 /** Bundles already built in this process, by cache key. */

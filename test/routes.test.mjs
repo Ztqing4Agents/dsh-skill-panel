@@ -7,7 +7,7 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { lstat, mkdir, readFile, realpath, symlink, unlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, realpath, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { ROUTES, makeRoutes } from '../lib/routes.js';
@@ -49,9 +49,10 @@ async function mount(options = {}) {
   };
 }
 
-test('路由表就是设计里的十一条 exact 路由（本地面 4 + 市场面 7）', () => {
+test('路由表就是设计里的十二条 exact 路由（本地面 5 + 市场面 7）', () => {
   assert.deepEqual(ROUTES, {
     list: '/api/dsh-skill-center/list',
+    detail: '/api/dsh-skill-center/detail',
     toggle: '/api/dsh-skill-center/toggle',
     providerToggle: '/api/dsh-skill-center/provider-toggle',
     health: '/api/dsh-skill-center/health',
@@ -62,15 +63,15 @@ test('路由表就是设计里的十一条 exact 路由（本地面 4 + 市场�
     marketInstall: '/api/dsh-skill-center/market/install',
     marketIcons: '/api/dsh-skill-center/market/icons',
     marketFavorite: '/api/dsh-skill-center/market/favorite',
-  }, '十一条路径与设计逐字一致（本地面 4 条 + 市场面 7 条，见 routes.md §3.3 / §3.7.1）');
+  }, '十二条路径与设计逐字一致（本地面 5 条 + 市场面 7 条，见 routes.md §3.3 / §3.7.1）');
 });
 
 test('路由都是 exact 类型，不用前缀匹配', async () => {
   const mounted = await mount();
   try {
     const routes = Object.values(mounted.byPath);
-    assert.equal(routes.length, 11, '一共注册十一条路由');
-    assert.equal(routes.every((route) => route.kind === 'exact'), true, '十一条都是 exact 路由');
+    assert.equal(routes.length, 12, '一共注册十二条路由');
+    assert.equal(routes.every((route) => route.kind === 'exact'), true, '十二条都是 exact 路由');
     assert.equal(
       routes.filter((route) => route.path.includes('/market/')).length,
       7,
@@ -582,5 +583,199 @@ test('已知边界（记录现状）：目录是真目录、SKILL.md 是软链�
     assert.equal(row.readonlyReason, null, '没有只读原因，故不渲染只读标记');
   } finally {
     await tree.cleanup();
+  }
+});
+
+/* ------------------------------------ K112 · 第 12 条路由 `detail`：围栏与出参 */
+
+/** The `_meta.json`-free fixture the detail tests re-read on every request. */
+const DETAIL_ENTRIES = {
+  'hand-made': skillFile({ name: 'hand-made', description: 'Hand written.', body: '# 标题\n\n正文一段。\n' }),
+};
+
+/**
+ * One `detail` request.
+ * @param {object} mounted - the mounted routes.
+ * @param {string} query - the query string, e.g. `?name=hand-made`.
+ * @param {object} [options] - request overrides.
+ * @returns {Promise<{status: number, headers: object, body: string, json: unknown}>} the response.
+ */
+const detailOf = (mounted, query, options = {}) => callRoute(mounted.byPath[ROUTES.detail], {
+  url: `${ROUTES.detail}${query}`,
+  headers: LOOPBACK_HEADERS,
+  ...options,
+});
+
+test('K112 detail 在表里，正常行 200：出参形状 + 已去 frontmatter 的正文 + 相对路径清单', async () => {
+  const mounted = await mount({ entries: DETAIL_ENTRIES });
+  try {
+    assert.equal(ROUTES.detail, '/api/dsh-skill-center/detail', '路径就是契约里那一条');
+    assert.equal(Object.keys(ROUTES).length, 12, 'route 表恰好 12 条（本地面 5 + 市场面 7）');
+
+    const response = await detailOf(mounted, '?name=hand-made');
+    assert.equal(response.status, 200, '正常行 200');
+    const data = response.json.data;
+    assert.deepEqual(Object.keys(data).sort(), [
+      'body', 'files', 'filesTruncated', 'name', 'path', 'size', 'truncated',
+    ], '出参就是 SkillContent 的七个字段');
+    assert.equal(data.name, 'hand-made', 'name 原样回传');
+    assert.equal(data.path, join(mounted.tree.skillsRoot, 'hand-made', 'SKILL.md'), 'path 是本次实际读的那个文件');
+    assert.equal(data.body, '# 标题\n\n正文一段。\n', '正文已去 frontmatter（不是手写正则切的）');
+    assert.equal(data.body.includes('---'), false, '正文里没有 frontmatter 分隔符');
+    assert.equal(data.truncated, false, '小文件不截断');
+    assert.equal(data.filesTruncated, false, '清单不截断');
+    assert.equal(data.size, (await lstat(data.path)).size, 'size 是文件字节数');
+    assert.deepEqual(data.files, [{ path: 'SKILL.md', size: data.size }], '清单是相对技能目录的 / 分隔串');
+    assert.equal(data.files[0].path.startsWith('/'), false, '清单里没有绝对路径');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K112 detail 软链行读 realPath；内置行 200 且 body / files 都是 null（不是错误）', async () => {
+  const registry = {
+    snapshot: async () => ({
+      complete: true,
+      skills: [{ name: 'office', provider: 'runtime', source: 'runtime', description: 'Built-in office skill.' }],
+    }),
+  };
+  const mounted = await mount({ entries: DETAIL_ENTRIES, registry });
+  try {
+    const linked = await detailOf(mounted, '?name=linked-skill');
+    assert.equal(linked.status, 200, '软链行照样 200');
+    const real = await realpath(join(mounted.targetRepo, 'SKILL.md'));
+    assert.equal(linked.json.data.path, real, 'path 是 realPath（链路末端），不是软链自己那条');
+    assert.notEqual(linked.json.data.path, mounted.linkedPath, 'path 不是软链自己那条（扫描层给的是 realPath）');
+    assert.equal(linked.json.data.path.includes('target-repo'), true, 'path 指向软链解析出来的目标目录');
+    assert.ok(linked.json.data.body.includes('linked-skill') === false, '正文里没有 frontmatter 的 name 行');
+    assert.equal(linked.json.data.body.startsWith('# body'), true, '正文是目标文件的 body');
+
+    const builtin = await detailOf(mounted, '?name=office');
+    assert.equal(builtin.status, 200, '内置行也是 200（没有可读文件不是错误）');
+    assert.deepEqual(
+      [builtin.json.data.path, builtin.json.data.size, builtin.json.data.body, builtin.json.data.files],
+      [null, null, null, null],
+      '内置行四项都是 null',
+    );
+    assert.equal(builtin.json.data.truncated, false, '内置行 truncated 是 false');
+    assert.equal(builtin.json.data.filesTruncated, false, '内置行 filesTruncated 是 false');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K112 detail 未知名 404、坏名 400，且坏名不触盘', async () => {
+  const mounted = await mount({ entries: DETAIL_ENTRIES });
+  try {
+    const unknown = await detailOf(mounted, '?name=no-such-skill');
+    assert.equal(unknown.status, 404, '没这条技能 404');
+    assert.equal(unknown.json.code, 'E_NOT_FOUND', '错误码 E_NOT_FOUND');
+
+    for (const bad of ['', '../..%2Fx', 'Bad-Name', 'UPPER', 'a..b', 'a/b', '%2e%2e%2f%2e%2e']) {
+      const response = await detailOf(mounted, `?name=${bad}`);
+      assert.equal(response.status, 400, `name=${bad} 是坏名 400（实际 ${response.status}）`);
+      assert.equal(response.json.code, 'E_BAD_NAME', `name=${bad} 的错误码是 E_BAD_NAME`);
+    }
+    const missing = await detailOf(mounted, '');
+    assert.equal(missing.status, 400, '不带 name 也按坏名处理');
+  } finally {
+    await mounted.close();
+  }
+
+  // 「不触盘」的证据：目录整个不在时，坏名仍然 400（先校验名字），好名字才走到扫描。
+  const gone = await mount({ entries: DETAIL_ENTRIES });
+  try {
+    await rm(gone.tree.skillsRoot, { recursive: true, force: true });
+    const bad = await detailOf(gone, '?name=Bad');
+    assert.equal(bad.status, 400, '目录都不在时坏名照样 400（校验在扫描之前）');
+    assert.equal(bad.json.code, 'E_BAD_NAME', '仍是 E_BAD_NAME');
+    const good = await detailOf(gone, '?name=hand-made');
+    assert.equal(good.status, 404, '同一个目录里好名字回落成「没这条技能」');
+  } finally {
+    await gone.close();
+  }
+});
+
+test('K112 detail 只认 name：请求里的 path / dir / cwd 一律被忽略', async () => {
+  const mounted = await mount({ entries: DETAIL_ENTRIES });
+  try {
+    const plain = await detailOf(mounted, '?name=hand-made');
+    const spiked = await detailOf(mounted, '?name=hand-made&path=/etc/passwd&dir=/etc&cwd=/etc');
+    assert.equal(spiked.status, plain.status, '状态码一模一样');
+    assert.equal(spiked.body, plain.body, '响应逐字节相同（多余参数没有参与任何决策）');
+    assert.equal(spiked.json.data.path.startsWith(mounted.tree.skillsRoot), true, '读的仍是技能根里的文件');
+    assert.equal(spiked.body.includes('/etc/passwd'), false, '响应里没有出现那个路径');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K112 detail 超 256 KiB：truncated true，size 仍是截断前的原大小', async () => {
+  const bytes = skillFile({ name: 'big-skill', description: 'A big one.', body: `${'x'.repeat(300_000)}\n` });
+  const mounted = await mount({ entries: { 'big-skill': bytes } });
+  try {
+    const response = await detailOf(mounted, '?name=big-skill');
+    assert.equal(response.status, 200, '大文件也是 200');
+    const data = response.json.data;
+    assert.equal(data.truncated, true, 'truncated 是 true');
+    assert.equal(data.size, bytes.length, `size 是原大小 ${bytes.length}（不是 256 KiB）`);
+    assert.equal(data.size > 262_144, true, '原大小确实超过上限');
+    assert.equal(Buffer.byteLength(data.body, 'utf8') <= 262_144, true, '正文不超过 256 KiB');
+    assert.equal(data.body.startsWith('x'.repeat(64)), true, '读到的是文件开头');
+    assert.equal(data.filesTruncated, false, '清单不受正文上限影响');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K112 detail 文件清单：跳过点开头 / node_modules / 包内软链；超 200 条置 filesTruncated', async () => {
+  const mounted = await mount({ entries: DETAIL_ENTRIES });
+  try {
+    const dir = join(mounted.tree.skillsRoot, 'hand-made');
+    await writeFile(join(dir, 'a.md'), 'a');
+    await writeFile(join(dir, '.hidden.md'), 'hidden');
+    await mkdir(join(dir, 'node_modules'), { recursive: true });
+    await writeFile(join(dir, 'node_modules', 'dep.js'), 'dep');
+    await mkdir(join(dir, 'sub'), { recursive: true });
+    await writeFile(join(dir, 'sub', 'b.md'), 'b');
+    await symlink('/etc/hosts', join(dir, 'outside.md'), 'file');
+
+    const listed = await detailOf(mounted, '?name=hand-made');
+    const paths = listed.json.data.files.map((file) => file.path);
+    assert.deepEqual(paths, ['SKILL.md', 'a.md', 'sub/b.md'], `清单只留普通文件并按路径排序（实测 ${paths.join(',')}）`);
+    assert.equal(listed.json.data.filesTruncated, false, '条目不多，不算截断');
+
+    // 201 个普通文件 ⇒ 停在 200 并置标志。
+    await mkdir(join(dir, 'many'), { recursive: true });
+    for (let index = 0; index < 201; index += 1) {
+      await writeFile(join(dir, 'many', `f${String(index).padStart(3, '0')}.txt`), 'x');
+    }
+    const truncated = await detailOf(mounted, '?name=hand-made');
+    assert.equal(truncated.status, 200, '超限是 200，不是错误');
+    assert.equal(truncated.json.data.files.length, 200, '恰好停在 200 条');
+    assert.equal(truncated.json.data.filesTruncated, true, 'filesTruncated 是 true');
+    assert.equal(truncated.json.data.files.some((file) => file.path.includes('.hidden')), false, '点开头的始终不在清单里');
+    assert.equal(truncated.json.data.files.some((file) => file.path.startsWith('node_modules/')), false, 'node_modules 始终不在清单里');
+    assert.equal(truncated.json.data.files.some((file) => file.path === 'outside.md'), false, '包内软链不跟随');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K112 detail 只答 loopback 的 GET：非本机 403、POST 405', async () => {
+  const mounted = await mount({ entries: DETAIL_ENTRIES });
+  try {
+    const foreign = await detailOf(mounted, '?name=hand-made', {
+      headers: { host: '10.0.0.9:5173' },
+      remoteAddress: '10.0.0.9',
+    });
+    assert.equal(foreign.status, 403, '非 loopback 请求 403');
+    assert.equal(foreign.json.code, 'E_FORBIDDEN', '错误码 E_FORBIDDEN');
+
+    const post = await detailOf(mounted, '?name=hand-made', { method: 'POST' });
+    assert.equal(post.status, 405, 'POST 405');
+    assert.equal(post.json.code, 'E_METHOD', '错误码 E_METHOD');
+  } finally {
+    await mounted.close();
   }
 });

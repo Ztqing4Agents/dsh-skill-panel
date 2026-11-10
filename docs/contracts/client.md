@@ -56,8 +56,6 @@ ClientPlugin.apply(ctx)
 
 ---
 
----
-
 ## 3.9 市场页组件与状态
 
 「技能市场」是同一个全局页的第二个页签：仍是 `main` 槽里的 `SkillsPage`，**不新增座位、不新增 `ctx.*` 服务**（`inject` 仍是 `['slots','locale']`）；安装成功的提示复用既有 `shell.overlay`。样式与取值来源见 `docs/contracts/market.md` 附录 F。
@@ -119,7 +117,8 @@ market = {
 
 ```text
 SkillsPage (page.jsx：页头 + 两个页签)
-├─ toolbar：刷新（恒在，行为跟随当前页签）｜计数 + ＋添加技能（仅「已安装」页签渲染）
+├─ toolbar：刷新（恒在，行为跟随当前页签；详情打开时 = 关详情 + 重拉）｜计数 + ＋添加技能（仅「已安装」页签渲染）
+├─ tabPanel(installed) → InstalledDetail (installed-detail.jsx)：面包屑 + 头 + 身份行 + 徽章 + 事实表 + 来源 + 正文 + 文件
 └─ tabPanel(market) → MarketPanel (market-panel.jsx)
     ├─ MarketFilters (market-filters.jsx)：Input(250ms 防抖，× 在框内) / Menu(来源 = 所有来源｜SkillHub｜ClawHub) / Menu(排序) —— **工具栏恒三个子元素** / Pill(分类 chips + 数量)
     ├─ 首屏骨架｜整页错误态（当前源失败）｜空态
@@ -129,11 +128,12 @@ SkillsPage (page.jsx：页头 + 两个页签)
     └─ MarketConfirm (market-confirm.jsx)：Modal（width:min(480px,100vw - 32px)）
 MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 icon-tile.jsx：IconTile / tileElement / useIconState（市场三处 + 已安装行共用的视觉单元）
+markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情共用同一段正文渲染与同一条兜底）
 ```
 
 八条结构约束：
 
-1. **整卡可点只有一个手段**：标题按钮 `.skc_marketCardOpen::after{inset:0}` 铺满整卡，**唯一的动作位**用显式层级浮在上面——安装位 `.skc_marketCardEnd{z-index:1}`（U5 起坐在头部右侧）；卡片里只有这一个动作位，其余区域（含**标签行**与三段数字）都落在点击层上、点的都是「进详情」。不做 `<a href>`、不加第二个可点区域、不用 JS 拦冒泡代替层级。已安装页签的行一个字节不变。
+1. **整卡可点只有一个手段**：标题按钮 `.skc_marketCardOpen::after{inset:0}` 铺满整卡，**唯一的动作位**用显式层级浮在上面——安装位 `.skc_marketCardEnd{z-index:1}`（U5 起坐在头部右侧）；卡片里只有这一个动作位，其余区域（含**标签行**与三段数字）都落在点击层上、点的都是「进详情」。不做 `<a href>`、不加第二个可点区域、不用 JS 拦冒泡代替层级。**「已安装」的行用同一条手段**（U1 起）：标题按钮 `.skc_cardOpen::after{inset:0}` 铺满整行、开关位 `.skc_cardEnd{z-index:1}` 浮起，软链行的 `roTag` 不浮起、不可点；两处都不许出现「看着能点、点了没反应」。
 2. **详情就地替换网格**（`detail !== null` 时返回详情而不是网格），与宿主的页内详情同构；返回不重拉任何东西。
 3. 详情正文用宿主 primitives 的 `MarkdownText` 渲染（与对话里的第三方 markdown 同一个渲染器，不自造 sanitizer）；渲染抛错或正文为空时回落纯文本 + `market.detailNoOverview`。
 4. 组件只读 props（`store/api/t`）写 `store.actions`，不直接 `fetch`；只有滚动位置恢复与触底预取读 DOM，且都在 `useEffect` 里（字符串渲染不触发）。
@@ -219,6 +219,9 @@ icon-tile.jsx：IconTile / tileElement / useIconState（市场三处 + 已安装
 
 ---
 
+## 3.10 已安装详情页
+组件树、`detail` 三态、返回与失败口径、19 个文案键见 `docs/contracts/installed-detail.md`（本节只留指针：§3.9 已到 400 行档位）。
+
 ## 8.2 命名约定
 
 | 对象 | 规则 | 例 |
@@ -251,7 +254,7 @@ icon-tile.jsx：IconTile / tileElement / useIconState（市场三处 + 已安装
 - `client/src/**` 与 `lib/**` **不得出现 CJK 字面量**（`check:i18n` 强制）；界面文案一律 `t('key')`。
 - 占位符用 `{name}`（宿主同款：`t('partToggle', { name: title })`）。
 - 入口标题**只允许**通过 `panel.label` 表达：改名 = 改 `locale/*.json` 的 `panel.label` + `meta.title`，代码零改动（这是「不硬编码中文」的可验收形态）。两处都要改的理由：`meta.title` 是插件列表里的显示名（`PROF/*/locale/zh.json` 四家都是 `{meta:{title,description}}`），`panel.label` 是侧栏行标题。`check-i18n` 会校验两者都存在。
-- 市场面沿用两族键：`market.*`（61 个 → **65 个**）与 `error.E_*`（11 个 → **13 个**），全字典 111 → **117**；**`market.placeholder` 已删除**（市场页签不再是占位文案）。下表有几行把同族的新键合并成一行，这是为了守住 400 行上限（`check-docs` 的 R11），键与值逐条列出、语义不变。
+- 市场面沿用两族键：`market.*`（61 个 → **65 个**）与 `error.E_*`（11 个 → **13 个**）；已安装详情页再加 19 个 `detail.*`（键表见 `docs/contracts/installed-detail.md` 的「文案」一节），外加 6 个 `markdown.*`（宿主 `MarkdownText` 的代码围栏与脚注 chrome，缺了它就整段回落成纯文本），全字典 111 → 117 → 136 → **142**；**`market.placeholder` 已删除**（市场页签不再是占位文案）。下表有几行把同族的新键合并成一行，这是为了守住 400 行上限（`check-docs` 的 R11），键与值逐条列出、语义不变。
 - 键表（P0 全集 + 市场轮；`zh` 值逐字来自 `PRD` §3.3.5 与本设计）：
 
 | key | zh |
@@ -387,8 +390,6 @@ icon-tile.jsx：IconTile / tileElement / useIconState（市场三处 + 已安装
 市场样式同样只进 `styles.js`（类名 `skc_market*`，取值逐条来自 `docs/contracts/market.md` 附录 F）；**市场不新增任何颜色字面量**，也不改 `.skc_cardIcon` 的任何一条声明。上游图标用的 `.skc_marketIconImg` 只有四条声明（`width/height:100%`、`object-fit:contain`、`display:block`、`border-radius:calc(var(--dsw-radius-lg) - .5px)` 同心内圆角），不含色值；`contain` 是因为上游图标尺寸从 256×64 的横版 logo 到 1024×1024 都有，`cover` 会把横版裁成怪形状。
 分类 chip 的数量位用 `.skc_marketChipCount`（`margin-left:4px`、12px/18px、`var(--dsw-alias-label-secondary)`），**不改 chip 的高度与点击面积**，也不新增色值。
 锚点：`test/styles.test.mjs`；把刻度搬进组件时那条用例先红。
-
----
 
 ---
 

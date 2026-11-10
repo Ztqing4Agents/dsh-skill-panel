@@ -132,9 +132,11 @@ const CSS = `
 .skc_groupHead{ align-items: center; gap: 8px; display: flex }
 .skc_groupTitle{ flex: 1; margin: 0; font-size: 14px; font-weight: 500; line-height: 22px }
 
-/* rows */
+/* rows: clickable, so the row owns the click layer */
 .skc_cards{ flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; display: flex }
-.skc_card{ border-radius: var(--dsw-radius-xl); min-width: 0; margin: 0 -8px }
+.skc_card{ border-radius: var(--dsw-radius-xl); min-width: 0; margin: 0 -8px; position: relative }
+@media (hover: hover){ .skc_card:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
+.skc_card:active{ background: var(--dsw-alias-interactive-bg-hover) }
 .skc_cardHead{ align-items: center; gap: 14px; padding: 8px; display: flex }
 .skc_cardIcon{
   box-sizing: border-box;
@@ -157,6 +159,18 @@ const CSS = `
   font-size: 13px; line-height: 18px;
 }
 .skc_cardEnd{ z-index: 1; flex: none; align-items: center; gap: 8px; display: inline-flex; position: relative }
+/* the whole-row click layer: an inset:0 ::after on the title button, .skc_cardEnd floats above */
+.skc_cardOpen{
+  flex: 0 1 auto; min-width: 0; max-width: 100%; padding: 0; border: 0; background: 0 0;
+  color: inherit; font: inherit; text-align: left; cursor: pointer; text-overflow: ellipsis; white-space: nowrap;
+  overflow: hidden; font-size: 14px; font-weight: 500; line-height: 20px;
+}
+.skc_cardOpen::after{ content: ""; border-radius: var(--dsw-radius-xl); position: absolute; inset: 0 }
+.skc_cardOpen:focus-visible{ outline: none }
+.skc_cardOpen:focus-visible::after{
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
 
 /* switch seat, read-only tag, skeleton */
 .skc_bundleToggle{ align-items: center; gap: var(--skc-toggle-gap); display: inline-flex }
@@ -183,9 +197,7 @@ const CSS = `
 .skc_skeletonHeading{ width: 48px }
 .skc_skeletonTitle{ width: min(144px, 60%) }
 .skc_skeletonDescription{ width: min(280px, 85%) }
-/* the skeleton must not inherit the avatar tile: keep its background grey on its own rule,
-   so a reordering of this stylesheet cannot let --skc-avatar-bg through. background-clip
-   matches .skc_cardIcon: the host border is translucent, the fill must stay under it. */
+/* keep the skeleton grey on its own rule and clip it like .skc_cardIcon */
 .skc_skeletonIcon{
   border-color: #0000;
   background: var(--dsw-alias-bg-skeleton); background-clip: padding-box;
@@ -235,27 +247,17 @@ const CSS = `
 }
 @container skc-page-bar (width < 372px){ .skc_pageTabList{ min-width: 0 } }
 
-/* market: toolbar and chips, transcribed from the host market's DiscoverSection.
-   One departure: the host's marketButton rule carries margin-left:-8px on both menus,
-   which cancels the toolbar's 8px gap twice and welds all three controls into one run
-   (the search box's border then sits flush against the first menu, and a typed keyword
-   welds the clear button too). Here the first menu keeps its 8px; only the trailing menu
-   cancels the gap, so the two menus read as one group - see decisions, appendix K. */
+/* market: toolbar and chips; only the trailing menu cancels the gap (decisions K) */
 .skc_marketSection{ flex-direction: column; gap: 16px; display: flex }
 .skc_marketToolbar{ flex-wrap: wrap; align-items: center; gap: 8px; display: flex }
-/* The search box and its clear button are one control: the button sits inside the field,
-   so showing or hiding it never moves the toolbar (measured: it used to sit 8px outside the
-   right edge and shorten the field by 44px). The wrapper owns the flex sizing; the host
-   Input's own span keeps the padding that the button floats over. */
+/* the clear button lives inside the field, so showing it never moves the toolbar */
 .skc_marketSearchField{
   min-width: 120px; flex: 1; align-items: center; display: flex; position: relative;
 }
 .skc_marketSearch{
   padding-right: 32px; box-sizing: border-box; width: 100%; min-width: 0;
 }
-/* The input is type=search, so Blink paints its own cancel button inside the field the
-   moment a keyword is typed - right beside the clear button this panel draws itself
-   (which is the one with a label and a title). Keep ours, drop the native one. */
+/* drop the native search cancel button: ours is the one with a label */
 .skc_marketSearch input::-webkit-search-cancel-button{ -webkit-appearance: none; appearance: none; display: none }
 .skc_marketClear{
   display: flex; position: absolute; top: 50%; right: 5px; transform: translateY(-50%);
@@ -274,11 +276,7 @@ const CSS = `
   outline-offset: 1px;
 }
 .skc_marketSelect{ max-width: 240px; font-weight: 500 }
-/* A ghost button paints no box, so the gap between the two menus reads as the gap plus
-   the trailing menu's own 10px inset: 8 + 10 = 18, against the 8 that separates the
-   search box (which does paint a border) from the first menu. Cancel the gap for the
-   trailing menu only - the pair then reads 8 / 10, and the boxes stay adjacent instead of
-   the host's weld-everything -8 on both. */
+/* ghost buttons paint no box: the trailing menu cancels the gap, 8 / 10 */
 .skc_marketSelectTrailing{ margin-left: -8px }
 .skc_marketSelectLabel{ text-overflow: ellipsis; white-space: nowrap; overflow: hidden }
 .skc_marketChips{ flex-wrap: wrap; align-items: center; gap: 6px; display: flex }
@@ -295,18 +293,13 @@ const CSS = `
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;
   margin: 0; padding: 0; list-style: none; display: grid;
 }
-/* the upstream icon inside the untouched .skc_cardIcon box: a flex child, so it fills
-   the *content* box and the .5px hairline still paints on top of it; the radius is the
-   concentric inner one (the host box radius minus that hairline) */
-/* contain, not cover: upstream icons come from a mixed bag of sources whose dimensions
-   range from a 256x64 wordmark to 1024x1024, and cropping a wordmark into a square is
-   worse than showing it whole on the pastel bed. Square icons look identical. */
+/* fills the content box; the concentric radius keeps the hairline on top */
+/* contain, not cover: upstream wordmarks would be cropped */
 .skc_marketIconImg{
   border-radius: calc(var(--dsw-radius-lg) - .5px); width: 100%; height: 100%;
   object-fit: contain; display: block;
 }
-/* the chip count rides inside the pill: 4px from the label, secondary, one step down in
-   size - the pill's own height and hit area stay exactly as the primitive draws them */
+/* inside the pill: 4px, secondary; its box and hit area are untouched */
 .skc_marketChipCount{
   margin-left: 4px; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px;
 }
@@ -315,31 +308,17 @@ const CSS = `
   padding: 14px; flex-direction: column; display: flex; position: relative;
 }
 @media (hover: hover){ .skc_marketCard:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
-/* the card's head: the 48px tile, the title/byline block and the one action seat in a
-   single row. nowrap is the flex default and is what keeps the seat on this row: when the
-   install label grows ("installing" is the widest of the four) the block shrinks into an
-   ellipsis instead of pushing the seat to a second line. */
+/* head: tile + title block + the one action seat; nowrap keeps the seat here */
 .skc_marketHead{ align-items: center; gap: 12px; min-width: 0; display: flex }
-/* one rhythm inside the card: this gap is 8px, the same value the card itself uses between
-   the head and this block, so all three gaps (head -> description -> tags -> figures) are
-   8px and each has exactly one source. */
+/* one rhythm: 8px here and 8px in the card - every gap has one source */
 .skc_marketBody{ flex-direction: column; gap: 8px; min-width: 0; display: flex }
 .skc_marketMain{ flex-direction: column; flex: 1; gap: 2px; min-width: 0; display: flex }
-/* the title row is as wide as its content, not as wide as the block: align-self keeps it
-   from being stretched by the column parent, so the source mark sits one 8px gap after the
-   title instead of being pushed to the far right of the block. max-width:100% keeps a long
-   title inside the card, and min-width:0 lets it ellipsise (the mark never shrinks).
-   nowrap is load-bearing: a wrapping container breaks lines on the flex base size *before*
-   any shrinking happens, so a long title would push the mark onto a second line (measured on
-   two real cards: 20px row grew to 44px) instead of ellipsising. This row has exactly two
-   children - the title and the mark - and nothing to wrap. */
+/* content-wide, not block-wide; nowrap is load-bearing (a wrapping row breaks before shrinking) */
 .skc_marketTitleRow{
   flex-wrap: nowrap; align-items: center; gap: 8px; min-width: 0;
   align-self: flex-start; max-width: 100%; display: flex;
 }
-/* flex:0 1 auto - grow 0 (the title takes its content width, so the mark stays right after
-   it), shrink 1 with min-width:0 (a long title gives way and ellipsises instead of pushing
-   the mark or the action seat onto a second line). */
+/* grow 0 / shrink 1: the title ellipsises instead of pushing the seat */
 .skc_marketCardOpen{
   max-width: 100%; color: inherit; font: inherit; text-align: left; cursor: pointer;
   text-overflow: ellipsis; white-space: nowrap; background: 0 0; border: 0; padding: 0;
@@ -352,28 +331,18 @@ const CSS = `
     var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 2px;
 }
-/* why 13/20: the leading is the loose end of the card's type scale on purpose - the three
-   gaps are 8px, so the breathing room lives inside the paragraph and the block still reads as
-   one piece. 20 is already on the scale (the title is 14/20), so no fourth line-height joins
-   the card; three lines measure 60px.
-   why the zero margin cannot be dropped: this is a <p> and the UA's 1em adds 13px above
-   and below, which reads as a loose block and costs 26px of card height. all spacing here
-   comes from the gaps (8px above and below). */
+/* 13/20 = 60px for three lines; the zero margin is load-bearing (UA 1em) */
 .skc_marketDesc{
   margin: 0; color: var(--dsw-alias-label-tertiary); -webkit-line-clamp: 3;
   -webkit-box-orient: vertical; font-size: 13px; line-height: 20px;
   display: -webkit-box; overflow: hidden;
 }
-/* the author line stays one line: an owner/slug handle can reach 129 characters, and
-   letting it wrap would grow the head from 48px to 66px and jump the card height */
+/* one line: a 129-char handle must not grow the head 48 -> 66px */
 .skc_marketMeta{
   color: var(--dsw-alias-label-tertiary); margin: 0; text-overflow: ellipsis;
   white-space: nowrap; overflow: hidden; font-size: 12px; line-height: 18px;
 }
-/* market: the card's figures - three equal-width slots, rating / downloads / saves.
-   The slots are fixed-width and always three, so the same column lands on the same x in
-   every card of a row (they are empty, not absent, when a source does not report a
-   number). tabular-nums keeps 1 and 8 the same width inside a slot. */
+/* three fixed slots so a column lands on the same x; tabular-nums */
 .skc_marketStats{
   grid-template-columns: repeat(3, minmax(0, 72px)); gap: 8px; justify-content: start;
   margin: 0; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums;
@@ -385,11 +354,9 @@ const CSS = `
 }
 .skc_marketStat > svg{ width: 13px; height: 13px; flex: none; opacity: .75 }
 .skc_marketStatValue{ min-width: 0; overflow: hidden; text-overflow: ellipsis }
-/* the source's own brand mark, 16px: a 32x32 PNG at 2x. Decoration, not a control. */
+/* the source's brand mark: 16px at 2x, decoration not a control */
 .skc_marketSourceMark{ border-radius: var(--dsw-radius-sm); width: 16px; height: 16px; flex: none; display: block }
-/* tag chips: one line of rounded hairline boxes, tertiary text one step below the meta
-   line. Wrapping is allowed (three labels can still exceed a 280px card) but each chip is
-   clamped, so no single long topic can stretch the row. */
+/* chips are clamped: a long topic must not stretch the row */
 .skc_marketTags{ flex-wrap: wrap; gap: 6px; min-width: 0; margin: 0; padding: 0; display: flex; list-style: none }
 .skc_marketTag{
   border: .5px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-sm);
@@ -397,9 +364,7 @@ const CSS = `
   font-size: 11px; line-height: 16px; white-space: nowrap;
   text-overflow: ellipsis; overflow: hidden;
 }
-/* the one action seat: it sits in the head row, so its vertical position comes from the
-   head's align-items; a flex-end self-alignment would push the button to the row's bottom and
-   grow the row. z-index:1 floats it above the card-wide click layer (do not drop it). */
+/* z-index:1 floats the seat above the click layer - do not drop it */
 .skc_marketCardEnd{
   z-index: 1; flex: none; align-items: center; gap: 8px;
   display: inline-flex; position: relative;
@@ -417,9 +382,7 @@ const CSS = `
   margin: 0; font-size: 13px; line-height: 20px; display: inline-flex;
 }
 .skc_marketFailure{ align-items: center; gap: 10px; display: flex }
-/* The list's own footers. skc_marketMore carries "no more" and the retry button;
-   skc_marketLoadMore is the "loading" row - same rhythm, but it holds a dot and words
-   rather than a control, so it centres them itself. */
+/* list footers: "no more" + retry, and the loading row */
 .skc_marketMore{ align-self: center }
 .skc_marketLoadMore{
   align-items: center; justify-content: center; gap: 6px; padding-top: 8px; display: flex;
@@ -472,15 +435,20 @@ const CSS = `
 }
 .skc_marketFileSize{ color: var(--dsw-alias-label-tertiary); flex: none; font-size: 12px; line-height: 18px }
 
+/* the installed detail reuses the family above; these three are all it adds */
+.skc_detailIdentity{ align-items: center; gap: 8px; display: flex }
+.skc_detailCallName{ font-family: var(--ds-font-family-code) }
+.skc_detailBody{ font-size: 13px; line-height: 20px }
+
 /* market: confirm dialog and skeleton */
 .skc_marketDialog{ width: min(480px, 100vw - 32px) }
 .skc_marketConfirmBody{ flex-direction: column; gap: 12px; display: flex }
 .skc_marketConfirmHead{ align-items: center; gap: 14px; display: flex }
 .skc_marketSkeletonChip{ border-radius: var(--dsw-radius-lg); width: 64px; height: 26px }
 .skc_marketSkeletonAction{ border-radius: var(--dsw-radius-md); width: 64px; height: 24px }
-/* three figure placeholders in the real row's rhythm; the bed is the shared skeleton fill */
+/* same box as the real figures */
 .skc_marketSkeletonStat{ border-radius: var(--dsw-radius-xs); width: 56px; height: 12px }
-/* the tag placeholder is the real chip's box (48x19), so the skeleton keeps the body's rhythm */
+/* the real chip's box (48x19) */
 .skc_marketSkeletonTag{ border-radius: var(--dsw-radius-sm); width: 48px; height: 19px }
 .skc_marketToastHint{
   color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere;

@@ -6,17 +6,13 @@
  * pages at the same scroll offset without re-fetching anything.
  *
  * The overview is third-party markdown, so it is rendered by the host's own renderer
- * (`MarkdownText`, the one the conversation uses): the panel does not grow a second
- * markdown pipeline, and it does not hand-roll a sanitizer. If the renderer is missing or
- * throws, the text falls back to a plain paragraph - a broken renderer must not take the
- * panel with it.
+ * through `markdown.jsx` (the same unit the installed tab's detail uses): the panel does
+ * not grow a second markdown pipeline, and it does not hand-roll a sanitizer.
  */
-import { Component } from 'react';
 import {
   Button,
   StateDot,
   Tag,
-  MarkdownText,
   IconChevronDownOutlineRegular,
   fileSizeText,
 } from '@deepseek-ai/dsh-client-ui-primitives';
@@ -24,37 +20,7 @@ import {
 import { cn } from './styles.js';
 import { InstallAction, MarketIcon } from './market-card.jsx';
 import { detailFacts, marketKeyOf } from './market-model.js';
-
-/**
- * Catches a failed markdown render and shows the raw text instead.
- *
- * The boundary is deliberately tiny: its only job is the fallback the design asked for,
- * and its only child is the host renderer.
- */
-class MarkdownBoundary extends Component {
-  /**
-   * @param {object} props - `{fallback, children}`.
-   */
-  constructor(props) {
-    super(props);
-    this.state = { failed: false };
-  }
-
-  /**
-   * Switch to the fallback after a render error.
-   * @returns {{failed: boolean}} the next state.
-   */
-  static getDerivedStateFromError() {
-    return { failed: true };
-  }
-
-  /**
-   * @returns {import('react').ReactNode} the children, or the fallback once they failed.
-   */
-  render() {
-    return this.state.failed ? this.props.fallback : this.props.children;
-  }
-}
+import { MarkdownBlock } from './markdown.jsx';
 
 /**
  * A definition-list table of label/value rows, one line per fact.
@@ -126,11 +92,7 @@ export function MarketDetail({ detail, market, t, onBack, onRetry, onInstall }) 
             <h4 className={cn('marketSectionTitle')}>{t('market.detailOverview')}</h4>
             {overview === ''
               ? <p className={cn('marketScope')}>{t('market.detailNoOverview')}</p>
-              : (
-                <MarkdownBoundary fallback={<p className={cn('marketDetailDesc')}>{overview}</p>}>
-                  <MarkdownText text={overview} variant="body" />
-                </MarkdownBoundary>
-              )}
+              : <MarkdownBlock text={overview} fallbackClassName="marketDetailDesc" t={t} />}
           </section>
           <section className={cn('marketDetailSection')}>
             <h4 className={cn('marketSectionTitle')}>{t('market.detailFiles')}</h4>

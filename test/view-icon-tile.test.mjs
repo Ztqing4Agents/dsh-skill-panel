@@ -129,12 +129,13 @@ test('K68 传 `iconUrl` ⇒ 首帧探测图 + 字母，onLoad 后可见图；始
   assert.equal(visible.props.src, url, '与探测图同 src（所以只发一次请求）');
   assert.equal(visible.props.alt, '', '装饰性图片 alt 为空');
 
-  // 可点区域零新增：整行只有一个交互元素，瓦片不带任何可点/可聚焦手段
+  // 可点区域零新增：整行的交互元素仍是「标题按钮（整行可点层）+ 开关」这两个，瓦片不带任何
+  // 可点/可聚焦手段（U1 之前标题是 <span>，所以这里从 1 变 2 —— 手段没变，只是标题成了按钮）
   const html = render({ iconUrl: url });
   assert.equal(/<a\b/.test(html), false, '没有 <a>');
   assert.equal(/<button[^>]*role="switch"|<input[^>]*type="checkbox"|role="switch"/.test(html), true, '开关还在');
   const clickable = html.match(/<(?:button|a|input)\b/g) ?? [];
-  assert.equal(clickable.length, 1, `整行只有一个可交互元素（实测 ${clickable.length}：${clickable.join(',')}）`);
+  assert.equal(clickable.length, 2, `整行只有两个可交互元素：标题按钮 + 开关（实测 ${clickable.length}：${clickable.join(',')}）`);
   assert.equal(/tabindex=/i.test(html), false, '没有 tabindex（瓦片不可聚焦）');
   for (const handler of ['onclick', 'onmousedown', 'onpointerdown', 'onkeydown']) {
     assert.equal(new RegExp(`${handler}=`, 'i').test(html), false, `没有内联 ${handler}`);

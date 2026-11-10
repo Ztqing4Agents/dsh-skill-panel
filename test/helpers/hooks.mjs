@@ -6,9 +6,15 @@
  * gap: the component under test is the real one, only the reconciler is replaced, so a test
  * can render, call a handler, and re-render against the same slots.
  *
- * The superset the three component tests need, in one place:
+ * The superset the component tests need, in one place:
  *   - `useState` with a controllable slot, `render()` re-runs against it;
  *   - `useRef` with a stable object per slot, so a component can read `ref.current`;
+ *   - `useCallback` / `useMemo` without a dependency array: the harness re-renders by
+ *     calling the component again, so "same deps" is trivially true and the identity
+ *     question those hooks answer cannot change an outcome here;
+ *   - `useId` as a per-mount counter, so two renders of the same mount give the same id;
+ *   - `useSyncExternalStore` reading `getSnapshot()` once - the harness renders on demand,
+ *     so there is nothing to subscribe to;
  *   - `useEffect` as a no-op: effects are the one thing this harness cannot run, which is
  *     why every transition under test here lives in an event handler or a pure function.
  */
@@ -37,8 +43,18 @@ export function mountHooks(component, initialProps) {
     if (nextProps !== undefined) props = nextProps;
     let index = 0;
     let refIndex = 0;
+    let idIndex = 0;
     holder.current = {
       useEffect: () => {},
+      useLayoutEffect: () => {},
+      useCallback: (callback) => callback,
+      useMemo: (factory) => factory(),
+      useId: () => {
+        const at = idIndex;
+        idIndex += 1;
+        return `:skc-test-r${at}:`;
+      },
+      useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot(),
       useRef(initial) {
         const at = refIndex;
         refIndex += 1;

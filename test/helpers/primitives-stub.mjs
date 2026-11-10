@@ -279,3 +279,5 @@ export const IconChevronDownOutlineRegular = iconOf('chevron');
 export const IconWarningOutlineRegular = iconOf('warning');
 export const IconSearchOutlineRegular = iconOf('search');
 export const IconCloseOutlineRegular = iconOf('close');
+export const IconCopyOutlineRegular = iconOf('copy');
+export const IconCheckOutlineRegular = iconOf('check');

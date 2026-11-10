@@ -25,6 +25,9 @@ import { rowKey, TAB_INSTALLED } from './model.js';
  * @property {{code: string, message: string}|null} error  last list failure
  * @property {Map<string, {pending: boolean, reason: string|null}>} rows per-row write state
  * @property {{kind: string, code: string, message: string, seq: number}|null} notice transient notice
+ * @property {{key: string, status: 'loading'|'ready'|'error', data: object|null, code: string|null}|null} detail
+ *   the installed tab's detail view: one skill's key plus the text route's three states
+ * @property {number} detailScrollTop                list offset remembered when the detail opened
  * @property {object} market                        the market sub-state (see `initialMarket`)
  */
 
@@ -82,6 +85,10 @@ function initialState() {
     error: null,
     rows: new Map(),
     notice: null,
+    // The detail view is store state, not component state: opening it must not re-scan the
+    // list, leaving the tab must not lose the text, and coming back must not re-request it.
+    detail: null,
+    detailScrollTop: 0,
     market: initialMarket(),
   };
 }
@@ -249,6 +256,64 @@ export function createStore() {
      */
     fail: (key, reason) => {
       setRow(key, { pending: false, reason });
+    },
+
+    /* ----------------------------------------------------------------- detail */
+
+    /**
+     * Show one skill's detail view. The list is left exactly as it is: the facts come from
+     * the row the page still holds, and only the text is fetched.
+     * @param {object} row - the row that was opened.
+     * @returns {void}
+     */
+    openDetail: (row) => {
+      set({ detail: { key: rowKey(row), status: 'loading', data: null, code: null } });
+    },
+    /**
+     * Remember where the list was, read with the rows still on screen (the detail view
+     * replaces them one render later, and after that the offset is gone).
+     * @param {number} top - scroll offset in pixels.
+     * @returns {void}
+     */
+    rememberDetailScroll: (top) => {
+      set({ detailScrollTop: Number.isFinite(top) && top > 0 ? top : 0 });
+    },
+    /**
+     * The text is being (re)read for one skill.
+     * @param {string} key - identity key of the detail's row.
+     * @returns {void}
+     */
+    detailLoading: (key) => {
+      if (state.detail === null || state.detail.key !== key) return;
+      set({ detail: { ...state.detail, status: 'loading', data: null, code: null } });
+    },
+    /**
+     * The text route answered.
+     *
+     * The key is checked, not assumed: a slow answer for a detail the user already closed
+     * (or replaced by opening another row) must not land in the current one.
+     * @param {string} key - identity key the request was made for.
+     * @param {object|null} data - SkillContent.
+     * @returns {void}
+     */
+    detailReady: (key, data) => {
+      if (state.detail === null || state.detail.key !== key) return;
+      set({ detail: { ...state.detail, status: 'ready', data: data ?? null, code: null } });
+    },
+    /**
+     * The text route failed. The page keeps the facts and offers a retry.
+     * @param {string} key - identity key the request was made for.
+     * @param {{code?: string, message?: string}} error - failure code and note.
+     * @returns {void}
+     */
+    detailFailed: (key, error) => {
+      if (state.detail === null || state.detail.key !== key) return;
+      set({ detail: { ...state.detail, status: 'error', data: null, code: error?.code ?? null } });
+    },
+    /** Close the detail view; the page writes the remembered offset back. @returns {void} */
+    closeDetail: () => {
+      if (state.detail === null) return;
+      set({ detail: null });
     },
 
     /* ------------------------------------------------------------------ market */

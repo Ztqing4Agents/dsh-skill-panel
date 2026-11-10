@@ -239,3 +239,41 @@ test('台账按扫描到的目录名也能命中（声明名与目录名不同�
   assert.equal(row.name, 'b', '行名用 frontmatter 里的声明名');
   assert.equal(row.rule, 'R5', '台账用目录名命中，因此是 R5');
 });
+
+/* ------------------------------------------------------- K114 · version 不进判定 */
+
+test('K114 version 不进 classifySkill：加不加版本，分类结果一字不差', () => {
+  const withVersion = classifySkill({ ...quiet, version: '1.2.3' });
+  const withoutVersion = classifySkill({ ...quiet });
+  assert.deepEqual(withVersion, withoutVersion, '分类结果里没有 version 这一项');
+  assert.equal(Object.keys(withVersion).includes('version'), false, '输出形状也不因版本而改变');
+});
+
+test('K114 Row.version：扫描行的版本原样透出，registry 胜出的行恒 null', () => {
+  const catalog = mergeCatalog({
+    scanned: [scanned('mine', { version: '2.1.0' })],
+    registry: [registry('office', 250, { provider: 'runtime' })],
+    ledger: { entries: new Set() },
+    skillsRoot: '/skills',
+  });
+  const rows = catalog.groups.flatMap((group) => group.skills);
+  const mine = rows.find((row) => row.name === 'mine');
+  assert.equal(mine.version, '2.1.0', '磁盘扫描那条带着自己的版本');
+  const office = rows.find((row) => row.name === 'office');
+  assert.equal(office.partition, 'builtin', 'registry 胜出的那条归内置');
+  assert.equal(office.version, null, 'registry 胜出的行没有扫描事实，version 恒 null');
+});
+
+test('K114 有没有版本不改变裁决：同一夹具的 partition / rule 完全相同', () => {
+  const build = (version) => mergeCatalog({
+    scanned: [scanned('mine', { version, metaRelease: true })],
+    ledger: { entries: new Set() },
+    skillsRoot: '/skills',
+  }).groups.flatMap((group) => group.skills)[0];
+  const plain = build(null);
+  const tagged = build('3.0.0');
+  assert.equal(tagged.version, '3.0.0', '版本透出');
+  assert.equal(plain.version, null, '无版本是 null');
+  const decision = (row) => [row.partition, row.rule, row.confidence, row.writable, row.readonlyReason, row.path];
+  assert.deepEqual(decision(tagged), decision(plain), '判据（分区 / 规则 / 置信度 / 可写性）与版本无关');
+});
