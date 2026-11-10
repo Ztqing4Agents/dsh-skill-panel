@@ -320,10 +320,10 @@ const CSS = `
    install label grows ("installing" is the widest of the four) the block shrinks into an
    ellipsis instead of pushing the seat to a second line. */
 .skc_marketHead{ align-items: center; gap: 12px; min-width: 0; display: flex }
-/* the body: description, tags and figures are 4px apart. the description adds 4px below
-   itself (see .skc_marketDesc), so description -> tags measures 8px while tags -> figures
-   stays at 4px, and the card's own gap (8px) is what separates the head from this block. */
-.skc_marketBody{ flex-direction: column; gap: 4px; min-width: 0; display: flex }
+/* one rhythm inside the card: this gap is 8px, the same value the card itself uses between
+   the head and this block, so all three gaps (head -> description -> tags -> figures) are
+   8px and each has exactly one source. */
+.skc_marketBody{ flex-direction: column; gap: 8px; min-width: 0; display: flex }
 .skc_marketMain{ flex-direction: column; flex: 1; gap: 2px; min-width: 0; display: flex }
 /* the title row is as wide as its content, not as wide as the block: align-self keeps it
    from being stretched by the column parent, so the source mark sits one 8px gap after the
@@ -352,17 +352,15 @@ const CSS = `
     var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 2px;
 }
-/* the top margin is reset on purpose: this is a <p>, and the UA's 1em (13px) margin is the
-   whole reason the block used to read as loose. the space above comes from the card gap (8px)
-   alone; the 4px bottom margin is deliberate and is the second half of description -> tags
-   (body gap 4px + this 4px = 8px). it sits here rather than on the tag row so that a card
-   without a summary still reads head -> tags as the plain 8px. */
-/* 13/20 (leading 1.54) is the loose end of the card's type scale on purpose: the three
-   blocks sit 8 / 8 / 4 apart, so the breathing room lives inside the paragraph and the block
-   itself still reads as one piece. 20 is also already on the scale (the title is 14/20), so
-   no fourth line-height joins the card; three lines measure 60px. */
+/* why 13/20: the leading is the loose end of the card's type scale on purpose - the three
+   gaps are 8px, so the breathing room lives inside the paragraph and the block still reads as
+   one piece. 20 is already on the scale (the title is 14/20), so no fourth line-height joins
+   the card; three lines measure 60px.
+   why the zero margin cannot be dropped: this is a <p> and the UA's 1em adds 13px above
+   and below, which reads as a loose block and costs 26px of card height. all spacing here
+   comes from the gaps (8px above and below). */
 .skc_marketDesc{
-  margin: 0 0 4px; color: var(--dsw-alias-label-tertiary); -webkit-line-clamp: 3;
+  margin: 0; color: var(--dsw-alias-label-tertiary); -webkit-line-clamp: 3;
   -webkit-box-orient: vertical; font-size: 13px; line-height: 20px;
   display: -webkit-box; overflow: hidden;
 }
@@ -399,9 +397,9 @@ const CSS = `
   font-size: 11px; line-height: 16px; white-space: nowrap;
   text-overflow: ellipsis; overflow: hidden;
 }
-/* the one action seat: it sits in the head row (U5), so its vertical position comes from
-   the head's align-items; a flex-end self-alignment would push the button to the row's
-   bottom and grow the row. z-index:1 floats it above the card-wide click layer. */
+/* the one action seat: it sits in the head row, so its vertical position comes from the
+   head's align-items; a flex-end self-alignment would push the button to the row's bottom and
+   grow the row. z-index:1 floats it above the card-wide click layer (do not drop it). */
 .skc_marketCardEnd{
   z-index: 1; flex: none; align-items: center; gap: 8px;
   display: inline-flex; position: relative;

@@ -145,9 +145,10 @@ test('K40 市场刻度逐条落地：网格 280/12、卡片竖排 14、cardOpen 
   assert.equal(/z-index/.test(head), false, '头部不带 z-index（只有动作位浮起）');
   const body = ruleOf('.skc_marketBody');
   assert.match(body, /flex-direction: column/, '正文竖排');
-  // U15: the body rhythm tightened from 6px to 4px (描述 → 标签 → 三段). It is *not* the
-  // card's 12px gap - keeping them separate is the point recorded in market.md 附录 F ⑪.
-  assert.match(body, /gap: 4px(?!\d)/, '正文三块共用 4px 节奏（新刻度 ⑪，U15 由 6 收到 4）');
+  // U18 定稿: one rhythm inside the card - the body gap is the same 8px the card uses between
+  // head and body, so description -> tags and tags -> figures each have a single source
+  // (market.md 附录 F ⑪). U15 had it at 6, U16 at 4 + a 4px description margin; that pair is gone.
+  assert.match(body, /gap: 8px(?!\d)/, '正文三块共用 8px 节奏（U18 定稿，与卡片 `gap` 同值）');
   assert.match(ruleOf('.skc_marketMeta'), /white-space: nowrap/, '作者行单行（换行会让头部高度抖动）');
   assert.match(ruleOf('.skc_marketMeta'), /text-overflow: ellipsis/, '作者行超出省略');
 
@@ -168,15 +169,19 @@ test('K40 市场刻度逐条落地：网格 280/12、卡片竖排 14、cardOpen 
   // real-machine check measures, so a "just check that line-clamp exists" assertion would let a
   // silent 2-line regression through.
   const desc = ruleOf('.skc_marketDesc');
-  // Both halves of the margin matter, for two different reasons:
-  //   the TOP 0 - U15 root cause: this is a <p> and it never reset the UA's `margin: 1em`, which
-  //     at 13px silently added 13px above and below (the tags row and the figures row both carry
-  //     their own `margin: 0`; only this one was missing);
-  //   the BOTTOM 4px - U16's ②: 描述 → 标签 = 正文 gap 4px + this 4px = 8px, and it lives here
-  //     rather than on the tag row so a card with no summary still reads ① = 8px.
-  // A bare `/margin: 0/` would accept `margin: 0 0 4px` and let that 4px be deleted silently
-  // (② quietly drops back to 4px), so the whole shorthand is pinned.
-  assert.match(desc, /margin: 0 0 4px(?!\d)/, '描述 margin: 0 0 4px —— 上边距归零（UA `1em` 会多给 13px）+ 下边距 4px 是 ② 的一半（删了描述→标签退回 4）');
+  // The margin must be exactly zero, on every side, and it must be declared:
+  //   - this is a <p>, so omitting the declaration falls back to the UA's `margin: 1em`, which at
+  //     13px silently adds 13px above and below (that was U15; the tags row and the figures row
+  //     both carry their own `margin: 0`, only this one was missing);
+  //   - U16 tried a 4px bottom margin as "half of ②"; U18 撤掉它 - all three gaps are gaps now,
+  //     so any non-zero margin here is a regression, whichever side it is on.
+  // Exact match rather than a pattern: `/margin: 0/` (and `/margin: 0 0 4px/`) are substring
+  // tests that a longer shorthand slips through, which is exactly how the 4px survived review.
+  const descMargin = (ruleOf('.skc_marketDesc').match(/margin:\s*[^;]*/) ?? ['margin:<missing>'])[0]
+    .replace(/\s+/g, ' ')
+    .trim();
+  assert.equal(descMargin, 'margin: 0', '描述 margin 必须恰好是 0（上下都为 0）：UA `1em` 会多给 13px，间距只由 `gap` 给');
+  assert.equal(/margin-(top|right|bottom|left)\s*:/.test(desc), false, '不用 margin-* 长写绕过（间距只由 gap 给，别把 4px 藏成 margin-bottom）');
   assert.match(desc, /-webkit-line-clamp: 3(?!\d)/, '描述三行（U14 取值变更；不算新刻度）');
   // U17: 13/18 (leading 1.38) read tight; the card's type scale is {16, 18, 20} and 20 is
   // already on it (the title is 14/20), so the body paragraph moved to 13/20 - three lines
