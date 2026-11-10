@@ -76,7 +76,7 @@ market = {
   keyword / input,                                // 已提交关键词 / 输入框现值（防抖在组件里，store 不持定时器）
   items / pages,                                  // 已合并去重后的列表、已加载页数（返回详情后要恢复）
   cursors / exhausted,                            // 每源自己的不透明游标与「已耗尽」
-  page: {status, code, message},                  // idle | loading | more | done | error（尾部）
+  page: {status, code, message},                  // idle | loading | more | done | error（尾部）；loading 同时表示「重取第一页」与「追加下一页」，用 pages 区分
   listStatus: 'idle'|'loading'|'ready'|'error',   // 整页态
   detail: null | {id, item, status, data, code},  // 内嵌详情三态
   installed / installedReady,                     // 安装台账 × item.id；只读一次
@@ -96,9 +96,10 @@ market = {
 | 首次进入市场页签 | `boot=loading`，并发发 `bootstrap` + `installed` + 第一页（默认 scope「所有来源」） | 骨架（分类条也是占位） |
 | `bootstrap` 成功 | `boot=ready` | 填 `sources/categories`；`categoriesOk=false` 时分类行换成一句说明 |
 | `bootstrap` 失败 | `boot=ready`（**不是 error**） | `sources` 回落内置三 scope，列表照打，分类行换成一句说明 |
-| 关键词变化 | 250ms 防抖后提交；**IME 组字期间先攒着，组字结束才提交**（否则中文用户会被半成品过滤） | 请求中**保留旧 items**（`aria-busy`），不换骨架；工具栏不动 |
+| 关键词变化 | 250ms 防抖后提交；**IME 组字期间先攒着，组字结束才提交**（否则中文用户会被半成品过滤） | 请求中**保留旧 items**（`aria-busy`），不换骨架；工具栏不动；尾部也不插占位卡（`pages` 已归零，那是首屏重取不是追加） |
+| 页头「刷新」（市场页签） | `marketReload`：清 `pages/cursors/exhausted`、关详情；**`items` 与 `icons`/`iconsTried`/`names` 都保留** | 重取期间旧列表直出（`aria-busy`），不换骨架、不滚回顶部、头像不回退成字母；`pages=0` 让尾部也不插占位卡 |
 | 回车（非组字）/ 点 × / 清空输入 | 立刻提交，不经防抖（× 与回车都取消在飞的防抖） | × 在**框内**（`.skc_marketSearchField` 里绝对定位），同时清 `input` 与 `keyword` 并把焦点送回输入框；不动 scope 与分类 |
-| 切 scope / 分类 / 排序（或关键词） | 清 `items/pages/cursors/exhausted/detail`，滚回顶部；`bootScope !== filters.source` 时补一次 `bootstrap?source=`（带 token 守卫，旧响应不覆盖新数字） | 值没变时不重拉；切 scope 只让 chips 进骨架 |
+| 切 scope / 分类 / 排序 | 清 `items/pages/cursors/exhausted/detail`，滚回顶部；`bootScope !== filters.source` 时补一次 `bootstrap?source=`（带 token 守卫，旧响应不覆盖新数字） | 值没变时不重拉；切 scope 只让 chips 进骨架 |
 | 一页返回 | `listStatus=ready`，`page` 进 `more` 或 `done` | 列表 = 已有项 + 这一页按序拼接（`mergeBatches` 仍接受多源数组，但市场一次只看一个源，只喂一项）；不跨源重排 |
 | 请求失败 | `listStatus=error` | 整页错误态 + 重试；**不出空态**（空 ≠ 失败）。单源没有「部分源失败」这种中间态 |
 | 追加返回 | `page` 进 `more` 或 `done` | 当前源 `cursor !== null` 才追加；`items` 追加去重，不重排已有项 |
@@ -120,7 +121,7 @@ SkillsPage (page.jsx：页头 + 两个页签)
 └─ tabPanel(market) → MarketPanel (market-panel.jsx)
     ├─ MarketFilters (market-filters.jsx)：Input(250ms 防抖，× 在框内) / Menu(来源 = 所有来源｜SkillHub｜ClawHub) / Menu(排序) —— **工具栏恒三个子元素** / Pill(分类 chips + 数量)
     ├─ 首屏骨架｜整页错误态（当前源失败）｜空态
-    ├─ ul.skc_marketGrid → MarketCard (market-card.jsx) × N（**头部 = 48 头像 + 标题行（标题 + 来源图）/ 作者行 + 安装位**；正文 = 描述 2 行 / 标签 chips / 三段 `评分·下载·收藏`；动作位只有安装；尾部 3 张骨架；头像位是 MarketIcon → tileElement）
+    ├─ ul.skc_marketGrid → MarketCard (market-card.jsx) × N（**头部 = 48 头像 + 标题行（标题 + 来源图）/ 作者行 + 安装位**；正文 = 描述 2 行 / 标签 chips / 三段 `评分·下载·收藏`；动作位只有安装；**追加下一页时**尾部 3 张骨架；头像位是 MarketIcon → tileElement）
     ├─ ul 之后：加载更多一行（`skc_marketLoadMore` = 圆点 + `market.loadingMore`，**视觉件 `aria-hidden`**，只在「已有卡片 + 正在追加」时出现；播报仍由上面那条 sr-only `role="status"` 负责）
     ├─ MarketDetail (market-detail.jsx)：面包屑 + 头 + 事实表 + 概览 + 文件
     └─ MarketConfirm (market-confirm.jsx)：Modal（width:min(480px,100vw - 32px)）
@@ -137,7 +138,7 @@ icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安�
 5. **一次只问一个 scope**：来源菜单是 `所有来源`（默认）/`SkillHub`/`ClawHub` 三项——`all` 上游就是一次不带 `source` 的请求，所以仍不存在「两源同屏」「部分源失败提示条」，当前 scope 失败即整页错误态（可重试）。分类行三个 scope 都渲染（同一张 12 类表，计数按 scope 各算），menu 选项与计数来自 `bootScope` 那一份；`all` 下不判「这个来源暂时没有技能」。
 6. **分类 chip 带数量**：`全部` 用 `bootstrap.total`，各分类用 `categories[].count`；`count` 为 `null` 时数字位整段不渲染（不写 0、不写破折号），`countsOk:false` 时所有数字位都不出现。格式是 `Intl.NumberFormat(undefined, {notation:'compact'})`（运行时默认语言，`try/catch` 兜底成原数字），样式见 §8.5。
 7. **头像只有两态**（卡片、详情头、确认弹窗共用一个 `MarketIcon`）：**瓦片任何时候都不空**——URL 有值但还没 `onload` 时画字母 + 一张 `display:none` + `loading="eager"` 的探测图（同 `src`/同 `referrerPolicy`），图片只在 `onload` 之后才换成可见的 `<img class="skc_marketIconImg">`；探测图与可见图同一个 URL，浏览器只发一次请求（实测 `display:none` 的 eager 图会加载并触发 `onload`，`loading="lazy"` 的不会）。取值顺序 **`item.iconUrl` → `market.icons[marketKeyOf(item)]` → `null`**（`iconUrlOf()`，纯函数），拿到非空字符串就画图（`<img>` + `skc_marketIconImg`、`alt=""`、`loading="lazy"`、`referrerPolicy="no-referrer"`），否则画首字母；**图片 `onError` 也回落首字母**，任何情况下都不留空白方块。ClawHub 的图标是**后到的**：列表先给 `iconUrl:null`，页面渲染完成后由 `market/icons` 批量补齐，所以同一张卡会先字母、后换图。
-8. **图标补齐不阻塞渲染**：`market/list` 回来后先画卡片，再由面板 effect 把「ClawHub + 无图标 + 本会话没问过」的条目打包（≤24）调 `market/icons`；**同一 id 只问一次**（`iconsTried` 同时记正负结果），请求失败静默保持字母；切来源 / 搜索 / 刷新**不清**已拿到的图标，只有 `marketReload()` 清。图片是 `.skc_cardIcon` 的 flex 子项、只填满内容盒，所以宿主那条 `.5px` 描边始终压在图片之上；头像盒既有声明（48×48 / `border .5px` / `radius-lg` / `background-clip: padding-box` / 粉彩底）一字不改。
+8. **图标补齐不阻塞渲染**：`market/list` 回来后先画卡片，再由面板 effect 把「ClawHub + 无图标 + 本会话没问过」的条目打包（≤24）调 `market/icons`；**同一 id 只问一次**（`iconsTried` 同时记正负结果），请求失败静默保持字母；切来源 / 搜索 / 页头刷新都**不清**已拿到的图标（缓存按身份键，重问同一个身份不会得到不同答案；清掉只会让卡片先回退成字母再换图，还会多打一轮 `market/icons`）。图片是 `.skc_cardIcon` 的 flex 子项、只填满内容盒，所以宿主那条 `.5px` 描边始终压在图片之上；头像盒既有声明（48×48 / `border .5px` / `radius-lg` / `background-clip: padding-box` / 粉彩底）一字不改。
 
 ### 3.9.3 store action（`src/client/state.js`）
 
@@ -149,7 +150,7 @@ icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安�
 | `marketSetInput(text)` | string | 只改 `input` |
 | `marketCommitKeyword(text)` | string | `keyword=input=text`，清分页；**保留 items** |
 | `marketSetFilter({source?,category?,sort?})` | 部分 filters | 合并 + 清 items/分页 + 关详情；值没变就什么都不做 |
-| `marketReload()` | —— | 页头「刷新」在市场页签的行为：清已加载页，由面板 effect 重拉第一页 |
+| `marketReload()` | —— | 页头「刷新」在市场页签的行为：清已加载页，由面板 effect 重拉第一页；**只清分页与详情**（`items` 与图标/标题缓存保留，`clearedPaging` 按「有 items 就 ready」给出 `listStatus`） |
 | `marketListLoading()` / `marketListFailed({code,message})` | —— / 错误 | 整页态 |
 | `marketPageStart()` | —— | `page.status='loading'`（追加用，不清 items） |
 | `marketPageAppended({pages,merged})` | `pages:[{sourceId,page,items}]`、合并结果 | 写该源 cursor/exhausted、`items=merged`、`pages+1`、尾部进 `more` 或 `done` |

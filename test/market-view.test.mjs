@@ -3,7 +3,10 @@
  *
  * Contract: docs/contracts/acceptance.md 附录 D.1 (what L3 can and cannot prove),
  * docs/contracts/client.md §3.9 (market components and state machine),
- * docs/contracts/market.md 附录 F (market tick classes); case ids K38, K39, K47–K49, K52.
+ * docs/contracts/market.md 附录 F (market tick classes); case ids K38, K39, K47–K49, K52,
+ * K54–K56, K79, K83, K84, K100–K104 (K101–K104 pin the U13 refresh split: a page-one
+ * re-fetch keeps the list and draws no tail, an append still draws its three placeholders
+ * and the "loading more" row).
  *
  * The primitives are the documented stub (`test/helpers/primitives-stub.mjs`), so
  * `role="dialog"` here is evidence of prop wiring, not of the host painting. Geometry,
@@ -107,16 +110,34 @@ const API_STUB = {
 };
 
 /**
+ * Render the page for one store, as it stands.
+ * @param {object} store - a store (or a lookalike) to render.
+ * @returns {string} the markup.
+ */
+function renderStore(store) {
+  return renderToStaticMarkup(createElement(page.SkillsPage, { store, api: API_STUB, t }));
+}
+
+/**
+ * A store parked on the market tab, ready to be seeded.
+ * @param {Function} [seed] - mutates the store before it is returned.
+ * @returns {object} the store.
+ */
+function marketStore(seed) {
+  const store = createStore();
+  store.actions.ready(LIST_PAYLOAD);
+  store.actions.setTab('market');
+  if (typeof seed === 'function') seed(store);
+  return store;
+}
+
+/**
  * Render the page on the market tab with a seeded store.
  * @param {Function} [seed] - mutates the store before rendering.
  * @returns {string} the markup.
  */
 function renderMarket(seed) {
-  const store = createStore();
-  store.actions.ready(LIST_PAYLOAD);
-  store.actions.setTab('market');
-  if (typeof seed === 'function') seed(store);
-  return renderToStaticMarkup(createElement(page.SkillsPage, { store, api: API_STUB, t }));
+  return renderStore(marketStore(seed));
 }
 
 /**
@@ -1264,4 +1285,140 @@ test('K100 无障碍只播报一次：视觉行 aria-hidden，sr-only role="stat
     'sr-only 播报在列表之前（加载一开始就能被听到）',
   );
   assert.match(row, /正在加载更多/, '视觉行仍给人看得见的那句话');
+});
+
+// ---------------------------------------------------------------------------
+// U13 — "refresh jitters". Both `marketReload` (header refresh) and a keyword
+// commit keep `items`, so `listStatus` no longer falls to `idle`: the grid on
+// screen is the loading placeholder now. `page.status === 'loading'` therefore
+// means two different things, and only an append (`pages > 0`) may grow the
+// tail. The four cases below pin that split from the markup side: which of the
+// six screens the panel picks, how many placeholder cards it draws, and how
+// many live regions it leaves behind.
+// ---------------------------------------------------------------------------
+
+/** How many placeholder cards (whole-screen skeleton and tail alike) the markup carries. */
+const placeholderCards = (html) => html.split('skc_marketSkeletonAction').length - 1;
+
+/** The whole-screen skeleton's own `role="status"` grid; the tail has no such `<ul>`. */
+const hasSkeletonGrid = (html) => /<ul class="[^"]*skc_marketGrid"[^>]*role="status"/.test(html);
+
+test('K101 页头刷新重取期间：旧卡片直出，不换整页骨架、也不插尾部占位卡', () => {
+  const count = (html, needle) => html.split(needle).length - 1;
+  const store = marketStore((it) => {
+    it.actions.marketPageAppended({
+      pages: [{ sourceId: 'all', page: { items: [item()], next: 'c2' } }],
+      merged: [item()],
+    });
+    // What the header button does, in order: `marketReload` (page.jsx) then the panel's
+    // effect notices `pages === 0` and calls `marketListLoading` before the request.
+    it.actions.marketReload();
+    it.actions.marketListLoading();
+  });
+  const html = renderStore(store);
+
+  // The store side of the same moment: the list is `ready` (so the panel never picks the
+  // skeleton) while the page-one request is in flight.
+  const market = store.getSnapshot().market;
+  assert.equal(market.items.length, 1, '刷新后列表还在');
+  assert.equal(market.listStatus, 'loading', 'listStatus 是 loading（整页骨架的判据是「loading 且列表为空」）');
+  assert.equal(market.page.status, 'loading', '第一页请求确实在飞（否则这条用例什么都没测）');
+  assert.equal(market.pages, 0, 'pages 归零：这是重取第一页，不是追加');
+
+  // The markup: real cards, and nothing that would make the document grow.
+  assert.equal(count(html, 'data-skc-market-id'), 1, '真卡片留在屏幕上');
+  assert.equal(placeholderCards(html), 0, '一张占位卡都没有（既不是整页 6 张，也不是尾部 3 张）');
+  assert.equal(hasSkeletonGrid(html), false, '没有换成整页骨架（骨架是带 role=status 的那个 ul）');
+  assert.equal(count(html, 'skc_marketLoadMore'), 0, '没有「正在加载更多」这一行（列表高度不变）');
+  assert.equal(count(html, 'marketMore'), 0, '也没有到底/重试页脚');
+  // The grid is the busy one now: the old cards are still a loading placeholder.
+  assert.match(html, /<ul class="[^"]*skc_marketGrid"[^>]*aria-busy="true"/, '网格标了 aria-busy（读屏知道它正在等新数据）');
+  assert.match(html, /class="[^"]*skc_marketSection"[^>]*aria-busy="true"/, '整块市场区也是 busy');
+  assert.equal(count(html, '正在读取技能市场'), 1, '播报说「正在读取」（不是「正在加载更多」）');
+});
+
+test('K102 追加下一页（pages > 0）期间：尾部 3 张占位卡与「加载更多」行照旧出现（U10 不回退）', () => {
+  const count = (html, needle) => html.split(needle).length - 1;
+  const store = marketStore((it) => {
+    it.actions.marketPageAppended({
+      pages: [{ sourceId: 'all', page: { items: [item()], next: 'c2' } }],
+      merged: [item()],
+    });
+    it.actions.marketPageStart();
+  });
+  const html = renderStore(store);
+  const market = store.getSnapshot().market;
+  assert.equal(market.pages, 1, '已经加载过一页');
+  assert.equal(market.page.status, 'loading', '追加请求在飞');
+
+  assert.equal(count(html, 'data-skc-market-id'), 1, '真卡片还在一张（占位卡复用 skc_marketCard 类，不能按类数真卡）');
+  assert.equal(placeholderCards(html), 3, '尾部三张占位卡（追加的既有行为）');
+  assert.equal(hasSkeletonGrid(html), false, '不是整页骨架：占位卡挂在真列表里');
+
+  // Order: real card, then the three tail cards, then the row - all inside/after the grid.
+  const gridAt = html.indexOf('class="skc_marketGrid"');
+  const rowAt = html.indexOf('class="skc_marketLoadMore"');
+  const gridEnd = html.indexOf('</ul>', gridAt);
+  assert.ok(gridAt > 0 && rowAt > gridEnd, '「加载更多」行在列表底部');
+  assert.ok(html.indexOf('skc_marketSkeletonAction') < gridEnd, '占位卡在 ul 里（跟着最后一行）');
+  assert.equal(count(html, 'skc_marketLoadMore'), 1, '只有一行加载提示');
+  assert.equal(count(html, '正在加载更多'), 2, '视觉行 + sr-only 播报各一份（视觉行 aria-hidden）');
+});
+
+test('K103 重取与追加互斥：任何一刻 role="status" 最多一条', () => {
+  const count = (html, needle) => html.split(needle).length - 1;
+  const statuses = (html) => count(html, 'role="status"');
+  const onePage = (it) => it.actions.marketPageAppended({
+    pages: [{ sourceId: 'all', page: { items: [item()], next: 'c2' } }],
+    merged: [item()],
+  });
+
+  // ① 首屏：没有列表，骨架自己播报，面板不再叠一条 sr-only。
+  const first = renderMarket((it) => { it.actions.marketListLoading(); });
+  assert.equal(placeholderCards(first), 6, '首屏六张骨架（列表为空时才走这条）');
+  assert.equal(statuses(first), 1, '首屏只有骨架那一条');
+  assert.equal(count(first, 'skc_progressAnnouncement'), 0, '叠加的 sr-only 播报不出现（改前这里是两条）');
+
+  // ② 重取第一页（刷新/搜索）：列表还在 ⇒ 由 sr-only 播报「正在读取」，骨架不说话。
+  const reload = renderMarket((it) => { onePage(it); it.actions.marketReload(); it.actions.marketListLoading(); });
+  assert.equal(statuses(reload), 1, '重取时恰好一条');
+  assert.equal(count(reload, 'skc_progressAnnouncement'), 1, '就是面板那条 sr-only 播报器');
+  assert.equal(count(reload, '正在加载更多'), 0, '重取不说「加载更多」');
+
+  // ③ 追加下一页：同样只有一条，说的是「正在加载更多」。
+  const append = renderMarket((it) => { onePage(it); it.actions.marketPageStart(); });
+  assert.equal(statuses(append), 1, '追加时恰好一条');
+  assert.equal(count(append, '正在加载更多'), 2, 'sr-only + 视觉行（视觉行 aria-hidden，不算第二个播报口）');
+  assert.equal(append.indexOf('role="status"') < append.indexOf('skc_marketLoadMore'), true, '播报器在视觉行之前');
+
+  // ④ 空闲：一条都没有。
+  const idle = renderMarket((it) => { onePage(it); });
+  assert.equal(statuses(idle), 0, '空闲时没有播报器');
+});
+
+test('K104 搜索重取（关键词落定）期间同样只留旧列表：不插尾部占位卡、不长出一行加载提示', () => {
+  const count = (html, needle) => html.split(needle).length - 1;
+  const twoItems = [item(), item({ id: 'skillhub:ake:second' })];
+  const store = marketStore((it) => {
+    it.actions.marketPageAppended({
+      pages: [{ sourceId: 'all', page: { items: twoItems, next: 'c2' } }],
+      merged: twoItems,
+    });
+    // 搜索：落定关键词（清分页、保留列表），面板 effect 随即重取第一页。
+    it.actions.marketCommitKeyword('ui');
+    it.actions.marketListLoading();
+  });
+  const html = renderStore(store);
+  const market = store.getSnapshot().market;
+  assert.equal(market.keyword, 'ui', '关键词落定（这条用例测的是搜索那条路径）');
+  assert.equal(market.items.length, 2, '搜索期间旧结果留着（不闪骨架）');
+  assert.equal(market.pages, 0, '搜索把分页归零 ⇒ 尾部不该出现');
+  assert.equal(market.page.status, 'loading', '第一页请求在飞');
+
+  assert.equal(count(html, 'data-skc-market-id'), 2, '两张真卡都在');
+  assert.equal(placeholderCards(html), 0, '没有尾部三张占位卡（改前这里让文档长高一行）');
+  assert.equal(count(html, 'skc_marketLoadMore'), 0, '也没有「正在加载更多」行');
+  assert.equal(hasSkeletonGrid(html), false, '不换整页骨架');
+  assert.equal(count(html, '正在读取技能市场'), 1, '只有一条「正在读取」播报');
+  assert.equal(count(html, '正在加载更多'), 0, '不混用追加的文案');
 });

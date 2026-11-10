@@ -350,22 +350,17 @@ export function createStore() {
       });
     },
     /**
-     * The header's refresh button was pressed on the market tab: forget the loaded
-     * pages so the list starts over, exactly as a filter change would.
+     * The header's refresh button was pressed on the market tab: forget the loaded pages so
+     * the list starts over - nothing else. The cards stay on screen until the answer arrives
+     * (`clearedPaging` keeps `listStatus` at `ready` while `items` is non-empty): swapping a
+     * full grid for the six-card skeleton and back moved the document by ~1k px and threw the
+     * scroll to the top. The icon and title caches survive for the same reason a filter change
+     * keeps them - they are keyed by identity, a re-asked identity cannot answer differently,
+     * and dropping them repainted 8 of 24 avatars as letters until the batch came back.
      * @returns {void}
      */
     marketReload: () => {
-      setMarket({
-        items: [],
-        detail: null,
-        // A reload is "start over": the icons and titles fetched so far are dropped with
-        // the list, so the new entries get a fresh chance. Filter and keyword changes keep
-        // them.
-        icons: {},
-        iconsTried: {},
-        names: {},
-        ...clearedPaging({ ...state.market, items: [] }),
-      });
+      setMarket({ detail: null, ...clearedPaging(state.market) });
     },
     /**
      * Cache icons the list route already answered inline (SkillHub puts `iconUrl` on the

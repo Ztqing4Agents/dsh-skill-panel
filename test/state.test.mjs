@@ -219,19 +219,32 @@ test('K45 marketCommitKeyword：关键词落定、输入框同步、分页重置
   assert.equal(market.items.length, 1, '旧结果暂留');
 });
 
-test('K45 marketReload：清空列表与详情、回到待拉状态（页头刷新按钮走这条路）', () => {
+test('K45 marketReload：只清分页与详情、列表留在屏幕上（页头刷新按钮走这条路）', () => {
   const store = createStore();
   store.actions.marketPageAppended({
     pages: [{ sourceId: 'skillhub', page: { items: [marketItem('skillhub:ake:a')], next: 'c2' } }],
     merged: [marketItem('skillhub:ake:a')],
   });
   store.actions.marketDetailOpen(marketItem('skillhub:ake:a'));
+  const before = store.getSnapshot().market;
   store.actions.marketReload();
   const market = store.getSnapshot().market;
-  assert.deepEqual(market.items, [], '卡片清空');
+  // U13：卡片不再是「消失—骨架—重来」，重取期间旧列表直出（整页高度与滚动位置不动）。
+  assert.deepEqual(market.items, [marketItem('skillhub:ake:a')], '卡片留着（重取期间不换骨架）');
+  assert.equal(market.items, before.items, '同一个数组引用：卡片不重挂，滚动位置不被甩回顶部');
+  assert.equal(market.listStatus, 'ready', '列表仍是 ready（有 items 就 ready，面板不切骨架）');
   assert.equal(market.detail, null, '详情关闭');
+  // 「从头再来」的语义仍只落在分页与尾部上——这三条不许被放宽掉。
   assert.equal(market.pages, 0, '分页重置');
-  assert.equal(market.listStatus, 'idle', '回到待拉状态（由面板的 effect 重新拉第一页）');
+  assert.deepEqual(market.cursors, {}, '游标清空（下一次是第一页）');
+  assert.deepEqual(market.exhausted, {}, '耗尽标记清空');
+  assert.equal(market.page.status, 'idle', '尾部回 idle（重取第一页不是「追加」）');
+
+  // 空列表上刷新（首屏失败后重试那条路）：没有 items 可留 ⇒ 仍回 idle，由面板 effect 重拉。
+  store.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 't' });
+  store.actions.marketReload();
+  assert.equal(store.getSnapshot().market.listStatus, 'idle', '空列表刷新回 idle（effect 据此重拉第一页）');
+  assert.equal(store.getSnapshot().market.pages, 0, '分页仍是 0');
 });
 
 test('K45 marketListFailed 与 marketPageFailed 语义不同：前者清列表，后者保留已加载卡片', () => {
@@ -406,7 +419,7 @@ test('K45 reload / boot 兜底都不动收藏，也不把 favoritesOk 置 true',
   const favorites = store.getSnapshot().market.favorites;
 
   store.actions.marketReload();
-  assert.equal(store.getSnapshot().market.favorites, favorites, 'reload 清列表与图标缓存，但不碰收藏（收藏不是缓存）');
+  assert.equal(store.getSnapshot().market.favorites, favorites, 'reload 只清分页与详情，但不碰收藏（收藏不是缓存）');
   assert.equal(store.getSnapshot().market.favoritesOk, false, '也不顺手把可用性改成 true');
 
   store.actions.marketBootFallback([{ id: 'skillhub', labelKey: 'market.source.skillhub', hasCategories: true, packageKind: 'files' }]);

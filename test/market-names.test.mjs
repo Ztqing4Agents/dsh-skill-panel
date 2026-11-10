@@ -140,16 +140,17 @@ test('K72 marketNamesReady：批次回来的标题可覆盖种子，null 不拖�
   assert.equal(store.getSnapshot().market, before, '空批次不改状态对象');
 });
 
-test('K72 marketReload 把标题与图标一起清空（会话内缓存）', () => {
+test('K72 marketReload 保留标题与图标缓存（按身份键的答案，只清分页）', () => {
   const store = createStore();
   store.actions.marketNamesSeeded({ [KEY]: '播种名' });
   store.actions.marketIconsReady({ [KEY]: 'https://cdn.example.com/x.png' });
-  assert.equal(store.getSnapshot().market.names[KEY], '播种名', '清空前有标题');
+  assert.equal(store.getSnapshot().market.names[KEY], '播种名', '刷新前有标题');
   store.actions.marketReload();
   const after = store.getSnapshot().market;
-  assert.deepEqual(after.names, {}, '刷新后标题清空');
-  assert.deepEqual(after.icons, {}, '图标也清空');
-  assert.deepEqual(after.iconsTried, {}, 'tried 也清空');
-  assert.equal(rowTitleOf(row(), after), 'dev-expert-pro', '没有缓存时行回落 kebab 名');
+  // U13：页头刷新不再让标题与头像退回原样（那会让卡片一行字/一个头像跳一次）。
+  assert.deepEqual(after.names, { [KEY]: '播种名' }, '刷新后标题留着');
+  assert.deepEqual(after.icons, { [KEY]: 'https://cdn.example.com/x.png' }, '图标也留着');
+  assert.equal(after.pages, 0, '只有分页被清空');
+  assert.equal(rowTitleOf(row(), after), '播种名', '缓存还在 ⇒ 行标题不回落 kebab 名');
   assert.equal(marketKeyOf(UPSTREAM), KEY, '键的形状：source:owner:slug');
 });

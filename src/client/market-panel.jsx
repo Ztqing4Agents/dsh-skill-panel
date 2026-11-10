@@ -292,6 +292,12 @@ export function MarketPanel({ store, api, t }) {
       ?? (market.detail !== null && market.detail.id === confirmId ? market.detail.item : null);
   const emptyKind = emptyKindOf(market);
   const loadingFirst = market.listStatus === 'loading' && market.items.length === 0;
+  // `page.status === 'loading'` covers two requests: page one (refresh, keyword) and the next
+  // page (scroll). `pages` separates them - a page-one request starts at 0 - so only an append
+  // draws the three placeholder cards and the "loading more" row. A page-one re-fetch over a
+  // list still on screen used to grow the tail by a row (+206px) and snap back.
+  const loadingTail = market.page.status === 'loading' && market.pages > 0 && market.items.length > 0;
+
   const emptyCopy = emptyKind === 'search'
     ? {
       title: t('market.emptySearchTitle', { keyword: market.keyword }),
@@ -347,8 +353,13 @@ export function MarketPanel({ store, api, t }) {
               </Button>
             </div>
           ) : null}
-          {market.page.status === 'loading' ? (
-            <span className={cn('progressAnnouncement')} role="status">{t('market.loadingMore')}</span>
+          {/* One live region for both: "more" while a next page is in flight, plain
+              "loading" while page one replaces a visible list (the skeleton speaks for
+              itself when there is no list). Exactly one at a time. */}
+          {market.page.status === 'loading' && !loadingFirst ? (
+            <span className={cn('progressAnnouncement')} role="status">
+              {t(loadingTail ? 'market.loadingMore' : 'market.loading')}
+            </span>
           ) : null}
           {market.items.length === 0 ? null : (
             <ul className={cn('marketGrid')} aria-busy={market.page.status === 'loading'}>
@@ -362,14 +373,15 @@ export function MarketPanel({ store, api, t }) {
                   onInstall={askInstall}
                 />
               ))}
-              {market.page.status === 'loading' ? <MarketTailSkeleton /> : null}
+              {loadingTail ? <MarketTailSkeleton /> : null}
             </ul>
           )}
           {/* The "loading more" row belongs to the list, not to the toolbar: as a fourth
               toolbar child it narrowed the search box by 21px for the duration of every
               page load. The dot and the words are decoration - the sr-only `role="status"`
-              above is what a screen reader hears, so this row is not announced twice. */}
-          {market.page.status === 'loading' && market.items.length > 0 ? (
+              above is what a screen reader hears, so this row is not announced twice. An
+              append only: a page-one re-fetch keeps the list and adds nothing at the bottom. */}
+          {loadingTail ? (
             <div className={cn('marketLoadMore')} aria-hidden="true">
               <StateDot state="ongoing" size={13} />
               <span>{t('market.loadingMore')}</span>
