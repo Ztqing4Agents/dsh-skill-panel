@@ -91,6 +91,21 @@ function renderPage(setup = {}) {
 }
 
 /**
+ * A payload whose builtin rows carry `originPath`, so the blocks fold by package.
+ * @returns {object} ListPayload.
+ */
+function payloadWithOrigins() {
+  const base = payload();
+  const builtin = base.groups.find((group) => group.key === 'builtin');
+  builtin.skills = [
+    { ...row({ name: 'office', provider: 'univer', partition: 'builtin', path: null, writable: false, readonlyReason: 'provider-store' }), originPath: '/p/node_modules/dsh-univer-office/skills/office/SKILL.md' },
+    { ...row({ name: 'sheet', provider: 'univer', partition: 'builtin', path: null, writable: false, readonlyReason: 'provider-store' }), originPath: '/p/node_modules/dsh-univer-office/skills/sheet/SKILL.md' },
+    { ...row({ name: 'zzz', provider: 'univer', partition: 'builtin', path: null, writable: false, readonlyReason: 'provider-store' }), originPath: '/p/node_modules/zzz-other-pkg/skills/zzz/SKILL.md' },
+  ];
+  return base;
+}
+
+/**
  * All matches of one attribute on a fragment.
  * @param {string} html - markup.
  * @param {RegExp} pattern - pattern with the captured value.
@@ -704,4 +719,24 @@ test('技能详情是从插件页进来的时候，退一级回到插件页（�
   assert.ok(html.includes('data-skc-plugin-detail="runtime"'), '退一级后回到插件页');
   assert.equal(html.includes('data-skc-installed-detail'), false, '技能详情已经关掉');
   assert.equal(html.includes('data-skc-group='), false, '还没回到列表');
+});
+
+/* ------------- 块按插件包分组 + 页签复位（本轮） ------------- */
+
+test('内置块的标题是插件包名，data-skc-plugin 仍是 provider id、data-skc-plugin-pkg 是包名', () => {
+  const html = renderPage({
+    payload: payloadWithOrigins(),
+  });
+  const block = html.slice(html.indexOf('data-skc-plugin='), html.indexOf('data-skc-group="local"'));
+  assert.ok(block.includes('data-skc-plugin="univer"'), 'data-skc-plugin 是 provider id');
+  assert.ok(block.includes('data-skc-plugin-pkg="dsh-univer-office"'), 'data-skc-plugin-pkg 是包名');
+  assert.ok(/class="skc_cardTitle skc_cardOpen"[^>]*>dsh-univer-office</.test(block), '块标题是包名');
+  assert.equal(/class="skc_cardTitle skc_cardOpen"[^>]*>univer</.test(block), false, '标题不再是 provider id');
+  assert.ok(/1 \d*个?技能|个技能/.test(block), '副行写着技能数');
+});
+
+test('两个包 → 两块，按包名升序（不是 provider 序）', () => {
+  const html = renderPage({ payload: payloadWithOrigins() });
+  const blocks = [...html.matchAll(/data-skc-plugin-pkg="([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(blocks, ['dsh-univer-office', 'zzz-other-pkg'], '包名升序');
 });

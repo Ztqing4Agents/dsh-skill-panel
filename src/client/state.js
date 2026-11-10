@@ -89,9 +89,9 @@ function initialState() {
     // list, leaving the tab must not lose the text, and coming back must not re-request it.
     detail: null,
     detailScrollTop: 0,
-    // One level up from a skill detail: the builtin provider whose block was opened. The list
-    // offset is `detailScrollTop`; this level has its own so coming back from a skill lands
-    // where the plugin page was.
+    // One level up from a skill detail: the block key (the shipping package) that was opened.
+    // The list offset is `detailScrollTop`; this level has its own so coming back from a skill
+    // lands where the provider page was.
     pluginDetail: null,
     pluginScrollTop: 0,
     // The manual update check of the open detail: {key, busy, status, latestVersion, at}.
@@ -345,6 +345,14 @@ export function createStore() {
      */
     openPlugin: (provider) => {
       set({ pluginDetail: typeof provider === 'string' ? provider : null });
+    },
+    /**
+     * Back to a fresh installed page: no detail, no provider page, no remembered offsets.
+     * Used when the tab is entered, which never resumes the previous visit.
+     * @returns {void}
+     */
+    resetPage: () => {
+      set({ detail: null, check: null, pluginDetail: null, detailScrollTop: 0, pluginScrollTop: 0 });
     },
     /** Leave the plugin page, back to the list (or to whatever is below it). @returns {void} */
     closePlugin: () => {

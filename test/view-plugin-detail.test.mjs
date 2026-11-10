@@ -43,9 +43,9 @@ function builtinOf(provider, name, overrides = {}) {
   };
 }
 
-/** A block of one provider. */
-function blockOf(provider, names) {
-  return { provider, skills: names.map((name) => builtinOf(provider, name)) };
+/** A block of one provider, keyed by its plugin package name. */
+function blockOf(provider, names, key = `pkg-${provider}`) {
+  return { key, provider, skills: names.map((name) => builtinOf(provider, name)) };
 }
 
 /** Render the plugin page. */
@@ -61,12 +61,12 @@ function render(block, setup = {}) {
   }));
 }
 
-test('插件页：面包屑 → provider 头（图标 + 名 + 技能数）→ 包含的技能 → 来源信息（内置）', () => {
-  const html = render(blockOf('univer', ['sheet', 'docx']));
+test('插件页：面包屑 → 插件包名头（图标 + 名 + 技能数）→ 包含的技能 → 来源信息（内置）', () => {
+  const html = render(blockOf('univer', ['sheet', 'docx'], 'dsh-univer-office'));
   const order = [
     'class="skc_marketCrumb"',
     'class="skc_pluginHead"',
-    '<h3 class="skc_marketDetailTitle">univer</h3>',
+    '<h3 class="skc_marketDetailTitle">dsh-univer-office</h3>',
     t('plugin.skills'),
     'class="skc_marketFacts"',
   ].map((needle) => html.indexOf(needle));
@@ -74,7 +74,9 @@ test('插件页：面包屑 → provider 头（图标 + 名 + 技能数）→ �
   assert.deepEqual([...order].sort((a, b) => a - b), order, '顺序：面包屑 → 头 → 包含的技能 → 来源信息');
   assert.ok(html.includes(t('plugin.skillsCount', { count: 2 })), '头上写着「2 个技能」');
   assert.ok(html.includes(`<dt>${t('detail.factCodeSource')}</dt><dd>${t('detail.sourceBuiltin')}</dd>`), '来源信息一行：代码来源 = 内置');
-  assert.ok(html.includes('data-skc-plugin-detail="univer"'), '有插件页挂点');
+  // 挂点仍是 provider id（开关写盘用它），包名单列一个属性。
+  assert.ok(html.includes('data-skc-plugin-detail="univer"'), '插件页挂点 = provider id');
+  assert.ok(html.includes('data-skc-plugin-pkg="dsh-univer-office"'), '包名在 data-skc-plugin-pkg 上');
 });
 
 test('插件页没有版本区块、没有查看仓库、也没有「无法检查更新」', () => {

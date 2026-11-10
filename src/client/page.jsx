@@ -132,10 +132,10 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
     store.actions.closeDetail();
   }, [store]);
 
-  const openPlugin = useCallback((provider) => {
+  const openPlugin = useCallback((key) => {
     const body = bodyRef.current;
     store.actions.rememberDetailScroll(body === null ? 0 : body.scrollTop);
-    store.actions.openPlugin(provider);
+    store.actions.openPlugin(key);
   }, [store]);
 
   const closePlugin = useCallback(() => {
@@ -231,7 +231,7 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
   const pluginBlock = pluginProvider === null
     ? null
     : (toPluginBlocks(toGroups(state.payload).find((group) => group.key === 'builtin'))
-      .find((block) => block.provider === pluginProvider) ?? null);
+      .find((block) => block.key === pluginProvider) ?? null);
   const detailKey = state.detail === null ? null : state.detail.key;
   const detailRow = detailKey === null ? null : rowByKey(state.payload, detailKey);
   const detailStatus = detailKey === null ? 'idle' : detailStateOf(state, detailKey);
@@ -287,6 +287,22 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
     body.scrollTop = snapshot.pluginDetail === null ? snapshot.detailScrollTop : snapshot.pluginScrollTop;
   }, [detailKey, state.pluginDetail, store]);
 
+  // Entering the skills tab always starts on the list - not on the detail or the provider page
+  // the last visit stopped at, and not at its offset. Going back *inside* the tab still
+  // restores offsets; only leaving and re-entering resets.
+  const entered = useRef(false);
+  useEffect(() => {
+    if (state.tab !== TAB_INSTALLED) {
+      entered.current = false;
+      return;
+    }
+    if (entered.current) return;
+    entered.current = true;
+    store.actions.resetPage();
+    const body = bodyRef.current;
+    if (body !== null) body.scrollTop = 0;
+  }, [state.tab, store]);
+
   const groups = toGroups(state.payload);
   const counts = state.payload?.counts;
   const excluded = Number.isInteger(counts?.excluded) ? counts.excluded : 0;
@@ -322,7 +338,7 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
           <ul className={cn('cards')}>
             {group.key === 'builtin'
               ? toPluginBlocks(group).map((block) => (
-                <PluginBlock key={block.provider} block={block} t={t} onOpen={openPlugin} />
+                <PluginBlock key={block.key} block={block} t={t} onOpen={openPlugin} />
               ))
               : group.skills.map((row) => (
                 <SkillRow

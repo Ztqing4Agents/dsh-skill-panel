@@ -306,6 +306,6 @@ test('K110 每个可点单元恰好一个 onClick：行一个（标题按钮）�
   const clicks = source.match(/onClick=/g) ?? [];
   assert.equal(clicks.length, 2, `row.jsx 里恰好两个 onClick（实测 ${clicks.length}）`);
   assert.match(source, /onClick=\{\(\) => onOpen\?\.\(row\)\}/, '行的那个是标题按钮的 onOpen(row)');
-  assert.match(source, /onClick=\{\(\) => onOpen\?\.\(block\.provider\)\}/, '块的那个是标题按钮的 onOpen(block.provider)');
+  assert.match(source, /onClick=\{\(\) => onOpen\?\.\(block\.key\)\}/, '块的那个是标题按钮的 onOpen(block.key)（键 = 包名）');
   assert.equal(/<li[^>]*onClick/.test(source), false, '<li> 上没有 onClick（行/块本身不是可点元素）');
 });

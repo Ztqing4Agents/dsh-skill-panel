@@ -66,22 +66,43 @@ export function toGroups(payload) {
 }
 
 /**
+ * The package that shipped a provider-delivered skill, for the block heading.
+ *
+ * A provider id is not a package name (`dsh-univer-office` registers itself as `univer`),
+ * so the name is read off the origin path instead: everything after the **last**
+ * `node_modules/` is the package, and a scoped package keeps two segments. Anything that
+ * cannot be read that way - no path, no `node_modules/` in it - falls back to the provider
+ * id, which is at least unique and always present.
+ * @param {object} row - one builtin row.
+ * @returns {string} the package name, or the provider id.
+ */
+export function packageOf(row) {
+  const provider = typeof row?.provider === 'string' ? row.provider : '';
+  const path = typeof row?.originPath === 'string' ? row.originPath : '';
+  const at = path.lastIndexOf('node_modules/');
+  if (at === -1) return provider;
+  const head = path.slice(at + 'node_modules/'.length).split('/');
+  if (head[0] === undefined || head[0] === '') return provider;
+  return head[0].startsWith('@') && head[1] !== undefined ? `${head[0]}/${head[1]}` : head[0];
+}
+
+/**
  * Fold one group's rows into the plugin blocks the builtin partition is shown as.
  *
- * The key is the row's own `provider` (the group only ever holds `partition === 'builtin'`
- * rows), and blocks are ordered by it: one block per provider, skills in payload order.
+ * Blocks are keyed by package (see `packageOf`) and ordered by it; the provider id stays on
+ * the block because it is the identity a switch writes. Skills keep payload order.
  * @param {{key: string, skills: object[]}|undefined} group - one group from `toGroups`.
- * @returns {{provider: string, skills: object[]}[]} blocks, provider ascending.
+ * @returns {{key: string, provider: string, skills: object[]}[]} blocks, package ascending.
  */
 export function toPluginBlocks(group) {
-  const byProvider = new Map();
+  const byKey = new Map();
   for (const row of Array.isArray(group?.skills) ? group.skills : []) {
-    const provider = typeof row?.provider === 'string' ? row.provider : '';
-    const block = byProvider.get(provider) ?? { provider, skills: [] };
+    const key = packageOf(row);
+    const block = byKey.get(key) ?? { key, provider: typeof row?.provider === 'string' ? row.provider : '', skills: [] };
     block.skills.push(row);
-    byProvider.set(provider, block);
+    byKey.set(key, block);
   }
-  return [...byProvider.values()].sort((left, right) => (left.provider < right.provider ? -1 : (left.provider > right.provider ? 1 : 0)));
+  return [...byKey.values()].sort((left, right) => (left.key < right.key ? -1 : (left.key > right.key ? 1 : 0)));
 }
 
 /**

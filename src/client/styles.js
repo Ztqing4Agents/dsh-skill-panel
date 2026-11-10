@@ -293,7 +293,6 @@ padding: 14px; flex-direction: column; display: flex; position: relative;
 .skc_marketHead{ align-items: center; gap: 12px; min-width: 0; display: flex }
 .skc_marketBody{ flex-direction: column; gap: 8px; min-width: 0; display: flex }
 .skc_marketMain{ flex-direction: column; flex: 1; gap: 2px; min-width: 0; display: flex }
-/* content-wide; nowrap is load-bearing */
 .skc_marketTitleRow{
 flex-wrap: nowrap; align-items: center; gap: 8px; min-width: 0;
 align-self: flex-start; max-width: 100%; display: flex;
@@ -310,7 +309,6 @@ outline: var(--dsw-focus-ring-width) solid
 var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
 outline-offset: 2px;
 }
-/* 13/20 = 60px for 3 lines; margin 0 */
 .skc_marketDesc{
 margin: 0; color: var(--dsw-alias-label-tertiary); -webkit-line-clamp: 3;
 -webkit-box-orient: vertical; font-size: 13px; line-height: 20px;
@@ -339,7 +337,6 @@ color: var(--dsw-alias-label-tertiary); max-width: 100%; padding: 1px 6px;
 font-size: 11px; line-height: 16px; white-space: nowrap;
 text-overflow: ellipsis; overflow: hidden;
 }
-/* z-index:1 floats the seat above the layer */
 .skc_marketCardEnd{
 z-index: 1; flex: none; align-items: center; gap: 8px;
 display: inline-flex; position: relative;
@@ -410,17 +407,14 @@ font-size: 12px; line-height: 18px;
 .skc_detailPage{ display: flex; flex-direction: column; min-width: 0 }
 .skc_detailDrag{ flex: none; height: var(--skc-page-top-inset) }
 [data-platform=darwin] .skc_detailDrag{ height: calc(var(--skc-page-top-inset) + var(--dsh-frame-top-clearance, 0px)) }
-/* 49 = host detail; the list row stays 48 (row 64) */
 .skc_detailIcon{ width: 49px; height: 49px }
 .skc_detailTop{ display: flex; justify-content: space-between; align-items: center }
 .skc_detailActions{ margin-left: auto; display: inline-flex; align-items: center; gap: 16px }
-/* 20 = the column's 32px gap minus 12 (host: 20) */
 .skc_detailIntro{ display: flex; flex-direction: column; gap: 8px; margin-top: -12px }
 .skc_detailAuthor{
 margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code);
 font-size: 12px; line-height: 18px;
 }
-/* danger: error token; 1px inset ring, no border */
 .skc_detailDanger{
 --dsh-button-outline-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent);
 --dsh-hairline-width: 1px;
@@ -428,7 +422,6 @@ color: var(--dsw-alias-state-error-primary); height: 28px; padding: 0 10px;
 border-radius: 8px; gap: 4px; font-size: 12px; line-height: 18px;
 }
 .skc_detailDanger:disabled{ opacity: .4 }
-/* body scrolls here; files and source stay outside (552 = 60vh) */
 .skc_detailBodyBox{
 max-height: 60vh; padding: 12px 0; overflow-y: auto;
 border-top: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent);
@@ -442,13 +435,11 @@ border-bottom: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, 
 .skc_detailVersionTitle{ margin: 0; font-size: 14px; line-height: 22px }
 .skc_detailRepoLink{ align-self: flex-end; display: inline-flex; align-items: center; gap: 4px; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px; text-decoration: none }
 @media (hover: hover){ .skc_detailRepoLink:hover{ color: var(--dsw-alias-label-primary) } }
-/* provider page head: 48 tile + name + count (the count reuses .skc_cardDesc) */
 .skc_pluginHead{ display: flex; align-items: center; gap: 14px }
 .skc_callRow{ display: flex; align-items: center; gap: 12px; height: 74px }
 .skc_callIcon{ width: 41px; height: 41px; border-radius: 12px }
 .skc_callBody{ display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 }
 .skc_callName{ margin: 0; font-size: 13.5px; line-height: 20px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-/* the host's component row, measured: 74 tall, 41 icon, 13.5/20 name, 11.5/16 two-line text */
 .skc_callDesc{ margin: 0; color: var(--dsw-alias-label-tertiary); font-size: 11.5px; line-height: 16px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
 .skc_detailBody{ font-size: 13px; line-height: 20px }
 

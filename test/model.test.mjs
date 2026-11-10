@@ -18,6 +18,7 @@ import {
   statusLine,
   switchMode,
   toGroups,
+  packageOf,
   toPluginBlocks,
 } from '../src/client/model.js';
 import { readDictionary, translator } from './helpers/ssr.mjs';
@@ -167,4 +168,33 @@ test('toPluginBlocks：升序是字符串序（dsh-office 在 univer 前，clawh
     skills: [builtinOf('univer', 'a'), builtinOf('runtime', 'b'), builtinOf('clawhub', 'c'), builtinOf('dsh-office', 'd')],
   });
   assert.deepEqual(blocks.map((block) => block.provider), ['clawhub', 'dsh-office', 'runtime', 'univer'], '纯字符串升序');
+});
+
+/* ------------- packageOf：块按插件包分组（本轮） ------------- */
+
+test('packageOf：取 originPath 里最后一个 node_modules/ 之后的一段', () => {
+  assert.equal(packageOf({ provider: 'univer', originPath: '/Users/me/.dsh/profiles/desktop/node_modules/dsh-univer-office/skills/office/SKILL.md' }), 'dsh-univer-office', '普通包名');
+  assert.equal(packageOf({ provider: 'univer', originPath: '/a/node_modules/outer/node_modules/inner/skills/x/SKILL.md' }), 'inner', '取最后一个 node_modules/');
+});
+
+test('packageOf：scoped 包取两段；没有 node_modules/ 或没有 originPath 退回 provider', () => {
+  assert.equal(packageOf({ provider: 'univer', originPath: '/p/node_modules/@scope/pkg/skills/x/SKILL.md' }), '@scope/pkg', 'scoped 取 @scope/pkg');
+  assert.equal(packageOf({ provider: 'univer', originPath: '/skills/office/SKILL.md' }), 'univer', '没有 node_modules/ 就用 provider');
+  assert.equal(packageOf({ provider: 'univer', originPath: null }), 'univer', 'originPath 为 null 就用 provider');
+  assert.equal(packageOf({ provider: 'univer' }), 'univer', '字段缺失也是 provider');
+  assert.equal(packageOf({ provider: 'univer', originPath: '/p/node_modules//x/SKILL.md' }), 'univer', '空段也退回 provider');
+});
+
+test('toPluginBlocks：按包名分组与排序（不是 provider），provider 留在块上供开关写盘', () => {
+  const rows = [
+    { ...builtinOf('univer', 'sheet'), originPath: '/p/node_modules/dsh-univer-office/skills/sheet/SKILL.md' },
+    { ...builtinOf('univer', 'docx'), originPath: '/p/node_modules/dsh-univer-office/skills/docx/SKILL.md' },
+    { ...builtinOf('univer', 'zz'), originPath: '/p/node_modules/@other/pkg/skills/zz/SKILL.md' },
+    builtinOf('univer', 'loose'),
+  ];
+  const blocks = toPluginBlocks({ key: 'builtin', skills: rows });
+  assert.deepEqual(blocks.map((block) => block.key), ['@other/pkg', 'dsh-univer-office', 'univer'], '包名升序；取不到包名的用 provider 当键');
+  assert.deepEqual(blocks[1].skills.map((item) => item.name), ['sheet', 'docx'], '同一个包的技能合在一块');
+  assert.equal(blocks[0].provider, 'univer', '块上仍带 provider（开关要它）');
+  assert.equal(blocks[2].provider, 'univer', '退回 provider 的那块也带 provider');
 });

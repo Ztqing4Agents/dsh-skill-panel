@@ -51,18 +51,20 @@
 
 ## 插件详情（内置 provider）
 
-「内置」分区在列表里**不单列技能**，而是每个 `provider` 折成一个块（见 `docs/contracts/client.md` §3.9.2）；点块进这一页。**分组键与显示名都是 `Row.provider` 原值**（如 `univer`、`dsh-office`，用户已确认不映射包名），只有 `partition === 'builtin'` 的行进块，`local` / `installed` 行照旧是列表行；块按 provider 名字升序。
+「内置」分区在列表里**不单列技能**，而是每个**提供它的插件包**折成一个块（见 `docs/contracts/client.md` §3.9.2）；点块进这一页。只有 `partition === 'builtin'` 的行进块，`local` / `installed` 行照旧是列表行；块按**包名**升序。
+
+**分组键与块标题都是包名**，不是 provider id：`dsh-univer-office` 这个包在它自己的注册代码里把 provider 名注册成 `univer`，它的 12 个技能（`office` / `office-docx` / `univer-sheet` …）同属一个包，标题写 `univer` 会让人以为「office 被塞进了 univer」。包名从行的 `originPath`（宿主 `SkillSummary.resourceBase.path` 透出）里找**最后一个 `node_modules/`**，取其后一段，`@scope/name` 取两段；**取不到就退回 provider id**（`originPath` 为 null，或路径里没有 `node_modules/`）。`provider` id 仍留在块数据里——它是开关写存储时的身份（`data-skc-plugin` 仍写 provider，另加 `data-skc-plugin-pkg` 写包名）。
 
 结构与返回：
 
 | # | 区块 | 内容 |
 | --- | --- | --- |
 | 1 | 面包屑 | 复用 `DetailCrumb`（`detail.back`），返回**列表** |
-| 2 | 头行 | `.skc_pluginHead`：`IconTile`（48，provider 首字母）+ `.skc_cardMain` 里 provider 名（`.skc_marketDetailTitle` 20/28/500）+ 副行 `plugin.skillsCount`（复用 `.skc_cardDesc` 13/18 tertiary） |
+| 2 | 头行 | `.skc_pluginHead`：`IconTile`（48，包名首字母）+ `.skc_cardMain` 里**包名**（`.skc_marketDetailTitle` 20/28/500）+ 副行 `plugin.skillsCount`（复用 `.skc_cardDesc` 13/18 tertiary） |
 | 3 | 包含的技能 | `plugin.skills` 标题 + `ul.skc_cards` 里逐行 `SkillRow`（**每行的开关保留**，仍是行里唯一的独立控件；软链行的只读标记照旧）——点行进**那个技能的详情页** |
 | 4 | 来源信息 | `detail.sectionSource` + 一行事实：`detail.factCodeSource` = `detail.sourceBuiltin`（「内置」）；**没有版本区块、没有查看仓库**（内置不检查更新，上一轮已定） |
 
-返回链是**两级**：`列表 → 插件详情 → 技能详情`。技能详情的面包屑只退一级（有 `pluginDetail` 就回插件详情，否则回列表）；两级各自记各自的偏移（`detailScrollTop` 给列表、`pluginScrollTop` 给插件页），进入任一层都把 `scrollTop` 归零；**返回时还原进入前的偏移，含 0**（0 是「到顶」，不是「不动」）。回列表前还要先把容器的 `scrollTop` 拍成 0 再切视图——页头的 `data-compact` 由这个偏移推导、会收起 intro，若页头在插件页的偏移下挂载，滚动锚定会把刚还原的偏移又拉回去。
+返回链是**两级**：`列表 → 插件详情 → 技能详情`。**离开技能页签再回来会复位**（列表页、插件页与两个滚动偏移全清，等价于重新进入）；页签**内部**的返回仍还原偏移——两条规则不冲突，只有跨页签才复位。技能详情的面包屑只退一级（有 `pluginDetail` 就回插件详情，否则回列表）；两级各自记各自的偏移（`detailScrollTop` 给列表、`pluginScrollTop` 给插件页），进入任一层都把 `scrollTop` 归零；**返回时还原进入前的偏移，含 0**（0 是「到顶」，不是「不动」）。回列表前还要先把容器的 `scrollTop` 拍成 0 再切视图——页头的 `data-compact` 由这个偏移推导、会收起 intro，若页头在插件页的偏移下挂载，滚动锚定会把刚还原的偏移又拉回去。
 
 整页替换口径与技能详情一致：页头整块不渲染，`pageBody` 里只有一个 `.skc_detailPage`（含那条拖窗口的空条）。
 

@@ -689,3 +689,31 @@ test('插件页的滚动偏移单独记：rememberPluginScroll 与 rememberDetai
   store.actions.rememberPluginScroll(0);
   assert.equal(store.getSnapshot().pluginScrollTop, 0, '回到顶部记 0');
 });
+
+/* ------------- 进技能页签即复位（本轮） ------------- */
+
+test('resetPage 清五个字段（detail / check / pluginDetail / 两级偏移），但不动 rows 与 payload', () => {
+  const store = createStore();
+  store.actions.ready(payload());
+  store.actions.openPlugin('univer');
+  store.actions.openDetail(builtinRow);
+  store.actions.detailReady('univer#sheet', { body: '正文', files: [], filesTruncated: false });
+  store.actions.setCheck('univer#sheet', { status: 'upToDate', at: 1 });
+  store.actions.rememberDetailScroll(300);
+  store.actions.rememberPluginScroll(120);
+  store.actions.fail('univer#sheet', '写不进去');
+
+  const before = store.getSnapshot();
+  assert.notEqual(before.detail, null, '复位前有详情');
+  assert.equal(before.rows.get('univer#sheet').reason, '写不进去', '复位前有一行的失败提示');
+
+  store.actions.resetPage();
+  const after = store.getSnapshot();
+  assert.equal(after.detail, null, 'detail 清空');
+  assert.equal(after.check, null, 'check 清空');
+  assert.equal(after.pluginDetail, null, 'pluginDetail 清空');
+  assert.equal(after.detailScrollTop, 0, '列表偏移清零');
+  assert.equal(after.pluginScrollTop, 0, '插件页偏移清零');
+  assert.equal(after.rows.get('univer#sheet').reason, '写不进去', 'rows 不动（行内状态保留）');
+  assert.equal(after.payload.groups.length, before.payload.groups.length, 'payload 不动');
+});

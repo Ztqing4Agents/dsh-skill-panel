@@ -118,7 +118,7 @@ market = {
 ```text
 SkillsPage (page.jsx：页头 + 两个页签)
 ├─ toolbar：刷新（恒在，行为跟随当前页签；详情打开时 = 关详情 + 重拉）｜计数 + ＋添加技能（仅「已安装」页签渲染）
-├─ tabPanel(installed)：**内置分区每个 provider 折成一个块** PluginBlock (row.jsx，`data-skc-plugin=<provider>`，无开关) → 点块进 PluginDetail (plugin-detail.jsx：面包屑 + provider 头 + 包含的技能（每行 SkillRow 带开关）+ 来源=内置)；其余分区仍是 SkillRow；技能详情 InstalledDetail (installed-detail.jsx)：面包屑 + 头 + 标题组 + 正文盒 + 调用名 + 版本 + 来源 + 仓库
+├─ tabPanel(installed)：**内置分区每个插件包折成一个块**（标题写包名，provider id 只做开关身份；**离开本页签再回来会复位**：详情/插件页/两个滚动偏移全清，页签内部返回仍还原偏移） PluginBlock (row.jsx，`data-skc-plugin=<provider>`，无开关) → 点块进 PluginDetail (plugin-detail.jsx：面包屑 + provider 头 + 包含的技能（每行 SkillRow 带开关）+ 来源=内置)；其余分区仍是 SkillRow；技能详情 InstalledDetail (installed-detail.jsx)：面包屑 + 头 + 标题组 + 正文盒 + 调用名 + 版本 + 来源 + 仓库
 └─ tabPanel(market) → MarketPanel (market-panel.jsx)
     ├─ MarketFilters (market-filters.jsx)：Input(250ms 防抖，× 在框内) / Menu(来源 = 所有来源｜SkillHub｜ClawHub) / Menu(排序) —— **工具栏恒三个子元素** / Pill(分类 chips + 数量)
     ├─ 首屏骨架｜整页错误态（当前源失败）｜空态

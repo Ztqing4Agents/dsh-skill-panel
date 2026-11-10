@@ -73,25 +73,25 @@ export function EnableSwitch({ row, t, pending, onToggle }) {
  * The block carries no control at all: the switch lives on each skill inside the provider's
  * page, so here the whole block is the single click target - the same technique as a row
  * (title button + `::after` covering the block, hard constraint 9), with no action seat.
- * @param {{block: {provider: string, skills: object[]}, t: Function, onOpen: Function,
- *   iconUrl?: string|null}} props - the provider block, translate, the open handler and the
- *   block's avatar URL (null keeps the letter).
+ * @param {{block: {key: string, provider: string, skills: object[]}, t: Function,
+ *   onOpen: Function, iconUrl?: string|null}} props - the package block, translate, the open
+ *   handler and the block's avatar URL (null keeps the letter).
  * @returns {import('react').ReactElement} the block.
  */
 export function PluginBlock({ block, t, onOpen, iconUrl = null }) {
   return (
-    <li className={cn('card')} data-skc-plugin={block.provider}>
+    <li className={cn('card')} data-skc-plugin={block.provider} data-skc-plugin-pkg={block.key}>
       <div className={cn('cardHead')}>
-        <IconTile iconUrl={iconUrl} title={block.provider} />
+        <IconTile iconUrl={iconUrl} title={block.key} />
         <div className={cn('cardMain')}>
           <div className={cn('titleRow')}>
             <button
               type="button"
               className={cn('cardTitle', 'cardOpen')}
-              title={block.provider}
-              onClick={() => onOpen?.(block.provider)}
+              title={block.key}
+              onClick={() => onOpen?.(block.key)}
             >
-              {block.provider}
+              {block.key}
             </button>
           </div>
           <span className={cn('cardDesc')}>{t('plugin.skillsCount', { count: block.skills.length })}</span>

@@ -16,19 +16,19 @@ import { SkillRow } from './row.jsx';
 
 /**
  * Render one provider's page.
- * @param {{block: {provider: string, skills: object[]}, t: Function, rows: Map<string, object>,
+ * @param {{block: {key: string, provider: string, skills: object[]}, t: Function, rows: Map<string, object>,
  *   onBack: Function, onToggle: Function, onOpenRow: Function}} props - the block, translate,
  *   per-row write state, and the back / switch / open handlers.
  * @returns {import('react').ReactElement} the page.
  */
 export function PluginDetail({ block, t, rows, onBack, onToggle, onOpenRow }) {
   return (
-    <div className={cn('marketDetail')} data-skc-plugin-detail={block.provider}>
+    <div className={cn('marketDetail')} data-skc-plugin-detail={block.provider} data-skc-plugin-pkg={block.key}>
       <DetailCrumb t={t} onBack={onBack} />
       <div className={cn('pluginHead')}>
-        <IconTile title={block.provider} />
+        <IconTile title={block.key} />
         <div className={cn('cardMain')}>
-          <h3 className={cn('marketDetailTitle')}>{block.provider}</h3>
+          <h3 className={cn('marketDetailTitle')}>{block.key}</h3>
           <p className={cn('cardDesc')}>{t('plugin.skillsCount', { count: block.skills.length })}</p>
         </div>
       </div>
