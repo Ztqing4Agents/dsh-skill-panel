@@ -91,7 +91,7 @@ grep -ac -- --bundle-progress-size "$A"   # 打开进度占位宽（本文 §4�
 1. 面包屑 `‹ 插件`（键 `crumbRoot`；列表侧的返回键是 `backToList`「返回插件」，不是同一个字符串）
 2. 头行：左图标（49×49）＋ 右侧动作组（有更新时先一个更新按钮 → 卸载 → 开关 `EnableSwitch`）
 3. 标题组 `detailMain`：`h3` 标题 + 版本 Tag `versionTag`（`v{version}`）+ 包名行 `p.detailName` + 描述
-4. 正文区：README，关在一个内滚动盒里
+4. 正文区：README，关在一个内滚动盒里（**紧接描述、前面没有区块标题**；正文之后依次是「包含的组件」「版本」「来源信息」等技术区）
 5. 技术区 `detailSections`：「包含的组件」块 → 「来源信息」块（页尾）
 
 locale 键值（逐字，来自该包的 zh 表）：

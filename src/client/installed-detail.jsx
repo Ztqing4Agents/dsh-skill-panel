@@ -121,11 +121,36 @@ export function InstalledDetail({
   const sourceLabel = upstream === null
     ? ''
     : (SOURCE_LABELS.has(upstream.sourceId) ? t(`market.source.${upstream.sourceId}`) : upstream.sourceId);
+  // The box holds one element in every state, so the host's "only the README is boxed" shape
+  // stays true: loading / failure / empty all render in place instead of above the document.
+  let bodyContent;
+  if (status === 'loading') {
+    bodyContent = <p className={cn('marketScope')}>{t('detail.loading')}</p>;
+  } else if (status === 'error') {
+    bodyContent = (
+      <div className={cn('marketFailure')}>
+        <p className={cn('marketError')} role="alert">
+          <StateDot state="error" />
+          {t('detail.error')}
+        </p>
+        <Button variant="outline" size="sm" onClick={onRetry}>{t('detail.retry')}</Button>
+      </div>
+    );
+  } else if (body === null) {
+    bodyContent = <p className={cn('marketScope')}>{t('detail.noBody')}</p>;
+  } else {
+    bodyContent = (
+      <div className={cn('detailBody')}>
+        <MarkdownBlock text={body} fallbackClassName="detailBody" t={t} />
+        {data?.truncated === true ? <p className={cn('marketScope')}>{t('detail.truncated')}</p> : null}
+      </div>
+    );
+  }
   return (
     <div className={cn('marketDetail')} data-skc-installed-detail={key}>
       {crumb}
       <div className={cn('detailTop')}>
-        <IconTile iconUrl={iconUrl} title={row.name} />
+        <IconTile iconUrl={iconUrl} title={row.name} className="detailIcon" />
         <div className={cn('detailActions')}>
           {/* Uninstall is a placeholder: visible and disabled, with no handler, because the real
               one is a write route this version does not have (board M6). Disabled rather than
@@ -159,14 +184,15 @@ export function InstalledDetail({
               {t('market.metaAuthor', { author: `${upstream.owner}/${upstream.slug}` })}
             </p>
           )}
+        <div className={cn('detailIdentity')}>
+          <span className={cn('marketScope')}>{t('detail.callName')}</span>
+          <code className={cn('detailCallName')}>{row.name}</code>
+          <CopyName name={row.name} t={t} />
+        </div>
         {row.description === '' ? null : <p className={cn('marketDetailDesc')}>{row.description}</p>}
       </div>
       {reason === null ? null : <p className={cn('reason')} role="alert">{reason}</p>}
-      <div className={cn('detailIdentity')}>
-        <span className={cn('marketScope')}>{t('detail.callName')}</span>
-        <code className={cn('detailCallName')}>{row.name}</code>
-        <CopyName name={row.name} t={t} />
-      </div>
+      <div className={cn('detailBodyBox')}>{bodyContent}</div>
       {partitionKey === null && row.readonlyReason !== 'symlink' ? null : (
         <ul className={cn('marketTags')}>
           {partitionKey === null ? null : <li className={cn('marketTag')}>{t(partitionKey)}</li>}
@@ -176,30 +202,6 @@ export function InstalledDetail({
         </ul>
       )}
       <FactsTable rows={detailFactsOf(row, t)} />
-      <section className={cn('marketDetailSection')}>
-        <h4 className={cn('marketSectionTitle')}>{t('market.detailOverview')}</h4>
-        {status === 'loading' ? <p className={cn('marketScope')}>{t('detail.loading')}</p> : null}
-        {status === 'error' ? (
-          <div className={cn('marketFailure')}>
-            <p className={cn('marketError')} role="alert">
-              <StateDot state="error" />
-              {t('detail.error')}
-            </p>
-            <Button variant="outline" size="sm" onClick={onRetry}>{t('detail.retry')}</Button>
-          </div>
-        ) : null}
-        {status === 'ready' && body === null
-          ? <p className={cn('marketScope')}>{t('detail.noBody')}</p>
-          : null}
-        {status === 'ready' && body !== null ? (
-          <div className={cn('detailBodyBox')}>
-            <div className={cn('detailBody')}><MarkdownBlock text={body} fallbackClassName="detailBody" t={t} /></div>
-          </div>
-        ) : null}
-        {status === 'ready' && data?.truncated === true
-          ? <p className={cn('marketScope')}>{t('detail.truncated')}</p>
-          : null}
-      </section>
       {files.length === 0 ? null : (
         <section className={cn('marketDetailSection')}>
           <h4 className={cn('marketSectionTitle')}>{t('market.detailFiles')}</h4>

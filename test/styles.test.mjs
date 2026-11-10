@@ -128,6 +128,15 @@ test('A.5 图标：容器逐字回归宿主，内容层是 17/700 大写首字�
   assert.match(body, /(?:^|;)\s*flex\s*:\s*none/, '不参与伸缩');
 });
 
+test('A.5 详情图标 49 走修饰类：.skc_cardIcon 仍是 48（列表行不跟着变大）', () => {
+  const base = ruleBody(capturedCss(), '.skc_cardIcon');
+  assert.match(base, /(?:^|;)\s*width\s*:\s*48px/, '基础类仍是 48 宽');
+  assert.match(base, /(?:^|;)\s*height\s*:\s*48px/, '基础类仍是 48 高');
+  const detail = ruleBody(capturedCss(), '.skc_detailIcon');
+  assert.match(detail, /(?:^|;)\s*width\s*:\s*49px/, '修饰类 49 宽');
+  assert.match(detail, /(?:^|;)\s*height\s*:\s*49px/, '修饰类 49 高');
+});
+
 test('A.5/A.9 48px 是「含边框」的外框：border-box + .5px 边框 + padding-box 底色，三者缺一就变样', () => {
   const body = ruleBody(capturedCss(), '.skc_cardIcon');
   assert.match(body, /(?:^|;)\s*box-sizing\s*:\s*border-box/, 'border-box：48px 含边框，否则 48 + .5×2 会撑成 49');

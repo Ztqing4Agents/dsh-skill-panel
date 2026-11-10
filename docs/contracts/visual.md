@@ -202,6 +202,10 @@
 .skc_detailPage{ display: flex; flex-direction: column; min-width: 0 }
 .skc_detailDrag{ flex: none; height: var(--skc-page-top-inset) }
 [data-platform=darwin] .skc_detailDrag{ height: calc(var(--skc-page-top-inset) + var(--dsh-frame-top-clearance, 0px)) }
+/* 详情头图标 49×49 = 宿主详情页的实测值（.5px 描边 + 48 内容，box-sizing:border-box 已含）。
+   **列表行仍是 48**——`.skc_cardIcon` 被已安装行与市场卡共用，64 = 48 + 8×2 是行高的来源，
+   两者刻意不同，所以这里只加修饰类、不改基类 */
+.skc_detailIcon{ width: 49px; height: 49px }
 /* 头行：宿主实测「图标贴内容左沿、动作组贴右沿、两者垂直居中」（组中心与图标中心同为 102.5）
    ⇒ space-between + center，没有 gap（旧的 gap:14 + flex-start 是没采集时的占位） */
 .skc_detailTop{ display: flex; justify-content: space-between; align-items: center }
@@ -218,7 +222,9 @@
 .skc_detailDanger{ --dsh-button-outline-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent); --dsh-hairline-width: 1px; color: var(--dsw-alias-state-error-primary); height: 28px; padding: 0 10px; border-radius: 8px; gap: 4px; font-size: 12px; line-height: 18px }
 .skc_detailDanger:disabled{ opacity: .4 }
 /* 正文内滚动盒：宿主在 1440×920 下实测 552px（盒 height:552 + padding:12px 0、overflow-y:auto）。
-   552/920 = 0.6，所以取 60vh（推断，不是宿主声明值）；文件清单与来源信息在盒外跟页面滚 */
+   552/920 = 0.6，所以取 60vh（推断，不是宿主声明值）。
+   **它紧跟描述、前面没有区块标题**（宿主描述下面直接是 README）；标签行、事实表、文件清单、
+   来源信息全在它下面，其中后两者跟页面滚。三态（loading/error/noBody）也在盒内就地呈现 */
 .skc_detailBodyBox{ max-height: 60vh; padding: 12px 0; overflow-y: auto }
 .skc_detailIdentity{ align-items: center; gap: 8px; display: flex }
 .skc_detailCallName{ font-family: var(--ds-font-family-code) }

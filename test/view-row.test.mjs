@@ -59,6 +59,8 @@ function render(target, rows = new Map(), onToggle = () => {}) {
 test('K22 行的四个部件齐备：图标、名称、描述、右侧控件', () => {
   const html = render(row());
   assert.ok(html.includes('class="skc_cardIcon"'), '有图标位');
+  // 列表行图标仍是 48 的基础类，不能沾详情那支 49 的修饰类（否则行高 64 会被顶开）。
+  assert.equal(html.includes('skc_detailIcon'), false, '列表行的图标不带 .skc_detailIcon');
   assert.ok(html.includes('class="skc_cardMain"'), '有中间列');
   assert.ok(html.includes('class="skc_cardTitle skc_cardOpen">ui-design<'), '有技能名（标题同时是整行可点层的按钮）');
   assert.ok(html.includes('Comprehensive UI design skill.'), '有描述');

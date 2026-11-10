@@ -435,6 +435,9 @@ stay empty - a drag region eats selection and buttons */
 .skc_detailDrag{ flex: none; height: var(--skc-page-top-inset) }
 [data-platform=darwin] .skc_detailDrag{ height: calc(var(--skc-page-top-inset) + var(--dsh-frame-top-clearance, 0px)) }
 /* head row: icon left, actions right (host) */
+/* 49 = the host's detail icon (.5px hairline + 48 of content); the list row keeps 48,
+   because 64 = 48 + 8x2 is the row height the installed list is pinned to */
+.skc_detailIcon{ width: 49px; height: 49px }
 .skc_detailTop{ display: flex; justify-content: space-between; align-items: center }
 .skc_detailActions{ margin-left: auto; display: inline-flex; align-items: center; gap: 16px }
 /* 20 = the column's 32px gap minus 12 (host: 20) */

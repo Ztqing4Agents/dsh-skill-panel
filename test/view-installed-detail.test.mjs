@@ -344,8 +344,11 @@ test('H1 头排顺序：detailTop（图标 + 动作组）在 detailIntro（标�
   assert.ok(top < intro, 'detailTop 在 detailIntro 之前');
   // detailTop 里是图标 + 动作组，且顺序也是图标在前。
   const topBlock = html.slice(top, intro);
-  assert.ok(topBlock.includes('class="skc_cardIcon"'), 'detailTop 里是 48 图标');
-  assert.ok(topBlock.indexOf('class="skc_cardIcon"') < topBlock.indexOf('class="skc_detailActions"'), '图标在动作组左边');
+  // 详情头用 49 的修饰类（宿主读数 49×49）；列表行仍是 48，不带这个类。
+  const iconTag = /<span class="skc_cardIcon skc_detailIcon"/.exec(topBlock);
+  assert.ok(iconTag !== null, 'detailTop 里的图标带 .skc_detailIcon（49）');
+  assert.equal((html.match(/skc_detailIcon/g) ?? []).length, 1, '整页只有详情头这一个 49 图标');
+  assert.ok(topBlock.indexOf('skc_detailIcon') < topBlock.indexOf('class="skc_detailActions"'), '图标在动作组左边');
   // detailIntro 里是 标题行 → 作者 → 描述。
   const introBlock = html.slice(intro);
   const titleRow = introBlock.indexOf('class="skc_marketTitleRow"');
@@ -495,4 +498,44 @@ test('H1 卸载红环不是 border：红字 + 1px 内环走 primitives 的两个
   assert.match(body, /border-radius:\s*8px/, '圆角 8');
   assert.match(body, /gap:\s*4px/, '图标与文字 4');
   assert.match(css, /\.skc_detailDanger:disabled\{[^}]*opacity:\s*\.4/, '禁用态只降透明度到 .4');
+});
+
+/* ------------- H1 本轮（结构回归）：正文盒紧跟描述，其余内容下移 ------------- */
+
+test('H1 正文盒紧跟描述：中间不夹标签/事实/文件，盒前没有「概览」小标题', () => {
+  const html = render({ row: marketRow(), title: '编程大神' });
+  const desc = html.indexOf('class="skc_marketDetailDesc"');
+  const box = html.indexOf('class="skc_detailBodyBox"');
+  assert.notEqual(desc, -1, '有描述');
+  assert.notEqual(box, -1, '有正文盒');
+  assert.ok(desc < box, '正文盒在描述之后');
+  const between = html.slice(desc, box);
+  // 描述与正文盒之间只允许出现 reason（错误原因）；标签/事实/文件/区块一律不许插进来。
+  for (const cls of ['skc_marketTags', 'skc_marketFacts', 'skc_marketFiles', 'skc_marketDetailSection', 'skc_marketSectionTitle']) {
+    assert.equal(between.includes(cls), false, `描述与正文盒之间没有 .${cls}（实测夹了 ${cls}）`);
+  }
+  // 「概览」这个区块标题在已安装详情里已经不画了（market.detailOverview 只给市场详情）。
+  assert.equal(html.includes(t('market.detailOverview')), false, '没有「概览」小标题');
+  assert.equal((html.match(/skc_marketDetailSection/g) ?? []).length <= 2, true, '区块只剩文件与来源两段');
+});
+
+test('H1 盒后顺序：标签 → 事实表 → 文件 → 来源信息（后两者在盒外）', () => {
+  const html = render({ row: marketRow(), title: '编程大神' });
+  const box = html.indexOf('class="skc_detailBodyBox"');
+  const tags = html.indexOf('class="skc_marketTags"');
+  const facts = html.indexOf('class="skc_marketFacts"');
+  const files = html.indexOf('class="skc_marketFiles"');
+  const source = html.indexOf(t('detail.sectionSource'));
+  assert.ok(box < tags, '标签行在正文盒之后');
+  assert.ok(tags < facts, '事实表在标签行之后');
+  assert.ok(facts < files, '文件清单在事实表之后');
+  assert.ok(files < source, '来源信息在文件清单之后');
+
+  // 盒里只有正文：标签、事实表、文件、来源都不在盒内。
+  const tree = modules.installedDetail.InstalledDetail(props({ row: marketRow() }));
+  const boxElement = elementsOf(tree).find((element) => element.props?.className === 'skc_detailBodyBox');
+  const insideClasses = elementsOf(boxElement).map((element) => String(element.props?.className ?? ''));
+  for (const cls of ['skc_marketTags', 'skc_marketFacts', 'skc_marketFiles', 'skc_marketDetailSection']) {
+    assert.equal(insideClasses.some((value) => value.includes(cls)), false, `${cls} 不在正文盒内`);
+  }
 });
