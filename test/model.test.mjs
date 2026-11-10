@@ -213,3 +213,23 @@ test('toPluginBlocks：块带包图标（同一包的行共用一个 iconUrl）�
   assert.equal(withIcon[1].key, 'univer', '取不到包名的行自成一户');
   assert.equal(withIcon[1].iconUrl, null, '没有 pluginIcon 就是 null（回退首字母）');
 });
+
+test('packageOf 三层优先级：pluginPackage > originPath 的 node_modules 段 > provider id', () => {
+  // 1) 宿主给了包名（含 link: 安装）：直接信它，不再从路径猜。
+  assert.equal(
+    packageOf({ provider: 'univer', pluginPackage: 'my-link-plug', originPath: '/p/node_modules/other-pkg/skills/a/SKILL.md' }),
+    'my-link-plug',
+    'pluginPackage 优先',
+  );
+  // 2) 没有 pluginPackage 但有 node_modules 段：按路径解析（老口径）。
+  assert.equal(
+    packageOf({ provider: 'univer', pluginPackage: null, originPath: '/p/node_modules/dsh-univer-office/skills/a/SKILL.md' }),
+    'dsh-univer-office',
+    '回退 originPath',
+  );
+  // 3) 两者都没有：退回 provider id。
+  assert.equal(packageOf({ provider: 'univer', pluginPackage: null, originPath: '/p/skills/a/SKILL.md' }), 'univer', '再回退 provider');
+  assert.equal(packageOf({ provider: 'univer' }), 'univer', '字段缺失也是 provider');
+  assert.equal(packageOf({ provider: 'univer', pluginPackage: '' }), 'univer', '空串不算给了包名');
+  assert.equal(packageOf({ provider: 'univer', pluginPackage: 42 }), 'univer', '非字符串不算给了包名');
+});

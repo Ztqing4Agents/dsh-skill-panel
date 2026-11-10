@@ -10,7 +10,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { packageRootOf, pluginIconOf, withPluginIcons } from '../lib/plugin-icon.js';
+import { packageInfoOf, packageRootOf, pluginIconOf, withPluginIcons } from '../lib/plugin-icon.js';
 
 /** One throwaway root per test, removed afterwards. */
 async function withRoot(fn) {
@@ -116,5 +116,103 @@ test('withPluginIcons：有 originPath 的行挂上 pluginIcon，没有的行原
     assert.equal(out.groups[0].skills[1].pluginIcon, undefined, '没有 originPath 的行不加字段');
     assert.deepEqual(out.counts, { total: 2 }, '其余字段原样带过去');
     assert.equal(catalog.groups[0].skills[0].pluginIcon, undefined, '不改入参');
+  });
+});
+
+/* ------------- link: 安装（不在 node_modules 下）：向上找最近的 package.json ------------- */
+// `packageAbove` 是私有函数，对外只有 `packageInfoOf` 这一个入口，所以都从它测（黑盒覆盖同一条路径）。
+
+test('packageInfoOf：link 安装（没有 node_modules 段）时向上找到包的 name', async () => {
+  await withRoot(async (base) => {
+    await mkdir(join(base, 'my-link-plug', 'skills', 'demo'), { recursive: true });
+    await writeFile(join(base, 'my-link-plug', 'package.json'), JSON.stringify({ name: 'my-link-plug', version: '0.1.0' }));
+    const info = await packageInfoOf(join(base, 'my-link-plug', 'skills', 'demo'));
+    assert.deepEqual(info, { root: join(base, 'my-link-plug'), name: 'my-link-plug' }, '命中最近的那层 manifest');
+  });
+});
+
+test('packageInfoOf：中间几层没有 manifest 也继续向上（技能目录嵌得比较深）', async () => {
+  await withRoot(async (base) => {
+    const pkg = join(base, 'deep-plug');
+    await mkdir(join(pkg, 'a', 'b', 'c', 'skills', 'demo'), { recursive: true });
+    await writeFile(join(pkg, 'package.json'), JSON.stringify({ name: 'deep-plug' }));
+    assert.deepEqual(await packageInfoOf(join(pkg, 'a', 'b', 'c', 'skills', 'demo')), { root: pkg, name: 'deep-plug' }, '跨三层也找得到');
+  });
+});
+
+test('packageInfoOf：向上最多 6 层——第 6 层有 manifest 命中，第 7 层才有就是 null', async () => {
+  await withRoot(async (base) => {
+    // D0 = .../s5，D1..D5 逐级向上，第 6 次（i=5）落在 pkg 根 —— 恰好命中。
+    const hitRoot = join(base, 'hit-plug');
+    await mkdir(join(hitRoot, 's1', 's2', 's3', 's4', 's5', 'demo'), { recursive: true });
+    await writeFile(join(hitRoot, 'package.json'), JSON.stringify({ name: 'hit-plug' }));
+    assert.deepEqual(await packageInfoOf(join(hitRoot, 's1', 's2', 's3', 's4', 's5', 'demo')), { root: hitRoot, name: 'hit-plug' }, '第 6 层命中');
+
+    // 再多一层：manifest 落在第 7 次才会到的地方 —— 不命中。
+    const missRoot = join(base, 'miss-plug');
+    await mkdir(join(missRoot, 's1', 's2', 's3', 's4', 's5', 's6', 'demo'), { recursive: true });
+    await writeFile(join(missRoot, 'package.json'), JSON.stringify({ name: 'miss-plug' }));
+    assert.equal(await packageInfoOf(join(missRoot, 's1', 's2', 's3', 's4', 's5', 's6', 'demo')), null, '第 7 层不命中');
+  });
+});
+
+test('packageInfoOf：一路爬到文件系统根都没有 manifest 就是 null', async () => {
+  await withRoot(async (base) => {
+    const deep = join(base, 'nothing', 'here', 'demo');
+    await mkdir(deep, { recursive: true });
+    assert.equal(await packageInfoOf(deep), null, '到根为止都没有 package.json');
+  });
+});
+
+test('packageInfoOf：软链目录不跟随（不会顺着软链跑到别的树里去找 manifest）', async () => {
+  await withRoot(async (base) => {
+    const target = join(base, 'target-pkg');
+    await mkdir(target, { recursive: true });
+    await writeFile(join(target, 'package.json'), JSON.stringify({ name: 'target-pkg' }));
+    const plug = join(base, 'plug');
+    await mkdir(join(plug, 'real'), { recursive: true });
+    await symlink(target, join(plug, 'linkdir'));
+    // 技能目录本身是那棵软链树里的
+    assert.equal(await packageInfoOf(join(plug, 'linkdir', 'demo')), null, '软链目录被跳过（否则会拿到 target-pkg）');
+  });
+});
+
+test('packageInfoOf：坏 JSON / name 为空 / name 不是字符串都算「这层没有」，继续向上', async () => {
+  await withRoot(async (base) => {
+    const pkg = join(base, 'multi-plug');
+    await mkdir(join(pkg, 'mid', 'demo'), { recursive: true });
+    await writeFile(join(pkg, 'package.json'), JSON.stringify({ name: 'multi-plug' }));
+    for (const [label, content] of [
+      ['坏 JSON', '{ not json'],
+      ['name 为空', JSON.stringify({ name: '' })],
+      ['name 不是字符串', JSON.stringify({ name: 42 })],
+    ]) {
+      await writeFile(join(pkg, 'mid', 'package.json'), content);
+      assert.deepEqual(await packageInfoOf(join(pkg, 'mid', 'demo')), { root: pkg, name: 'multi-plug' }, `${label}：跳过这层，命中上一层`);
+    }
+  });
+});
+
+test('withPluginIcons：同时挂 pluginPackage 与 pluginIcon，取不到时两个字段都是 null', async () => {
+  await withRoot(async (base) => {
+    const plug = join(base, 'linked-plug');
+    await mkdir(join(plug, 'skills', 'demo'), { recursive: true });
+    await writeFile(join(plug, 'package.json'), JSON.stringify({ name: 'linked-plug', icon: 'assets/icon.svg' }));
+    await mkdir(join(plug, 'assets'), { recursive: true });
+    await writeFile(join(plug, 'assets', 'icon.svg'), SVG);
+    const nowhere = join(base, 'orphan', 'skills', 'gone');
+    await mkdir(nowhere, { recursive: true });
+
+    const out = await withPluginIcons({ groups: [{ key: 'builtin', skills: [
+      { name: 'demo', originPath: join(plug, 'skills', 'demo') },
+      { name: 'gone', originPath: nowhere },
+      { name: 'plain' },
+    ] }] });
+    const [linked, orphan, plain] = out.groups[0].skills;
+    assert.equal(linked.pluginPackage, 'linked-plug', '包名挂上了');
+    assert.ok((linked.pluginIcon ?? '').startsWith('data:image/svg+xml;base64,'), '图标也挂上了（link 安装同样能读）');
+    assert.equal(orphan.pluginPackage, null, '找不到包：包名是 null');
+    assert.equal(orphan.pluginIcon, null, '找不到包：图标也是 null（两个字段照挂）');
+    assert.equal(plain.pluginPackage, undefined, '没有 originPath 的行不加字段');
   });
 });

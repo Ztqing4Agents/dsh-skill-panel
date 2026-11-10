@@ -68,16 +68,17 @@ export function toGroups(payload) {
 /**
  * The package that shipped a provider-delivered skill, for the block heading.
  *
- * A provider id is not a package name (`dsh-univer-office` registers itself as `univer`),
- * so the name is read off the origin path instead: everything after the **last**
- * `node_modules/` is the package, and a scoped package keeps two segments. Anything that
- * cannot be read that way - no path, no `node_modules/` in it - falls back to the provider
- * id, which is at least unique and always present.
+ * A provider id is not a package name (`dsh-univer-office` registers itself as `univer`), so
+ * three sources are tried in order: the host's own reading of the package (`pluginPackage`,
+ * which also covers `link:` installs), the origin path (everything after the **last**
+ * `node_modules/`, a scoped package keeping two segments), and finally the provider id -
+ * which is at least unique and always present.
  * @param {object} row - one builtin row.
  * @returns {string} the package name, or the provider id.
  */
 export function packageOf(row) {
   const provider = typeof row?.provider === 'string' ? row.provider : '';
+  if (typeof row?.pluginPackage === 'string' && row.pluginPackage !== '') return row.pluginPackage;
   const path = typeof row?.originPath === 'string' ? row.originPath : '';
   const at = path.lastIndexOf('node_modules/');
   if (at === -1) return provider;

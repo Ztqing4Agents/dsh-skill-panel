@@ -55,7 +55,7 @@
 
 **块与插件页头的图标取插件包的 `package.json` 的 `icon`**（相对包根，≤16 KB，只认 `.svg/.png/.webp/.jpg`），由 Host 半部读成 base64 data URL 随行下发为 `Row.pluginIcon`；读不到（无该字段、文件不合法、超限、是软链、越出包根）就回退**首字母头像**——两种块在样式上没有区别，`IconTile` 只是多一张图。
 
-**分组键与块标题都是包名**，不是 provider id：`dsh-univer-office` 这个包在它自己的注册代码里把 provider 名注册成 `univer`，它的 12 个技能（`office` / `office-docx` / `univer-sheet` …）同属一个包，标题写 `univer` 会让人以为「office 被塞进了 univer」。包名从行的 `originPath`（宿主 `SkillSummary.resourceBase.path` 透出）里找**最后一个 `node_modules/`**，取其后一段，`@scope/name` 取两段；**取不到就退回 provider id**（`originPath` 为 null，或路径里没有 `node_modules/`）。`provider` id 仍留在块数据里——它是开关写存储时的身份（`data-skc-plugin` 仍写 provider，另加 `data-skc-plugin-pkg` 写包名）。
+**分组键与块标题都是包名**，不是 provider id：`dsh-univer-office` 这个包在它自己的注册代码里把 provider 名注册成 `univer`，它的 12 个技能（`office` / `office-docx` / `univer-sheet` …）同属一个包，标题写 `univer` 会让人以为「office 被塞进了 univer」。包名按**三层优先级**取：① `Row.pluginPackage`（Host 读该包 `package.json` 的 `name`，`link:` 安装也覆盖——包不在 `node_modules` 下时从技能目录向上**最多 6 层**找最近的 manifest，不跟随软链）；② `originPath` 里**最后一个 `node_modules/`** 之后的一段，`@scope/name` 取两段；③ 都取不到才退回 provider id。`provider` id 仍留在块数据里——它是开关写存储时的身份（`data-skc-plugin` 仍写 provider，另加 `data-skc-plugin-pkg` 写包名）。
 
 结构与返回（**与技能详情页同一套刻度**，不另立样式族）：
 
