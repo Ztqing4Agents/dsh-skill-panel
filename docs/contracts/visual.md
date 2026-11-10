@@ -216,9 +216,8 @@
 .skc_detailIntro{ display: flex; flex-direction: column; gap: 8px; margin-top: -12px }
 /* 作者行 = 宿主的包名行：12/18、tertiary、mono（宿主那行用 ui-monospace 一族） */
 .skc_detailAuthor{ margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code); font-size: 12px; line-height: 18px }
-/* 卸载占位：宿主是「透明描边按钮 + 红字」，环是 inset 1px 的红 30%——不是 border（border 会让
-   高度多 2px）。红来自 --dsw-alias-state-error-primary（宿主同一令牌），我们借 primitives 自己
-   的两个 knob 画环；不用文字色手写 rgba，也不重定义任何 --dsw-* */
+/* 卸载占位：宿主是「透明描边按钮 + 红字」，环是 inset 1px 的红 30%——不是 border（会让高度
+   多 2px）。红用 --dsw-alias-state-error-primary（宿主同一令牌），借 primitives 两个 knob 画环 */
 .skc_detailDanger{ --dsh-button-outline-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent); --dsh-hairline-width: 1px; color: var(--dsw-alias-state-error-primary); height: 28px; padding: 0 10px; border-radius: 8px; gap: 4px; font-size: 12px; line-height: 18px }
 .skc_detailDanger:disabled{ opacity: .4 }
 /* 正文内滚动盒：宿主在 1440×920 下实测 552px（盒 height:552 + padding:12px 0、overflow-y:auto）。
@@ -226,6 +225,19 @@
    **它紧跟描述、前面没有区块标题**（宿主描述下面直接是 README）；标签行、事实表、文件清单、
    来源信息全在它下面，其中后两者跟页面滚。三态（loading/error/noBody）也在盒内就地呈现 */
 .skc_detailBodyBox{ max-height: 60vh; padding: 12px 0; overflow-y: auto }
+/* 版本区块：标题沿用 14/20/500、右侧小按钮是 Button size=sm；卡片 1px 描边 + radius-lg + 16
+   内边距（宿主那张圆角卡，卡内 px 未采，取值按本页既有刻度定）；✓ 圆底 32、底色为 success
+   令牌 12%。「来源信息」两行不新增规则：复用 .skc_marketFacts（market.md 附录 F） */
+.skc_detailVersionHead{ display: flex; align-items: center; justify-content: space-between; gap: 12px }
+.skc_detailVersionCard{ border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); padding: 16px; display: flex; align-items: flex-start }
+.skc_detailVersionRow{ display: flex; align-items: flex-start; gap: 12px; min-width: 0 }
+.skc_detailVersionMark{ width: 32px; height: 32px; border-radius: 999px; flex: none; align-items: center; justify-content: center; display: inline-flex; color: var(--dsw-alias-state-success-primary); background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent) }
+.skc_detailVersionText{ display: flex; flex-direction: column; gap: 2px; min-width: 0 }
+/* 卡内结论 14/22（与描述同阶）；时间那行沿用 .skc_marketScope */
+.skc_detailVersionTitle{ margin: 0; font-size: 14px; line-height: 22px }
+/* 「查看仓库」是页内普通链接（不是点击层）：右下角、13/20 tertiary、hover 变主色 */
+.skc_detailRepoLink{ align-self: flex-end; display: inline-flex; align-items: center; gap: 4px; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px; text-decoration: none }
+@media (hover: hover){ .skc_detailRepoLink:hover{ color: var(--dsw-alias-label-primary) } }
 .skc_detailIdentity{ align-items: center; gap: 8px; display: flex }
 .skc_detailCallName{ font-family: var(--ds-font-family-code) }
 .skc_detailBody{ font-size: 13px; line-height: 20px }

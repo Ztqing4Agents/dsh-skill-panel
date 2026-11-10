@@ -34,7 +34,6 @@ export function cn(...names) {
 
 /** The stylesheet text. */
 const CSS = `
-/* page shell */
 .skc_page{
 --skc-page-inset: clamp(24px, 4vw, 48px);
 --skc-page-top-inset: 28px;
@@ -47,7 +46,6 @@ display: flex; flex-direction: column; align-items: center;
 @media (width <= 767px){ .skc_page{ --skc-page-inset: 20px } }
 .skc_page > *{ flex: none; width: 100%; max-width: 960px }
 
-/* scroll container and header bar */
 .skc_pageBody{
 min-height: 0;
 width: calc(100% + 2 * var(--skc-page-inset));
@@ -92,7 +90,6 @@ box-sizing: border-box; border-bottom: .5px solid var(--dsw-alias-border-l3);
 position: absolute; top: 0;
 }
 
-/* page head */
 .skc_pageHead{
 box-sizing: border-box; padding-top: var(--skc-page-top-inset);
 display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 16px;
@@ -125,14 +122,12 @@ border-top-left-radius: 0; border-bottom-left-radius: 0; width: 32px; padding: 0
 .skc_pageTabs{ flex: 100%; order: 3; display: flex }
 .skc_pageTabList{ width: fit-content; min-width: 240px }
 
-/* partitions */
 .skc_installedPanel{ flex-direction: column; gap: 32px; display: flex }
 .skc_tabPanel{ flex-direction: column; gap: 24px; display: flex }
 .skc_group{ flex-direction: column; gap: 8px; display: flex }
 .skc_groupHead{ align-items: center; gap: 8px; display: flex }
 .skc_groupTitle{ flex: 1; margin: 0; font-size: 14px; font-weight: 500; line-height: 22px }
 
-/* rows: the row owns the click layer */
 .skc_cards{ flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; display: flex }
 .skc_card{ border-radius: var(--dsw-radius-xl); min-width: 0; margin: 0 -8px; position: relative }
 @media (hover: hover){ .skc_card:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
@@ -159,7 +154,6 @@ color: var(--dsw-alias-label-tertiary); display: -webkit-box;
 font-size: 13px; line-height: 18px;
 }
 .skc_cardEnd{ z-index: 1; flex: none; align-items: center; gap: 8px; display: inline-flex; position: relative }
-/* click layer: inset:0 ::after; the seat floats above */
 .skc_cardOpen{
 flex: 0 1 auto; min-width: 0; max-width: 100%; padding: 0; border: 0; background: 0 0;
 color: inherit; font: inherit; text-align: left; cursor: pointer; text-overflow: ellipsis; white-space: nowrap;
@@ -196,7 +190,6 @@ animation: 2s cubic-bezier(.36, 0, .64, 1) infinite skc-skeleton;
 .skc_skeletonHeading{ width: 48px }
 .skc_skeletonTitle{ width: min(144px, 60%) }
 .skc_skeletonDescription{ width: min(280px, 85%) }
-/* skeleton grey on its own rule, clipped */
 .skc_skeletonIcon{
 border-color: #0000;
 background: var(--dsw-alias-bg-skeleton); background-clip: padding-box;
@@ -230,7 +223,6 @@ clip: rect(0 0 0 0); white-space: nowrap; width: 1px; height: 1px; position: abs
 }
 .skc_pageBarWithTabs[data-compact]:not([data-natural]) .skc_pageTabs{ flex: none; order: 1 }
 
-/* narrow pages */
 @container skc-page-bar (width < 600px){
 .skc_pageBarWithTabs .skc_pageHead{ align-items: center }
 .skc_pageBarWithTabs .skc_pageHeading{ flex-basis: 100% }
@@ -244,17 +236,15 @@ width: 32px; min-width: 32px; padding-inline: 0;
 }
 @container skc-page-bar (width < 372px){ .skc_pageTabList{ min-width: 0 } }
 
-/* market: toolbar and chips; the menu cancels the gap (K) */
+/* market: toolbar and chips */
 .skc_marketSection{ flex-direction: column; gap: 16px; display: flex }
 .skc_marketToolbar{ flex-wrap: wrap; align-items: center; gap: 8px; display: flex }
-/* clear inside the field: it never moves the toolbar */
 .skc_marketSearchField{
 min-width: 120px; flex: 1; align-items: center; display: flex; position: relative;
 }
 .skc_marketSearch{
 padding-right: 32px; box-sizing: border-box; width: 100%; min-width: 0;
 }
-/* drop native cancel: ours has a label */
 .skc_marketSearch input::-webkit-search-cancel-button{ -webkit-appearance: none; appearance: none; display: none }
 .skc_marketClear{
 display: flex; position: absolute; top: 50%; right: 5px; transform: translateY(-50%);
@@ -273,7 +263,6 @@ var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
 outline-offset: 1px;
 }
 .skc_marketSelect{ max-width: 240px; font-weight: 500 }
-/* ghost: no box; the menu cancels the gap, 8 / 10 */
 .skc_marketSelectTrailing{ margin-left: -8px }
 .skc_marketSelectLabel{ text-overflow: ellipsis; white-space: nowrap; overflow: hidden }
 .skc_marketChips{ flex-wrap: wrap; align-items: center; gap: 6px; display: flex }
@@ -289,13 +278,10 @@ margin: 0; padding: 10px 12px; font-size: 12px; line-height: 18px; display: flex
 grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;
 margin: 0; padding: 0; list-style: none; display: grid;
 }
-/* fills the box; concentric radius keeps the hairline */
-/* contain, not cover: wordmarks would crop */
 .skc_marketIconImg{
 border-radius: calc(var(--dsw-radius-lg) - .5px); width: 100%; height: 100%;
 object-fit: contain; display: block;
 }
-/* in the pill: 4px, secondary; hit area untouched */
 .skc_marketChipCount{
 margin-left: 4px; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px;
 }
@@ -304,9 +290,7 @@ border-radius: var(--dsw-radius-xl); align-items: stretch; gap: 8px; min-width: 
 padding: 14px; flex-direction: column; display: flex; position: relative;
 }
 @media (hover: hover){ .skc_marketCard:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
-/* head: tile + title + the one seat; nowrap keeps it */
 .skc_marketHead{ align-items: center; gap: 12px; min-width: 0; display: flex }
-/* one rhythm: 8 here and 8 in the card */
 .skc_marketBody{ flex-direction: column; gap: 8px; min-width: 0; display: flex }
 .skc_marketMain{ flex-direction: column; flex: 1; gap: 2px; min-width: 0; display: flex }
 /* content-wide; nowrap is load-bearing */
@@ -314,7 +298,6 @@ padding: 14px; flex-direction: column; display: flex; position: relative;
 flex-wrap: nowrap; align-items: center; gap: 8px; min-width: 0;
 align-self: flex-start; max-width: 100%; display: flex;
 }
-/* grow 0 / shrink 1: the title ellipsises */
 .skc_marketCardOpen{
 max-width: 100%; color: inherit; font: inherit; text-align: left; cursor: pointer;
 text-overflow: ellipsis; white-space: nowrap; background: 0 0; border: 0; padding: 0;
@@ -327,18 +310,16 @@ outline: var(--dsw-focus-ring-width) solid
 var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
 outline-offset: 2px;
 }
-/* 13/20 = 60px for three lines; margin 0 is load-bearing */
+/* 13/20 = 60px for 3 lines; margin 0 */
 .skc_marketDesc{
 margin: 0; color: var(--dsw-alias-label-tertiary); -webkit-line-clamp: 3;
 -webkit-box-orient: vertical; font-size: 13px; line-height: 20px;
 display: -webkit-box; overflow: hidden;
 }
-/* one line: a 129-char handle would grow the head */
 .skc_marketMeta{
 color: var(--dsw-alias-label-tertiary); margin: 0; text-overflow: ellipsis;
 white-space: nowrap; overflow: hidden; font-size: 12px; line-height: 18px;
 }
-/* fixed slots; tabular-nums */
 .skc_marketStats{
 grid-template-columns: repeat(3, minmax(0, 72px)); gap: 8px; justify-content: start;
 margin: 0; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums;
@@ -350,9 +331,7 @@ text-overflow: ellipsis; overflow: hidden; display: inline-flex;
 }
 .skc_marketStat > svg{ width: 13px; height: 13px; flex: none; opacity: .75 }
 .skc_marketStatValue{ min-width: 0; overflow: hidden; text-overflow: ellipsis }
-/* brand mark 16px at 2x, decoration */
 .skc_marketSourceMark{ border-radius: var(--dsw-radius-sm); width: 16px; height: 16px; flex: none; display: block }
-/* chips clamped: a long topic must not stretch the row */
 .skc_marketTags{ flex-wrap: wrap; gap: 6px; min-width: 0; margin: 0; padding: 0; display: flex; list-style: none }
 .skc_marketTag{
 border: .5px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-sm);
@@ -360,7 +339,7 @@ color: var(--dsw-alias-label-tertiary); max-width: 100%; padding: 1px 6px;
 font-size: 11px; line-height: 16px; white-space: nowrap;
 text-overflow: ellipsis; overflow: hidden;
 }
-/* z-index:1 floats the seat above the click layer */
+/* z-index:1 floats the seat above the layer */
 .skc_marketCardEnd{
 z-index: 1; flex: none; align-items: center; gap: 8px;
 display: inline-flex; position: relative;
@@ -428,15 +407,11 @@ font-size: 12px; line-height: 18px;
 }
 .skc_marketFileSize{ color: var(--dsw-alias-label-tertiary); flex: none; font-size: 12px; line-height: 18px }
 
-/* installed detail: adds only these */
 .skc_detailPage{ display: flex; flex-direction: column; min-width: 0 }
-/* drag with no header: the header's darwin inset, and it must
-stay empty - a drag region eats selection and buttons */
+/* drag: the header's darwin inset, must stay empty */
 .skc_detailDrag{ flex: none; height: var(--skc-page-top-inset) }
 [data-platform=darwin] .skc_detailDrag{ height: calc(var(--skc-page-top-inset) + var(--dsh-frame-top-clearance, 0px)) }
-/* head row: icon left, actions right (host) */
-/* 49 = the host's detail icon (.5px hairline + 48 of content); the list row keeps 48,
-   because 64 = 48 + 8x2 is the row height the installed list is pinned to */
+/* 49 = host detail; the list row stays 48 (row 64) */
 .skc_detailIcon{ width: 49px; height: 49px }
 .skc_detailTop{ display: flex; justify-content: space-between; align-items: center }
 .skc_detailActions{ margin-left: auto; display: inline-flex; align-items: center; gap: 16px }
@@ -446,8 +421,7 @@ stay empty - a drag region eats selection and buttons */
 margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code);
 font-size: 12px; line-height: 18px;
 }
-/* host danger button: error-token text, 1px inset ring via the
-primitives' knobs (a border would add 2px) */
+/* danger: error token; 1px inset ring, no border */
 .skc_detailDanger{
 --dsh-button-outline-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent);
 --dsh-hairline-width: 1px;
@@ -455,22 +429,26 @@ color: var(--dsw-alias-state-error-primary); height: 28px; padding: 0 10px;
 border-radius: 8px; gap: 4px; font-size: 12px; line-height: 18px;
 }
 .skc_detailDanger:disabled{ opacity: .4 }
-/* body scrolls here; the file list and source block stay outside
-it (host: 552px at 920 tall = 60vh) */
+/* body scrolls here; files and source stay outside (552 = 60vh) */
 .skc_detailBodyBox{ max-height: 60vh; padding: 12px 0; overflow-y: auto }
+.skc_detailVersionHead{ display: flex; align-items: center; justify-content: space-between; gap: 12px }
+.skc_detailVersionCard{ border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); padding: 16px; display: flex; align-items: flex-start }
+.skc_detailVersionRow{ display: flex; align-items: flex-start; gap: 12px; min-width: 0 }
+.skc_detailVersionMark{ width: 32px; height: 32px; border-radius: 999px; flex: none; align-items: center; justify-content: center; display: inline-flex; color: var(--dsw-alias-state-success-primary); background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent) }
+.skc_detailVersionText{ display: flex; flex-direction: column; gap: 2px; min-width: 0 }
+.skc_detailVersionTitle{ margin: 0; font-size: 14px; line-height: 22px }
+.skc_detailRepoLink{ align-self: flex-end; display: inline-flex; align-items: center; gap: 4px; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px; text-decoration: none }
+@media (hover: hover){ .skc_detailRepoLink:hover{ color: var(--dsw-alias-label-primary) } }
 .skc_detailIdentity{ align-items: center; gap: 8px; display: flex }
 .skc_detailCallName{ font-family: var(--ds-font-family-code) }
 .skc_detailBody{ font-size: 13px; line-height: 20px }
 
-/* confirm dialog and skeleton */
 .skc_marketDialog{ width: min(480px, 100vw - 32px) }
 .skc_marketConfirmBody{ flex-direction: column; gap: 12px; display: flex }
 .skc_marketConfirmHead{ align-items: center; gap: 14px; display: flex }
 .skc_marketSkeletonChip{ border-radius: var(--dsw-radius-lg); width: 64px; height: 26px }
 .skc_marketSkeletonAction{ border-radius: var(--dsw-radius-md); width: 64px; height: 24px }
-/* same box as the real figures */
 .skc_marketSkeletonStat{ border-radius: var(--dsw-radius-xs); width: 56px; height: 12px }
-/* the real chip's box (48x19) */
 .skc_marketSkeletonTag{ border-radius: var(--dsw-radius-sm); width: 48px; height: 19px }
 .skc_marketToastHint{
 color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere;

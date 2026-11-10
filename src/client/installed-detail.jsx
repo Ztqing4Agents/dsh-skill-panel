@@ -20,8 +20,9 @@ import {
   IconCheckOutlineRegular,
   IconChevronDownOutlineRegular,
   IconCopyOutlineRegular,
+  IconLinkOutlineRegular,
+  IconRefreshOutlineRegular,
   IconTrashOutlineRegular,
-  fileSizeText,
 } from '@deepseek-ai/dsh-client-ui-primitives';
 
 import { IconTile } from './icon-tile.jsx';
@@ -33,9 +34,6 @@ import { EnableSwitch, ReadonlyTag } from './row.jsx';
 
 /** How long the copy button shows the tick, in milliseconds. */
 const COPIED_MS = 1500;
-
-/** Source ids whose display name the dictionary carries; anything else shows as-is. */
-const SOURCE_LABELS = new Set(['skillhub', 'clawhub']);
 
 /**
  * The copy affordance of the invocation name.
@@ -82,14 +80,16 @@ function CopyName({ name, t }) {
 /**
  * Render the detail view of one installed skill.
  * @param {{detail: object|null, row: object|null, rows: Map<string, object>, t: Function,
- *   status: string, iconUrl?: string|null, title?: string, onBack: Function,
- *   onRetry: Function, onToggle: Function}} props - the detail state, the row the list still
- *   carries (null once it is gone), per-row write state, translate, the detail status, the
- *   row's icon and visible title, and the back / retry / switch handlers.
+ *   status: string, check?: object|null, iconUrl?: string|null, title?: string,
+ *   onBack: Function, onRetry: Function, onToggle: Function, onCheck?: Function}} props - the
+ *   detail state, the row the list still carries (null once it is gone), per-row write state,
+ *   translate, the detail status, the update check's verdict, the row's icon and visible
+ *   title, and the back / retry / switch / check handlers.
  * @returns {import('react').ReactElement} the detail view.
  */
 export function InstalledDetail({
-  detail, row, rows, t, status, iconUrl = null, title, onBack, onRetry, onToggle,
+  detail, row, rows, t, status, check = null, iconUrl = null, title, onBack, onRetry, onToggle,
+  onCheck,
 }) {
   const crumb = (
     <button type="button" className={cn('marketCrumb')} onClick={onBack}>
@@ -112,15 +112,29 @@ export function InstalledDetail({
   }
   const key = rowKey(row);
   const data = status === 'ready' ? detail?.data ?? null : null;
-  const files = Array.isArray(data?.files) ? data.files : [];
   const body = typeof data?.body === 'string' && data.body.trim() !== '' ? data.body : null;
   const reason = rows?.get?.(key)?.reason ?? null;
   const mode = switchMode(row);
   const partitionKey = partitionTagKey(row);
   const upstream = row.upstream ?? null;
-  const sourceLabel = upstream === null
-    ? ''
-    : (SOURCE_LABELS.has(upstream.sourceId) ? t(`market.source.${upstream.sourceId}`) : upstream.sourceId);
+  const version = typeof row.version === 'string' && row.version !== '' ? row.version : null;
+  // The verdict belongs to this row only: a verdict left over from another skill must not
+  // paint here (the store already drops it on open and close, this is the belt).
+  const verdict = check !== null && check.key === key ? check : null;
+  const checkStatus = verdict === null ? 'idle' : verdict.status;
+  const checkedAt = verdict !== null && Number.isFinite(verdict.at)
+    ? new Date(verdict.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+    : '';
+  const busy = verdict !== null && verdict.busy === true;
+  const faceText = checkStatus === 'upToDate'
+    ? t('detail.upToDate')
+    : (checkStatus === 'newer'
+      ? t('detail.newerVersion', { version: verdict.latestVersion ?? '' })
+      : t(checkStatus === 'unavailable'
+        ? 'detail.checkUnavailable'
+        : (checkStatus === 'error' ? 'detail.checkFailed' : 'detail.checkIdle')));
+  const showMark = checkStatus === 'upToDate';
+  const showAt = (showMark || checkStatus === 'newer') && checkedAt !== '';
   // The box holds one element in every state, so the host's "only the README is boxed" shape
   // stays true: loading / failure / empty all render in place instead of above the document.
   let bodyContent;
@@ -202,29 +216,53 @@ export function InstalledDetail({
         </ul>
       )}
       <FactsTable rows={detailFactsOf(row, t)} />
-      {files.length === 0 ? null : (
-        <section className={cn('marketDetailSection')}>
-          <h4 className={cn('marketSectionTitle')}>{t('market.detailFiles')}</h4>
-          <ul className={cn('marketFiles')}>
-            {files.map((file) => (
-              <li key={file.path}>
-                <span className={cn('marketFileName')}>{file.path}</span>
-                {Number.isFinite(file.size)
-                  ? <span className={cn('marketFileSize')}>{fileSizeText(file.size)}</span>
-                  : null}
-              </li>
-            ))}
-          </ul>
-          {data?.filesTruncated === true
-            ? <p className={cn('marketScope')}>{t('detail.filesTruncated')}</p>
-            : null}
-        </section>
-      )}
+      <section className={cn('marketDetailSection')}>
+        <div className={cn('detailVersionHead')}>
+          <h4 className={cn('marketSectionTitle')}>{t('detail.sectionVersion')}</h4>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy || checkStatus === 'unavailable'}
+            onClick={onCheck}
+            icon={busy ? <StateDot state="ongoing" size={13} /> : <IconRefreshOutlineRegular size={13} />}
+          >
+            {t(busy ? 'detail.checking' : 'detail.checkAgain')}
+          </Button>
+        </div>
+        <div className={cn('detailVersionCard')}>
+          <div className={cn('detailVersionRow')}>
+            {showMark
+              ? <span className={cn('detailVersionMark')} aria-hidden="true"><IconCheckOutlineRegular size={14} /></span>
+              : null}
+            <div className={cn('detailVersionText')}>
+              <p className={cn('detailVersionTitle')}>{faceText}</p>
+              {showAt ? <p className={cn('marketScope')}>{t('detail.checkedAt', { time: checkedAt })}</p> : null}
+            </div>
+          </div>
+        </div>
+      </section>
       {upstream === null ? null : (
         <section className={cn('marketDetailSection')}>
           <h4 className={cn('marketSectionTitle')}>{t('detail.sectionSource')}</h4>
-          <p className={cn('marketScope')}>{`${sourceLabel} · ${upstream.owner}/${upstream.slug}`}</p>
+          <dl className={cn('marketFacts')}>
+            <div>
+              <dt>{t('detail.factCodeSource')}</dt>
+              <dd><code>{version === null ? `${upstream.owner}/${upstream.slug}` : `${upstream.owner}/${upstream.slug}@${version}`}</code></dd>
+            </div>
+            {version === null ? null : (
+              <div>
+                <dt>{t('detail.factVersion')}</dt>
+                <dd><code>{version}</code></dd>
+              </div>
+            )}
+          </dl>
         </section>
+      )}
+      {typeof data?.repoUrl !== 'string' ? null : (
+        <a className={cn('detailRepoLink')} href={data.repoUrl} target="_blank" rel="noopener noreferrer">
+          {t('detail.viewRepo')}
+          <IconLinkOutlineRegular size={12} aria-hidden="true" />
+        </a>
       )}
     </div>
   );

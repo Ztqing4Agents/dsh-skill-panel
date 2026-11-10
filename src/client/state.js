@@ -89,6 +89,9 @@ function initialState() {
     // list, leaving the tab must not lose the text, and coming back must not re-request it.
     detail: null,
     detailScrollTop: 0,
+    // The manual update check of the open detail: {key, busy, status, latestVersion, at}.
+    // One skill at a time, so a plain object keyed by the detail's key is enough.
+    check: null,
     market: initialMarket(),
   };
 }
@@ -267,7 +270,17 @@ export function createStore() {
      * @returns {void}
      */
     openDetail: (row) => {
-      set({ detail: { key: rowKey(row), status: 'loading', data: null, code: null } });
+      const key = rowKey(row);
+      // A skill with no upstream identity, or none of its own versions, can never be compared:
+      // say so on arrival instead of offering a button whose only possible answer is that.
+      const comparable = (row?.upstream ?? null) !== null
+        && typeof row?.version === 'string' && row.version !== '';
+      set({
+        detail: { key, status: 'loading', data: null, code: null },
+        check: comparable
+          ? null
+          : { key, busy: false, status: 'unavailable', latestVersion: null, at: null },
+      });
     },
     /**
      * Remember where the list was, read with the rows still on screen (the detail view
@@ -313,7 +326,32 @@ export function createStore() {
     /** Close the detail view; the page writes the remembered offset back. @returns {void} */
     closeDetail: () => {
       if (state.detail === null) return;
-      set({ detail: null });
+      set({ detail: null, check: null });
+    },
+    /**
+     * Patch the open detail's update check. The key is checked, not assumed: a slow answer for
+     * a skill the user already closed must not land on the next one. A patch without `busy`
+     * keeps the previous verdict, so the card stays on the last answer while the button spins.
+     * @param {string} key - identity key of the detail's row.
+     * @param {{busy?: boolean, status?: string, latestVersion?: string|null, at?: number|null}} patch - fields to change.
+     * @returns {void}
+     */
+    setCheck: (key, patch) => {
+      if (state.detail === null || state.detail.key !== key) return;
+      const prev = state.check !== null && state.check.key === key ? state.check : null;
+      set({
+        check: {
+          key,
+          status: 'idle',
+          latestVersion: null,
+          at: null,
+          ...prev,
+          ...patch,
+          // Read from the patch only: a settled patch says nothing about `busy`, and letting
+          // prev.busy win would leave the button spinning after every answer.
+          busy: patch?.busy === true,
+        },
+      });
     },
 
     /* ------------------------------------------------------------------ market */

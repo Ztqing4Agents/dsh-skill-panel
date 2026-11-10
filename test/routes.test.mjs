@@ -12,6 +12,7 @@ import { join } from 'node:path';
 
 import { ROUTES, makeRoutes } from '../lib/routes.js';
 import { LOOPBACK_HEADERS, callRoute } from './helpers/http.mjs';
+import { ROOT } from './helpers/ssr.mjs';
 import { customTree, skillFile } from './helpers/tree.mjs';
 
 /** The field the toggle route rewrites. */
@@ -616,8 +617,13 @@ test('K112 detail 在表里，正常行 200：出参形状 + 已去 frontmatter 
     assert.equal(response.status, 200, '正常行 200');
     const data = response.json.data;
     assert.deepEqual(Object.keys(data).sort(), [
-      'body', 'files', 'filesTruncated', 'name', 'path', 'size', 'truncated',
-    ], '出参就是 SkillContent 的七个字段');
+      'body', 'files', 'filesTruncated', 'name', 'path', 'repoUrl', 'size', 'truncated',
+    ], '出参是 SkillContent 的八个字段（本轮加 repoUrl）');
+    // URL 由宿主拼：客户端不许造（硬约束 13），所以这里钉住「路由给、客户端只透传」。
+    assert.equal(data.repoUrl, null, '没有 upstream 的行没有仓库地址（null 而不是空串）');
+    const detailSource = await readFile(join(ROOT, 'src', 'client', 'installed-detail.jsx'), 'utf8');
+    assert.equal(/https?:\/\//.test(detailSource), false, '客户端源码里零字面量 URL（仓库地址只从 data.repoUrl 取）');
+    assert.match(detailSource, /href=\{data\.repoUrl\}/, '链接直接吃路由给的 repoUrl');
     assert.equal(data.name, 'hand-made', 'name 原样回传');
     assert.equal(data.path, join(mounted.tree.skillsRoot, 'hand-made', 'SKILL.md'), 'path 是本次实际读的那个文件');
     assert.equal(data.body, '# 标题\n\n正文一段。\n', '正文已去 frontmatter（不是手写正则切的）');

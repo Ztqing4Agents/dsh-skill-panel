@@ -355,13 +355,50 @@ function mountPage(api) {
   return { store, render: mounted.render };
 }
 
+/** One installed row that carries an upstream identity and a local version. */
+function upstreamRow(overrides = {}) {
+  return row({
+    name: 'ui-design',
+    partition: 'installed',
+    rule: 'R7',
+    upstream: { sourceId: 'skillhub', owner: 'ake', slug: 'ui-design' },
+    version: '1.2.4',
+    ...overrides,
+  });
+}
+
+/** A payload holding exactly one upstream row (the list is what `detailRow` is read from). */
+function upstreamPayload(overrides = {}) {
+  const target = upstreamRow(overrides);
+  return { groups: [{ key: 'installed', skills: [target] }], counts: { total: 1, disabled: 0, excluded: 0 }, complete: true, diagnostics: [], cwd: '/work' };
+}
+
+/**
+ * The `onCheck` handler the page hands the detail view.
+ * @param {object} tree - a rendered tree.
+ * @returns {Function} the handler.
+ */
+function checkPropOf(tree) {
+  const detail = elementsOf(tree).find((element) => element.type === modules.installedDetail.InstalledDetail);
+  assert.ok(detail !== undefined, '详情组件在树里');
+  assert.equal(typeof detail.props.onCheck, 'function', '页面把 onCheck 传下去了');
+  return detail.props.onCheck;
+}
+
 /** The api client stub the detail tests use; `calls` records every route touched. */
-function recordingApi(calls, detail = { body: 'text', files: [], filesTruncated: false }) {
+function recordingApi(calls, detail = { body: 'text', files: [], filesTruncated: false }, options = {}) {
+  const apiVersion = options.version ?? '1.2.4';
+  const apiDetailFails = options.fails === true;
   return {
     list: async () => { calls.push('list'); },
     toggle: async () => {},
     toggleProvider: async () => {},
     skillDetail: async (arg) => { calls.push(`skillDetail:${arg?.name}`); return detail; },
+    marketDetail: async (arg) => {
+      calls.push(`marketDetail:${arg?.source}/${arg?.owner}/${arg?.slug}`);
+      if (apiDetailFails) throw new Error('boom');
+      return { item: { version: apiVersion } };
+    },
   };
 }
 
@@ -505,6 +542,84 @@ test('K111 返回列表后页头与刷新都回来了，刷新仍走「关详情
   assert.deepEqual(calls, ['list'], '刷新走一次 list（不额外重读正文）');
   assert.equal(store.getSnapshot().status, 'loading', '列表进入加载态');
   await new Promise((resolve) => setTimeout(resolve, 450));
+});
+
+test('版本检查：没有 upstream 或没有本地版本 ⇒ 状态 unavailable，且一个请求都不发', async () => {
+  for (const bare of [row({ name: 'hand-written' }), row({ name: 'hand-written', upstream: { sourceId: 'skillhub', owner: 'ake', slug: 'dev-god' } })]) {
+    const calls = [];
+    const { store, render } = mountPage(recordingApi(calls));
+    store.actions.openDetail(bare);
+    store.actions.detailReady('filesystem#hand-written', { body: '正文', files: [], filesTruncated: false });
+    const onCheck = checkPropOf(render());
+    const pending = onCheck();
+    assert.equal(store.getSnapshot().check.status, 'unavailable', '直接判 unavailable');
+    await pending;
+    assert.deepEqual(calls, [], '没有发出任何请求（没有可比的版本）');
+  }
+});
+
+test('版本检查：同版本 ⇒ upToDate（带 at），且只查一条 market/detail', async () => {
+  const calls = [];
+  const { store, render } = mountPage(recordingApi(calls, undefined, { version: '1.2.4' }));
+  store.actions.ready(upstreamPayload());
+  store.actions.openDetail(upstreamRow());
+  store.actions.detailReady('filesystem#ui-design', { body: '正文', files: [], filesTruncated: false });
+  await checkPropOf(render())();
+  const check = store.getSnapshot().check;
+  assert.equal(check.status, 'upToDate', '字符串相等就是最新');
+  assert.equal(Number.isFinite(check.at), true, '记下检查时间');
+  assert.deepEqual(calls, ['marketDetail:skillhub/ake/ui-design'], '只查一次上游详情');
+});
+
+test('版本检查：版本不同 ⇒ newer + latestVersion（不做大小比较）', async () => {
+  const calls = [];
+  const { store, render } = mountPage(recordingApi(calls, undefined, { version: '9.9.9' }));
+  store.actions.ready(upstreamPayload({ upstream: { sourceId: 'clawhub', owner: 'ake', slug: 'ui-design' } }));
+  store.actions.openDetail(upstreamRow({ upstream: { sourceId: 'clawhub', owner: 'ake', slug: 'ui-design' } }));
+  store.actions.detailReady('filesystem#ui-design', { body: '正文', files: [], filesTruncated: false });
+  await checkPropOf(render())();
+  const check = store.getSnapshot().check;
+  assert.equal(check.status, 'newer', '不同就是有新版本');
+  assert.equal(check.latestVersion, '9.9.9', '带上上游版本号');
+  assert.deepEqual(calls, ['marketDetail:clawhub/ake/ui-design'], 'clawhub 身份走 clawhub 范围');
+});
+
+test('版本检查：请求失败 ⇒ error（可以重试）', async () => {
+  const calls = [];
+  const { store, render } = mountPage(recordingApi(calls, undefined, { fails: true }));
+  store.actions.ready(upstreamPayload());
+  store.actions.openDetail(upstreamRow());
+  store.actions.detailReady('filesystem#ui-design', { body: '正文', files: [], filesTruncated: false });
+  await checkPropOf(render())();
+  assert.equal(store.getSnapshot().check.status, 'error', '抛错落到 error 态');
+  assert.deepEqual(calls, ['marketDetail:skillhub/ake/ui-design'], '失败也算查过一次');
+});
+
+test('版本检查：查的过程中是 busy（按钮禁用、结论不清空）', async () => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const api = {
+    list: async () => {},
+    toggle: async () => {},
+    toggleProvider: async () => {},
+    skillDetail: async () => ({ body: 'text', files: [], filesTruncated: false }),
+    marketDetail: async () => {
+      await gate;
+      return { item: { version: '1.2.4' } };
+    },
+  };
+  const { store, render } = mountPage(api);
+  store.actions.ready(upstreamPayload());
+  store.actions.openDetail(upstreamRow());
+  store.actions.detailReady('filesystem#ui-design', { body: '正文', files: [], filesTruncated: false });
+  store.actions.setCheck('filesystem#ui-design', { status: 'upToDate', at: Date.now() });
+  const pending = checkPropOf(render())();
+  assert.equal(store.getSnapshot().check.busy, true, '请求在飞的时候 busy 为真');
+  assert.equal(store.getSnapshot().check.status, 'upToDate', '结论保留上一次的值');
+  release();
+  await pending;
+  assert.equal(store.getSnapshot().check.busy, false, '落地后 busy 收起');
+  assert.equal(store.getSnapshot().check.status, 'upToDate', '同版本仍是 upToDate');
 });
 
 test('K111 市场页签不跟着改：页头与页签仍在，市场详情仍只替换网格', () => {

@@ -211,6 +211,35 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
     void loadDetail(detailRow);
   }, [detailRow, loadDetail]);
 
+  // The one thing the detail page asks the network for. It compares two strings and nothing
+  // else: equal means up to date, different means the upstream has another version. No
+  // ordering - "newer" is not a judgement this panel can make, and pre-releases exist.
+  // Without source or without a local version there is nothing to compare, so no request.
+  const checkVersion = useCallback(async () => {
+    if (detailRow === null) return;
+    const key = rowKey(detailRow);
+    const up = detailRow.upstream ?? null;
+    const local = typeof detailRow.version === 'string' ? detailRow.version : '';
+    if (up === null || local === '') {
+      store.actions.setCheck(key, { status: 'unavailable' });
+      return;
+    }
+    store.actions.setCheck(key, { busy: true });
+    try {
+      const data = await api.marketDetail({
+        source: up.sourceId === 'clawhub' ? 'clawhub' : 'skillhub',
+        owner: up.owner,
+        slug: up.slug,
+      });
+      const latest = typeof data?.item?.version === 'string' ? data.item.version : '';
+      store.actions.setCheck(key, latest === ''
+        ? { status: 'unavailable' }
+        : { status: latest === local ? 'upToDate' : 'newer', latestVersion: latest, at: Date.now() });
+    } catch {
+      store.actions.setCheck(key, { status: 'error' });
+    }
+  }, [api, store, detailRow]);
+
   // Two moves, both in a paint effect so neither is visible as a jump:
   //   entering the detail -> 0, because the page header is gone and the detail starts at the
   //     breadcrumb (an offset from the list would start it mid-page);
@@ -288,11 +317,13 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
               rows={state.rows}
               t={t}
               status={detailStatus}
+              check={state.check}
               iconUrl={detailRow === null ? null : rowIconUrl(detailRow)}
               title={detailRow === null ? '' : rowTitleOf(detailRow, state.market)}
               onBack={closeDetail}
               onRetry={retryDetail}
               onToggle={onToggle}
+              onCheck={checkVersion}
             />
           </div>
         ) : (

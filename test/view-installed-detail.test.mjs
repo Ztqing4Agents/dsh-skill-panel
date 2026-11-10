@@ -66,6 +66,7 @@ function content(overrides = {}) {
     body: '# Heading\n\nOne paragraph.\n',
     files: [{ path: 'SKILL.md', size: 26 }],
     filesTruncated: false,
+    repoUrl: 'https://skillhub.cn/skills/ake/dev-god',
     ...overrides,
   };
 }
@@ -94,6 +95,8 @@ function props(setup = {}) {
     onBack: () => {},
     onRetry: () => {},
     onToggle: () => {},
+    check: setup.check ?? null,
+    onCheck: () => {},
   };
 }
 
@@ -206,12 +209,16 @@ test('K113 两页共用一个实现：两个详情都 import markdown.jsx，市�
 
 /* ------------------------------------------------- K112 · 两个截断标志上屏 */
 
-test('K112 truncated 上屏：正文之后的纯文案，正文段以内', () => {
+test('K112 truncated 上屏：正文之后的纯文案，正文盒以内', () => {
   const html = render({ data: content({ truncated: true, size: 480_079 }) });
   const at = html.indexOf('正文过长，只显示前 256 KiB');
   assert.notEqual(at, -1, 'detail.truncated 出现在页面上');
   assert.ok(html.indexOf('class="skc_detailBody"') < at, '这句在正文之后');
-  assert.ok(at < html.indexOf(FILES_HEADING), '这句仍在正文段内（文件段标题之前）');
+  // 「文件」区块已经删掉，判据换成「仍在正文盒内」：截断提示属于正文这一块。
+  const boxStart = html.indexOf('class="skc_detailBodyBox"');
+  const boxEnd = html.indexOf('</div>', html.lastIndexOf('class="skc_marketScope"', at) + 1);
+  assert.ok(boxStart !== -1 && boxStart < at, '这句在正文盒里');
+  assert.equal(html.includes(FILES_HEADING), false, '页面上没有「文件」区块标题');
   assert.ok(html.includes('data-stub-markdown'), '被截断的正文照样渲染（只是前 256 KiB）');
 });
 
@@ -220,12 +227,14 @@ test('K112 truncated 不上屏：没有截断就没有这句', () => {
   assert.equal(html.includes('正文过长'), false, 'truncated:false 时不出现提示');
 });
 
-test('K112 filesTruncated 上屏：文件列表之后的纯文案', () => {
+test('K112 filesTruncated 不再上屏：页面上没有这句，但键仍在字典里', () => {
   const html = render({ data: content({ filesTruncated: true }) });
-  const at = html.indexOf('文件过多，只列出前 200 个');
-  assert.notEqual(at, -1, 'detail.filesTruncated 出现在页面上');
-  assert.ok(html.indexOf('class="skc_marketFiles"') < at, '这句在文件列表之后');
-  assert.ok(at < html.indexOf('</section>', html.indexOf(FILES_HEADING)), '这句在文件段之内');
+  // 「文件」区块整块删除：清单不再上屏，截断提示自然也没有落点；字典里的键保留（回滚要用）。
+  assert.equal(html.includes('文件过多，只列出前 200 个'), false, 'detail.filesTruncated 不再出现在页面上');
+  assert.equal(html.includes('class="skc_marketFiles"'), false, '页面上没有文件清单');
+  assert.equal(html.includes(FILES_HEADING), false, '也没有文件段标题');
+  assert.equal(typeof t('detail.filesTruncated'), 'string', '键还在字典里（不报原始键名）');
+  assert.notEqual(t('detail.filesTruncated'), 'detail.filesTruncated', '字典里取得到这句文案');
 });
 
 test('K112 files 为空：文件段整段不渲染，那句也不出现', () => {
@@ -304,7 +313,10 @@ test('详情页的调用名可选中、等宽，复制按钮是普通按钮（�
   const copy = /<button type="button" aria-label="复制调用名" title="复制调用名">/.exec(html);
   assert.ok(copy !== null, '复制是一个带 aria-label 的普通按钮');
   assert.equal(/skc_cardOpen/.test(html), false, '详情页内部复用行的整行点击层');
-  assert.equal(/<a\b/.test(html), false, '详情页没有链接');
+  // 整行点击层仍然不是链接：详情里唯一的 <a> 是页尾那个「查看仓库」外链。
+  const links = [...html.matchAll(/<a\b[^>]*>/g)].map((match) => match[0]);
+  assert.equal(links.length, 1, '详情页只有一个链接');
+  assert.match(links[0], /class="skc_detailRepoLink"/, '那个链接就是查看仓库');
   assert.equal((html.match(/role="switch"/g) ?? []).length, 1, '可写行的详情头恰好一个开关');
 });
 
@@ -416,32 +428,44 @@ test('H1 作者行：upstream 非空时是 @owner/slug，为空时整段不渲�
   assert.equal(bare.includes('未知'), false, '也不写「未知」');
 });
 
-test('H1 来源信息在文件清单之后（页尾），upstream 为空时整块不渲染', () => {
+test('H1 页尾三段：版本区块 → 来源信息 → 查看仓库；upstream 为空时后两段不渲染', () => {
   const html = render({ row: marketRow() });
-  const filesAt = html.indexOf('class="skc_marketFiles"');
+  const versionAt = html.indexOf(t('detail.sectionVersion'));
   const sourceAt = html.indexOf(t('detail.sectionSource'));
-  assert.notEqual(filesAt, -1, '有文件清单');
-  assert.notEqual(sourceAt, -1, '有来源信息');
-  assert.ok(filesAt < sourceAt, '来源信息在文件清单之后');
-  assert.ok(sourceAt < html.lastIndexOf('</section>'), '来源信息是最后一段');
-  assert.ok(html.includes('SkillHub · ake/dev-god'), '来源信息写的是「来源 · owner/slug」');
+  const repoAt = html.indexOf('class="skc_detailRepoLink"');
+  assert.notEqual(versionAt, -1, '有「版本」区块');
+  assert.notEqual(sourceAt, -1, '有「来源信息」');
+  assert.notEqual(repoAt, -1, '有「查看仓库」链接');
+  assert.ok(versionAt < sourceAt, '来源信息在版本区块之后');
+  assert.ok(sourceAt < repoAt, '查看仓库在来源信息之后（页尾最后一行）');
+  assert.equal(html.includes('class="skc_marketFiles"'), false, '页面上没有文件清单');
+  // 来源信息改成两行事实表
+  assert.ok(html.includes(t('detail.factCodeSource')), '有「代码来源」行');
+  assert.ok(html.includes(t('detail.factVersion')), '有「当前版本」行');
 
-  const bare = render({ row: marketRow({ upstream: null }) });
+  // 路由对没有 upstream 的行给 repoUrl:null（客户端只透传，不自己拼），所以这里喂 null 看渲染。
+  const bare = render({ row: marketRow({ upstream: null }), data: content({ repoUrl: null }) });
   assert.equal(bare.includes(t('detail.sectionSource')), false, '没有 upstream 就没有来源信息整块');
+  assert.equal(bare.includes('class="skc_detailRepoLink"'), false, 'repoUrl 是 null 就不渲染查看仓库');
+  assert.notEqual(bare.indexOf(t('detail.sectionVersion')), -1, '版本区块仍在（与 upstream 无关）');
 });
 
-test('H1 可交互元素清单：面包屑 / 复制 / 开关（错误态再加重试），卸载不在其中', () => {
+test('H1 可交互元素清单：面包屑 / 复制 / 开关 / 重新检查（错误态加重试），卸载不在其中', () => {
   const html = render({ row: marketRow() });
   const enabled = [...html.matchAll(/<button(?![^>]*\sdisabled="")[^>]*>/g)].map((match) => match[0]);
-  assert.equal(enabled.length, 3, `就绪态恰好三个可点的按钮（实测 ${enabled.length}）`);
+  assert.equal(enabled.length, 4, `就绪态四个可点按钮（实测 ${enabled.length}）`);
   assert.match(enabled[0], /class="skc_marketCrumb"/, '面包屑');
   assert.match(enabled[1], /role="switch"/, '开关');
   assert.match(enabled[2], /aria-label="复制调用名"/, '复制调用名');
+  assert.ok(html.includes('>重新检查</button>'), '重新检查按钮带文案');
+  assert.equal(/<button[^>]*disabled=""[^>]*>[^<]*重新检查/.test(html), false, '空闲时重新检查可点');
   assert.equal(enabled.some((tag) => /卸载/.test(tag)), false, '卸载不在可交互清单里（它是 disabled）');
+  // 有 upstream 时页尾多一个外链——它是 <a>，不是按钮。
+  assert.equal((html.match(/<a /g) ?? []).length, 1, '就绪态恰好一个链接（查看仓库）');
 
   const errorHtml = render({ row: marketRow(), status: 'error' });
   const errorEnabled = [...errorHtml.matchAll(/<button(?![^>]*\sdisabled="")[^>]*>/g)];
-  assert.equal(errorEnabled.length, 4, '错误态四个：面包屑 / 开关 / 复制 / 重试');
+  assert.equal(errorEnabled.length, 5, '错误态五个：面包屑 / 开关 / 复制 / 重新检查 / 重试');
   assert.ok(/重试<\/button>/.test(errorHtml), '重试按钮在场');
 });
 
@@ -524,12 +548,14 @@ test('H1 盒后顺序：标签 → 事实表 → 文件 → 来源信息（后�
   const box = html.indexOf('class="skc_detailBodyBox"');
   const tags = html.indexOf('class="skc_marketTags"');
   const facts = html.indexOf('class="skc_marketFacts"');
-  const files = html.indexOf('class="skc_marketFiles"');
+  const version = html.indexOf(t('detail.sectionVersion'));
   const source = html.indexOf(t('detail.sectionSource'));
+  const repo = html.indexOf('class="skc_detailRepoLink"');
   assert.ok(box < tags, '标签行在正文盒之后');
   assert.ok(tags < facts, '事实表在标签行之后');
-  assert.ok(facts < files, '文件清单在事实表之后');
-  assert.ok(files < source, '来源信息在文件清单之后');
+  assert.ok(facts < version, '版本区块在事实表之后');
+  assert.ok(version < source, '来源信息在版本区块之后');
+  assert.ok(source < repo, '查看仓库在最后');
 
   // 盒里只有正文：标签、事实表、文件、来源都不在盒内。
   const tree = modules.installedDetail.InstalledDetail(props({ row: marketRow() }));
@@ -538,4 +564,122 @@ test('H1 盒后顺序：标签 → 事实表 → 文件 → 来源信息（后�
   for (const cls of ['skc_marketTags', 'skc_marketFacts', 'skc_marketFiles', 'skc_marketDetailSection']) {
     assert.equal(insideClasses.some((value) => value.includes(cls)), false, `${cls} 不在正文盒内`);
   }
+});
+
+/* ---------------------- 版本区块 / 来源信息两行 / 查看仓库（本轮） ---------------------- */
+
+/** The key the component uses to decide whether a verdict belongs to this row. */
+const CHECK_KEY = 'filesystem#dev-god';
+/** A fixed timestamp: the card prints HH:MM in the reader's zone, so the test formats it the same way. */
+const CHECKED_AT = Date.UTC(2026, 10, 10, 6, 5);
+/**
+ * The version card's button element (it is the only button whose onClick is `onCheck`).
+ * @param {object} setup - `props()` overrides.
+ * @returns {object} the element.
+ */
+function checkButtonOf(setup) {
+  const tree = modules.installedDetail.InstalledDetail(props(setup));
+  const found = elementsOf(tree).filter((element) => element.type !== undefined
+    && ['重新检查', '正在检查…'].includes(element.props?.children)
+    && element.props?.onClick !== undefined);
+  assert.equal(found.length, 1, '版本区块里恰好一个检查按钮');
+  return found[0];
+}
+
+/** The same instant formatted with the implementation's own options (24-hour, no seconds). */
+const checkedAtText = (at) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+
+test('版本区块：标题 + 重新检查，位置在事实表之后、来源信息之前', () => {
+  const html = render({ row: marketRow() });
+  const facts = html.indexOf('class="skc_marketFacts"');
+  const version = html.indexOf(t('detail.sectionVersion'));
+  const source = html.indexOf(t('detail.sectionSource'));
+  assert.notEqual(version, -1, '有「版本」区块');
+  assert.ok(facts < version, '版本区块在事实表之后');
+  assert.ok(version < source, '版本区块在来源信息之前');
+  assert.ok(html.includes(`>${t('detail.checkAgain')}</button>`), '有「重新检查」按钮');
+  assert.equal(html.includes(FILES_HEADING), false, '「文件」区块已经不存在');
+  // 表头是标题 + 按钮同一行
+  assert.ok(/class="skc_detailVersionHead"/.test(html), '表头是一个 detailVersionHead');
+});
+
+test('版本区块空闲态：写「尚未检查更新」，没有时间戳也没有 ✓', () => {
+  const html = render({ row: marketRow() });
+  assert.ok(html.includes(t('detail.checkIdle')), '卡内文案是 detail.checkIdle');
+  assert.equal(html.includes(t('detail.checkedAt', { time: '9' }).slice(0, 4)), false, '没有「上次检查于」');
+  assert.equal(html.includes('skc_detailVersionMark'), false, '没有 ✓ 圆底');
+});
+
+test('版本区块 upToDate：✓ 圆底 + 已是最新版本 + 上次检查于 HH:MM（24 小时制）', () => {
+  const html = render({ row: marketRow(), check: { key: CHECK_KEY, status: 'upToDate', at: CHECKED_AT } });
+  assert.ok(html.includes(t('detail.upToDate')), '卡内文案是 detail.upToDate');
+  assert.ok(html.includes('class="skc_detailVersionMark"'), '有 ✓ 圆底');
+  const shown = checkedAtText(CHECKED_AT);
+  assert.match(shown, /^\d{2}:\d{2}$/, '时间是 24 小时制 HH:MM');
+  assert.ok(html.includes(t('detail.checkedAt', { time: shown })), `显示「上次检查于 ${shown}」`);
+});
+
+test('版本区块 newer：写「有新版本 {version}」，不画 ✓', () => {
+  const html = render({ row: marketRow(), check: { key: CHECK_KEY, status: 'newer', latestVersion: '9.9.9', at: CHECKED_AT } });
+  assert.ok(html.includes(t('detail.newerVersion', { version: '9.9.9' })), '卡内文案带上游版本号');
+  assert.equal(html.includes('class="skc_detailVersionMark"'), false, '有新版本时不画 ✓（不是「最新」）');
+  assert.ok(html.includes(t('detail.checkedAt', { time: checkedAtText(CHECKED_AT) })), '仍然显示检查时间');
+});
+
+test('版本区块 error：写「检查失败，请重试」，按钮仍可点', () => {
+  const html = render({ row: marketRow(), check: { key: CHECK_KEY, status: 'error', at: CHECKED_AT } });
+  assert.ok(html.includes(t('detail.checkFailed')), '卡内文案是 detail.checkFailed');
+  assert.ok(html.includes(`>${t('detail.checkAgain')}</button>`), '按钮回到「重新检查」');
+  assert.equal(/<button[^>]*disabled=""[^>]*>[^<]*重新检查/.test(html), false, '失败后可以再点');
+});
+
+test('版本区块 unavailable：按钮禁用（没有来源或没有版本就没什么可查）', () => {
+  const setup = { row: marketRow(), check: { key: CHECK_KEY, status: 'unavailable' } };
+  assert.ok(render(setup).includes(t('detail.checkUnavailable')), '卡内文案是 detail.checkUnavailable');
+  const button = checkButtonOf(setup);
+  assert.equal(button.props.children, t('detail.checkAgain'), '按钮文字仍是「重新检查」');
+  assert.equal(button.props.disabled, true, '按钮是 disabled');
+});
+
+test('版本区块 busy：按钮「正在检查…」并禁用，卡内保留上次结论', () => {
+  const setup = {
+    row: marketRow(),
+    check: { key: CHECK_KEY, status: 'upToDate', at: CHECKED_AT, busy: true },
+  };
+  const button = checkButtonOf(setup);
+  assert.equal(button.props.children, t('detail.checking'), '按钮文案变 detail.checking');
+  assert.equal(button.props.disabled, true, '检查中按钮禁用');
+  assert.ok(render(setup).includes(t('detail.upToDate')), '卡内仍是上一次的结论（不清空）');
+});
+
+test('版本区块不串台：结论的 key 不是这一行就不画', () => {
+  const html = render({ row: marketRow(), check: { key: 'filesystem#other-skill', status: 'upToDate', at: CHECKED_AT } });
+  assert.ok(html.includes(t('detail.checkIdle')), '别人的结论不落到这一页');
+  assert.equal(html.includes(t('detail.upToDate')), false, '没有「已是最新版本」');
+});
+
+test('查看仓库：href 逐字等于路由给的 repoUrl，target=_blank + rel noopener', () => {
+  const html = render({ row: marketRow() });
+  const link = /<a class="skc_detailRepoLink" href="([^"]*)" target="([^"]*)" rel="([^"]*)">/.exec(html);
+  assert.ok(link !== null, '页尾有一个 .skc_detailRepoLink 的 <a>');
+  assert.equal(link[1], 'https://skillhub.cn/skills/ake/dev-god', 'href 就是路由给的 repoUrl（客户端不拼）');
+  assert.equal(link[2], '_blank', '新窗口打开');
+  assert.match(link[3], /noopener/, 'rel 含 noopener');
+  assert.match(link[3], /noreferrer/, 'rel 含 noreferrer');
+  assert.ok(html.includes(t('detail.viewRepo')), '链接文字是 detail.viewRepo');
+});
+
+test('来源信息两行：代码来源 owner/slug@version（等宽），当前版本单独一行', () => {
+  const html = render({ row: marketRow() });
+  const source = html.slice(html.indexOf(t('detail.sectionSource')));
+  assert.ok(source.includes(`<dt>${t('detail.factCodeSource')}</dt><dd><code>ake/dev-god@1.2.4</code></dd>`), '代码来源是 owner/slug@version');
+  assert.ok(source.includes(`<dt>${t('detail.factVersion')}</dt><dd><code>1.2.4</code></dd>`), '当前版本是 version');
+  assert.ok(source.includes('class="skc_marketFacts"'), '两行复用事实表那套刻度');
+});
+
+test('来源信息：没有 version 时代码来源只有 owner/slug，当前版本整行不渲染', () => {
+  const html = render({ row: marketRow({ version: null }) });
+  const source = html.slice(html.indexOf(t('detail.sectionSource')));
+  assert.ok(source.includes(`<dt>${t('detail.factCodeSource')}</dt><dd><code>ake/dev-god</code></dd>`), '没有 @version 尾巴');
+  assert.equal(source.includes(t('detail.factVersion')), false, '没有版本就不画「当前版本」这一行');
 });

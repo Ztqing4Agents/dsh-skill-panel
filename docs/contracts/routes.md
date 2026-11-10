@@ -115,7 +115,10 @@ const st = await lstat(file)                                           // ⑤ �
   "truncated": false,       // 正文是否被 MAX_TEXT_BYTES 截断
   "body": "…",              // stripFrontmatter 之后的正文；null = 这条没有可读文件
   "files": [{ "path": "SKILL.md", "size": 12345 }],     // null = 没有可列目录（内置行）
-  "filesTruncated": false }
+  "filesTruncated": false,
+  "repoUrl": "https://skillhub.cn/skills/<owner>/<slug>" } // 详情页「查看仓库」的 href；
+                            // 没有 upstream 身份时为 null。**由宿主拼好**——浏览器半部不造
+                            // 上游 URL（硬约束 13），客户端只把它放进 href，不发任何请求。
 ```
 
 ---
