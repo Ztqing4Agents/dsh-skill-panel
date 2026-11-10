@@ -439,7 +439,7 @@ test('H1 作者行：upstream 非空时是 @owner/slug，为空时整段不渲�
   assert.equal(bare.includes('未知'), false, '也不写「未知」');
 });
 
-test('H1 页尾三段：版本区块 → 来源信息 → 查看仓库；upstream 为空时后两段不渲染', () => {
+test('H1 页尾：市场装是「版本 → 来源信息 → 查看仓库」；本地行没有版本区块也没有仓库链接', () => {
   const html = render({ row: marketRow() });
   const versionAt = html.indexOf(t('detail.sectionVersion'));
   const sourceAt = html.indexOf(t('detail.sectionSource'));
@@ -456,12 +456,16 @@ test('H1 页尾三段：版本区块 → 来源信息 → 查看仓库；upstrea
 
   // 路由对没有 upstream 的行给 repoUrl:null（客户端只透传，不自己拼），所以这里喂 null 看渲染。
   const bare = render({ row: marketRow({ upstream: null }), data: content({ repoUrl: null }) });
-  // 来源信息恒渲染：没有 upstream 时它只剩「调用名」一行。
+  // 来源信息恒渲染：调用名 + 代码来源（本地行给目录）。
   assert.notEqual(bare.indexOf(t('detail.sectionSource')), -1, '没有 upstream 也有来源信息这一段');
-  assert.equal(bare.includes(`<dt>${t('detail.callName')}</dt>`), true, '那一行是调用名');
-  assert.equal(bare.includes(`<dt>${t('detail.factCodeSource')}</dt>`), false, '没有上游就没有「代码来源」');
+  assert.equal(bare.includes(`<dt>${t('detail.callName')}</dt>`), true, '第一行是调用名');
+  assert.ok(bare.includes(`<dt>${t('detail.factCodeSource')}</dt><dd><code>/skills/ui-design</code></dd>`), '代码来源是目录（path 去掉文件名）');
   assert.equal(bare.includes('class="skc_detailRepoLink"'), false, 'repoUrl 是 null 就不渲染查看仓库');
-  assert.notEqual(bare.indexOf(t('detail.sectionVersion')), -1, '版本区块仍在（与 upstream 无关）');
+  // 版本区块只属于市场装的行：本地/软链/内置整块不渲染，也不再出现「无法检查更新」。
+  // 注意用标记而不是文案：「当前版本」里也含「版本」两个字。
+  assert.equal(bare.includes(`<h4 class="skc_marketSectionTitle">${t('detail.sectionVersion')}</h4>`), false, '没有 upstream 就没有版本区块');
+  assert.equal(bare.includes('skc_detailVersionHead'), false, '连版本区块的表头都没有');
+  assert.equal(bare.includes(t('detail.checkUnavailable')), false, '页面里不出现「无法检查更新」');
 });
 
 test('H1 可交互元素清单：面包屑 / 复制 / 开关 / 重新检查（错误态加重试），卸载不在其中', () => {
@@ -725,21 +729,22 @@ test('不再出现标签行与事实表：.skc_marketTags / .skc_marketFacts / �
     assert.equal(factsCount, 1, `${shape}：来源信息恒渲染，事实表类恰好 1 个（实测 ${factsCount}）`);
     const factsBlock = html.slice(html.indexOf('class="skc_marketFacts"'), html.indexOf('</dl>', html.indexOf('class="skc_marketFacts"')));
     const rows = (factsBlock.match(/<dt>/g) ?? []).length;
-    const expectedRows = shape === '从市场安装' ? 3 : 1;
+    // 市场装：调用名 + 代码来源 + 当前版本 = 3；其余：调用名 + 代码来源（目录 / link: / 内置）= 2。
+    const expectedRows = shape === '从市场安装' ? 3 : 2;
     assert.equal(rows, expectedRows, `${shape}：来源信息 ${expectedRows} 行（实测 ${rows}）`);
     assert.ok(factsBlock.includes(t('detail.callName')), '第一行恒是调用名');
     assert.equal(factsBlock.includes(t('detail.factPath')), false, '没有「技能文件」这一行');
     assert.equal(factsBlock.includes(t('detail.factProvider')), false, '没有「提供者」这一行');
     assert.equal(html.includes(FILES_HEADING), false, `${shape}：没有「文件」区块`);
     assert.equal(html.includes('class="skc_marketFiles"'), false, `${shape}：没有文件清单`);
-    // 恒两段：版本 + 来源信息。
+    // 市场装两段（版本 + 来源信息）；本地/软链/内置只有来源信息一段。
     const sections = (html.match(/class="skc_marketDetailSection"/g) ?? []).length;
-    assert.equal(sections, 2, `${shape}：区块恰好 2 段（版本 + 来源信息），实测 ${sections}`);
+    assert.equal(sections, shape === '从市场安装' ? 2 : 1, `${shape}：区块 ${shape === '从市场安装' ? 2 : 1} 段（实测 ${sections}）`);
   }
 });
 
 test('两块被删后，那五句文案一句都不出现（分区名 / 事实表四个标签）', () => {
-  const gone = ['技能文件', '提供者', '真实位置', '只读原因', '从市场安装', '本地', '内置', '这个技能没有可写的本地文件'];
+  const gone = ['技能文件', '提供者', '真实位置', '只读原因', '从市场安装', '这个技能没有可写的本地文件'];
   for (const [shape, build] of DELETED_BLOCK_ROWS) {
     const html = render({ row: build() });
     for (const text of gone) {
@@ -751,20 +756,33 @@ test('两块被删后，那五句文案一句都不出现（分区名 / 事实�
 
 /* ------------- 来源信息恒渲染（调用名当第一行）与正文盒上下发丝线 ------------- */
 
-test('来源信息恒渲染：无 upstream 无 version 也有 1 行（调用名）', () => {
+test('来源信息恒渲染：无 upstream 无 version 也有 2 行（调用名 + 代码来源目录）', () => {
   const html = render({ row: row({ upstream: null, version: null }), data: content({ repoUrl: null }) });
   const block = html.slice(html.indexOf('class="skc_marketFacts"'), html.indexOf('</dl>', html.indexOf('class="skc_marketFacts"')));
-  assert.equal((block.match(/<dt>/g) ?? []).length, 1, '只剩调用名一行');
-  assert.ok(block.includes(`<dt>${t('detail.callName')}</dt>`), '那行是调用名');
+  assert.equal((block.match(/<dt>/g) ?? []).length, 2, '调用名 + 代码来源');
+  assert.ok(block.includes(`<dt>${t('detail.callName')}</dt>`), '第一行是调用名');
   assert.ok(block.includes('aria-label="复制调用名"'), '复制按钮跟着调用名进 dd');
   assert.ok(block.includes('class="skc_detailFactValue"'), 'dd 上是 detailFactValue（等宽值 + 复制按钮的横排）');
+  assert.ok(block.includes(`<dt>${t('detail.factCodeSource')}</dt><dd><code>/skills/ui-design</code></dd>`), '第二行是技能目录');
 });
 
-test('来源信息行数随身份变化：无 upstream 有 version = 2 行；有 upstream 有 version = 3 行', () => {
-  const two = render({ row: row({ upstream: null, version: '2.1.0' }), data: content({ repoUrl: null }) });
-  const twoBlock = two.slice(two.indexOf('class="skc_marketFacts"'), two.indexOf('</dl>', two.indexOf('class="skc_marketFacts"')));
-  assert.equal((twoBlock.match(/<dt>/g) ?? []).length, 2, '调用名 + 当前版本');
-  assert.equal(twoBlock.includes(t('detail.factCodeSource')), false, '没有上游就没有代码来源');
+test('来源信息行数：市场装有 version = 3 行；市场装无 version / 本地 / 软链 / 内置 = 2 行', () => {
+  const rowsOf = (html) => {
+    const block = html.slice(html.indexOf('class="skc_marketFacts"'), html.indexOf('</dl>', html.indexOf('class="skc_marketFacts"')));
+    return { count: (block.match(/<dt>/g) ?? []).length, block };
+  };
+
+  // 市场装、没有 version：调用名 + 代码来源（owner/slug），没有「当前版本」。
+  const noVersion = rowsOf(render({ row: marketRow({ version: null }) }));
+  assert.equal(noVersion.count, 2, '调用名 + 代码来源');
+  assert.equal(noVersion.block.includes(t('detail.factVersion')), false, '没有 version 就没有「当前版本」');
+  assert.ok(noVersion.block.includes(`<code>ake/dev-god</code>`), '代码来源是没有 @version 的 owner/slug');
+
+  // 本地行：调用名 + 代码来源（目录）。
+  const local = rowsOf(render({ row: row({ upstream: null, version: null }) }));
+  assert.equal(local.count, 2, '本地行：调用名 + 代码来源目录');
+  assert.ok(local.block.includes(t('detail.factCodeSource')), '代码来源这一行恒在');
+  assert.equal(local.block.includes(t('detail.factVersion')), false, '本地行没有「当前版本」');
 
   const three = render({ row: marketRow() });
   const threeBlock = three.slice(three.indexOf('class="skc_marketFacts"'), three.indexOf('</dl>', three.indexOf('class="skc_marketFacts"')));
@@ -781,4 +799,71 @@ test('标题组只剩三段：标题+版本 → 作者 → 描述（没有调用
   assert.ok(order.every((at) => at !== -1), '三段都在');
   assert.ok(order[0] < order[1] && order[1] < order[2], '标题 → 作者 → 描述');
   assert.equal(intro.includes('detailCallName'), false, '调用名等宽值不在标题组');
+});
+
+/* ------------- 代码来源四种取值 + 版本区块「只有市场装才有」 ------------- */
+
+/** The `<dd>` that follows the 「代码来源」 label. */
+const codeSourceDdOf = (html) => {
+  const at = html.indexOf(`<dt>${t('detail.factCodeSource')}</dt>`);
+  assert.notEqual(at, -1, '有「代码来源」这一行');
+  const dd = html.slice(html.indexOf('<dd>', at));
+  return dd.slice(0, dd.indexOf('</dd>') + 5);
+};
+
+test('代码来源四种取值逐字：owner/slug@version / owner/slug / link:<目录> / <目录> / 内置（纯文本）', () => {
+  assert.equal(codeSourceDdOf(render({ row: marketRow() })), '<dd><code>ake/dev-god@1.2.4</code></dd>', '市场装：包规格带版本');
+  assert.equal(codeSourceDdOf(render({ row: marketRow({ version: null }) })), '<dd><code>ake/dev-god</code></dd>', '市场装无版本：只有 owner/slug');
+
+  const linked = render({ row: row({ symlink: true, path: null, realPath: '/Users/me/Skills/ui-design/SKILL.md', writable: false, readonlyReason: 'symlink' }) });
+  assert.equal(codeSourceDdOf(linked), '<dd><code>link:/Users/me/Skills/ui-design</code></dd>', '软链：link: + 链接目标目录（不是链接本身）');
+
+  const local = render({ row: row({}) });
+  assert.equal(codeSourceDdOf(local), '<dd><code>/skills/ui-design</code></dd>', '本地目录：path 去掉文件名');
+
+  const builtin = render({ row: row({ provider: 'runtime', partition: 'builtin', path: null, realPath: null, writable: false, readonlyReason: 'provider-store' }) });
+  assert.equal(codeSourceDdOf(builtin), `<dd>${t('detail.sourceBuiltin')}</dd>`, '内置：纯文案，不是 <code>');
+  assert.equal(codeSourceDdOf(builtin).includes('<code>'), false, '内置那一格没有 <code>');
+});
+
+test('`link:` 前缀只出现在软链行；目录末尾不带斜杠、也不含文件名', () => {
+  const shapes = [
+    render({ row: marketRow() }),
+    render({ row: row({}) }),
+    render({ row: row({ provider: 'runtime', partition: 'builtin', path: null, realPath: null, writable: false, readonlyReason: 'provider-store' }) }),
+  ];
+  for (const html of shapes) {
+    assert.equal(codeSourceDdOf(html).includes('link:'), false, '非软链行没有 link: 前缀');
+  }
+  for (const html of [render({ row: row({}) }), render({ row: row({ symlink: true, path: null, realPath: '/Users/me/Skills/ui-design/SKILL.md' }) })]) {
+    const value = codeSourceDdOf(html).replace(/<\/?[^>]+>/g, '');
+    assert.equal(value.endsWith('/'), false, '目录末尾不带斜杠');
+    assert.equal(value.endsWith('SKILL.md'), false, '不是 SKILL.md 的完整路径');
+  }
+});
+
+test('版本区块只有市场装才渲染；upstream 为空时页面里连表头都没有', () => {
+  const market = render({ row: marketRow() });
+  assert.ok(market.includes('class="skc_detailVersionHead"'), '市场装有版本区块');
+  assert.ok(market.includes(`<h4 class="skc_marketSectionTitle">${t('detail.sectionVersion')}</h4>`), '有「版本」标题');
+
+  for (const shape of [
+    row({ upstream: null }),
+    row({ symlink: true, path: null, realPath: '/Users/me/Skills/ui-design/SKILL.md' }),
+    row({ provider: 'runtime', partition: 'builtin', path: null, realPath: null }),
+  ]) {
+    const html = render({ row: shape, data: content({ repoUrl: null }) });
+    assert.equal(html.includes('skc_detailVersionHead'), false, '没有版本区块表头');
+    assert.equal(html.includes('skc_detailVersionCard'), false, '没有版本卡');
+    assert.equal(html.includes(t('detail.checkUnavailable')), false, '不出现「无法检查更新」');
+    assert.equal(html.includes(`>${t('detail.checkAgain')}</button>`), false, '也没有「重新检查」按钮');
+  }
+});
+
+test('市场装无版本：版本区块仍在，卡内写「无法检查更新」且按钮禁用', () => {
+  const html = render({ row: marketRow({ version: null }), check: { key: 'filesystem#dev-god', status: 'unavailable' } });
+  assert.ok(html.includes('class="skc_detailVersionHead"'), '版本区块在（有 upstream）');
+  assert.ok(html.includes(t('detail.checkUnavailable')), '卡内文案是 detail.checkUnavailable');
+  const button = checkButtonOf({ row: marketRow({ version: null }), check: { key: 'filesystem#dev-god', status: 'unavailable' } });
+  assert.equal(button.props.disabled, true, '按钮禁用');
 });

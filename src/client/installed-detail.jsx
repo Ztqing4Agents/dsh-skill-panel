@@ -116,6 +116,19 @@ export function InstalledDetail({
   const mode = switchMode(row);
   const upstream = row.upstream ?? null;
   const version = typeof row.version === 'string' && row.version !== '' ? row.version : null;
+  // Where the code comes from, in the host's own four shapes: a package spec for a market
+  // install, "link:<dir>" for a symlink, the plain directory otherwise, and the word for a
+  // row that has no file at all. Built here, not on the host: it is one string, and a new
+  // field on the detail payload would ripple into the route contract for nothing.
+  const base = typeof row.realPath === 'string' && row.realPath !== ''
+    ? row.realPath
+    : (typeof row.path === 'string' && row.path !== '' ? row.path : null);
+  const dir = base === null ? null : base.replace(/\/[^/]+$/, '');
+  const codeSource = dir === null
+    ? null
+    : (upstream === null
+      ? (row.symlink === true ? `link:${dir}` : dir)
+      : (version === null ? `${upstream.owner}/${upstream.slug}` : `${upstream.owner}/${upstream.slug}@${version}`));
   // The verdict belongs to this row only: a verdict left over from another skill must not
   // paint here (the store already drops it on open and close, this is the belt).
   const verdict = check !== null && check.key === key ? check : null;
@@ -200,6 +213,7 @@ export function InstalledDetail({
       </div>
       {reason === null ? null : <p className={cn('reason')} role="alert">{reason}</p>}
       <div className={cn('detailBodyBox')}>{bodyContent}</div>
+      {upstream === null ? null : (
       <section className={cn('marketDetailSection')}>
         <div className={cn('detailVersionHead')}>
           <h4 className={cn('marketSectionTitle')}>{t('detail.sectionVersion')}</h4>
@@ -225,6 +239,7 @@ export function InstalledDetail({
           </div>
         </div>
       </section>
+      )}
       <section className={cn('marketDetailSection')}>
         <h4 className={cn('marketSectionTitle')}>{t('detail.sectionSource')}</h4>
         <dl className={cn('marketFacts')}>
@@ -235,12 +250,10 @@ export function InstalledDetail({
               <CopyName name={row.name} t={t} />
             </dd>
           </div>
-          {upstream === null ? null : (
-            <div>
-              <dt>{t('detail.factCodeSource')}</dt>
-              <dd><code>{version === null ? `${upstream.owner}/${upstream.slug}` : `${upstream.owner}/${upstream.slug}@${version}`}</code></dd>
-            </div>
-          )}
+          <div>
+            <dt>{t('detail.factCodeSource')}</dt>
+            <dd>{codeSource === null ? t('detail.sourceBuiltin') : <code>{codeSource}</code>}</dd>
+          </div>
           {version === null ? null : (
             <div>
               <dt>{t('detail.factVersion')}</dt>

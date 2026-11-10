@@ -115,6 +115,7 @@
   "detail.checkUnavailable": "Cannot check: no source or version",
   "detail.checkFailed": "Check failed, try again",
   "detail.factCodeSource": "Code source",
+  "detail.sourceBuiltin": "Built-in",
   "detail.factVersion": "Current version",
   "detail.viewRepo": "View repository",
   "detail.loading": "Reading the skill text...",

@@ -115,6 +115,7 @@
   "detail.checkUnavailable": "无法检查更新：没有来源信息或版本号",
   "detail.checkFailed": "检查失败，请重试",
   "detail.factCodeSource": "代码来源",
+  "detail.sourceBuiltin": "内置",
   "detail.factVersion": "当前版本",
   "detail.viewRepo": "查看仓库",
   "detail.loading": "正在读取技能正文…",

@@ -544,18 +544,34 @@ test('K111 返回列表后页头与刷新都回来了，刷新仍走「关详情
   await new Promise((resolve) => setTimeout(resolve, 450));
 });
 
-test('版本检查：没有 upstream 或没有本地版本 ⇒ 状态 unavailable，且一个请求都不发', async () => {
-  for (const bare of [row({ name: 'hand-written' }), row({ name: 'hand-written', upstream: { sourceId: 'skillhub', owner: 'ake', slug: 'dev-god' } })]) {
-    const calls = [];
-    const { store, render } = mountPage(recordingApi(calls));
-    store.actions.openDetail(bare);
-    store.actions.detailReady('filesystem#hand-written', { body: '正文', files: [], filesTruncated: false });
-    const onCheck = checkPropOf(render());
-    const pending = onCheck();
-    assert.equal(store.getSnapshot().check.status, 'unavailable', '直接判 unavailable');
-    await pending;
-    assert.deepEqual(calls, [], '没有发出任何请求（没有可比的版本）');
-  }
+test('没有 upstream ⇒ 打开时 check 为 null（不渲染版本区块），点一下也不发请求', async () => {
+  const calls = [];
+  const { store, render } = mountPage(recordingApi(calls));
+  store.actions.openDetail(row({ name: 'hand-written' }));
+  store.actions.detailReady('filesystem#hand-written', { body: '正文', files: [], filesTruncated: false });
+  assert.equal(store.getSnapshot().check, null, '本地行没有结论，也就没有版本区块');
+  await checkPropOf(render())();
+  assert.equal(store.getSnapshot().check.status, 'unavailable', '万一被点到也只是判 unavailable');
+  assert.deepEqual(calls, [], '没有发出任何请求');
+});
+
+test('有 upstream 没有本地版本 ⇒ 打开即 unavailable（按钮禁用），一个请求都不发', async () => {
+  const calls = [];
+  const { store } = mountPage(recordingApi(calls));
+  store.actions.openDetail(row({ name: 'hand-written', upstream: { sourceId: 'skillhub', owner: 'ake', slug: 'dev-god' } }));
+  store.actions.detailReady('filesystem#hand-written', { body: '正文', files: [], filesTruncated: false });
+  const check = store.getSnapshot().check;
+  assert.equal(check.status, 'unavailable', '打开就判 unavailable（版本区块在，但没什么可比）');
+  assert.deepEqual(calls, [], '没有可比的版本，不发请求');
+});
+
+test('有 upstream 且有本地版本 ⇒ 打开时 check 为 null（idle，等用户点）', async () => {
+  const calls = [];
+  const { store } = mountPage(recordingApi(calls));
+  store.actions.openDetail(upstreamRow());
+  store.actions.detailReady('filesystem#ui-design', { body: '正文', files: [], filesTruncated: false });
+  assert.equal(store.getSnapshot().check, null, '没点之前没有结论');
+  assert.deepEqual(calls, [], '打开详情本身不查上游');
 });
 
 test('版本检查：同版本 ⇒ upToDate（带 at），且只查一条 market/detail', async () => {

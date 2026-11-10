@@ -223,7 +223,8 @@
 /* 正文盒**只有上下两条 0.5px 发丝线**（宿主实测：左右 none、圆角 0、背景透明）。颜色取「标签主色
    5%」：浅色 ≈4% 黑、深色 ≈5% 白，随主题翻转；--dsw-alias-border-l3 约 12%，重 3 倍故不用 */
 .skc_detailBodyBox{ max-height: 60vh; padding: 12px 0; overflow-y: auto; border-top: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent); border-bottom: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent) }
-/* 版本区块：标题沿用 14/20/500、右侧小按钮是 Button size=sm；卡片 1px 描边 + radius-lg + 16
+/* 版本区块**只在市场装的技能上渲染**（row.upstream 非空；本地/内置技能整块不存在）。
+   标题沿用 14/20/500、右侧小按钮是 Button size=sm；卡片 1px 描边 + radius-lg + 16
    内边距（宿主那张圆角卡，卡内 px 未采，取值按本页既有刻度定）；✓ 圆底 32、底色为 success
    令牌 12%。「来源信息」两行不新增规则：复用 .skc_marketFacts（market.md 附录 F） */
 .skc_detailVersionHead{ display: flex; align-items: center; justify-content: space-between; gap: 12px }

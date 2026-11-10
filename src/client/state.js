@@ -271,15 +271,16 @@ export function createStore() {
      */
     openDetail: (row) => {
       const key = rowKey(row);
-      // A skill with no upstream identity, or none of its own versions, can never be compared:
-      // say so on arrival instead of offering a button whose only possible answer is that.
-      const comparable = (row?.upstream ?? null) !== null
-        && typeof row?.version === 'string' && row.version !== '';
+      // Only a market install gets the version block at all, so a local or built-in row needs no
+      // verdict. With a source but no version of its own there is still nothing to compare, and
+      // that is the one case the block shows "cannot check".
+      const up = row?.upstream ?? null;
+      const noVersion = typeof row?.version !== 'string' || row.version === '';
       set({
         detail: { key, status: 'loading', data: null, code: null },
-        check: comparable
-          ? null
-          : { key, busy: false, status: 'unavailable', latestVersion: null, at: null },
+        check: up !== null && noVersion
+          ? { key, busy: false, status: 'unavailable', latestVersion: null, at: null }
+          : null,
       });
     },
     /**
