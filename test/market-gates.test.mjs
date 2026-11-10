@@ -124,9 +124,10 @@ test('K40 市场刻度逐条落地：网格 280/12、卡片竖排 14、cardOpen 
   assert.match(card, /padding: 14px/, '卡片内边距 14（新刻度 ②）');
   assert.match(card, /flex-direction: column/, '卡片改竖向排布');
   assert.match(card, /align-items: stretch/, 'column 下必须 stretch（否则骨架收缩包裹）');
-  // The head → body separator. U15 tightened this from 14px to 12px; it is the card's own
-  // gap, deliberately *not* the same value as the body rhythm below (market.md 附录 F ⑪).
-  assert.match(card, /gap: 12px/, '卡片 gap 12：头部 → 正文的唯一分隔（U15 由 14 收到 12）');
+  // The head → body separator (①). U15 took it 14 → 12, U16 12 → 8. It is the card's own gap
+  // and deliberately *not* the body rhythm below: ① and ③ are two different numbers now
+  // (market.md 附录 F ⑪), so neither may be relaxed into a range.
+  assert.match(card, /gap: 8px(?!\d)/, '卡片 gap 8：头部 → 正文 ①（U16 由 12 收到 8）');
   assert.equal(/border:/.test(card), false, '卡面无描边（附录 E 决策 E-1）');
 
   const open = ruleOf('.skc_marketCardOpen::after');
@@ -167,11 +168,15 @@ test('K40 市场刻度逐条落地：网格 280/12、卡片竖排 14、cardOpen 
   // real-machine check measures, so a "just check that line-clamp exists" assertion would let a
   // silent 2-line regression through.
   const desc = ruleOf('.skc_marketDesc');
-  // U15 root cause: `.skc_marketDesc` is a <p> and never reset the UA's `margin: 1em`, so at
-  // 13px it silently added 13px above and below (the tags row and the figures row both carry
-  // their own `margin: 0`; only this one was missing). Deleting this declaration is invisible
-  // in review and costs 26px of card height plus a loose-looking block - hence the pin.
-  assert.match(desc, /margin: 0/, '描述自己写 margin: 0（UA `margin:1em` 会在 13px 字号下多给上下各 13px）');
+  // Both halves of the margin matter, for two different reasons:
+  //   the TOP 0 - U15 root cause: this is a <p> and it never reset the UA's `margin: 1em`, which
+  //     at 13px silently added 13px above and below (the tags row and the figures row both carry
+  //     their own `margin: 0`; only this one was missing);
+  //   the BOTTOM 4px - U16's ②: 描述 → 标签 = 正文 gap 4px + this 4px = 8px, and it lives here
+  //     rather than on the tag row so a card with no summary still reads ① = 8px.
+  // A bare `/margin: 0/` would accept `margin: 0 0 4px` and let that 4px be deleted silently
+  // (② quietly drops back to 4px), so the whole shorthand is pinned.
+  assert.match(desc, /margin: 0 0 4px(?!\d)/, '描述 margin: 0 0 4px —— 上边距归零（UA `1em` 会多给 13px）+ 下边距 4px 是 ② 的一半（删了描述→标签退回 4）');
   assert.match(desc, /-webkit-line-clamp: 3(?!\d)/, '描述三行（U14 取值变更；不算新刻度）');
   assert.match(desc, /font-size: 13px; line-height: 18px/, '描述刻度 13/18（三行 ⇒ 描述盒 54px）');
   assert.match(desc, /display: -webkit-box/, '多行截断走 -webkit-box（不是单行 nowrap）');
