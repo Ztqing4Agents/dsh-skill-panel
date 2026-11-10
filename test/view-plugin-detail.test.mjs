@@ -65,8 +65,8 @@ test('插件页：面包屑 → 插件包名头（图标 + 名 + 技能数）→
   const html = render(blockOf('univer', ['sheet', 'docx'], 'dsh-univer-office'));
   const order = [
     'class="skc_marketCrumb"',
-    'class="skc_pluginHead"',
-    '<h3 class="skc_marketDetailTitle">dsh-univer-office</h3>',
+    'class="skc_detailTop"',
+    `<h3 class="skc_marketSectionTitle">dsh-univer-office</h3>`,
     t('plugin.skills'),
     'class="skc_marketFacts"',
   ].map((needle) => html.indexOf(needle));
@@ -105,4 +105,39 @@ test('插件页的面包屑带 onClick（返回上一级由调用方决定，两
   const html = render(blockOf('univer', ['sheet']), { onBack: () => { back += 1; } });
   assert.ok(/<button type="button" class="skc_marketCrumb"/.test(html), '面包屑是普通按钮');
   assert.equal(html.includes(t('detail.back')), true, '按钮文字是 detail.back');
+});
+
+test('插件页的行是组件式行：74 高壳 + 41 图标 + 13.5/20/500 名字 + 两行描述 + 行尾开关', () => {
+  const html = render(blockOf('univer', ['sheet', 'docx']));
+  const rows = html.match(/<div class="skc_callRow"[\s\S]*?(?=<div class="skc_callRow"|<\/div><\/div>)/g) ?? [];
+  assert.equal(rows.length >= 2, true, '每行都是 .skc_callRow 壳');
+  // 图标位同时带宿主行的 cardIcon（尺寸由 .skc_callIcon 覆写成 41 / 圆角 12）。
+  assert.equal((html.match(/class="skc_cardIcon skc_callIcon"/g) ?? []).length, 2, '每行一个 41 图标');
+  assert.equal((html.match(/class="skc_cardTitle skc_cardOpen skc_callName"/g) ?? []).length, 2, '名字是可点按钮（callName）');
+  assert.equal((html.match(/<p class="skc_callDesc">/g) ?? []).length, 2, '描述是 callDesc');
+  const ends = html.match(/<div class="skc_cardEnd">[\s\S]*?<\/div>/g) ?? [];
+  assert.equal(ends.length, 2, '行尾的开关在 .skc_cardEnd 里');
+  assert.ok(ends.every((chunk) => chunk.includes('role="switch"')), '每个行尾都是开关');
+  assert.equal(html.includes('data-skc-row="univer#sheet"'), true, '行上带着技能键（可点进技能详情）');
+});
+
+test('插件页没有正文盒 / 版本卡 / 仓库链接 / 旧的头行类名', () => {
+  const html = render(blockOf('univer', ['sheet']));
+  assert.equal(html.includes('skc_detailBodyBox'), false, '没有正文盒');
+  assert.equal(html.includes('skc_detailVersionCard'), false, '没有版本卡');
+  assert.equal(html.includes('skc_detailRepoLink'), false, '没有查看仓库');
+  assert.equal(html.includes('skc_pluginHead'), false, '旧的 .skc_pluginHead 已不在');
+  assert.ok(html.includes('class="skc_detailTop"'), '头行是 .skc_detailTop');
+  assert.ok(html.includes('class="skc_cardIcon skc_detailIcon"'), '头图标是 .skc_detailIcon（49 那颗）');
+});
+
+test('插件页头：有包图标就把 data URL 交给头像位，没有就只画首字母', () => {
+  const withIcon = render({ ...blockOf('univer', ['sheet']), iconUrl: 'data:image/svg+xml;base64,AAA' });
+  assert.ok(withIcon.includes('class="skc_cardIcon skc_detailIcon"'), '头像位还是那颗 49 图标');
+  // 头像是「先探测、加载成功才替换字母」（SSR 阶段拿到的是隐藏的 eager 探针图）。
+  assert.ok(/<img[^>]*src="data:image\/svg\+xml;base64,AAA"/.test(withIcon), 'data URL 进了 img');
+  assert.ok(/<img[^>]*loading="eager"/.test(withIcon), '是 eager 探针图');
+  const without = render(blockOf('univer', ['sheet']));
+  assert.equal(without.includes('data:image'), false, '没有图标时不出现任何 img 数据');
+  assert.ok(without.includes('--skc-avatar-bg'), '没有图标就是首字母头像');
 });

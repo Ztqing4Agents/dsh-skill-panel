@@ -881,7 +881,7 @@ test('市场装无版本：版本区块仍在，卡内写「无法检查更新�
 
 /* ------------- 「调用名」区块：宿主「包含的组件」行样式（本轮） ------------- */
 
-test('调用名区块恒渲染：本地/软链/内置/市场装四种行都有，标题是 detail.callName（无计数）', () => {
+test('区块恒渲染且标题是「包含的技能」：本地/软链/内置/市场装四种行都有（无计数）', () => {
   for (const [shape, target] of [
     ['市场装', marketRow()],
     ['本地', row({})],
@@ -890,8 +890,10 @@ test('调用名区块恒渲染：本地/软链/内置/市场装四种行都有�
   ]) {
     const html = render({ row: target, data: content({ repoUrl: null }) });
     assert.ok(html.includes('class="skc_callRow"'), `${shape}：有调用名行`);
-    assert.ok(html.includes(`<h4 class="skc_marketSectionTitle">${t('detail.callName')}</h4>`), `${shape}：标题是「调用名」`);
-    assert.equal(/<h4 class="skc_marketSectionTitle">调用名\s*\d+/.test(html), false, `${shape}：标题不带计数`);
+    assert.ok(html.includes(`<h4 class="skc_marketSectionTitle">${t('plugin.skills')}</h4>`), `${shape}：标题是「包含的技能」`);
+    assert.equal(/<h4 class="skc_marketSectionTitle">包含的技能\s*\d+/.test(html), false, `${shape}：标题不带计数`);
+    // 复制按钮的无障碍名仍是「复制调用名」（这轮只改了区块标题），所以只钉住 h4 那一层。
+    assert.equal(/<h4[^>]*>调用名/.test(html), false, `${shape}：旧区块标题「调用名」已不再出现`);
   }
 });
 

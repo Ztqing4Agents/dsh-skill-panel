@@ -224,7 +224,7 @@ export function InstalledDetail({
       {reason === null ? null : <p className={cn('reason')} role="alert">{reason}</p>}
       <div className={cn('detailBodyBox')}>{bodyContent}</div>
       <section className={cn('marketDetailSection')}>
-        <h4 className={cn('marketSectionTitle')}>{t('detail.callName')}</h4>
+        <h4 className={cn('marketSectionTitle')}>{t('plugin.skills')}</h4>
         <div className={cn('callRow')}>
           <IconTile iconUrl={iconUrl} title={row.name} className="callIcon" />
           <div className={cn('callBody')}>

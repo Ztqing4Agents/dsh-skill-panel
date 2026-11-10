@@ -8,6 +8,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync, readdirSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 
 import { ROOT, readDictionary, translator } from './helpers/ssr.mjs';
@@ -274,5 +275,18 @@ test('locale 文件是单层扁平点号键：除 meta 块外没有嵌套对象'
     assert.equal(typeof meta, 'object', `${language}.json 保留 meta 块`);
     assert.equal(typeof meta.title, 'string', `${language}.json 的 meta.title 是字符串（宿主插件列表读它）`);
     assert.equal(typeof meta.description, 'string', `${language}.json 的 meta.description 是字符串`);
+  }
+});
+
+test('detail.callName 已从两本字典移除，代码里也没有引用（区块标题改用 plugin.skills）', async () => {
+  const zh = JSON.parse(await readFile(join(ROOT, 'locale', 'zh.json'), 'utf8'));
+  const en = JSON.parse(await readFile(join(ROOT, 'locale', 'en.json'), 'utf8'));
+  assert.equal('detail.callName' in zh, false, 'zh 里没有 detail.callName');
+  assert.equal('detail.callName' in en, false, 'en 里没有 detail.callName');
+  assert.equal(zh['plugin.skills'], '包含的技能', '技能详情页与插件页共用 plugin.skills');
+  const files = ['src/client/installed-detail.jsx', 'src/client/plugin-detail.jsx'];
+  for (const file of files) {
+    const source = await readFile(join(ROOT, file), 'utf8');
+    assert.equal(source.includes('detail.callName'), false, `${file} 不引用 detail.callName`);
   }
 });

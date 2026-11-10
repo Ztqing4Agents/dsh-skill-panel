@@ -73,16 +73,16 @@ export function EnableSwitch({ row, t, pending, onToggle }) {
  * The block carries no control at all: the switch lives on each skill inside the provider's
  * page, so here the whole block is the single click target - the same technique as a row
  * (title button + `::after` covering the block, hard constraint 9), with no action seat.
- * @param {{block: {key: string, provider: string, skills: object[]}, t: Function,
- *   onOpen: Function, iconUrl?: string|null}} props - the package block, translate, the open
- *   handler and the block's avatar URL (null keeps the letter).
+ * @param {{block: {key: string, provider: string, iconUrl: string|null, skills: object[]},
+ *   t: Function, onOpen: Function}} props - the package block, translate and the open handler.
+ *   The block's icon comes from the package manifest; without one it keeps the letter avatar.
  * @returns {import('react').ReactElement} the block.
  */
-export function PluginBlock({ block, t, onOpen, iconUrl = null }) {
+export function PluginBlock({ block, t, onOpen }) {
   return (
     <li className={cn('card')} data-skc-plugin={block.provider} data-skc-plugin-pkg={block.key}>
       <div className={cn('cardHead')}>
-        <IconTile iconUrl={iconUrl} title={block.key} />
+        <IconTile iconUrl={block.iconUrl ?? null} title={block.key} />
         <div className={cn('cardMain')}>
           <div className={cn('titleRow')}>
             <button

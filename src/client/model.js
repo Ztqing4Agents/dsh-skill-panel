@@ -92,13 +92,15 @@ export function packageOf(row) {
  * Blocks are keyed by package (see `packageOf`) and ordered by it; the provider id stays on
  * the block because it is the identity a switch writes. Skills keep payload order.
  * @param {{key: string, skills: object[]}|undefined} group - one group from `toGroups`.
- * @returns {{key: string, provider: string, skills: object[]}[]} blocks, package ascending.
+ * @returns {{key: string, provider: string, iconUrl: string|null, skills: object[]}[]} blocks,
+ *   package ascending; `iconUrl` is the package's own icon, null when it has none.
  */
 export function toPluginBlocks(group) {
   const byKey = new Map();
   for (const row of Array.isArray(group?.skills) ? group.skills : []) {
     const key = packageOf(row);
-    const block = byKey.get(key) ?? { key, provider: typeof row?.provider === 'string' ? row.provider : '', skills: [] };
+    const block = byKey.get(key)
+      ?? { key, provider: typeof row?.provider === 'string' ? row.provider : '', iconUrl: row?.pluginIcon ?? null, skills: [] };
     block.skills.push(row);
     byKey.set(key, block);
   }

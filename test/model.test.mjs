@@ -198,3 +198,18 @@ test('toPluginBlocks：按包名分组与排序（不是 provider），provider 
   assert.equal(blocks[0].provider, 'univer', '块上仍带 provider（开关要它）');
   assert.equal(blocks[2].provider, 'univer', '退回 provider 的那块也带 provider');
 });
+
+test('toPluginBlocks：块带包图标（同一包的行共用一个 iconUrl），没有图标时是 null', () => {
+  const withIcon = toPluginBlocks({
+    key: 'builtin',
+    skills: [
+      { ...builtinOf('univer', 'a'), originPath: '/p/node_modules/pkg-a/skills/a/SKILL.md', pluginIcon: 'data:image/svg+xml;base64,AAA' },
+      { ...builtinOf('univer', 'b'), originPath: '/p/node_modules/pkg-a/skills/b/SKILL.md', pluginIcon: 'data:image/svg+xml;base64,AAA' },
+      builtinOf('univer', 'c'),
+    ],
+  });
+  assert.equal(withIcon[0].key, 'pkg-a', '按包名成块');
+  assert.equal(withIcon[0].iconUrl, 'data:image/svg+xml;base64,AAA', '块的 iconUrl 来自行的 pluginIcon');
+  assert.equal(withIcon[1].key, 'univer', '取不到包名的行自成一户');
+  assert.equal(withIcon[1].iconUrl, null, '没有 pluginIcon 就是 null（回退首字母）');
+});

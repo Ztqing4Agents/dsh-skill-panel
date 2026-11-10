@@ -230,9 +230,9 @@
 @media (hover: hover){ .skc_detailRepoLink:hover{ color: var(--dsw-alias-label-primary) } }
 /* 调用名区块：一行照宿主「包含的组件」的组件行（实测 74 / 41 / 13.5·20·500 / 11.5·16 两行），
    图标沿用 IconTile 的基类再加这层修饰，右侧挂复制按钮；标题不带计数（宿主的「共 N 个」没意义） */
-/* provider 页头 + 内置块：块本身复用 .skc_card/.skc_cardOpen 的既有刻度，这里只多一条头行 */
-.skc_pluginHead{ display: flex; align-items: center; gap: 14px }
-.skc_callRow{ display: flex; align-items: center; gap: 12px; height: 74px }
+/* 内置块与插件页**不新增任何类**：块 = .skc_card + .skc_cardOpen；插件页 = .skc_detailTop/.skc_detailIcon(49)
+   + .skc_detailIntro + .skc_marketSectionTitle + .skc_callRow 那一套组件式行（行高 74 / 图标 41） */
+.skc_callRow{ display: flex; align-items: center; gap: 12px; height: 74px; position: relative }
 .skc_callIcon{ width: 41px; height: 41px; border-radius: 12px }
 .skc_callBody{ display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 }
 .skc_callName{ margin: 0; font-size: 13.5px; line-height: 20px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }

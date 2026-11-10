@@ -174,6 +174,7 @@ isSafeRelativePath(value: string): boolean
 isUpstreamIdentity(sourceId: string, owner: string, slug: string): boolean
 // 三段同时过 UPSTREAM_SOURCE_ID / UPSTREAM_OWNER / UPSTREAM_SLUG，且都不含 '..'；`market/query.js` 的上游白名单就是这三个常量的别名（一处定义两处消费，别抄第二份）
 // 真: ('skillhub','ake','dev-god')    假: ('nope!','a','b') | ('clawhub','../x','y') | (undefined,…)
+// Row 的两个**展示**字段（都不进 classifySkill）：`originPath` = 宿主 `SkillSummary.resourceBase.path`，内置块靠它算提供者的包名；`pluginIcon` = 该包 `package.json.icon` 读成的 base64 data URL（`lib/plugin-icon.js`，≤16 KB / svg·png·webp·jpg / 不跟随软链 / 不出包根），失败即 null。
 // `ScanCandidate.upstream` 只由 `_meta.json` 的 source/ownerId/slug 过本判据后给出：`ownerId` 语义因写者而异（我们写 handle，ClawHub CLI 写内部 Convex id，后者当 owner 查 404）⇒ 身份只认我们写的记录，**不从目录名反推**、不按名字 join，也不进任何分区判据（不变式见 routes.md §3.3.1）
 ```
 
