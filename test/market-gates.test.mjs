@@ -124,6 +124,9 @@ test('K40 市场刻度逐条落地：网格 280/12、卡片竖排 14、cardOpen 
   assert.match(card, /padding: 14px/, '卡片内边距 14（新刻度 ②）');
   assert.match(card, /flex-direction: column/, '卡片改竖向排布');
   assert.match(card, /align-items: stretch/, 'column 下必须 stretch（否则骨架收缩包裹）');
+  // The head → body separator. U15 tightened this from 14px to 12px; it is the card's own
+  // gap, deliberately *not* the same value as the body rhythm below (market.md 附录 F ⑪).
+  assert.match(card, /gap: 12px/, '卡片 gap 12：头部 → 正文的唯一分隔（U15 由 14 收到 12）');
   assert.equal(/border:/.test(card), false, '卡面无描边（附录 E 决策 E-1）');
 
   const open = ruleOf('.skc_marketCardOpen::after');
@@ -141,7 +144,9 @@ test('K40 市场刻度逐条落地：网格 280/12、卡片竖排 14、cardOpen 
   assert.equal(/z-index/.test(head), false, '头部不带 z-index（只有动作位浮起）');
   const body = ruleOf('.skc_marketBody');
   assert.match(body, /flex-direction: column/, '正文竖排');
-  assert.match(body, /gap: 6px/, '正文三块共用 6px 节奏（新刻度 ⑪）');
+  // U15: the body rhythm tightened from 6px to 4px (描述 → 标签 → 三段). It is *not* the
+  // card's 12px gap - keeping them separate is the point recorded in market.md 附录 F ⑪.
+  assert.match(body, /gap: 4px(?!\d)/, '正文三块共用 4px 节奏（新刻度 ⑪，U15 由 6 收到 4）');
   assert.match(ruleOf('.skc_marketMeta'), /white-space: nowrap/, '作者行单行（换行会让头部高度抖动）');
   assert.match(ruleOf('.skc_marketMeta'), /text-overflow: ellipsis/, '作者行超出省略');
 
@@ -162,6 +167,11 @@ test('K40 市场刻度逐条落地：网格 280/12、卡片竖排 14、cardOpen 
   // real-machine check measures, so a "just check that line-clamp exists" assertion would let a
   // silent 2-line regression through.
   const desc = ruleOf('.skc_marketDesc');
+  // U15 root cause: `.skc_marketDesc` is a <p> and never reset the UA's `margin: 1em`, so at
+  // 13px it silently added 13px above and below (the tags row and the figures row both carry
+  // their own `margin: 0`; only this one was missing). Deleting this declaration is invisible
+  // in review and costs 26px of card height plus a loose-looking block - hence the pin.
+  assert.match(desc, /margin: 0/, '描述自己写 margin: 0（UA `margin:1em` 会在 13px 字号下多给上下各 13px）');
   assert.match(desc, /-webkit-line-clamp: 3(?!\d)/, '描述三行（U14 取值变更；不算新刻度）');
   assert.match(desc, /font-size: 13px; line-height: 18px/, '描述刻度 13/18（三行 ⇒ 描述盒 54px）');
   assert.match(desc, /display: -webkit-box/, '多行截断走 -webkit-box（不是单行 nowrap）');

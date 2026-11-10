@@ -281,7 +281,7 @@ var __defProp=Object.defineProperty;var __getOwnPropDesc=Object.getOwnPropertyDe
   margin-left: 4px; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px;
 }
 .skc_marketCard{
-  border-radius: var(--dsw-radius-xl); align-items: stretch; gap: 14px; min-width: 0;
+  border-radius: var(--dsw-radius-xl); align-items: stretch; gap: 12px; min-width: 0;
   padding: 14px; flex-direction: column; display: flex; position: relative;
 }
 @media (hover: hover){ .skc_marketCard:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
@@ -290,9 +290,9 @@ var __defProp=Object.defineProperty;var __getOwnPropDesc=Object.getOwnPropertyDe
    install label grows ("installing" is the widest of the four) the block shrinks into an
    ellipsis instead of pushing the seat to a second line. */
 .skc_marketHead{ align-items: center; gap: 12px; min-width: 0; display: flex }
-/* the body: description, tags and figures share one rhythm of 6px; the card's own gap
-   (14px) stays the single separator between the head and this block. */
-.skc_marketBody{ flex-direction: column; gap: 6px; min-width: 0; display: flex }
+/* the body: description, tags and figures share one rhythm of 4px; the card's own gap
+   (12px) stays the single separator between the head and this block. */
+.skc_marketBody{ flex-direction: column; gap: 4px; min-width: 0; display: flex }
 .skc_marketMain{ flex-direction: column; flex: 1; gap: 2px; min-width: 0; display: flex }
 /* the title row is as wide as its content, not as wide as the block: align-self keeps it
    from being stretched by the column parent, so the source mark sits one 8px gap after the
@@ -321,9 +321,13 @@ var __defProp=Object.defineProperty;var __getOwnPropDesc=Object.getOwnPropertyDe
     var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 2px;
 }
+/* margin is reset on purpose: this is a <p>, and the UA's 1em (13px) top/bottom margin is
+   the whole reason the block used to read as loose. the spacing above and below comes from
+   the card gap (12px) and the body gap (4px) alone. */
 .skc_marketDesc{
-  color: var(--dsw-alias-label-tertiary); -webkit-line-clamp: 3; -webkit-box-orient: vertical;
-  font-size: 13px; line-height: 18px; display: -webkit-box; overflow: hidden;
+  margin: 0; color: var(--dsw-alias-label-tertiary); -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical; font-size: 13px; line-height: 18px;
+  display: -webkit-box; overflow: hidden;
 }
 /* the author line stays one line: an owner/slug handle can reach 129 characters, and
    letting it wrap would grow the head from 48px to 66px and jump the card height */
