@@ -350,7 +350,7 @@ test('H1 头排顺序：detailTop（图标 + 动作组）在 detailIntro（标�
   const introBlock = html.slice(intro);
   const titleRow = introBlock.indexOf('class="skc_marketTitleRow"');
   const author = introBlock.indexOf('class="skc_detailAuthor"');
-  const desc = introBlock.indexOf('class="skc_marketDesc"');
+  const desc = introBlock.indexOf('class="skc_marketDetailDesc"');
   assert.ok(titleRow !== -1 && titleRow < author && author < desc, '标题行 → 作者 → 描述');
 });
 
@@ -388,8 +388,9 @@ test('H1 软链行：动作组里是只读标记，没有开关', () => {
 
 test('H1 卸载是 disabled 占位：type=button、title=卸载功能尚未支持、没有 onClick', () => {
   const html = render({ row: marketRow() });
-  const tag = /<button type="button" disabled="" title="卸载功能尚未支持">/.exec(html);
-  assert.ok(tag !== null, '卸载渲染成 type=button + disabled + 那句 title');
+  // 宿主那支卸载按钮是「红字 + 30% 红内环」，走 .skc_detailDanger 这条修饰类；仍然没有 handler。
+  const tag = /<button type="button" class="[^"]*skc_detailDanger[^"]*" disabled="" title="卸载功能尚未支持">/.exec(html);
+  assert.ok(tag !== null, '卸载渲染成 type=button + disabled + 那句 title + .skc_detailDanger');
   assert.ok(html.includes('>卸载</button>'), '按钮文字是 detail.uninstall =「卸载」');
   // SSR 会把 handler 丢掉，所以「没有 onClick」只能在元素树上验。
   const tree = modules.installedDetail.InstalledDetail(props({ row: marketRow() }));
@@ -439,4 +440,59 @@ test('H1 可交互元素清单：面包屑 / 复制 / 开关（错误态再加�
   const errorEnabled = [...errorHtml.matchAll(/<button(?![^>]*\sdisabled="")[^>]*>/g)];
   assert.equal(errorEnabled.length, 4, '错误态四个：面包屑 / 开关 / 复制 / 重试');
   assert.ok(/重试<\/button>/.test(errorHtml), '重试按钮在场');
+});
+
+/* ------------- H1 本轮（按宿主读数）：正文盒 / 区块节奏单源 / 卸载红环 ------------- */
+
+test('H1 正文装在 .skc_detailBodyBox 里：文件清单与来源信息在盒外', () => {
+  const tree = modules.installedDetail.InstalledDetail(props({ row: marketRow() }));
+  const box = elementsOf(tree).find((element) => element.props?.className === 'skc_detailBodyBox');
+  assert.ok(box !== undefined, '有正文盒 .skc_detailBodyBox');
+  const inside = elementsOf(box).map((element) => String(element.props?.className ?? ''));
+  assert.ok(inside.some((cls) => cls.includes('skc_detailBody')), '盒里有正文');
+  // 宿主只把 README 关进盒子；文件清单与「来源信息」跟着页面滚，不在盒内。
+  assert.equal(inside.some((cls) => cls.includes('skc_marketFiles')), false, '文件清单不在盒内');
+  assert.equal(inside.some((cls) => cls.includes('skc_marketDetailSection')), false, '区块（含来源信息）不在盒内');
+  assert.equal(inside.some((cls) => cls.includes('skc_marketSectionTitle')), false, '盒子不吞区块标题');
+  // 盒子里只有正文这一块内容（多包一层就会多出第二个 div）
+  const kids = Array.isArray(box.props.children) ? box.props.children : [box.props.children];
+  assert.equal(kids.length, 1, '盒内只有正文一层');
+});
+
+test('H1 区块节奏单一来源：.skc_marketDetail gap 32、区块自己不留 margin', async () => {
+  const css = await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8');
+  const detailRule = /\.skc_marketDetail\{([^}]*)\}/.exec(css);
+  assert.ok(detailRule !== null, '有 .skc_marketDetail 规则');
+  assert.match(detailRule[1], /gap:\s*32px/, '父级 gap 32（与宿主的 detailSections 同值）');
+
+  const sectionRule = /\.skc_marketDetailSection\{([^}]*)\}/.exec(css);
+  assert.ok(sectionRule !== null, '有区块规则');
+  // 上一轮是 margin-top:16 叠在 gap:16 上，现在 32 只能有一个来源：区块自己不许再带外边距。
+  assert.equal(/margin/.test(sectionRule[1]), false, `区块规则里没有 margin（实测「${sectionRule[1].trim()}」）`);
+  assert.match(sectionRule[1], /gap:\s*12px/, '区块内仍是 12（标题→内容）');
+
+  // 「图标行 → 标题组 = 20」靠把这一组上提 12（32 − 12）；真机那条 20 由真机脚本钉。
+  const introRule = /\.skc_detailIntro\{([^}]*)\}/.exec(css);
+  assert.ok(introRule !== null, '有标题组规则');
+  assert.match(introRule[1], /gap:\s*8px/, '标题组 gap 8');
+  assert.match(introRule[1], /margin-top:\s*-12px/, '标题组上提 12');
+});
+
+test('H1 卸载红环不是 border：红字 + 1px 内环走 primitives 的两个 knob', async () => {
+  const css = await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8');
+  const block = /\.skc_detailDanger\{([^}]*)\}/.exec(css);
+  assert.ok(block !== null, '有 .skc_detailDanger 规则');
+  const body = block[1];
+  // 宿主用 inset ring（0 0 0 1px）而不是 border——border 会多占 2px 盒宽，把按钮撑到 30。
+  assert.equal(/(^|[\s;])border(?!-radius)(-[a-z]+)?\s*:/.test(body), false, '没有 border 声明（border-radius 不算）');
+  assert.match(body, /--dsh-button-outline-color/, '红环走 outline 色 knob');
+  assert.match(body, /--dsh-hairline-width:\s*1px/, '环宽走 1px 发丝 knob');
+  assert.match(body, /color:\s*var\(--dsw-alias-state-error-primary\)/, '红字走 error token');
+  assert.match(body, /height:\s*28px/, '高 28');
+  assert.match(body, /padding:\s*0 10px/, '左右 10');
+  assert.match(body, /line-height:\s*18px/, '行高 18');
+  assert.match(body, /font-size:\s*12px/, '字号 12');
+  assert.match(body, /border-radius:\s*8px/, '圆角 8');
+  assert.match(body, /gap:\s*4px/, '图标与文字 4');
+  assert.match(css, /\.skc_detailDanger:disabled\{[^}]*opacity:\s*\.4/, '禁用态只降透明度到 .4');
 });

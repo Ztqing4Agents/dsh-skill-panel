@@ -93,7 +93,7 @@ export function InstalledDetail({
 }) {
   const crumb = (
     <button type="button" className={cn('marketCrumb')} onClick={onBack}>
-      <IconChevronDownOutlineRegular size={13} className={cn('marketCrumbIcon')} aria-hidden="true" />
+      <IconChevronDownOutlineRegular size={14} className={cn('marketCrumbIcon')} aria-hidden="true" />
       <span>{t('detail.back')}</span>
     </button>
   );
@@ -133,6 +133,7 @@ export function InstalledDetail({
           <Button
             variant="outline"
             size="sm"
+            className={cn('detailDanger')}
             disabled
             title={t('detail.uninstallSoon')}
             icon={<IconTrashOutlineRegular size={13} />}
@@ -158,7 +159,7 @@ export function InstalledDetail({
               {t('market.metaAuthor', { author: `${upstream.owner}/${upstream.slug}` })}
             </p>
           )}
-        {row.description === '' ? null : <p className={cn('marketDesc')} title={row.description}>{row.description}</p>}
+        {row.description === '' ? null : <p className={cn('marketDetailDesc')}>{row.description}</p>}
       </div>
       {reason === null ? null : <p className={cn('reason')} role="alert">{reason}</p>}
       <div className={cn('detailIdentity')}>
@@ -190,7 +191,11 @@ export function InstalledDetail({
         {status === 'ready' && body === null
           ? <p className={cn('marketScope')}>{t('detail.noBody')}</p>
           : null}
-        {status === 'ready' && body !== null ? <div className={cn('detailBody')}><MarkdownBlock text={body} fallbackClassName="detailBody" t={t} /></div> : null}
+        {status === 'ready' && body !== null ? (
+          <div className={cn('detailBodyBox')}>
+            <div className={cn('detailBody')}><MarkdownBlock text={body} fallbackClassName="detailBody" t={t} /></div>
+          </div>
+        ) : null}
         {status === 'ready' && data?.truncated === true
           ? <p className={cn('marketScope')}>{t('detail.truncated')}</p>
           : null}

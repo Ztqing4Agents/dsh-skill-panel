@@ -192,25 +192,34 @@
 }
 
 /* 详情族（.skc_marketDetail / Crumb / DetailHead / DetailTitle / DetailSection / SectionTitle /
-   Facts / Files）的语义是「详情页骨架，两个页签共用」，**不改名**；已安装详情只补这九条 */
+   Facts / Files）的语义是「详情页骨架，两个页签共用」，**不改名**；已安装详情只补这些。
+   以下刻度全部对照宿主「插件详情页」真机读数（1440×920、DPR 1，见
+   `docs/reference/host-plugin-page.md` §7 与 `.agents/work/scratch/host-detail-metrics.md`） */
 /* 整页替换时 pageBody 里只有这一个详情容器；顶端那条空条只承载窗口拖动（页头没了，
-   这段拖动区不能跟着丢）。高度 = 页头在 darwin 下预留的同一个顶部安全区；拖动区只能
-   挂在这条空条上——整块当拖动区会吃掉文字选择与按钮点击。基础值就是页头的顶部内边距
-   （`--skc-page-top-inset`，web 28px），darwin 再叠加安全区，所以进出详情时头部不跳 */
+   这段拖动区不能跟着丢）。高度 = 页头预留的同一个顶部内边距（web 28px），darwin 再叠加
+   安全区，所以进出详情头部不跳；拖动区只能挂在这条空条上——整块当拖动区会吃掉文字选择
+   与按钮点击 */
 .skc_detailPage{ display: flex; flex-direction: column; min-width: 0 }
 .skc_detailDrag{ flex: none; height: var(--skc-page-top-inset) }
 [data-platform=darwin] .skc_detailDrag{ height: calc(var(--skc-page-top-inset) + var(--dsh-frame-top-clearance, 0px)) }
-/* 头部第一行：图标 + 右侧动作组。14 与宿主行内 gap 同值；图标与动作组顶端对齐，
-   所以是 flex-start（不是 center——按钮比 48 图标矮，居中会让图标看着偏下） */
-.skc_detailTop{ display: flex; align-items: flex-start; gap: 14px }
-/* 动作组的「卸载占位 + 开关」同排：margin-left:auto 把它顶到右沿，8 沿用行内动作位的间距 */
-.skc_detailActions{ margin-left: auto; display: inline-flex; align-items: center; gap: 8px }
-/* 图标下方的介绍组（标题/版本 → 作者 → 描述）：6 比标题与描述的 4 松一档，
-   因为作者行是 13/20 的次级信息。它到图标行的间距由父级 .skc_marketDetail 的 gap:16px 给，
-   自己**不再加外边距**——重复加会变成 16+12=28，比参照图松近一倍 */
-.skc_detailIntro{ display: flex; flex-direction: column; gap: 6px }
-/* 作者行 = 宿主详情页的作者行同级：tertiary + 13/20，margin 归零（行距由 .skc_detailIntro 的 gap 给） */
-.skc_detailAuthor{ margin: 0; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px }
+/* 头行：宿主实测「图标贴内容左沿、动作组贴右沿、两者垂直居中」（组中心与图标中心同为 102.5）
+   ⇒ space-between + center，没有 gap（旧的 gap:14 + flex-start 是没采集时的占位） */
+.skc_detailTop{ display: flex; justify-content: space-between; align-items: center }
+/* 动作组内 gap 16 = 宿主实测；margin-left:auto 在 space-between 下是冗余保险 */
+.skc_detailActions{ margin-left: auto; display: inline-flex; align-items: center; gap: 16px }
+/* 图标行 → 标题组 = 宿主的 20（detailMain{margin-top:20}）：本页由列 gap 32 提供 32，
+   再用 -12 收回 20，只此一处来源；组内 gap 8 = 宿主 detailMain{gap:8} */
+.skc_detailIntro{ display: flex; flex-direction: column; gap: 8px; margin-top: -12px }
+/* 作者行 = 宿主的包名行：12/18、tertiary、mono（宿主那行用 ui-monospace 一族） */
+.skc_detailAuthor{ margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code); font-size: 12px; line-height: 18px }
+/* 卸载占位：宿主是「透明描边按钮 + 红字」，环是 inset 1px 的红 30%——不是 border（border 会让
+   高度多 2px）。红来自 --dsw-alias-state-error-primary（宿主同一令牌），我们借 primitives 自己
+   的两个 knob 画环；不用文字色手写 rgba，也不重定义任何 --dsw-* */
+.skc_detailDanger{ --dsh-button-outline-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent); --dsh-hairline-width: 1px; color: var(--dsw-alias-state-error-primary); height: 28px; padding: 0 10px; border-radius: 8px; gap: 4px; font-size: 12px; line-height: 18px }
+.skc_detailDanger:disabled{ opacity: .4 }
+/* 正文内滚动盒：宿主在 1440×920 下实测 552px（盒 height:552 + padding:12px 0、overflow-y:auto）。
+   552/920 = 0.6，所以取 60vh（推断，不是宿主声明值）；文件清单与来源信息在盒外跟页面滚 */
+.skc_detailBodyBox{ max-height: 60vh; padding: 12px 0; overflow-y: auto }
 .skc_detailIdentity{ align-items: center; gap: 8px; display: flex }
 .skc_detailCallName{ font-family: var(--ds-font-family-code) }
 .skc_detailBody{ font-size: 13px; line-height: 20px }

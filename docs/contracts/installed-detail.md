@@ -34,16 +34,16 @@
 | --- | --- | --- |
 | 1 | 面包屑 | `detail.back`（值「技能」/`Skills`，与宿主的 `crumbRoot` 同义），唯一返回入口（`.skc_marketCrumb` 配方） |
 | 2 | 头行 | `.skc_detailTop`：左 `IconTile`（48，与行同源）；右侧 `.skc_detailActions`（`margin-left:auto`）= **卸载占位按钮 + 开关**，两者同一行、`align-items:flex-start`。卸载 = `Button variant="outline" size="sm" disabled title=detail.uninstallSoon` + `IconTrashOutlineRegular size={13}` + 文案 `detail.uninstall`，**没有 onClick**（真实卸载见看板 M6；可见的不可点，与本项目 `＋ 添加技能` 的 C-3 同一处置）。开关：`switchMode(row)` 非空 → `EnableSwitch`；软链行 → `ReadonlyTag`；其余不渲染 |
-| 3 | 介绍组 | `.skc_detailIntro`（图标下方纵向，`gap:6`；到图标行的间距由父级 `gap:16px` 给，自己不加外边距）：标题 `h3.skc_marketDetailTitle`（`rowTitleOf` 三级优先）+ 版本 Tag（复用 `market.metaVersion` = `v{version}`，有值才画）→ **作者行** `.skc_detailAuthor`（复用 `market.metaAuthor` = `@owner/slug`，13/20 tertiary，**仅 `row.upstream !== null` 时渲染**）→ 描述（`row.description`，三行裁切 `.skc_marketDesc` 配方，空串整块不渲染） |
+| 3 | 介绍组 | `.skc_detailIntro`（图标下方纵向，`gap:8`；到图标行 20 = 列 gap 32 − 12）：标题 `h3.skc_marketDetailTitle`（`rowTitleOf` 三级优先，20/28/500）+ 版本 Tag（复用 `market.metaVersion` = `v{version}`，有值才画）→ **作者行** `.skc_detailAuthor`（复用 `market.metaAuthor` = `@owner/slug`，**12/18 tertiary mono**，**仅 `row.upstream !== null` 时渲染**）→ 描述（`row.description`，**`.skc_marketDetailDesc` 14/22 不截断**，空串整块不渲染） |
 | 4 | 身份行 | `detail.callName` 标签 + 等宽 kebab 调用名（`.skc_detailCallName`，可选中）+ 复制按钮（`detail.copy`） |
 | 5 | 徽章行 | 分区 Tag（`detail.partition.*`）+ 软链只读 Tag（仅软链行），`.skc_marketTags` 配方 |
 | 6 | 事实表 | 技能文件（等宽）/ 真实位置（仅软链）/ 提供者（原样，不翻译）/ 只读原因（无开关的行：软链复用 `row.symlinkReadonly`，`no-file` 用 `detail.readonlyNoFile`；`provider-store` 有开关，不写原因） |
-| 7 | 正文 | `market.detailOverview` 标题 + `MarkdownBlock`（必须传 `labels`：6 个 `markdown.*` —— 缺了它宿主渲染代码围栏时抛错，整段回落纯文本）；三态见「状态与返回」；`truncated === true` 时正文**下面**再加一行 `detail.truncated`（纯文案） |
+| 7 | 正文 | `market.detailOverview` 标题 + **`.skc_detailBodyBox` 内滚动盒**（`max-height:60vh; padding:12px 0; overflow-y:auto`——宿主在 1440×920 实测 552px = 60vh；不加 `tabindex`、不拦 `wheel`）里的 `MarkdownBlock`（必须传 `labels`：6 个 `markdown.*` —— 缺了它宿主渲染代码围栏时抛错，整段回落纯文本）；**盒外的文件清单与来源信息跟页面滚**；三态见「状态与返回」；`truncated === true` 时正文**盒子下面**再加一行 `detail.truncated`（纯文案） |
 | 8 | 文件清单 | `market.detailFiles` 标题 + 复用 `.skc_marketFiles`（路径 + `fileSizeText`）；`filesTruncated === true` 时列表**后面**再加一行 `detail.filesTruncated`；`files` 为 `null` 或空数组时整段不渲染（没有清单就无从截断） |
 | 9 | 来源信息（**页尾**） | 仅 `row.upstream !== null`：`detail.sectionSource` 标题 + `market.source.<sourceId>` + `owner/slug`，三段纯文本、**不可点**；位置在文件清单之后（宿主也把「来源信息」放在正文下方的技术区） |
 | 10 | 失效态 | 按 `detail.key` 在 `payload` 里取不到行 ⇒ 只渲染面包屑 + `error.E_NOT_FOUND` 一行，不抛异常 |
 
-区块骨架逐字复用 `.skc_marketDetail*` 族（**详情族，两个页签共用**，不改名）。已安装详情新增刻度共 9 条，规则体只有一处真源：`docs/contracts/visual.md` A.5（`.skc_detailPage` / `.skc_detailDrag` / `.skc_detailTop` / `.skc_detailActions` / `.skc_detailIntro` / `.skc_detailAuthor` / `.skc_detailIdentity` / `.skc_detailCallName` / `.skc_detailBody`），实现逐字相同，在 `src/client/styles.js`。
+区块骨架逐字复用 `.skc_marketDetail*` 族（**详情族，两个页签共用**，不改名）。已安装详情新增刻度共 11 条，规则体只有一处真源：`docs/contracts/visual.md` A.5（`.skc_detailPage` / `.skc_detailDrag` / `.skc_detailTop` / `.skc_detailActions` / `.skc_detailIntro` / `.skc_detailAuthor` / `.skc_detailDanger` / `.skc_detailBodyBox` / `.skc_detailIdentity` / `.skc_detailCallName` / `.skc_detailBody`），实现逐字相同，在 `src/client/styles.js`。
 
 ## 状态与返回
 

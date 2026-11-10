@@ -36,91 +36,91 @@ export function cn(...names) {
 const CSS = `
 /* page shell */
 .skc_page{
-  --skc-page-inset: clamp(24px, 4vw, 48px);
-  --skc-page-top-inset: 28px;
-  --skc-progress-size: 14px;
-  --skc-toggle-gap: 8px;
-  box-sizing: border-box; height: 100%; padding: 0 var(--skc-page-inset);
-  color: var(--dsw-alias-label-primary);
-  display: flex; flex-direction: column; align-items: center;
+--skc-page-inset: clamp(24px, 4vw, 48px);
+--skc-page-top-inset: 28px;
+--skc-progress-size: 14px;
+--skc-toggle-gap: 8px;
+box-sizing: border-box; height: 100%; padding: 0 var(--skc-page-inset);
+color: var(--dsw-alias-label-primary);
+display: flex; flex-direction: column; align-items: center;
 }
 @media (width <= 767px){ .skc_page{ --skc-page-inset: 20px } }
 .skc_page > *{ flex: none; width: 100%; max-width: 960px }
 
 /* scroll container and header bar */
 .skc_pageBody{
-  min-height: 0;
-  width: calc(100% + 2 * var(--skc-page-inset));
-  max-width: none; margin-inline: calc(-1 * var(--skc-page-inset));
-  box-sizing: border-box; padding: 0 var(--skc-page-inset) 48px;
-  scroll-padding-top: var(--skc-header-scroll-padding, 0px);
-  display: flex; flex: 1; flex-direction: column; align-items: center; gap: 32px;
-  position: relative; overflow: hidden auto;
+min-height: 0;
+width: calc(100% + 2 * var(--skc-page-inset));
+max-width: none; margin-inline: calc(-1 * var(--skc-page-inset));
+box-sizing: border-box; padding: 0 var(--skc-page-inset) 48px;
+scroll-padding-top: var(--skc-header-scroll-padding, 0px);
+display: flex; flex: 1; flex-direction: column; align-items: center; gap: 32px;
+position: relative; overflow: hidden auto;
 }
 .skc_pageBody > *{ flex: none; width: 100%; max-width: 960px }
 .skc_pageBar{
-  width: calc(100% + 2 * var(--skc-page-inset) + var(--skc-page-scrollbar-width, 0px));
-  max-width: none; margin-inline: calc(-1 * var(--skc-page-inset));
-  box-sizing: border-box; padding-inline: var(--skc-page-inset);
-  display: flex; flex-direction: column; align-self: flex-start;
-  position: relative; container: skc-page-bar / inline-size;
+width: calc(100% + 2 * var(--skc-page-inset) + var(--skc-page-scrollbar-width, 0px));
+max-width: none; margin-inline: calc(-1 * var(--skc-page-inset));
+box-sizing: border-box; padding-inline: var(--skc-page-inset);
+display: flex; flex-direction: column; align-self: flex-start;
+position: relative; container: skc-page-bar / inline-size;
 }
 .skc_pageBar > .skc_pageHead{ align-self: center; width: 100%; max-width: 960px }
 .skc_pageBody > .skc_pageBar[data-measuring]{
-  visibility: hidden; pointer-events: none; margin: 0; position: absolute; top: 0; left: 0;
+visibility: hidden; pointer-events: none; margin: 0; position: absolute; top: 0; left: 0;
 }
 .skc_pageBody > .skc_pageBar[data-natural]{ z-index: 2; pointer-events: none; position: sticky; top: 0 }
 .skc_pageBar[data-natural] .skc_pageHead{
-  height: var(--skc-header-rest-height);
-  clip-path: inset(0 0 max(0px, calc(var(--skc-header-rest-height) - var(--skc-header-paint-height))) 0);
-  pointer-events: auto; position: relative;
+height: var(--skc-header-rest-height);
+clip-path: inset(0 0 max(0px, calc(var(--skc-header-rest-height) - var(--skc-header-paint-height))) 0);
+pointer-events: auto; position: relative;
 }
 .skc_pageBar[data-natural] .skc_pageHeading{ display: contents }
 .skc_pageBar[data-natural] [data-skc-header-part]{
-  left: var(--skc-part-x); top: var(--skc-part-y); width: var(--skc-part-width);
-  pointer-events: auto; margin: 0; position: absolute;
+left: var(--skc-part-x); top: var(--skc-part-y); width: var(--skc-part-width);
+pointer-events: auto; margin: 0; position: absolute;
 }
 .skc_pageBar[data-natural] .skc_pageTabs{ z-index: 2; pointer-events: none }
 .skc_pageBar[data-natural] .skc_pageTabList{ pointer-events: auto }
 .skc_pageBar[data-natural]:before{
-  content: ""; height: var(--skc-header-paint-height, var(--skc-header-rest-height));
-  background: var(--dsw-alias-bg-base); pointer-events: none; position: absolute; inset: 0 0 auto;
+content: ""; height: var(--skc-header-paint-height, var(--skc-header-rest-height));
+background: var(--dsw-alias-bg-base); pointer-events: none; position: absolute; inset: 0 0 auto;
 }
 .skc_pageBar[data-natural][data-compact]:after{
-  content: ""; inset-inline: 0; height: var(--skc-header-compact-height);
-  box-sizing: border-box; border-bottom: .5px solid var(--dsw-alias-border-l3);
-  position: absolute; top: 0;
+content: ""; inset-inline: 0; height: var(--skc-header-compact-height);
+box-sizing: border-box; border-bottom: .5px solid var(--dsw-alias-border-l3);
+position: absolute; top: 0;
 }
 
 /* page head */
 .skc_pageHead{
-  box-sizing: border-box; padding-top: var(--skc-page-top-inset);
-  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 16px;
+box-sizing: border-box; padding-top: var(--skc-page-top-inset);
+display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 16px;
 }
 [data-platform=darwin] .skc_pageHead{
-  padding-top: calc(var(--skc-page-top-inset) + var(--dsh-frame-top-clearance, 0px));
+padding-top: calc(var(--skc-page-top-inset) + var(--dsh-frame-top-clearance, 0px));
 }
 .skc_pageHeading{ order: 1; min-width: 0; max-width: 100% }
 .skc_pageTitle{ margin: 0; font-size: 20px; font-weight: 500; line-height: 28px }
 .skc_pageIntro{
-  color: var(--dsw-alias-label-secondary);
-  align-items: center; gap: 4px; margin: 4px 0 0; font-size: 13px; line-height: 20px; display: flex;
+color: var(--dsw-alias-label-secondary);
+align-items: center; gap: 4px; margin: 4px 0 0; font-size: 13px; line-height: 20px; display: flex;
 }
 .skc_infoButton{ width: 20px; height: 20px; color: var(--dsw-alias-label-caption); flex: none; padding: 0 }
 .skc_toolbar{
-  white-space: nowrap; flex-wrap: wrap; flex: 0 auto; order: 2;
-  justify-content: flex-end; align-items: center; gap: 8px 16px; min-width: 0; display: flex;
+white-space: nowrap; flex-wrap: wrap; flex: 0 auto; order: 2;
+justify-content: flex-end; align-items: center; gap: 8px 16px; min-width: 0; display: flex;
 }
 .skc_toolbar[hidden]{ display: none }
 .skc_status{ color: var(--dsw-alias-label-tertiary); margin: 0; font-size: 12px; line-height: 18px }
 .skc_addButton, .skc_addPrimary, .skc_addMore{
-  border-radius: var(--dsw-radius-md); height: 32px; padding: 0 12px; font-size: 13px; line-height: 20px;
+border-radius: var(--dsw-radius-md); height: 32px; padding: 0 12px; font-size: 13px; line-height: 20px;
 }
 .skc_addGroup{ flex: none; align-items: stretch; display: inline-flex }
 .skc_addPrimary{ border-top-right-radius: 0; border-bottom-right-radius: 0 }
 .skc_addMore{
-  border-left: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary-foreground) 30%, transparent);
-  border-top-left-radius: 0; border-bottom-left-radius: 0; width: 32px; padding: 0;
+border-left: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary-foreground) 30%, transparent);
+border-top-left-radius: 0; border-bottom-left-radius: 0; width: 32px; padding: 0;
 }
 .skc_pageTabs{ flex: 100%; order: 3; display: flex }
 .skc_pageTabList{ width: fit-content; min-width: 240px }
@@ -132,63 +132,62 @@ const CSS = `
 .skc_groupHead{ align-items: center; gap: 8px; display: flex }
 .skc_groupTitle{ flex: 1; margin: 0; font-size: 14px; font-weight: 500; line-height: 22px }
 
-/* rows: clickable, so the row owns the click layer */
+/* rows: the row owns the click layer */
 .skc_cards{ flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; display: flex }
 .skc_card{ border-radius: var(--dsw-radius-xl); min-width: 0; margin: 0 -8px; position: relative }
 @media (hover: hover){ .skc_card:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
 .skc_card:active{ background: var(--dsw-alias-interactive-bg-hover) }
 .skc_cardHead{ align-items: center; gap: 14px; padding: 8px; display: flex }
 .skc_cardIcon{
-  box-sizing: border-box;
-  border: .5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-lg);
-  width: 48px; height: 48px; flex: none;
-  background: var(--skc-avatar-bg, transparent); background-clip: padding-box;
-  color: var(--skc-avatar-ink, var(--dsw-alias-label-secondary));
-  font-size: 17px; font-weight: 700; line-height: 1; text-transform: uppercase; user-select: none;
-  justify-content: center; align-items: center; display: inline-flex;
+box-sizing: border-box;
+border: .5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-lg);
+width: 48px; height: 48px; flex: none;
+background: var(--skc-avatar-bg, transparent); background-clip: padding-box;
+color: var(--skc-avatar-ink, var(--dsw-alias-label-secondary));
+font-size: 17px; font-weight: 700; line-height: 1; text-transform: uppercase; user-select: none;
+justify-content: center; align-items: center; display: inline-flex;
 }
 .skc_cardMain{ flex-direction: column; flex: 1; gap: 4px; min-width: 0; display: flex }
 .skc_titleRow{ flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; display: flex }
 .skc_cardTitle{
-  text-overflow: ellipsis; white-space: nowrap;
-  font-size: 14px; font-weight: 500; line-height: 20px; overflow: hidden;
+text-overflow: ellipsis; white-space: nowrap;
+font-size: 14px; font-weight: 500; line-height: 20px; overflow: hidden;
 }
 .skc_cardDesc{
-  color: var(--dsw-alias-label-tertiary); display: -webkit-box;
-  -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
-  font-size: 13px; line-height: 18px;
+color: var(--dsw-alias-label-tertiary); display: -webkit-box;
+-webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
+font-size: 13px; line-height: 18px;
 }
 .skc_cardEnd{ z-index: 1; flex: none; align-items: center; gap: 8px; display: inline-flex; position: relative }
-/* the whole-row click layer: inset:0 ::after; .skc_cardEnd floats above it */
+/* click layer: inset:0 ::after; the seat floats above */
 .skc_cardOpen{
-  flex: 0 1 auto; min-width: 0; max-width: 100%; padding: 0; border: 0; background: 0 0;
-  color: inherit; font: inherit; text-align: left; cursor: pointer; text-overflow: ellipsis; white-space: nowrap;
-  overflow: hidden; font-size: 14px; font-weight: 500; line-height: 20px;
+flex: 0 1 auto; min-width: 0; max-width: 100%; padding: 0; border: 0; background: 0 0;
+color: inherit; font: inherit; text-align: left; cursor: pointer; text-overflow: ellipsis; white-space: nowrap;
+overflow: hidden; font-size: 14px; font-weight: 500; line-height: 20px;
 }
 .skc_cardOpen::after{ content: ""; border-radius: var(--dsw-radius-xl); position: absolute; inset: 0 }
 .skc_cardOpen:focus-visible{ outline: none }
 .skc_cardOpen:focus-visible::after{
-  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
-  outline-offset: 2px;
+outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+outline-offset: 2px;
 }
 
-/* switch seat, read-only tag, skeleton */
 .skc_bundleToggle{ align-items: center; gap: var(--skc-toggle-gap); display: inline-flex }
 .skc_toggleProgress{ width: var(--skc-progress-size); height: var(--skc-progress-size); display: inline-flex }
 .skc_toggleProgress > svg{ width: 100%; height: 100% }
 .skc_progressAnnouncement{
-  clip-path: inset(50%); white-space: nowrap; width: 1px; height: 1px; position: absolute; overflow: hidden;
+clip-path: inset(50%); white-space: nowrap; width: 1px; height: 1px; position: absolute; overflow: hidden;
 }
 .skc_roTag{
-  border-radius: var(--dsw-radius-sm); background: var(--dsw-alias-bg-layer-3);
-  color: var(--dsw-alias-label-secondary); height: 18px; padding: 0 6px;
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: 11px; line-height: 18px; white-space: nowrap;
+border-radius: var(--dsw-radius-sm); background: var(--dsw-alias-bg-layer-3);
+color: var(--dsw-alias-label-secondary); height: 18px; padding: 0 6px;
+display: inline-flex; align-items: center; gap: 4px;
+font-size: 11px; line-height: 18px; white-space: nowrap;
 }
 .skc_roTag > svg{ width: 12px; height: 12px; flex: none }
 .skc_skeletonFill{
-  background: var(--dsw-alias-bg-skeleton);
-  animation: 2s cubic-bezier(.36, 0, .64, 1) infinite skc-skeleton;
+background: var(--dsw-alias-bg-skeleton);
+animation: 2s cubic-bezier(.36, 0, .64, 1) infinite skc-skeleton;
 }
 @keyframes skc-skeleton{ 0%{opacity:1} 40%{opacity:.6} 80%,100%{opacity:1} }
 @media (prefers-reduced-motion: reduce){ .skc_skeletonFill{ animation: none } }
@@ -197,259 +196,270 @@ const CSS = `
 .skc_skeletonHeading{ width: 48px }
 .skc_skeletonTitle{ width: min(144px, 60%) }
 .skc_skeletonDescription{ width: min(280px, 85%) }
-/* skeleton stays grey on its own rule, clipped like .skc_cardIcon */
+/* skeleton grey on its own rule, clipped */
 .skc_skeletonIcon{
-  border-color: #0000;
-  background: var(--dsw-alias-bg-skeleton); background-clip: padding-box;
+border-color: #0000;
+background: var(--dsw-alias-bg-skeleton); background-clip: padding-box;
 }
 .skc_skeletonActions{ width: calc(36px + var(--skc-toggle-gap) + var(--skc-progress-size)); height: 20px }
 
-/* empty, failure, inline reason, footer */
 .skc_empty{ color: var(--dsw-alias-label-tertiary); margin: 0; font-size: 13px; line-height: 20px }
 .skc_failure{ color: var(--dsw-alias-state-error-primary); align-items: center; gap: 10px; display: flex }
 .skc_failure p{ color: var(--dsw-alias-label-tertiary); margin: 0; font-size: 13px; line-height: 20px }
 .skc_reason{
-  color: var(--dsw-alias-state-error-primary); overflow-wrap: anywhere; white-space: pre-wrap;
-  margin: 0; font-size: 12px; line-height: 18px;
+color: var(--dsw-alias-state-error-primary); overflow-wrap: anywhere; white-space: pre-wrap;
+margin: 0; font-size: 12px; line-height: 18px;
 }
 .skc_footer{ color: var(--dsw-alias-label-tertiary); margin: 0; font-size: 13px; line-height: 20px }
 
-/* compact state without the sticky path */
 .skc_pageBar[data-compact]:not([data-natural]){ --skc-page-top-inset: 16px; padding-bottom: 16px }[data-platform=darwin] .skc_pageBar[data-compact]:not([data-natural]) .skc_pageHead{
-  padding-top: var(--skc-page-top-inset);
+padding-top: var(--skc-page-top-inset);
 }
 [data-platform=darwin] [data-sidebar-collapsed] .skc_pageBar[data-compact]:not([data-natural]) .skc_pageHead{
-  --skc-page-top-inset: 8px;
-  padding-top: calc(var(--skc-page-top-inset) + var(--dsh-frame-top-clearance, 0px));
+--skc-page-top-inset: 8px;
+padding-top: calc(var(--skc-page-top-inset) + var(--dsh-frame-top-clearance, 0px));
 }
 .skc_pageBar[data-compact]:not([data-natural]):after{
-  content: ""; inset-inline: 0; border-bottom: .5px solid var(--dsw-alias-border-l3);
-  pointer-events: none; position: absolute; bottom: 0;
+content: ""; inset-inline: 0; border-bottom: .5px solid var(--dsw-alias-border-l3);
+pointer-events: none; position: absolute; bottom: 0;
 }
 .skc_pageBar[data-compact]:not([data-natural]) .skc_pageHead{ align-items: center }
 .skc_pageBar[data-compact]:not([data-natural]) .skc_pageIntro{ display: none }
 .skc_pageBarWithTabs[data-compact]:not([data-natural]) .skc_pageHeading{
-  clip: rect(0 0 0 0); white-space: nowrap; width: 1px; height: 1px; position: absolute; overflow: hidden;
+clip: rect(0 0 0 0); white-space: nowrap; width: 1px; height: 1px; position: absolute; overflow: hidden;
 }
 .skc_pageBarWithTabs[data-compact]:not([data-natural]) .skc_pageTabs{ flex: none; order: 1 }
 
 /* narrow pages */
 @container skc-page-bar (width < 600px){
-  .skc_pageBarWithTabs .skc_pageHead{ align-items: center }
-  .skc_pageBarWithTabs .skc_pageHeading{ flex-basis: 100% }
-  .skc_pageBarWithTabs .skc_pageTabs{ flex: none; order: 2 }
-  .skc_pageBarWithTabs .skc_toolbar{ order: 3 }
-  .skc_toolbarLabel{ display: none }
-  .skc_pageHead .skc_addButton, .skc_pageHead .skc_addPrimary{
-    width: 32px; min-width: 32px; padding-inline: 0;
-  }
-  .skc_toolbar{ flex-shrink: 0; max-width: 100% }
+.skc_pageBarWithTabs .skc_pageHead{ align-items: center }
+.skc_pageBarWithTabs .skc_pageHeading{ flex-basis: 100% }
+.skc_pageBarWithTabs .skc_pageTabs{ flex: none; order: 2 }
+.skc_pageBarWithTabs .skc_toolbar{ order: 3 }
+.skc_toolbarLabel{ display: none }
+.skc_pageHead .skc_addButton, .skc_pageHead .skc_addPrimary{
+width: 32px; min-width: 32px; padding-inline: 0;
+}
+.skc_toolbar{ flex-shrink: 0; max-width: 100% }
 }
 @container skc-page-bar (width < 372px){ .skc_pageTabList{ min-width: 0 } }
 
-/* market: toolbar and chips; only the trailing menu cancels the gap (decisions K) */
+/* market: toolbar and chips; the menu cancels the gap (K) */
 .skc_marketSection{ flex-direction: column; gap: 16px; display: flex }
 .skc_marketToolbar{ flex-wrap: wrap; align-items: center; gap: 8px; display: flex }
-/* the clear button sits inside the field, so it never moves the toolbar */
+/* clear inside the field: it never moves the toolbar */
 .skc_marketSearchField{
-  min-width: 120px; flex: 1; align-items: center; display: flex; position: relative;
+min-width: 120px; flex: 1; align-items: center; display: flex; position: relative;
 }
 .skc_marketSearch{
-  padding-right: 32px; box-sizing: border-box; width: 100%; min-width: 0;
+padding-right: 32px; box-sizing: border-box; width: 100%; min-width: 0;
 }
-/* drop the native search cancel button: ours is the one with a label */
+/* drop native cancel: ours has a label */
 .skc_marketSearch input::-webkit-search-cancel-button{ -webkit-appearance: none; appearance: none; display: none }
 .skc_marketClear{
-  display: flex; position: absolute; top: 50%; right: 5px; transform: translateY(-50%);
-  align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0;
-  border: 0; border-radius: var(--dsw-radius-sm); background: 0 0; cursor: pointer;
-  color: var(--dsw-alias-label-secondary); font: inherit;
+display: flex; position: absolute; top: 50%; right: 5px; transform: translateY(-50%);
+align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0;
+border: 0; border-radius: var(--dsw-radius-sm); background: 0 0; cursor: pointer;
+color: var(--dsw-alias-label-secondary); font: inherit;
 }
 @media (hover: hover){
-  .skc_marketClear:hover{
-    color: var(--dsw-alias-label-primary); background: var(--dsw-alias-interactive-bg-hover);
-  }
+.skc_marketClear:hover{
+color: var(--dsw-alias-label-primary); background: var(--dsw-alias-interactive-bg-hover);
+}
 }
 .skc_marketClear:focus-visible{
-  outline: var(--dsw-focus-ring-width) solid
-    var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
-  outline-offset: 1px;
+outline: var(--dsw-focus-ring-width) solid
+var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+outline-offset: 1px;
 }
 .skc_marketSelect{ max-width: 240px; font-weight: 500 }
-/* ghost buttons paint no box: the trailing menu cancels the gap, 8 / 10 */
+/* ghost: no box; the menu cancels the gap, 8 / 10 */
 .skc_marketSelectTrailing{ margin-left: -8px }
 .skc_marketSelectLabel{ text-overflow: ellipsis; white-space: nowrap; overflow: hidden }
 .skc_marketChips{ flex-wrap: wrap; align-items: center; gap: 6px; display: flex }
 .skc_marketScope{ color: var(--dsw-alias-label-tertiary); margin: 0; font-size: 13px; line-height: 20px }
 .skc_marketNotice{
-  border-radius: var(--dsw-radius-md); background: var(--dsw-alias-state-warn-tertiary);
-  color: var(--dsw-alias-label-secondary); align-items: flex-start; gap: 8px;
-  margin: 0; padding: 10px 12px; font-size: 12px; line-height: 18px; display: flex;
+border-radius: var(--dsw-radius-md); background: var(--dsw-alias-state-warn-tertiary);
+color: var(--dsw-alias-label-secondary); align-items: flex-start; gap: 8px;
+margin: 0; padding: 10px 12px; font-size: 12px; line-height: 18px; display: flex;
 }
 .skc_marketNotice > svg{ color: var(--dsw-alias-state-warn-primary); flex: none; margin-top: 2px }
 
-/* market: the grid and the card */
 .skc_marketGrid{
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;
-  margin: 0; padding: 0; list-style: none; display: grid;
+grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;
+margin: 0; padding: 0; list-style: none; display: grid;
 }
-/* fills the content box; concentric radius keeps the hairline on top */
-/* contain, not cover: upstream wordmarks would be cropped */
+/* fills the box; concentric radius keeps the hairline */
+/* contain, not cover: wordmarks would crop */
 .skc_marketIconImg{
-  border-radius: calc(var(--dsw-radius-lg) - .5px); width: 100%; height: 100%;
-  object-fit: contain; display: block;
+border-radius: calc(var(--dsw-radius-lg) - .5px); width: 100%; height: 100%;
+object-fit: contain; display: block;
 }
-/* inside the pill: 4px, secondary; its box and hit area are untouched */
+/* in the pill: 4px, secondary; hit area untouched */
 .skc_marketChipCount{
-  margin-left: 4px; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px;
+margin-left: 4px; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px;
 }
 .skc_marketCard{
-  border-radius: var(--dsw-radius-xl); align-items: stretch; gap: 8px; min-width: 0;
-  padding: 14px; flex-direction: column; display: flex; position: relative;
+border-radius: var(--dsw-radius-xl); align-items: stretch; gap: 8px; min-width: 0;
+padding: 14px; flex-direction: column; display: flex; position: relative;
 }
 @media (hover: hover){ .skc_marketCard:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
-/* head: tile + title block + the one action seat; nowrap keeps the seat here */
+/* head: tile + title + the one seat; nowrap keeps it */
 .skc_marketHead{ align-items: center; gap: 12px; min-width: 0; display: flex }
-/* one rhythm: 8px here and 8px in the card - every gap has one source */
+/* one rhythm: 8 here and 8 in the card */
 .skc_marketBody{ flex-direction: column; gap: 8px; min-width: 0; display: flex }
 .skc_marketMain{ flex-direction: column; flex: 1; gap: 2px; min-width: 0; display: flex }
-/* content-wide, not block-wide; nowrap is load-bearing (it breaks before shrinking) */
+/* content-wide; nowrap is load-bearing */
 .skc_marketTitleRow{
-  flex-wrap: nowrap; align-items: center; gap: 8px; min-width: 0;
-  align-self: flex-start; max-width: 100%; display: flex;
+flex-wrap: nowrap; align-items: center; gap: 8px; min-width: 0;
+align-self: flex-start; max-width: 100%; display: flex;
 }
-/* grow 0 / shrink 1: the title ellipsises instead of pushing the seat */
+/* grow 0 / shrink 1: the title ellipsises */
 .skc_marketCardOpen{
-  max-width: 100%; color: inherit; font: inherit; text-align: left; cursor: pointer;
-  text-overflow: ellipsis; white-space: nowrap; background: 0 0; border: 0; padding: 0;
-  flex: 0 1 auto; min-width: 0; font-size: 14px; font-weight: 500; line-height: 20px; overflow: hidden;
+max-width: 100%; color: inherit; font: inherit; text-align: left; cursor: pointer;
+text-overflow: ellipsis; white-space: nowrap; background: 0 0; border: 0; padding: 0;
+flex: 0 1 auto; min-width: 0; font-size: 14px; font-weight: 500; line-height: 20px; overflow: hidden;
 }
 .skc_marketCardOpen::after{ content: ""; border-radius: var(--dsw-radius-xl); position: absolute; inset: 0 }
 .skc_marketCardOpen:focus-visible{ outline: none }
 .skc_marketCardOpen:focus-visible::after{
-  outline: var(--dsw-focus-ring-width) solid
-    var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
-  outline-offset: 2px;
+outline: var(--dsw-focus-ring-width) solid
+var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+outline-offset: 2px;
 }
-/* 13/20 = 60px for three lines; the zero margin is load-bearing (UA 1em) */
+/* 13/20 = 60px for three lines; margin 0 is load-bearing */
 .skc_marketDesc{
-  margin: 0; color: var(--dsw-alias-label-tertiary); -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical; font-size: 13px; line-height: 20px;
-  display: -webkit-box; overflow: hidden;
+margin: 0; color: var(--dsw-alias-label-tertiary); -webkit-line-clamp: 3;
+-webkit-box-orient: vertical; font-size: 13px; line-height: 20px;
+display: -webkit-box; overflow: hidden;
 }
-/* one line: a 129-char handle would grow the head 48 -> 66px */
+/* one line: a 129-char handle would grow the head */
 .skc_marketMeta{
-  color: var(--dsw-alias-label-tertiary); margin: 0; text-overflow: ellipsis;
-  white-space: nowrap; overflow: hidden; font-size: 12px; line-height: 18px;
+color: var(--dsw-alias-label-tertiary); margin: 0; text-overflow: ellipsis;
+white-space: nowrap; overflow: hidden; font-size: 12px; line-height: 18px;
 }
-/* fixed slots, so a column lands on the same x; tabular-nums */
+/* fixed slots; tabular-nums */
 .skc_marketStats{
-  grid-template-columns: repeat(3, minmax(0, 72px)); gap: 8px; justify-content: start;
-  margin: 0; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums;
-  font-size: 12px; line-height: 18px; display: grid;
+grid-template-columns: repeat(3, minmax(0, 72px)); gap: 8px; justify-content: start;
+margin: 0; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums;
+font-size: 12px; line-height: 18px; display: grid;
 }
 .skc_marketStat{
-  align-items: center; gap: 3px; min-width: 0; white-space: nowrap;
-  text-overflow: ellipsis; overflow: hidden; display: inline-flex;
+align-items: center; gap: 3px; min-width: 0; white-space: nowrap;
+text-overflow: ellipsis; overflow: hidden; display: inline-flex;
 }
 .skc_marketStat > svg{ width: 13px; height: 13px; flex: none; opacity: .75 }
 .skc_marketStatValue{ min-width: 0; overflow: hidden; text-overflow: ellipsis }
-/* the source's brand mark: 16px at 2x, decoration not a control */
+/* brand mark 16px at 2x, decoration */
 .skc_marketSourceMark{ border-radius: var(--dsw-radius-sm); width: 16px; height: 16px; flex: none; display: block }
 /* chips clamped: a long topic must not stretch the row */
 .skc_marketTags{ flex-wrap: wrap; gap: 6px; min-width: 0; margin: 0; padding: 0; display: flex; list-style: none }
 .skc_marketTag{
-  border: .5px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-sm);
-  color: var(--dsw-alias-label-tertiary); max-width: 100%; padding: 1px 6px;
-  font-size: 11px; line-height: 16px; white-space: nowrap;
-  text-overflow: ellipsis; overflow: hidden;
+border: .5px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-sm);
+color: var(--dsw-alias-label-tertiary); max-width: 100%; padding: 1px 6px;
+font-size: 11px; line-height: 16px; white-space: nowrap;
+text-overflow: ellipsis; overflow: hidden;
 }
-/* z-index:1 floats the seat above the click layer - do not drop it */
+/* z-index:1 floats the seat above the click layer */
 .skc_marketCardEnd{
-  z-index: 1; flex: none; align-items: center; gap: 8px;
-  display: inline-flex; position: relative;
+z-index: 1; flex: none; align-items: center; gap: 8px;
+display: inline-flex; position: relative;
 }
 
-/* market: empty, failure, tail */
 .skc_marketEmpty{
-  text-align: center; flex-direction: column; align-items: center; gap: 8px;
-  padding: 64px 0; display: flex;
+text-align: center; flex-direction: column; align-items: center; gap: 8px;
+padding: 64px 0; display: flex;
 }
 .skc_marketEmptyTitle{ margin: 8px 0 0; font-size: 14px; font-weight: 500; line-height: 20px }
 .skc_marketEmpty > button{ margin-top: 8px }
 .skc_marketError{
-  color: var(--dsw-alias-state-error-primary); align-items: center; gap: 6px;
-  margin: 0; font-size: 13px; line-height: 20px; display: inline-flex;
+color: var(--dsw-alias-state-error-primary); align-items: center; gap: 6px;
+margin: 0; font-size: 13px; line-height: 20px; display: inline-flex;
 }
 .skc_marketFailure{ align-items: center; gap: 10px; display: flex }
-/* list footers: "no more" + retry, and the loading row */
 .skc_marketMore{ align-self: center }
 .skc_marketLoadMore{
-  align-items: center; justify-content: center; gap: 6px; padding-top: 8px; display: flex;
-  color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px;
+align-items: center; justify-content: center; gap: 6px; padding-top: 8px; display: flex;
+color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px;
 }
 
-/* market: the inline detail */
-.skc_marketDetail{ flex-direction: column; gap: 16px; display: flex }
+.skc_marketDetail{ flex-direction: column; gap: 32px; display: flex }
 .skc_marketCrumb{
-  color: var(--dsw-alias-label-tertiary); font: inherit; cursor: pointer; background: 0 0; border: 0;
-  align-self: flex-start; align-items: center; gap: 6px; padding: 0; font-size: 12.5px; display: inline-flex;
+color: var(--dsw-alias-label-tertiary); font: inherit; cursor: pointer; background: 0 0; border: 0;
+align-self: flex-start; align-items: center; gap: 6px; padding: 0; font-size: 12.5px; display: inline-flex;
 }
 @media (hover: hover){ .skc_marketCrumb:hover{ color: var(--dsw-alias-label-primary) } }
 .skc_marketCrumb:focus-visible{
-  outline: var(--dsw-focus-ring-width) solid
-    var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
-  outline-offset: 2px;
+outline: var(--dsw-focus-ring-width) solid
+var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+outline-offset: 2px;
 }
 .skc_marketCrumbIcon{ transform: rotate(90deg) }
 .skc_marketDetailHead{ align-items: center; gap: 14px; display: flex }
 .skc_marketDetailTitle{ margin: 0; font-size: 20px; font-weight: 500; line-height: 28px }
 .skc_marketDetailDesc{
-  color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; margin: 0;
-  font-size: 14px; line-height: 22px;
+color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; margin: 0;
+font-size: 14px; line-height: 22px;
 }
-.skc_marketDetailSection{ flex-direction: column; gap: 12px; margin-top: 16px; display: flex }
+.skc_marketDetailSection{ flex-direction: column; gap: 12px; display: flex }
 .skc_marketSectionTitle{ margin: 0; font-size: 14px; font-weight: 500; line-height: 20px }
 .skc_marketFacts{ margin: 0 }
 .skc_marketFacts div{
-  border-bottom: .5px solid var(--dsw-alias-border-l2); justify-content: space-between;
-  align-items: center; gap: 16px; min-height: 44px; padding: 8px 2px; display: flex;
+border-bottom: .5px solid var(--dsw-alias-border-l2); justify-content: space-between;
+align-items: center; gap: 16px; padding: 8px 2px; display: flex;
 }
 .skc_marketFacts dt{ color: var(--dsw-alias-label-secondary); flex: none; font-size: 13px; line-height: 20px }
 .skc_marketFacts dd{
-  text-align: end; overflow-wrap: anywhere; min-width: 0; margin: 0; font-size: 13px; line-height: 20px;
+text-align: end; overflow-wrap: anywhere; min-width: 0; margin: 0; font-size: 13px; line-height: 20px;
 }
 .skc_marketFacts code{
-  background: var(--dsw-alias-bg-module-platform); box-decoration-break: clone;
-  font-family: var(--ds-font-family-code); border-radius: 4px; padding: 2px 6px; font-size: 12px;
+background: var(--dsw-alias-bg-module-platform); box-decoration-break: clone;
+font-family: var(--ds-font-family-code); border-radius: 4px; padding: 2px 6px; font-size: 12px;
 }
 .skc_marketFiles{ margin: 0; padding: 0; list-style: none }
 .skc_marketFiles li{
-  border-bottom: .5px solid var(--dsw-alias-border-l2); justify-content: space-between;
-  align-items: center; gap: 16px; min-height: 32px; padding: 6px 2px;
-  font-size: 13px; line-height: 20px; display: flex;
+border-bottom: .5px solid var(--dsw-alias-border-l2); justify-content: space-between;
+align-items: center; gap: 16px; min-height: 32px; padding: 6px 2px;
+font-size: 13px; line-height: 20px; display: flex;
 }
 .skc_marketFileName{
-  overflow-wrap: anywhere; min-width: 0; font-family: var(--ds-font-family-code);
-  font-size: 12px; line-height: 18px;
+overflow-wrap: anywhere; min-width: 0; font-family: var(--ds-font-family-code);
+font-size: 12px; line-height: 18px;
 }
 .skc_marketFileSize{ color: var(--dsw-alias-label-tertiary); flex: none; font-size: 12px; line-height: 18px }
 
-/* the installed detail reuses the family above; these are all it adds (host head order) */
+/* installed detail: adds only these */
 .skc_detailPage{ display: flex; flex-direction: column; min-width: 0 }
-/* keeps the window draggable while the header is gone: the header's darwin inset, and it
-   must stay empty - a drag region over the card eats selection and buttons */
+/* drag with no header: the header's darwin inset, and it must
+stay empty - a drag region eats selection and buttons */
 .skc_detailDrag{ flex: none; height: var(--skc-page-top-inset) }
 [data-platform=darwin] .skc_detailDrag{ height: calc(var(--skc-page-top-inset) + var(--dsh-frame-top-clearance, 0px)) }
-.skc_detailTop{ display: flex; align-items: flex-start; gap: 14px }
-.skc_detailActions{ margin-left: auto; display: inline-flex; align-items: center; gap: 8px }
-.skc_detailIntro{ display: flex; flex-direction: column; gap: 6px }
-.skc_detailAuthor{ margin: 0; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px }
+/* head row: icon left, actions right (host) */
+.skc_detailTop{ display: flex; justify-content: space-between; align-items: center }
+.skc_detailActions{ margin-left: auto; display: inline-flex; align-items: center; gap: 16px }
+/* 20 = the column's 32px gap minus 12 (host: 20) */
+.skc_detailIntro{ display: flex; flex-direction: column; gap: 8px; margin-top: -12px }
+.skc_detailAuthor{
+margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code);
+font-size: 12px; line-height: 18px;
+}
+/* host danger button: error-token text, 1px inset ring via the
+primitives' knobs (a border would add 2px) */
+.skc_detailDanger{
+--dsh-button-outline-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent);
+--dsh-hairline-width: 1px;
+color: var(--dsw-alias-state-error-primary); height: 28px; padding: 0 10px;
+border-radius: 8px; gap: 4px; font-size: 12px; line-height: 18px;
+}
+.skc_detailDanger:disabled{ opacity: .4 }
+/* body scrolls here; the file list and source block stay outside
+it (host: 552px at 920 tall = 60vh) */
+.skc_detailBodyBox{ max-height: 60vh; padding: 12px 0; overflow-y: auto }
 .skc_detailIdentity{ align-items: center; gap: 8px; display: flex }
 .skc_detailCallName{ font-family: var(--ds-font-family-code) }
 .skc_detailBody{ font-size: 13px; line-height: 20px }
 
-/* market: confirm dialog and skeleton */
+/* confirm dialog and skeleton */
 .skc_marketDialog{ width: min(480px, 100vw - 32px) }
 .skc_marketConfirmBody{ flex-direction: column; gap: 12px; display: flex }
 .skc_marketConfirmHead{ align-items: center; gap: 14px; display: flex }
@@ -460,8 +470,8 @@ const CSS = `
 /* the real chip's box (48x19) */
 .skc_marketSkeletonTag{ border-radius: var(--dsw-radius-sm); width: 48px; height: 19px }
 .skc_marketToastHint{
-  color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere;
-  margin-top: 2px; font-size: 12px; line-height: 18px; display: block;
+color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere;
+margin-top: 2px; font-size: 12px; line-height: 18px; display: block;
 }
 `;
 
