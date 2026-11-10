@@ -159,13 +159,14 @@ test('K22 行结构：图标 + 名称 + 描述 + 右侧控件', () => {
   assert.ok(rowHtml.includes('class="skc_cardMain"'), '名称与描述在中间列');
 });
 
-test('K22 每行的头像按自己的名字取色，不是整表一个色', () => {
+test('K22 头像按名字取色：内置块取 provider 名，两区的行取技能名', () => {
   const html = renderPage();
   const tiles = matches(html, /style="--skc-avatar-bg:([^;]+);--skc-avatar-ink:[^"]+"/g);
-  assert.equal(tiles.length, 4, '四条假技能各有一个头像');
-  assert.equal(new Set(tiles).size, 4, '四条名字拿到四种色块（常量色或按首字母上色都会撞色）');
+  assert.equal(tiles.length, 4, '一个内置块 + 三条行，各有一个头像');
+  assert.equal(new Set(tiles).size, 4, '四个名字拿到四种色块（常量色或按首字母上色都会撞色）');
   const letters = matches(html, /aria-hidden="true">([^<]*)<\/span>/g);
-  assert.deepEqual(letters, ['O', 'D', 'H', 'U'], '字母跟随各自名字（office / dev-docs-standards / hand-written / ui-design）');
+  // 内置区折成 provider 块（runtime），所以第一块的头像是 R，不再是被折进去的 office。
+  assert.deepEqual(letters, ['R', 'D', 'H', 'U'], '字母跟随各自名字（runtime 块 / dev-docs-standards / hand-written / ui-design）');
 });
 
 test('K22 可写行的右侧是 role=switch 的开关，aria-label 为「启用 <name>」', () => {
@@ -195,12 +196,20 @@ test('软链行不渲染开关，改渲染只读标记（三层拦截的第二�
   assert.ok(linkedRow.includes('data-icon="link"'), '只读标记带链接图标');
 });
 
-test('内置行渲染开关（写面板存储那条路径）', () => {
+test('内置块里没有开关；进插件页后每个技能各有一个开关（写面板存储那条路径）', () => {
   const html = renderPage();
-  const builtin = html.slice(html.indexOf('data-skc-row="runtime#office"'), html.indexOf('data-skc-group="local"'));
-  assert.ok(builtin.includes('role="switch"'), '内置行有开关');
-  assert.ok(builtin.includes('aria-label="启用 office"'), '内置行的开关名是「启用 office」');
-  assert.equal(builtin.includes('skc_roTag'), false, '内置行没有只读标记');
+  const block = html.slice(html.indexOf('data-skc-plugin="runtime"'), html.indexOf('data-skc-group="local"'));
+  assert.ok(block.length > 0, '内置区渲染成 provider 块');
+  assert.equal(block.includes('role="switch"'), false, '块上没有开关（折叠后只剩入口）');
+  assert.equal(block.includes('skc_roTag'), false, '块上也没有只读标记');
+  assert.ok(block.includes('1 个技能') || block.includes('个技能'), '块上写着技能数');
+
+  // 进插件页：每行一个开关，名字仍是「启用 <name>」。
+  const pluginHtml = renderPage({ after: (store) => { store.actions.openPlugin('runtime'); } });
+  assert.ok(pluginHtml.includes('data-skc-plugin-detail="runtime"'), '插件页挂点');
+  const switches = (pluginHtml.match(/role="switch"/g) ?? []).length;
+  assert.equal(switches, 1, `插件页的开关数 = 技能数（实测 ${switches}）`);
+  assert.ok(pluginHtml.includes('aria-label="启用 office"'), '开关名是「启用 office」');
 });
 
 test('行本身不可点：没有链接、没有详情按钮', () => {
@@ -453,7 +462,11 @@ test('K111 面包屑返回：detail 变 null 且不再请求任何路由', async
   // 面包屑在详情组件内部：组件本体不含 hook，直接调用它拿到元素树再点那颗按钮。
   const detailElement = elementsOf(render()).find((element) => element.type === modules.installedDetail.InstalledDetail);
   assert.ok(detailElement !== undefined, '页面把详情交给了 InstalledDetail');
-  const crumb = elementsOf(modules.installedDetail.InstalledDetail(detailElement.props))
+  // 面包屑是 DetailCrumb 组件（两级返回里插件页也复用它），所以要进到它的渲染结果里找按钮。
+  const detailTree = modules.installedDetail.InstalledDetail(detailElement.props);
+  const crumbComponent = elementsOf(detailTree).find((element) => element.type === modules.installedDetail.DetailCrumb);
+  assert.ok(crumbComponent !== undefined, '详情里有 DetailCrumb');
+  const crumb = elementsOf(modules.installedDetail.DetailCrumb(crumbComponent.props))
     .find((element) => element.props?.className === 'skc_marketCrumb');
   assert.ok(crumb !== undefined, '详情里有面包屑按钮');
   assert.equal(crumb.props.type, 'button', '面包屑是普通按钮（不是第二套点击层）');
@@ -528,7 +541,9 @@ test('K111 返回列表后页头与刷新都回来了，刷新仍走「关详情
 
   // 面包屑返回：页头重建，刷新按钮回到页头。
   const detailElement = elementsOf(render()).find((element) => element.type === modules.installedDetail.InstalledDetail);
-  const crumb = elementsOf(modules.installedDetail.InstalledDetail(detailElement.props))
+  const crumbTree = modules.installedDetail.InstalledDetail(detailElement.props);
+  const crumbComponent = elementsOf(crumbTree).find((element) => element.type === modules.installedDetail.DetailCrumb);
+  const crumb = elementsOf(modules.installedDetail.DetailCrumb(crumbComponent.props))
     .find((element) => element.props?.className === 'skc_marketCrumb');
   crumb.props.onClick();
   assert.equal(store.getSnapshot().detail, null, '返回后详情关了');
@@ -656,4 +671,37 @@ test('K111 市场页签不跟着改：页头与页签仍在，市场详情仍只
   assert.equal(detailState.includes('data-skc-market-id'), false, '网格被就地替换掉了');
   assert.equal(detailState.includes('skc_detailPage'), false, '市场详情不走 detailPage（那是已安装页签的整页替换）');
   assert.equal(detailState.includes('skc_detailDrag'), false, '市场详情也没有那条拖动条');
+});
+
+/* ------------- 插件页 / 两级返回（本轮） ------------- */
+
+test('列表里的内置区是 provider 块，不是行：块上没有开关，也没有 data-skc-row', () => {
+  const html = renderPage();
+  const builtinGroup = html.slice(html.indexOf('data-skc-group="builtin"'), html.indexOf('data-skc-group="local"'));
+  assert.ok(builtinGroup.includes('data-skc-plugin="runtime"'), '内置区渲染成块');
+  assert.equal(/data-skc-row=/.test(builtinGroup), false, '块里没有行');
+  assert.equal(builtinGroup.includes('role="switch"'), false, '块上没有开关');
+  assert.ok(builtinGroup.includes('class="skc_cardTitle skc_cardOpen"'), '块头有一个可点的标题按钮');
+});
+
+test('进插件页：整页替换掉列表，只留插件页（面包屑 + provider 头 + 技能行）', () => {
+  const html = renderPage({ after: (store) => { store.actions.openPlugin('runtime'); } });
+  assert.ok(html.includes('data-skc-plugin-detail="runtime"'), '插件页在场');
+  assert.equal(html.includes('data-skc-group='), false, '列表三分区不再渲染');
+  assert.equal(/data-skc-plugin=/.test(html), false, '块也不渲染（整页替换）');
+  assert.ok(html.includes('data-skc-row="runtime#office"'), '插件页里有技能行');
+});
+
+test('技能详情是从插件页进来的时候，退一级回到插件页（不是回列表）', () => {
+  const html = renderPage({
+    after: (store) => {
+      store.actions.openPlugin('runtime');
+      store.actions.openDetail(row({ name: 'office', provider: 'runtime', partition: 'builtin', path: null, writable: false, readonlyReason: 'provider-store' }));
+      store.actions.detailReady('runtime#office', { body: '正文', files: [], filesTruncated: false });
+      store.actions.closeDetail();
+    },
+  });
+  assert.ok(html.includes('data-skc-plugin-detail="runtime"'), '退一级后回到插件页');
+  assert.equal(html.includes('data-skc-installed-detail'), false, '技能详情已经关掉');
+  assert.equal(html.includes('data-skc-group='), false, '还没回到列表');
 });

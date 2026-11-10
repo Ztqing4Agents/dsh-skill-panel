@@ -37,16 +37,34 @@
 | 3 | 标题组 | `.skc_detailIntro`（图标下方纵向，`gap:8`；到图标行 20 = 列 gap 32 − 12）——**三段，顺序固定**：标题 `h3.skc_marketDetailTitle`（20/28/500）+ 版本 Tag（复用 `market.metaVersion` = `v{version}`，有值才画）→ **作者行** `.skc_detailAuthor`（复用 `market.metaAuthor` = `@owner/slug`，**12/18 tertiary mono**，仅 `row.upstream !== null` 渲染；它顶替宿主的包名行，所以这里不再放第二行身份）→ 描述（**`.skc_marketDetailDesc` 14/22 不截断**，空串整块不渲染） |
 | 4 | 失效原因（可选） | `reason` 非空时一行 `.skc_reason`（`role="alert"`），紧跟在标题组之后 |
 | 5 | 正文盒 | **紧跟描述**，**前面没有区块标题**（宿主也是描述下面直接是 README，`market.detailOverview` 只给市场详情用）：`.skc_detailBodyBox`（`max-height:60vh; padding:12px 0; overflow-y:auto`，宿主 1440×920 实测 552px = 60vh；**上下各一条 0.5px 发丝线、左右无、圆角 0**——宿主就是这样，颜色取标签主色 5% 以随主题翻转；不加 `tabindex`、不拦 `wheel`）。**三态与空态都在盒内就地呈现**：`loading` → 一行 `detail.loading`；`error` → 一行 `detail.error` + 「重试」按钮；`ready` 但无正文 → 一行 `detail.noBody`；`ready` 有正文 → `MarkdownBlock`（必须传 `labels`：6 个 `markdown.*`，缺了它宿主渲染代码围栏时抛错、整段回落纯文本）；`truncated === true` 时正文**下方**再加一行 `detail.truncated` |
-| 6 | 版本（**条件块：仅 `row.upstream !== null`，即市场装的技能**） | 本地技能（手工装 / 软链指向的技能目录 / 内置）**整块不渲染**——宿主对本地插件就没有这块，不再显示「无法检查更新」。块内：`detail.sectionVersion` 标题 + 右侧小按钮（`detail.checkAgain` / `detail.checking`，检查中禁用）；下面是圆角卡：`upToDate` 显示 ✓ 圆底 + `detail.upToDate` + `detail.checkedAt`（`HH:MM`）；`newer` 显示 `detail.newerVersion`（带上游版本号）+ `detail.checkedAt`；其余四态在卡内各一行文案（见「检查更新」）。**本地技能（没有 upstream）也渲染本区块**，落在 `unavailable` |
-| 7 | 来源信息（**1–3 行，恒渲染**） | `detail.sectionSource` 标题 + 复用事实表样式（`.skc_marketFacts`，左 label / 右值、`.5px` 分隔线）。**第一行恒有**：`detail.callName`（调用名）＝ 等宽 kebab 名（`.skc_detailCallName`）+ 行尾复制按钮（`detail.copy` / `detail.copied`，`CopyName`，1.5 s 对勾 + `aria-live` 播报；按钮在 `dd` 里、Tab 顺序自然）；**第二行** **第二行** `detail.factCodeSource`：四种取值（都在客户端由 `Row` 拼，纯字符串）——①`upstream !== null` ⇒ `owner/slug@version`（无 version 就 `owner/slug`）；②`upstream === null` 且 `row.symlink === true` ⇒ `link:` + `realPath` 的目录（`realPath` 是 `<dir>/SKILL.md`，取 dirname，与宿主那条 `link:/Users/…` 同形状）；③`upstream === null` 且非软链、`row.path` 有值 ⇒ `path` 的目录；④`row.path === null`（内置 / provider-store 行）⇒ 文案 `detail.sourceBuiltin`（「内置」/`Built-in`），**不用等宽**。前三种值等宽。**第三行** **第三行** `detail.factVersion`：`row.version`（等宽），仅 version 非空渲染——本地技能大概率没有 version，**这一行整行不渲染是允许的**（宿主那台有 `0.1.0` 是因为它是 npm 包）。**整块恒渲染**——调用名永远有，所以区块不会空；标题仍叫「来源信息」 |
-| 8 | 查看仓库 | 仅详情出参带 `repoUrl` 时（= 有 upstream 身份）：右下角 `<a href={data.repoUrl} target="_blank" rel="noopener noreferrer">` + `detail.viewRepo` + 外链图标；13/20 tertiary、hover 变主色。**URL 由宿主拼好**（`https://skillhub.cn/skills/<owner>/<slug>`，见 `docs/contracts/routes.md` §3.3.3）：浏览器半部不造上游 URL、不发请求（硬约束 13）。**详情页内的普通链接**，不属于「整区可点」（硬约束 9），`target=_blank` 只有这一处 |
-| 9 | 失效态 | 按 `detail.key` 在 `payload` 里取不到行 ⇒ 只渲染面包屑 + `error.E_NOT_FOUND` 一行，不抛异常 |
+| 6 | 调用名（**新区块**） | `detail.callName` 标题（`.skc_marketSectionTitle` 14/20/500，**不带计数**——宿主那个「共 N 个」对我们没意义）+ 一行**组件式行**（照宿主「包含的组件」）：`.skc_callRow`（`flex; align-items:center; gap:12px; height:74px`）＝ 左图标 41×41（`IconTile` + `.skc_callIcon`，圆角 12、不动 48 的基类）+ 中段 `.skc_callBody`（`.skc_callName` 常规字体 13.5/20/500 单行省略；`.skc_callDesc` 11.5/16 tertiary、**2 行裁切**、空串不渲染）+ 右侧复制按钮（`CopyName`，`detail.copy` / `detail.copied`）。**位置在版本之上**（与宿主的组件区一致） |
+| 7 | 版本（**条件块：仅 `row.upstream !== null`，即市场装的技能**） | 本地技能（手工装 / 软链指向的技能目录 / 内置）**整块不渲染**——宿主对本地插件就没有这块，不再显示「无法检查更新」。块内：`detail.sectionVersion` 标题 + 右侧小按钮（`detail.checkAgain` / `detail.checking`，检查中禁用）；下面是圆角卡：`upToDate` 显示 ✓ 圆底 + `detail.upToDate` + `detail.checkedAt`（`HH:MM`）；`newer` 显示 `detail.newerVersion`（带上游版本号）+ `detail.checkedAt`；其余四态在卡内各一行文案（见「检查更新」）。**本地技能（没有 upstream）也渲染本区块**，落在 `unavailable` |
+| 8 | 来源信息（**1–2 行，恒渲染**） | `detail.sectionSource` 标题 + 复用事实表样式（`.skc_marketFacts`，左 label / 右值、`.5px` 分隔线）。**调用名那一行已移出**（见上一条区块）。**第一行** `detail.factCodeSource`：四种取值（都在客户端由 `Row` 拼，纯字符串）——①`upstream !== null` ⇒ `owner/slug@version`（无 version 就 `owner/slug`）；②`upstream === null` 且 `row.symlink === true` ⇒ `link:` + `realPath` 的目录（`realPath` 是 `<dir>/SKILL.md`，取 dirname，与宿主那条 `link:/Users/…` 同形状）；③`upstream === null` 且非软链、`row.path` 有值 ⇒ `path` 的目录；④`row.path === null`（内置 / provider-store 行）⇒ 文案 `detail.sourceBuiltin`（「内置」/`Built-in`），**不用等宽**。前三种值等宽。**第二行** `detail.factVersion`：`row.version`（等宽），仅 version 非空渲染——本地技能大概率没有 version，**这一行整行不渲染是允许的**（宿主那台有 `0.1.0` 是因为它是 npm 包）。**整块恒渲染**：市场装两行（代码来源 / 当前版本）、本地技能一行（代码来源，`link:` 或目录）、内置行一行（代码来源＝「内置」）；标题仍叫「来源信息」 |
+| 9 | 查看仓库 | 仅详情出参带 `repoUrl` 时（= 有 upstream 身份）：右下角 `<a href={data.repoUrl} target="_blank" rel="noopener noreferrer">` + `detail.viewRepo` + 外链图标；13/20 tertiary、hover 变主色。**URL 由宿主拼好**（`https://skillhub.cn/skills/<owner>/<slug>`，见 `docs/contracts/routes.md` §3.3.3）：浏览器半部不造上游 URL、不发请求（硬约束 13）。**详情页内的普通链接**，不属于「整区可点」（硬约束 9），`target=_blank` 只有这一处 |
+| 10 | 失效态 | 按 `detail.key` 在 `payload` 里取不到行 ⇒ 只渲染面包屑 + `error.E_NOT_FOUND` 一行，不抛异常 |
 
-顺序一句话：**面包屑 → 头行（49 图标 + 卸载占位 + 开关 / 软链只读）→ 标题组（标题+版本 / 作者 / 描述）→ [reason] → 正文盒 → [版本（仅市场装的技能）] → 来源信息（调用名+复制 / 代码来源 / 当前版本）→ 查看仓库**。正文紧跟描述，其余技术区全在盒下；盒内滚正文，盒外跟页面滚。调用名是**技术标识**，与「代码来源 / 当前版本」同类，所以放在来源信息里而不是标题下（宿主标题下只有一行身份，已被作者行占用）。
+顺序一句话：**面包屑 → 头行（49 图标 + 卸载占位 + 开关 / 软链只读）→ 标题组（标题+版本 / 作者 / 描述）→ [reason] → 正文盒 → 调用名（组件式行）→ [版本（仅市场装的技能）] → 来源信息（代码来源 / 当前版本）→ 查看仓库**。正文紧跟描述，其余技术区全在盒下；盒内滚正文，盒外跟页面滚。调用名是**技术标识**，与「代码来源 / 当前版本」同类，所以放在来源信息里而不是标题下（宿主标题下只有一行身份，已被作者行占用）。
 
 **文件清单已整块删除**（U1e）：宿主详情页没有文件清单，底部的技术区是「版本 / 来源信息 / 查看仓库」。`market.detailFiles` 与 `detail.filesTruncated` 两个键**留着**——市场详情仍用前者，后者留给以后真需要时；本页不再渲染它们。
 
-区块骨架逐字复用 `.skc_marketDetail*` 族（**详情族，两个页签共用**，不改名）。已安装详情新增刻度共 19 条，规则体只有一处真源：`docs/contracts/visual.md` A.5（`.skc_detailPage` / `.skc_detailDrag` / `.skc_detailIcon` / `.skc_detailTop` / `.skc_detailActions` / `.skc_detailIntro` / `.skc_detailAuthor` / `.skc_detailDanger` / `.skc_detailBodyBox` / `.skc_detailVersionHead` / `.skc_detailVersionCard` / `.skc_detailVersionRow` / `.skc_detailVersionMark` / `.skc_detailVersionText` / `.skc_detailVersionTitle` / `.skc_detailRepoLink` / `.skc_detailFactValue` / `.skc_detailCallName` / `.skc_detailBody`），实现逐字相同，在 `src/client/styles.js`。
+区块骨架逐字复用 `.skc_marketDetail*` 族（**详情族，两个页签共用**，不改名）。已安装详情新增刻度共 23 条，规则体只有一处真源：`docs/contracts/visual.md` A.5（`.skc_detailPage` / `.skc_detailDrag` / `.skc_detailIcon` / `.skc_detailTop` / `.skc_detailActions` / `.skc_detailIntro` / `.skc_detailAuthor` / `.skc_detailDanger` / `.skc_detailBodyBox` / `.skc_detailVersionHead` / `.skc_detailVersionCard` / `.skc_detailVersionRow` / `.skc_detailVersionMark` / `.skc_detailVersionText` / `.skc_detailVersionTitle` / `.skc_detailRepoLink` / `.skc_detailBody`）＋调用名区块 5 条（`.skc_callRow` / `.skc_callIcon` / `.skc_callBody` / `.skc_callName` / `.skc_callDesc`），实现逐字相同，在 `src/client/styles.js`。
+
+## 插件详情（内置 provider）
+
+「内置」分区在列表里**不单列技能**，而是每个 `provider` 折成一个块（见 `docs/contracts/client.md` §3.9.2）；点块进这一页。**分组键与显示名都是 `Row.provider` 原值**（如 `univer`、`dsh-office`，用户已确认不映射包名），只有 `partition === 'builtin'` 的行进块，`local` / `installed` 行照旧是列表行；块按 provider 名字升序。
+
+结构与返回：
+
+| # | 区块 | 内容 |
+| --- | --- | --- |
+| 1 | 面包屑 | 复用 `DetailCrumb`（`detail.back`），返回**列表** |
+| 2 | 头行 | `.skc_pluginHead`：`IconTile`（48，provider 首字母）+ `.skc_cardMain` 里 provider 名（`.skc_marketDetailTitle` 20/28/500）+ 副行 `plugin.skillsCount`（复用 `.skc_cardDesc` 13/18 tertiary） |
+| 3 | 包含的技能 | `plugin.skills` 标题 + `ul.skc_cards` 里逐行 `SkillRow`（**每行的开关保留**，仍是行里唯一的独立控件；软链行的只读标记照旧）——点行进**那个技能的详情页** |
+| 4 | 来源信息 | `detail.sectionSource` + 一行事实：`detail.factCodeSource` = `detail.sourceBuiltin`（「内置」）；**没有版本区块、没有查看仓库**（内置不检查更新，上一轮已定） |
+
+返回链是**两级**：`列表 → 插件详情 → 技能详情`。技能详情的面包屑只退一级（有 `pluginDetail` 就回插件详情，否则回列表）；两级各自记各自的偏移（`detailScrollTop` 给列表、`pluginScrollTop` 给插件页），进入任一层都把 `scrollTop` 归零；**返回时还原进入前的偏移，含 0**（0 是「到顶」，不是「不动」）。回列表前还要先把容器的 `scrollTop` 拍成 0 再切视图——页头的 `data-compact` 由这个偏移推导、会收起 intro，若页头在插件页的偏移下挂载，滚动锚定会把刚还原的偏移又拉回去。
+
+整页替换口径与技能详情一致：页头整块不渲染，`pageBody` 里只有一个 `.skc_detailPage`（含那条拖窗口的空条）。
 
 ## 状态与返回
 

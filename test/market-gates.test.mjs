@@ -704,29 +704,29 @@ test('K115 visual.md A.5 有整行可点的三条刻度与「待真机取色」'
   assert.match(a5, /\.skc_cardEnd\{[^}]*z-index: 1/, 'A.5 写了 z-index:1 的动作位');
   assert.match(a5, /@media \(hover: hover\)/, 'A.5 把 hover 限定在有悬停的设备上');
   assert.match(a5, /待真机取色/, 'A.5 标注了待真机取色的刻度');
-  for (const rule of ['.skc_detailFactValue{', '.skc_detailCallName{', '.skc_detailBody{']) {
+  for (const rule of ['.skc_callRow{', '.skc_callName{', '.skc_detailBody{']) {
     assert.ok(a5.includes(rule), `A.5 记下详情页新增的 ${rule}`);
   }
 });
 
-test('K115 体积门禁抬到 138000，locale 恰好 149 键（含 6 个 markdown.* chrome 标签）', async () => {
+test('K115 体积门禁抬到 142000，locale 恰好 151 键（含 6 个 markdown.* chrome 标签）', async () => {
   const bundleTest = await readFile(join(ROOT, 'test', 'bundle-contract.test.mjs'), 'utf8');
-  assert.match(bundleTest, /size < 138_000/, '产物上限是 138000 B');
-  assert.equal(/size < 134_000/.test(bundleTest), false, '旧上限 134000 已经不在（不能两个都在）');
+  assert.match(bundleTest, /size < 142_000/, '产物上限是 142000 B');
+  assert.equal(/size < 138_000/.test(bundleTest), false, '旧上限 138000 已经不在（不能两个都在）');
   assert.equal(/size < 128_000/.test(bundleTest), false, '旧上限 128000 已经不在（不能两个都在）');
 
   const gate = await runGate('check-i18n.mjs');
   assert.equal(gate.code, 0, `check:i18n 必须 exit 0：${gate.stdout}${gate.stderr}`);
   const summary = /check-i18n: OK \((\d+) keys in both dictionaries/.exec(gate.stdout);
   assert.ok(summary !== null, '门禁输出里带键数');
-  assert.equal(Number(summary[1]), 149, `locale 恰好 149 键（实际 ${summary[1]}）`);
+  assert.equal(Number(summary[1]), 151, `locale 恰好 151 键（实际 ${summary[1]}）`);
 
-  // 口径自查：147 个扁平键 + meta 的两项 = 149（嵌套字典会让界面显示原始键名）。
+  // 口径自查：149 个扁平键 + meta 的两项 = 151（嵌套字典会让界面显示原始键名）。
   const [zh, en] = await Promise.all(['zh', 'en'].map(async (language) => (
     JSON.parse(await readFile(join(ROOT, 'locale', `${language}.json`), 'utf8'))
   )));
   const flat = (dictionary) => Object.keys(dictionary).filter((key) => key !== 'meta');
-  assert.equal(flat(zh).length + Object.keys(zh.meta).length, 149, 'zh：147 扁平 + meta 两项');
+  assert.equal(flat(zh).length + Object.keys(zh.meta).length, 151, 'zh：149 扁平 + meta 两项');
   assert.deepEqual(flat(zh).sort(), flat(en).sort(), 'zh/en 键集一致');
   assert.deepEqual(
     flat(zh).filter((key) => key.startsWith('detail.')).sort(),
@@ -734,6 +734,13 @@ test('K115 体积门禁抬到 138000，locale 恰好 149 键（含 6 个 markdow
       'detail.back', 'detail.callName', 'detail.checkAgain', 'detail.checkFailed', 'detail.checkIdle', 'detail.checkUnavailable', 'detail.checkedAt', 'detail.checking', 'detail.copied', 'detail.copy', 'detail.error', 'detail.factCodeSource', 'detail.factVersion', 'detail.filesTruncated', 'detail.loading', 'detail.newerVersion', 'detail.noBody', 'detail.retry', 'detail.sectionSource', 'detail.sectionVersion', 'detail.sourceBuiltin', 'detail.truncated', 'detail.uninstall', 'detail.uninstallSoon', 'detail.upToDate', 'detail.viewRepo',
     ],
     'detail.* 恰好 26 个键（本轮加 detail.sourceBuiltin：内置行的代码来源）',
+  );
+
+  // 内置区折块 + 插件页：两个新键（「N 个技能」与「包含的技能」标题）。
+  assert.deepEqual(
+    flat(zh).filter((key) => key.startsWith('plugin.')).sort(),
+    ['plugin.skills', 'plugin.skillsCount'],
+    'plugin.* 恰好 2 个键',
   );
 
   // 136 → 142 的那 6 个键不是文案需求，是宿主渲染器的 chrome：`MarkdownText` 的代码块读

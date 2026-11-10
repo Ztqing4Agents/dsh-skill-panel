@@ -67,6 +67,40 @@ export function EnableSwitch({ row, t, pending, onToggle }) {
  *   `rowTitleOf`).
  * @returns {import('react').ReactElement} the row.
  */
+/**
+ * One builtin provider, shown as a block instead of its rows.
+ *
+ * The block carries no control at all: the switch lives on each skill inside the provider's
+ * page, so here the whole block is the single click target - the same technique as a row
+ * (title button + `::after` covering the block, hard constraint 9), with no action seat.
+ * @param {{block: {provider: string, skills: object[]}, t: Function, onOpen: Function,
+ *   iconUrl?: string|null}} props - the provider block, translate, the open handler and the
+ *   block's avatar URL (null keeps the letter).
+ * @returns {import('react').ReactElement} the block.
+ */
+export function PluginBlock({ block, t, onOpen, iconUrl = null }) {
+  return (
+    <li className={cn('card')} data-skc-plugin={block.provider}>
+      <div className={cn('cardHead')}>
+        <IconTile iconUrl={iconUrl} title={block.provider} />
+        <div className={cn('cardMain')}>
+          <div className={cn('titleRow')}>
+            <button
+              type="button"
+              className={cn('cardTitle', 'cardOpen')}
+              title={block.provider}
+              onClick={() => onOpen?.(block.provider)}
+            >
+              {block.provider}
+            </button>
+          </div>
+          <span className={cn('cardDesc')}>{t('plugin.skillsCount', { count: block.skills.length })}</span>
+        </div>
+      </div>
+    </li>
+  );
+}
+
 export function SkillRow({ row, t, rows, onToggle, onOpen, iconUrl = null, title }) {
   const key = rowKey(row);
   const view = rowViewState(row, rows);

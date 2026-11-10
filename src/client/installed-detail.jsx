@@ -77,6 +77,21 @@ function CopyName({ name, t }) {
 }
 
 /**
+ * The one way back: a chevron and the word "skills". Shared by both installed views, so the
+ * provider page and a skill page can never drift apart on their breadcrumb.
+ * @param {{t: Function, onBack: Function}} props - translate and the back handler.
+ * @returns {import('react').ReactElement} the crumb button.
+ */
+export function DetailCrumb({ t, onBack }) {
+  return (
+    <button type="button" className={cn('marketCrumb')} onClick={onBack}>
+      <IconChevronDownOutlineRegular size={14} className={cn('marketCrumbIcon')} aria-hidden="true" />
+      <span>{t('detail.back')}</span>
+    </button>
+  );
+}
+
+/**
  * Render the detail view of one installed skill.
  * @param {{detail: object|null, row: object|null, rows: Map<string, object>, t: Function,
  *   status: string, check?: object|null, iconUrl?: string|null, title?: string,
@@ -90,12 +105,7 @@ export function InstalledDetail({
   detail, row, rows, t, status, check = null, iconUrl = null, title, onBack, onRetry, onToggle,
   onCheck,
 }) {
-  const crumb = (
-    <button type="button" className={cn('marketCrumb')} onClick={onBack}>
-      <IconChevronDownOutlineRegular size={14} className={cn('marketCrumbIcon')} aria-hidden="true" />
-      <span>{t('detail.back')}</span>
-    </button>
-  );
+  const crumb = <DetailCrumb t={t} onBack={onBack} />;
   // The row can disappear under the page (someone deleted the directory); the way back is
   // the only thing left to offer, and saying so beats an exception.
   if (row === null || row === undefined) {
@@ -213,6 +223,17 @@ export function InstalledDetail({
       </div>
       {reason === null ? null : <p className={cn('reason')} role="alert">{reason}</p>}
       <div className={cn('detailBodyBox')}>{bodyContent}</div>
+      <section className={cn('marketDetailSection')}>
+        <h4 className={cn('marketSectionTitle')}>{t('detail.callName')}</h4>
+        <div className={cn('callRow')}>
+          <IconTile iconUrl={iconUrl} title={row.name} className="callIcon" />
+          <div className={cn('callBody')}>
+            <p className={cn('callName')}>{row.name}</p>
+            {row.description === '' ? null : <p className={cn('callDesc')}>{row.description}</p>}
+          </div>
+          <CopyName name={row.name} t={t} />
+        </div>
+      </section>
       {upstream === null ? null : (
       <section className={cn('marketDetailSection')}>
         <div className={cn('detailVersionHead')}>
@@ -243,13 +264,6 @@ export function InstalledDetail({
       <section className={cn('marketDetailSection')}>
         <h4 className={cn('marketSectionTitle')}>{t('detail.sectionSource')}</h4>
         <dl className={cn('marketFacts')}>
-          <div>
-            <dt>{t('detail.callName')}</dt>
-            <dd className={cn('detailFactValue')}>
-              <code className={cn('detailCallName')}>{row.name}</code>
-              <CopyName name={row.name} t={t} />
-            </dd>
-          </div>
           <div>
             <dt>{t('detail.factCodeSource')}</dt>
             <dd>{codeSource === null ? t('detail.sourceBuiltin') : <code>{codeSource}</code>}</dd>

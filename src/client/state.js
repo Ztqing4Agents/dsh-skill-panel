@@ -89,6 +89,11 @@ function initialState() {
     // list, leaving the tab must not lose the text, and coming back must not re-request it.
     detail: null,
     detailScrollTop: 0,
+    // One level up from a skill detail: the builtin provider whose block was opened. The list
+    // offset is `detailScrollTop`; this level has its own so coming back from a skill lands
+    // where the plugin page was.
+    pluginDetail: null,
+    pluginScrollTop: 0,
     // The manual update check of the open detail: {key, busy, status, latestVersion, at}.
     // One skill at a time, so a plain object keyed by the detail's key is enough.
     check: null,
@@ -324,10 +329,35 @@ export function createStore() {
       if (state.detail === null || state.detail.key !== key) return;
       set({ detail: { ...state.detail, status: 'error', data: null, code: error?.code ?? null } });
     },
-    /** Close the detail view; the page writes the remembered offset back. @returns {void} */
+    /**
+     * Close the skill detail. With a plugin page underneath, that page is where the user came
+     * from, so this only drops one level - the plugin level closes on its own action.
+     * @returns {void}
+     */
     closeDetail: () => {
       if (state.detail === null) return;
       set({ detail: null, check: null });
+    },
+    /**
+     * Open one builtin provider's page.
+     * @param {string} provider - the provider id, which is the block's key.
+     * @returns {void}
+     */
+    openPlugin: (provider) => {
+      set({ pluginDetail: typeof provider === 'string' ? provider : null });
+    },
+    /** Leave the plugin page, back to the list (or to whatever is below it). @returns {void} */
+    closePlugin: () => {
+      if (state.pluginDetail === null) return;
+      set({ pluginDetail: null });
+    },
+    /**
+     * Remember where the plugin page was, read with its rows still on screen.
+     * @param {number} top - scroll offset in pixels.
+     * @returns {void}
+     */
+    rememberPluginScroll: (top) => {
+      set({ pluginScrollTop: Number.isFinite(top) && top > 0 ? top : 0 });
     },
     /**
      * Patch the open detail's update check. The key is checked, not assumed: a slow answer for

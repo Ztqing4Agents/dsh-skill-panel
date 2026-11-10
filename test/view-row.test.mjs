@@ -298,11 +298,14 @@ test('K110 内置行有 provider 开关、无文件行什么都没有：可交�
   assert.equal(noFile.includes('class="skc_cardEnd"'), false, '右侧不留空壳');
 });
 
-test('K110 不许用 JS 拦冒泡：行组件里 stopPropagation 零出现', async () => {
+test('K110 每个可点单元恰好一个 onClick：行一个（标题按钮）、块一个（标题按钮），都不许拦冒泡', async () => {
   const source = await readFile(join(ROOT, 'src', 'client', 'row.jsx'), 'utf8');
   assert.equal(source.includes('stopPropagation'), false, 'row.jsx 没有 stopPropagation');
+  // 一个文件里有行与块两个可点单元，所以 onClick 恰好两个，且都在标题按钮上——
+  // 不是「随便几个都行」：多一个就说明又长出了第二套点击层（或用 onClick 拦冒泡）。
   const clicks = source.match(/onClick=/g) ?? [];
-  assert.equal(clicks.length, 1, `row.jsx 里只有一个 onClick（实测 ${clicks.length}）`);
-  assert.match(source, /onClick=\{\(\) => onOpen\?\.\(row\)\}/, '那个 onClick 就是标题按钮的 onOpen');
-  assert.equal(/<li[^>]*onClick/.test(source), false, '<li> 上没有 onClick（行本身不是可点元素）');
+  assert.equal(clicks.length, 2, `row.jsx 里恰好两个 onClick（实测 ${clicks.length}）`);
+  assert.match(source, /onClick=\{\(\) => onOpen\?\.\(row\)\}/, '行的那个是标题按钮的 onOpen(row)');
+  assert.match(source, /onClick=\{\(\) => onOpen\?\.\(block\.provider\)\}/, '块的那个是标题按钮的 onOpen(block.provider)');
+  assert.equal(/<li[^>]*onClick/.test(source), false, '<li> 上没有 onClick（行/块本身不是可点元素）');
 });

@@ -5,6 +5,8 @@
   },
   "panel.label": "技能",
   "page.title": "技能",
+  "plugin.skillsCount": "{count} 个技能",
+  "plugin.skills": "包含的技能",
   "page.intro": "启用、停用和查看技能来源",
   "page.infoLabel": "关于技能",
   "page.infoDescription": "在这里启用或停用技能。内置技能、本地技能和从市场安装的技能分三组展示。",

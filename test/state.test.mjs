@@ -644,3 +644,48 @@ test('K111 切页签：detail 留在 store 里，切回来还在详情', () => {
   assert.equal(store.getSnapshot().detail.status, 'ready', '切回来仍是同一份正文');
   assert.equal(store.getSnapshot().detail.key, 'filesystem#ui-design', '还是同一个技能的详情');
 });
+
+/* ------------- 两级返回：closeDetail 只退一级（本轮） ------------- */
+
+/** One builtin row for the navigation tests. */
+const builtinRow = { name: 'sheet', provider: 'univer', partition: 'builtin', path: null, writable: false, readonlyReason: 'provider-store', enabled: true };
+
+test('两级返回：openPlugin 记 provider；openDetail 不清它；closeDetail 只退一级', () => {
+  const store = createStore();
+  store.actions.ready(payload());
+  store.actions.openPlugin('univer');
+  assert.equal(store.getSnapshot().pluginDetail, 'univer', '先进插件页');
+
+  store.actions.openDetail(builtinRow);
+  assert.equal(store.getSnapshot().detail.key, 'univer#sheet', '再进技能详情');
+  assert.equal(store.getSnapshot().pluginDetail, 'univer', '插件页在下面留着（返回要回到它）');
+
+  store.actions.closeDetail();
+  assert.equal(store.getSnapshot().detail, null, '退一级：技能详情关掉');
+  assert.equal(store.getSnapshot().pluginDetail, 'univer', '插件页还在（不是直接回列表）');
+});
+
+test('两级返回：closePlugin 才回列表；两层都关干净时 detail 与 pluginDetail 都是 null', () => {
+  const store = createStore();
+  store.actions.ready(payload());
+  store.actions.openPlugin('univer');
+  store.actions.closePlugin();
+  assert.equal(store.getSnapshot().pluginDetail, null, '插件页关掉，回到列表');
+
+  // 从列表直接开技能详情（没有插件页）：closeDetail 一次就回列表。
+  store.actions.openDetail(builtinRow);
+  assert.equal(store.getSnapshot().pluginDetail, null, '没有插件页');
+  store.actions.closeDetail();
+  assert.equal(store.getSnapshot().detail, null, '一次就回到列表');
+});
+
+test('插件页的滚动偏移单独记：rememberPluginScroll 与 rememberDetailScroll 互不覆盖', () => {
+  const store = createStore();
+  store.actions.ready(payload());
+  store.actions.rememberDetailScroll(300);
+  store.actions.rememberPluginScroll(120);
+  assert.equal(store.getSnapshot().detailScrollTop, 300, '列表的偏移还在');
+  assert.equal(store.getSnapshot().pluginScrollTop, 120, '插件页的偏移单独存');
+  store.actions.rememberPluginScroll(0);
+  assert.equal(store.getSnapshot().pluginScrollTop, 0, '回到顶部记 0');
+});

@@ -180,8 +180,7 @@
   font-size: 13px; line-height: 18px;
 }
 .skc_cardEnd{ z-index: 1; flex: none; align-items: center; gap: 8px; display: inline-flex; position: relative }
-/* 整行可点的唯一手段（与市场卡的 .skc_marketCardOpen 同一条）：标题按钮铺一层 inset:0 的
-   ::after 盖住整行，开关位靠上一行的 z-index:1 浮在它上面。取值逐条照抄，不另立一套 */
+/* 整行可点的唯一手段：标题按钮铺一层 inset:0 的 ::after 盖住整行，开关位靠 z-index:1 浮在上面 */
 /* font: inherit 会把标题的字号冲回继承值，所以这三条必需（与 .skc_cardTitle 同值） */
 .skc_cardOpen{ flex: 0 1 auto; min-width: 0; max-width: 100%; padding: 0; border: 0; background: 0 0; color: inherit; font: inherit; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 500; line-height: 20px }
 .skc_cardOpen::after{ content: ""; border-radius: var(--dsw-radius-xl); position: absolute; inset: 0 }
@@ -195,38 +194,30 @@
    Facts / Files）的语义是「详情页骨架，两个页签共用」，**不改名**；已安装详情只补这些。
    以下刻度全部对照宿主「插件详情页」真机读数（1440×920、DPR 1，见
    `docs/reference/host-plugin-page.md` §7 与 `.agents/work/scratch/host-detail-metrics.md`） */
-/* 整页替换时 pageBody 里只有这一个详情容器；顶端那条空条只承载窗口拖动（页头没了，
-   这段拖动区不能跟着丢）。高度 = 页头预留的同一个顶部内边距（web 28px），darwin 再叠加
-   安全区，所以进出详情头部不跳；拖动区只能挂在这条空条上——整块当拖动区会吃掉文字选择
-   与按钮点击 */
+/* 整页替换时 pageBody 里只有这一个详情容器；顶端那条空条只承载窗口拖动（页头没了，这段不能
+   丢）。高度 = 页头预留的同一顶部内边距（web 28px），darwin 再叠安全区，进出详情头部不跳；
+   拖动区只能挂在这条空条上——整块当拖动区会吃掉文字选择与按钮点击 */
 .skc_detailPage{ display: flex; flex-direction: column; min-width: 0 }
 .skc_detailDrag{ flex: none; height: var(--skc-page-top-inset) }
 [data-platform=darwin] .skc_detailDrag{ height: calc(var(--skc-page-top-inset) + var(--dsh-frame-top-clearance, 0px)) }
-/* 详情头图标 49×49 = 宿主详情页的实测值（.5px 描边 + 48 内容，box-sizing:border-box 已含）。
-   **列表行仍是 48**——`.skc_cardIcon` 被已安装行与市场卡共用，64 = 48 + 8×2 是行高的来源，
-   两者刻意不同，所以这里只加修饰类、不改基类 */
+/* 详情头图标 49×49 = 宿主实测（.5px 描边 + 48 内容）；**列表行仍是 48**（64 = 48 + 8×2 是行高来源），只加修饰类 */
 .skc_detailIcon{ width: 49px; height: 49px }
-/* 头行：宿主实测「图标贴内容左沿、动作组贴右沿、两者垂直居中」（组中心与图标中心同为 102.5）
-   ⇒ space-between + center，没有 gap（旧的 gap:14 + flex-start 是没采集时的占位） */
+/* 头行：宿主实测图标贴左沿、动作组贴右沿、两者垂直居中（中心同为 102.5）⇒ space-between + center */
 .skc_detailTop{ display: flex; justify-content: space-between; align-items: center }
 /* 动作组内 gap 16 = 宿主实测；margin-left:auto 在 space-between 下是冗余保险 */
 .skc_detailActions{ margin-left: auto; display: inline-flex; align-items: center; gap: 16px }
-/* 图标行 → 标题组 = 宿主的 20（detailMain{margin-top:20}）：本页由列 gap 32 提供 32，
-   再用 -12 收回 20，只此一处来源；组内 gap 8 = 宿主 detailMain{gap:8} */
+/* 图标行 → 标题组 = 20（宿主 detailMain 的 margin-top）：列 gap 32 减 12，一处来源；组内 gap 8 */
 .skc_detailIntro{ display: flex; flex-direction: column; gap: 8px; margin-top: -12px }
 /* 作者行 = 宿主的包名行：12/18、tertiary、mono（宿主那行用 ui-monospace 一族） */
 .skc_detailAuthor{ margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code); font-size: 12px; line-height: 18px }
-/* 卸载占位：宿主是「透明描边按钮 + 红字」，环是 inset 1px 的红 30%——不是 border（会让高度
-   多 2px）。红用 --dsw-alias-state-error-primary（宿主同一令牌），借 primitives 两个 knob 画环 */
+/* 卸载占位：红字 + inset 1px 红环（不是 border，会让高度多 2px），红用 error 令牌 */
 .skc_detailDanger{ --dsh-button-outline-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent); --dsh-hairline-width: 1px; color: var(--dsw-alias-state-error-primary); height: 28px; padding: 0 10px; border-radius: 8px; gap: 4px; font-size: 12px; line-height: 18px }
 .skc_detailDanger:disabled{ opacity: .4 }
 /* 正文盒**只有上下两条 0.5px 发丝线**（宿主实测：左右 none、圆角 0、背景透明）。颜色取「标签主色
    5%」：浅色 ≈4% 黑、深色 ≈5% 白，随主题翻转；--dsw-alias-border-l3 约 12%，重 3 倍故不用 */
 .skc_detailBodyBox{ max-height: 60vh; padding: 12px 0; overflow-y: auto; border-top: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent); border-bottom: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent) }
-/* 版本区块**只在市场装的技能上渲染**（row.upstream 非空；本地/内置技能整块不存在）。
-   标题沿用 14/20/500、右侧小按钮是 Button size=sm；卡片 1px 描边 + radius-lg + 16
-   内边距（宿主那张圆角卡，卡内 px 未采，取值按本页既有刻度定）；✓ 圆底 32、底色为 success
-   令牌 12%。「来源信息」两行不新增规则：复用 .skc_marketFacts（market.md 附录 F） */
+/* 版本区块**只在市场装的技能上渲染**：标题 14/20/500 + Button size=sm；卡片 1px 描边 + radius-lg +
+   16 内边距（卡内 px 未采）；✓ 圆底 32。「来源信息」复用 .skc_marketFacts（market.md 附录 F） */
 .skc_detailVersionHead{ display: flex; align-items: center; justify-content: space-between; gap: 12px }
 .skc_detailVersionCard{ border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); padding: 16px; display: flex; align-items: flex-start }
 .skc_detailVersionRow{ display: flex; align-items: flex-start; gap: 12px; min-width: 0 }
@@ -237,9 +228,15 @@
 /* 「查看仓库」是页内普通链接（不是点击层）：右下角、13/20 tertiary、hover 变主色 */
 .skc_detailRepoLink{ align-self: flex-end; display: inline-flex; align-items: center; gap: 4px; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px; text-decoration: none }
 @media (hover: hover){ .skc_detailRepoLink:hover{ color: var(--dsw-alias-label-primary) } }
-/* 调用名是来源信息第一行：值后挂复制按钮，这一格是行内 flex 贴右沿 */
-.skc_detailFactValue{ align-items: center; gap: 6px; justify-content: flex-end; display: inline-flex }
-.skc_detailCallName{ font-family: var(--ds-font-family-code) }
+/* 调用名区块：一行照宿主「包含的组件」的组件行（实测 74 / 41 / 13.5·20·500 / 11.5·16 两行），
+   图标沿用 IconTile 的基类再加这层修饰，右侧挂复制按钮；标题不带计数（宿主的「共 N 个」没意义） */
+/* provider 页头 + 内置块：块本身复用 .skc_card/.skc_cardOpen 的既有刻度，这里只多一条头行 */
+.skc_pluginHead{ display: flex; align-items: center; gap: 14px }
+.skc_callRow{ display: flex; align-items: center; gap: 12px; height: 74px }
+.skc_callIcon{ width: 41px; height: 41px; border-radius: 12px }
+.skc_callBody{ display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 }
+.skc_callName{ margin: 0; font-size: 13.5px; line-height: 20px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.skc_callDesc{ margin: 0; color: var(--dsw-alias-label-tertiary); font-size: 11.5px; line-height: 16px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
 .skc_detailBody{ font-size: 13px; line-height: 20px }
 ```
 

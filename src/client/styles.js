@@ -408,7 +408,6 @@ font-size: 12px; line-height: 18px;
 .skc_marketFileSize{ color: var(--dsw-alias-label-tertiary); flex: none; font-size: 12px; line-height: 18px }
 
 .skc_detailPage{ display: flex; flex-direction: column; min-width: 0 }
-/* drag: the header's darwin inset, must stay empty */
 .skc_detailDrag{ flex: none; height: var(--skc-page-top-inset) }
 [data-platform=darwin] .skc_detailDrag{ height: calc(var(--skc-page-top-inset) + var(--dsh-frame-top-clearance, 0px)) }
 /* 49 = host detail; the list row stays 48 (row 64) */
@@ -443,9 +442,14 @@ border-bottom: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, 
 .skc_detailVersionTitle{ margin: 0; font-size: 14px; line-height: 22px }
 .skc_detailRepoLink{ align-self: flex-end; display: inline-flex; align-items: center; gap: 4px; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px; text-decoration: none }
 @media (hover: hover){ .skc_detailRepoLink:hover{ color: var(--dsw-alias-label-primary) } }
-.skc_detailCallName{ font-family: var(--ds-font-family-code) }
-/* the call-name row's value carries a copy button, so it is an inline flex kept at the right */
-.skc_detailFactValue{ align-items: center; gap: 6px; justify-content: flex-end; display: inline-flex }
+/* provider page head: 48 tile + name + count (the count reuses .skc_cardDesc) */
+.skc_pluginHead{ display: flex; align-items: center; gap: 14px }
+.skc_callRow{ display: flex; align-items: center; gap: 12px; height: 74px }
+.skc_callIcon{ width: 41px; height: 41px; border-radius: 12px }
+.skc_callBody{ display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 }
+.skc_callName{ margin: 0; font-size: 13.5px; line-height: 20px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+/* the host's component row, measured: 74 tall, 41 icon, 13.5/20 name, 11.5/16 two-line text */
+.skc_callDesc{ margin: 0; color: var(--dsw-alias-label-tertiary); font-size: 11.5px; line-height: 16px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
 .skc_detailBody{ font-size: 13px; line-height: 20px }
 
 .skc_marketDialog{ width: min(480px, 100vw - 32px) }

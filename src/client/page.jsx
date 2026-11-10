@@ -20,10 +20,11 @@ import {
 import { cn } from './styles.js';
 import { attachHeader } from './header-scroll.js';
 import { InstalledDetail } from './installed-detail.jsx';
+import { PluginDetail } from './plugin-detail.jsx';
 import { iconBatch, iconSeeds, iconUrlFor, marketKeyOf, nameSeeds, rowTitleOf } from './market-model.js';
 import { MarketPanel } from './market-panel.jsx';
 import { ListSkeleton } from './skeleton.jsx';
-import { SkillRow } from './row.jsx';
+import { PluginBlock, SkillRow } from './row.jsx';
 import {
   TAB_INSTALLED,
   TAB_MARKET,
@@ -35,6 +36,7 @@ import {
   statusLine,
   switchMode,
   toGroups,
+  toPluginBlocks,
 } from './model.js';
 
 /** How long the refresh indicator stays up, so a fast reload does not flicker. */
@@ -115,13 +117,34 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
    */
   const openRow = useCallback((row) => {
     const body = bodyRef.current;
-    store.actions.rememberDetailScroll(body === null ? 0 : body.scrollTop);
+    // Two levels remember two offsets: a row opened from a provider page has to come back to
+    // that page, not to the list, so the level it was opened from decides which one to write.
+    if (store.getSnapshot().pluginDetail === null) {
+      store.actions.rememberDetailScroll(body === null ? 0 : body.scrollTop);
+    } else {
+      store.actions.rememberPluginScroll(body === null ? 0 : body.scrollTop);
+    }
     store.actions.openDetail(row);
     void loadDetail(row);
   }, [loadDetail, store]);
 
   const closeDetail = useCallback(() => {
     store.actions.closeDetail();
+  }, [store]);
+
+  const openPlugin = useCallback((provider) => {
+    const body = bodyRef.current;
+    store.actions.rememberDetailScroll(body === null ? 0 : body.scrollTop);
+    store.actions.openPlugin(provider);
+  }, [store]);
+
+  const closePlugin = useCallback(() => {
+    // Crash the offset to 0 before the list remounts: the page bar's compact state is derived
+    // from this offset and hides the intro, so a header mounted at the provider page's offset
+    // would swallow the offset the next effect restores (scroll anchoring pulls it back up).
+    const body = bodyRef.current;
+    if (body !== null) body.scrollTop = 0;
+    store.actions.closePlugin();
   }, [store]);
 
   useEffect(() => {
@@ -203,6 +226,12 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
     }
   }, [api, store, t]);
 
+  // The provider page is a view of rows the list already holds: no request of its own.
+  const pluginProvider = state.pluginDetail;
+  const pluginBlock = pluginProvider === null
+    ? null
+    : (toPluginBlocks(toGroups(state.payload).find((group) => group.key === 'builtin'))
+      .find((block) => block.provider === pluginProvider) ?? null);
   const detailKey = state.detail === null ? null : state.detail.key;
   const detailRow = detailKey === null ? null : rowByKey(state.payload, detailKey);
   const detailStatus = detailKey === null ? 'idle' : detailStateOf(state, detailKey);
@@ -252,9 +281,11 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
       body.scrollTop = 0;
       return;
     }
-    const top = store.getSnapshot().detailScrollTop;
-    if (top > 0) body.scrollTop = top;
-  }, [detailKey, store]);
+    const snapshot = store.getSnapshot();
+    // Back on the provider page -> its own offset; back on the list -> the list's. Written
+    // unconditionally: 0 means "top", not "leave whatever was there".
+    body.scrollTop = snapshot.pluginDetail === null ? snapshot.detailScrollTop : snapshot.pluginScrollTop;
+  }, [detailKey, state.pluginDetail, store]);
 
   const groups = toGroups(state.payload);
   const counts = state.payload?.counts;
@@ -264,6 +295,8 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
   // detail follows it: breadcrumb first, nothing above it. The market keeps its header and
   // swaps only the grid - that difference is deliberate (host parity is per page).
   const detailOpen = showsInstalled && detailKey !== null;
+  // One level below the skill detail: a provider page replaces the page body the same way.
+  const pluginOpen = showsInstalled && detailKey === null && pluginBlock !== null;
   const loadingFirst = state.status === 'loading' && state.payload === null;
   const failedFirst = state.status === 'error' && state.payload === null;
   // The header's one refresh button follows the tab: the installed list below, the
@@ -276,6 +309,8 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
     ? null
     : iconUrlFor(marketKeyOf(row.upstream), state.market));
 
+  // The builtin partition is shown as one block per provider (the provider is the row's own
+  // field); local and installed rows stay exactly as they were.
   const renderGroup = (group) => (
     <section className={cn('group')} data-skc-group={group.key} key={group.key}>
       <div className={cn('groupHead')}>
@@ -285,18 +320,22 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
         ? <p className={cn('empty')}>{t(groupEmptyKey(group.key))}</p>
         : (
           <ul className={cn('cards')}>
-            {group.skills.map((row) => (
-              <SkillRow
-                key={rowKey(row)}
-                row={row}
-                t={t}
-                rows={state.rows}
-                onToggle={onToggle}
-                onOpen={openRow}
-                iconUrl={rowIconUrl(row)}
-                title={rowTitleOf(row, state.market)}
-              />
-            ))}
+            {group.key === 'builtin'
+              ? toPluginBlocks(group).map((block) => (
+                <PluginBlock key={block.provider} block={block} t={t} onOpen={openPlugin} />
+              ))
+              : group.skills.map((row) => (
+                <SkillRow
+                  key={rowKey(row)}
+                  row={row}
+                  t={t}
+                  rows={state.rows}
+                  onToggle={onToggle}
+                  onOpen={openRow}
+                  iconUrl={rowIconUrl(row)}
+                  title={rowTitleOf(row, state.market)}
+                />
+              ))}
           </ul>
         )}
     </section>
@@ -305,12 +344,22 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
   return (
     <section className={cn('page')} data-skc-panel="" aria-busy={state.status === 'loading' || refreshing}>
       <div className={cn('pageBody')} data-skc-body="" ref={bodyRef}>
-        {detailOpen ? (
+        {detailOpen || pluginOpen ? (
           <div className={cn('detailPage')}>
             {/* A window drag region cannot go on the whole card: it would swallow text
                 selection and every button. An empty strip with the header's darwin inset
                 keeps the window draggable and nothing else. */}
             <div className={cn('detailDrag')} data-window-drag="" />
+            {pluginOpen ? (
+              <PluginDetail
+                block={pluginBlock}
+                t={t}
+                rows={state.rows}
+                onBack={closePlugin}
+                onToggle={onToggle}
+                onOpenRow={openRow}
+              />
+            ) : (
             <InstalledDetail
               detail={state.detail}
               row={detailRow}
@@ -325,6 +374,7 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
               onToggle={onToggle}
               onCheck={checkVersion}
             />
+            )}
           </div>
         ) : (
           <Fragment>

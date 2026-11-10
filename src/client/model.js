@@ -66,6 +66,25 @@ export function toGroups(payload) {
 }
 
 /**
+ * Fold one group's rows into the plugin blocks the builtin partition is shown as.
+ *
+ * The key is the row's own `provider` (the group only ever holds `partition === 'builtin'`
+ * rows), and blocks are ordered by it: one block per provider, skills in payload order.
+ * @param {{key: string, skills: object[]}|undefined} group - one group from `toGroups`.
+ * @returns {{provider: string, skills: object[]}[]} blocks, provider ascending.
+ */
+export function toPluginBlocks(group) {
+  const byProvider = new Map();
+  for (const row of Array.isArray(group?.skills) ? group.skills : []) {
+    const provider = typeof row?.provider === 'string' ? row.provider : '';
+    const block = byProvider.get(provider) ?? { provider, skills: [] };
+    block.skills.push(row);
+    byProvider.set(provider, block);
+  }
+  return [...byProvider.values()].sort((left, right) => (left.provider < right.provider ? -1 : (left.provider > right.provider ? 1 : 0)));
+}
+
+/**
  * The header's status line: how many skills the panel shows, and how many are off.
  * @param {{total?: number, disabled?: number}|undefined} counts - payload counts.
  * @param {Function} t - translate function.

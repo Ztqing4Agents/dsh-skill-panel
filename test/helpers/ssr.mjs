@@ -44,6 +44,7 @@ const SOURCES = {
   detail: 'market-detail.jsx',
   filters: 'market-filters.jsx',
   installedDetail: 'installed-detail.jsx',
+  pluginDetail: 'plugin-detail.jsx',
   markdown: 'markdown.jsx',
 };
 

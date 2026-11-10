@@ -18,6 +18,7 @@ import {
   statusLine,
   switchMode,
   toGroups,
+  toPluginBlocks,
 } from '../src/client/model.js';
 import { readDictionary, translator } from './helpers/ssr.mjs';
 
@@ -132,4 +133,38 @@ test('KI-1 已修：E_BAD_NAME / E_BAD_PATH 各有专属文案，不再走 E_UNK
 test('页签常量与设计一致', () => {
   assert.equal(TAB_INSTALLED, 'installed', '已安装页签的机器值是 installed');
   assert.equal(TAB_MARKET, 'market', '市场页签的机器值是 market');
+});
+
+/* ------------- toPluginBlocks：内置区按 provider 折块（本轮） ------------- */
+
+/** One builtin row of a given provider. */
+function builtinOf(provider, name) {
+  return row({ name, provider, partition: 'builtin', path: null, writable: false, readonlyReason: 'provider-store' });
+}
+
+test('toPluginBlocks：同 provider 合并成一块，块里保持原有顺序', () => {
+  const blocks = toPluginBlocks({
+    key: 'builtin',
+    skills: [builtinOf('univer', 'sheet'), builtinOf('dsh-office', 'docx'), builtinOf('univer', 'slide')],
+  });
+  assert.equal(blocks.length, 2, '两个 provider 两块');
+  assert.deepEqual(blocks.map((block) => block.provider), ['dsh-office', 'univer'], '按 provider 升序');
+  assert.deepEqual(blocks[1].skills.map((item) => item.name), ['sheet', 'slide'], '同 provider 的技能合在一块且顺序不变');
+  assert.equal(blocks[0].skills.length, 1, '单个技能的块也是块');
+});
+
+test('toPluginBlocks：只有一个 provider 时仍是一块；没有内置技能时是空数组', () => {
+  const single = toPluginBlocks({ key: 'builtin', skills: [builtinOf('univer', 'sheet'), builtinOf('univer', 'docx')] });
+  assert.equal(single.length, 1, '一个 provider 一块');
+  assert.equal(single[0].skills.length, 2, '块里两个技能');
+  assert.deepEqual(toPluginBlocks({ key: 'builtin', skills: [] }), [], '没有内置技能就没有块');
+  assert.deepEqual(toPluginBlocks(undefined), [], '没有分组也不炸');
+});
+
+test('toPluginBlocks：升序是字符串序（dsh-office 在 univer 前，clawhub 也在前面）', () => {
+  const blocks = toPluginBlocks({
+    key: 'builtin',
+    skills: [builtinOf('univer', 'a'), builtinOf('runtime', 'b'), builtinOf('clawhub', 'c'), builtinOf('dsh-office', 'd')],
+  });
+  assert.deepEqual(blocks.map((block) => block.provider), ['clawhub', 'dsh-office', 'runtime', 'univer'], '纯字符串升序');
 });

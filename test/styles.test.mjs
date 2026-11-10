@@ -137,6 +137,27 @@ test('A.5 详情图标 49 走修饰类：.skc_cardIcon 仍是 48（列表行不�
   assert.match(detail, /(?:^|;)\s*height\s*:\s*49px/, '修饰类 49 高');
 });
 
+test('A.5 调用名行按宿主「包含的组件」刻度：行高 74 / 图标 41 圆角 12 / 名字 13.5-20-500 / 描述 11.5-16 两行裁切', () => {
+  const row = ruleBody(capturedCss(), '.skc_callRow');
+  assert.match(row, /(?:^|;)\s*height\s*:\s*74px/, '行高 74');
+  assert.match(row, /(?:^|;)\s*align-items\s*:\s*center/, '垂直居中');
+  const icon = ruleBody(capturedCss(), '.skc_callIcon');
+  assert.match(icon, /(?:^|;)\s*width\s*:\s*41px/, '图标 41 宽');
+  assert.match(icon, /(?:^|;)\s*height\s*:\s*41px/, '图标 41 高');
+  assert.match(icon, /(?:^|;)\s*border-radius\s*:\s*12px/, '图标圆角 12');
+  const name = ruleBody(capturedCss(), '.skc_callName');
+  assert.match(name, /font-size\s*:\s*13\.5px[^;]*;?/, '名字 13.5px');
+  assert.match(name, /line-height\s*:\s*20px/, '名字行高 20px');
+  assert.match(name, /font-weight\s*:\s*500/, '名字 500');
+  assert.match(name, /white-space\s*:\s*nowrap/, '名字单行不折');
+  assert.match(name, /text-overflow\s*:\s*ellipsis/, '名字超出省略');
+  const desc = ruleBody(capturedCss(), '.skc_callDesc');
+  assert.match(desc, /font-size\s*:\s*11\.5px/, '描述 11.5px');
+  assert.match(desc, /line-height\s*:\s*16px/, '描述行高 16px');
+  assert.match(desc, /-webkit-line-clamp\s*:\s*2/, '描述两行裁切');
+  assert.match(desc, /overflow\s*:\s*hidden/, '裁切靠 overflow:hidden');
+});
+
 test('A.5 正文盒只有上下两条 .5px 发丝线：左右没有、无圆角（宿主 4% 黑 / 6% 白 的等价物）', () => {
   const body = ruleBody(capturedCss(), '.skc_detailBodyBox');
   const line = (side) => new RegExp(`border-${side}\\s*:\\s*\\.5px\\s+solid\\s+color-mix\\(in srgb, var\\(--dsw-alias-label-primary\\) 5%, transparent\\)`);
@@ -270,7 +291,7 @@ test('K110 hover / active 只跟着可点的东西走：开关位、只读标记
   // 只列「不许有」的那一批：开关位与只读标记是整行点击层上面的动作位/静态标记，
   // 正文与事实表是详情页的内容，谁都不该有悬停或按下反馈（看着能点、点了没反应）。
   for (const inert of [
-    '.skc_bundleToggle', '.skc_roTag', '.skc_detailBody', '.skc_detailCallName', '.skc_marketFacts', '.skc_marketFiles',
+    '.skc_bundleToggle', '.skc_roTag', '.skc_detailBody', '.skc_callName', '.skc_marketFacts', '.skc_marketFiles',
   ]) {
     assert.equal(css.includes(`${inert}:hover`), false, `${inert} 没有 hover 底色`);
     assert.equal(css.includes(`${inert}:active`), false, `${inert} 没有按下底色`);

@@ -5,6 +5,8 @@
   },
   "panel.label": "Skills",
   "page.title": "Skills",
+  "plugin.skillsCount": "{count} skills",
+  "plugin.skills": "Included skills",
   "page.intro": "Turn skills on or off and see where they come from",
   "page.infoLabel": "About skills",
   "page.infoDescription": "Turn skills on or off here. Built-in skills, local skills, and skills installed from the market appear in three groups.",
