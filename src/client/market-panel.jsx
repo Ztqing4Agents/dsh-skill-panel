@@ -12,7 +12,7 @@
  * failure and gets the error state with a retry - while an empty list is not a failure,
  * it is an empty state.
  */
-import { Fragment, useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { Button, StateDot } from '@deepseek-ai/dsh-client-ui-primitives';
 
 import { cn } from './styles.js';
@@ -21,6 +21,7 @@ import {
   MARKET_PAGE_SIZE,
   emptyKindOf,
   mergeBatches,
+  visibleCategories,
   marketKeyOf,
   pagedSources,
   reasonKeyOf,
@@ -37,6 +38,9 @@ const PREFETCH_PX = 200;
 
 /** The scroll container the page owns; the panel only reads and writes its offset. */
 const SCROLL_BODY = '[data-skc-body]';
+
+/** Writes land before the frame paints; a string render has no DOM to write to. */
+const usePaintEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
 /**
  * Render the market tab.
@@ -290,6 +294,24 @@ export function MarketPanel({ store, api, t }) {
     ? null
     : market.items.find((entry) => marketKeyOf(entry) === confirmId)
       ?? (market.detail !== null && market.detail.id === confirmId ? market.detail.item : null);
+  // What "this result set" means for the reader: the four query inputs, nothing else. Changing
+  // one of them is a different list and starts at the first card; paging, loading and detail
+  // round-trips leave `scrollTop` alone.
+  const queryKey = `${market.filters.source}|${market.filters.category}|${market.filters.sort}|${market.keyword}`;
+  const shownQuery = useRef(queryKey);
+
+  // Land the list at the top of its own account, in a paint effect: the reference market
+  // (dsh-market `MarketSection.tsx`) does exactly this - instant, never smooth, so the move
+  // is the frame's first state and not an animation - and it is what makes the landing point
+  // independent of how long the answer turns out to be. Waiting for the browser's clamp gives
+  // whatever the content height allows (measured: 0 on one path, 228 on another).
+  usePaintEffect(() => {
+    if (shownQuery.current === queryKey) return;
+    shownQuery.current = queryKey;
+    const body = scrollBody();
+    if (body !== null) body.scrollTop = 0;
+  }, [queryKey]);
+
   const emptyKind = emptyKindOf(market);
   const loadingFirst = market.listStatus === 'loading' && market.items.length === 0;
   // `page.status === 'loading'` covers two requests: page one (refresh, keyword) and the next
@@ -297,6 +319,10 @@ export function MarketPanel({ store, api, t }) {
   // draws the three placeholder cards and the "loading more" row. A page-one re-fetch over a
   // list still on screen used to grow the tail by a row (+206px) and snap back.
   const loadingTail = market.page.status === 'loading' && market.pages > 0 && market.items.length > 0;
+  // A scope change re-reads the counts. While the chip row is already on screen it keeps the
+  // numbers it has (one request old, replaced in place) instead of growing a second,
+  // placeholder row underneath: that duplicate row moved the grid by 42px every time.
+  const chipsRow = visibleCategories(market).visible;
 
   const emptyCopy = emptyKind === 'search'
     ? {
@@ -337,7 +363,7 @@ export function MarketPanel({ store, api, t }) {
             onCommit={(text) => store.actions.marketCommitKeyword(text)}
             onFilter={(patch) => store.actions.marketSetFilter(patch)}
           />
-          {market.categoriesLoading || (market.boot === 'loading' && market.sources.length === 0)
+          {(market.categoriesLoading && !chipsRow) || (market.boot === 'loading' && market.sources.length === 0)
             ? <MarketChipsSkeleton />
             : null}
           {loadingFirst ? <MarketSkeleton label={t('market.loading')} /> : null}

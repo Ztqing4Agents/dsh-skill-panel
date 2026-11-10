@@ -186,8 +186,22 @@
 | O-2 | SkillHub 这一档是什么 | `source=community`，160,838 条，**本身含 `enterprise`** | 我们的 `skillhub` scope 传 `community`；`enterprise` 行折叠成 `skillhub` 身份（不进键） |
 | O-3 | 分类是否与来源正交 | 是，ClawHub 也有分类 | 三个 scope 都渲染 chips，**计数按 scope 各算**（同一分类三档数字不同：23,193 / 10,145 / 13,048） |
 | O-4 | 排序几项 | 默认 `score`，另有 `updated_at` / `downloads` / `stars` | 四项全上；**只改文案值、不改键名**（`recommended` 显示成「默认排序」，新增 `stars`=「收藏量」），`sort` 的机器值不漂 |
-| O-5 | 旧游标怎么办 | 站点每次改筛选都重新拉第一页 | 契约写死「任何筛选变化必清 cursor+items」；**游标形状仍是 `{page}`**，不加筛选签名（客户端已经清，加签名只盖 bug 不修 bug） |
+| O-5 | 旧游标怎么办 | 站点每次改筛选都重新拉第一页 | 契约写死「任何筛选变化必清 `cursor`」；**游标形状仍是 `{page}`**，不加筛选签名（客户端已经清，加签名只盖 bug 不修 bug）。~~「必清 `items`」~~ **（2026-11-10 由 M10 改写：筛选变更保留 `items` 直出，见附录 P）** |
 | O-6 | 「不限 API Key」过滤 | 站点有 | **本轮不做**（用户明确排除），也不预留占位 UI |
+
+---
+
+## 附录 P 重取期间旧列表直出（U13 / M10，2026-11-10）
+
+> 用户原话：「只要是刷新都会，右上角刷新，切换页签，搜索都会」（U13）；「可以落实，我发现确实还有这个问题」（M10，指切来源/排序）。判据与用例见 `docs/contracts/acceptance.md` 的 K101–K108（U13 四条 / M10 四条）与 `test/market-view.test.mjs`、`test/state.test.mjs` 的对应用例；表里每组数字都是隔离实例上逐帧（页内 `requestAnimationFrame`）实测的。
+
+| # | 事项 | 原先做法与实测 | 现在的处置 |
+| --- | --- | --- | --- |
+| P-1 | 重取第一页时列表怎么处理 | `marketReload` 与 `marketSetFilter` 都 `items: []`：整页换成 6 张卡骨架，文档高度 2020 → 940（−1080 px）、`scrollTop` 被浏览器夹回 0、卡片全部重挂所以头像退回字母；搜索保留 `items` 但共用 `page.status === 'loading'`，尾部多插 3 张占位卡（+206 px） | **一律保留 `items`**（刷新 / 搜索 / 筛选），`clearedPaging` 按「有 items 就 `ready`」给 `listStatus`；重量级判据换成 `pages > 0`——只有「追加下一页」才画尾部占位卡与「正在加载更多」。答案落地时整表替换（首屏重取不带 `existing`），所以旧卡不会串进新查询 |
+| P-2 | 换 scope 时 chips 怎么进骨架 | `categoriesLoading` 一到就**再加**一行 chips 骨架（真行还在），一次换来源网格下移 42 px | 有 chips 行时**不叠骨架**：旧计数留在原位、新数字到达就地替换；只有还没有 chips 行（首屏）才画骨架。`categoriesLoading` 与 `bootstrap?source=` 的 token 守卫都不动 |
+| P-3 | 关闭菜单会不会动滚动位置 | 宿主的 `Menu` 关闭时把焦点还给锚点，锚点在吸顶栏里、布局位置在容器顶部，浏览器为露出它把 `.skc_pageBody` 滚到 0（实测 300 → 0，**选同一个值也发生**，关闭后约 12 ms，且没有 JS 写 `scrollTop`）。这一跳与数据无关，U8 起就在 | `.skc_marketFilters` 在打开菜单时记下偏移，关闭后 150 ms 内监听容器的 `scroll` 事件：只要被拉到 0 就写回原偏移（只认「到 0」这一种，避免和浏览器的滚动锚定打架）。宿主没有关闭焦点的开关（`Menu` 的 props 里只有 `autoFocus`，`focusWithoutRing` 的 `preventScroll` 不外传），所以这是**对宿主行为的补偿**，不是样式改动。与 P-5 的先后：选中的值**变了**就解除补偿（`menuTop` 置 0），落点全交给 P-5；只有「选了同一个值」才用补偿（真机 4 例：同值 300 → 300，异值 → 0） |
+| P-4 | 为什么不再「收窄骨架高度」 | 骨架 6 张（2 行）、真实列表 12/24 张（4/8 行），高度随内容变；要「高度不变」得在骨架期量旧高度再撑住，多一份状态与一套失效点 | 不选。保留旧列表的收益相同、代价更小；「陈旧但稳定」的窗口就是一次请求 |
+| P-5 | 筛选后落在什么位置 | 改前靠「列表消失 → 骨架变矮 → 浏览器夹取」，落点由内容长度决定：实测切分类/排序落在 **0**、换来源那次落在 **228**（短页预取补页），同一条交互两种落点 | **自己决定落点：paint 之前瞬时写 0。** 面板用 `useLayoutEffect`，依赖只有四个查询输入 `source`/`category`/`sort`/`keyword` 拼成的键，键变了就把 `.skc_pageBody` 的 `scrollTop` 写 0（不做平滑、不 `scrollTo`、不等夹取）：跳变是那一帧的初始状态，不是动画。键没变（翻页、加载态、详情往返、刷新）一律不碰 —— 刷新的「保住你原来的位置」是 U13 的既定语义，与这条不冲突。参考实现 [dsh-market](https://github.com/dsh-market/dsh-market) 的市场页组件 `MarketSection.tsx` 正是这么做的（筛选键驱动的 `useLayoutEffect` 里 `el.scrollTop = 0`，注释写明 instant 不用 pagination 的 smooth，让跳变发生在 paint 之前），我们的容器没有宿主那种 sticky floor，所以目标就是 0 而不是「记住的 floor」 |
 
 ---
 

@@ -38,6 +38,9 @@ const TEXT_DELAY_MS = 250;
 /** A portal needs a document; without one the menu renders in place (string render). */
 const CAN_PORTAL = typeof document !== 'undefined';
 
+/** The scroll container the page owns; only read and written when a menu opens or closes. */
+const SCROLL_BODY = '[data-skc-body]';
+
 /**
  * One labelled menu anchored on a ghost button.
  * @param {{name: string, label: string, value: string, items: {id: string, label: string}[],
@@ -90,6 +93,15 @@ export function MarketFilters({ market, t, onInput, onCommit, onFilter }) {
   const composing = useRef(false);
   /** The pending debounce, so a composition or a clear can cancel it. */
   const timer = useRef(null);
+  /** The scroll offset to put back when the open menu closes (see the effect below). */
+  const menuTop = useRef(0);
+
+  /**
+   * The page body, found from this component's own box.
+   * @returns {HTMLElement|null} the scroll container, or null outside a browser.
+   */
+  const scrollBody = () => fieldRef.current?.closest?.(SCROLL_BODY) ?? null;
+
   const chips = visibleCategories(market);
   const selectedSource = market.filters.source ?? MARKET_DEFAULT_SOURCE;
   const selectedSort = market.filters.sort ?? MARKET_SORTS[0];
@@ -132,6 +144,32 @@ export function MarketFilters({ market, t, onInput, onCommit, onFilter }) {
   // Leaving the tab must not apply a query the user never finished typing.
   useEffect(() => () => cancelCommit(), []);
 
+  // The host menu hands focus back to its anchor when it closes, and focusing an element whose
+  // layout box sits above the scrollport scrolls the page body to the top - measured 300 -> 0,
+  // even when the picked value is already the selected one, and always ~12ms after the close,
+  // i.e. after this component's effects. So the offset is put back from the container's own
+  // scroll event for one menu-width of time: whatever makes it scroll in that window, the list
+  // stays where it was. (Only the first moment matters - a wheel that starts later is the
+  // user's own.)
+  useEffect(() => {
+    if (menu !== null) return undefined;
+    const body = scrollBody();
+    if (body === null || menuTop.current === 0) return undefined;
+    const top = menuTop.current;
+    menuTop.current = 0;
+    // Only the focus jump lands at 0; a small offset change is the browser's scroll anchoring
+    // reacting to the chip row growing, and that one must be left alone.
+    const undo = () => {
+      if (body.scrollTop === 0) body.scrollTop = top;
+    };
+    body.addEventListener('scroll', undo);
+    const stop = setTimeout(() => body.removeEventListener('scroll', undo), 150);
+    return () => {
+      body.removeEventListener('scroll', undo);
+      clearTimeout(stop);
+    };
+  }, [menu]);
+
   /**
    * Clear the box and the query together, then put the caret back where the user was.
    *
@@ -152,8 +190,15 @@ export function MarketFilters({ market, t, onInput, onCommit, onFilter }) {
     fieldRef.current?.querySelector('input')?.focus();
   };
 
-  const onToggle = (name) => setMenu(menu === name ? null : name);
+  const onToggle = (name) => {
+    // Remember where the list was before the menu takes focus; closing it would lose that.
+    if (menu === null) menuTop.current = scrollBody()?.scrollTop ?? 0;
+    setMenu(menu === name ? null : name);
+  };
   const onSelect = (name, id) => {
+    // A pick that changes the query hands the landing point to the panel's paint effect (top);
+    // only a pick of the value already selected keeps the offset captured at open time.
+    if (id !== (name === 'source' ? selectedSource : selectedSort)) menuTop.current = 0;
     setMenu(null);
     onFilter(name === 'source' ? { source: id } : { sort: id });
   };

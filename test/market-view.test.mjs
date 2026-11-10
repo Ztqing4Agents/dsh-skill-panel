@@ -4,9 +4,10 @@
  * Contract: docs/contracts/acceptance.md 附录 D.1 (what L3 can and cannot prove),
  * docs/contracts/client.md §3.9 (market components and state machine),
  * docs/contracts/market.md 附录 F (market tick classes); case ids K38, K39, K47–K49, K52,
- * K54–K56, K79, K83, K84, K100–K104 (K101–K104 pin the U13 refresh split: a page-one
+ * K54–K56, K79, K83, K84, K100–K108 (K101–K104 pin the U13 refresh split: a page-one
  * re-fetch keeps the list and draws no tail, an append still draws its three placeholders
- * and the "loading more" row).
+ * and the "loading more" row; K106–K107 pin the same split for a filter change plus the
+ * chip row that must not grow a second placeholder line).
  *
  * The primitives are the documented stub (`test/helpers/primitives-stub.mjs`), so
  * `role="dialog"` here is evidence of prop wiring, not of the host painting. Geometry,
@@ -1421,4 +1422,103 @@ test('K104 搜索重取（关键词落定）期间同样只留旧列表：不插
   assert.equal(hasSkeletonGrid(html), false, '不换整页骨架');
   assert.equal(count(html, '正在读取技能市场'), 1, '只有一条「正在读取」播报');
   assert.equal(count(html, '正在加载更多'), 0, '不混用追加的文案');
+});
+
+// ---------------------------------------------------------------------------
+// M10 — "切来源/分类/排序也不跳". Same judgement as U13 (`loadingTail` needs `pages > 0`),
+// but the filter path adds two things of its own: the count chips must not grow a second,
+// placeholder row while the old numbers are still on screen, and the answer must replace
+// the whole grid (a page-one fetch merges without `existing`, so no old card survives into
+// the new query).
+//
+// What this layer cannot prove: the landing point. The paint effect writes
+// `body.scrollTop = 0` into a real DOM (`useLayoutEffect`), and `renderToStaticMarkup`
+// renders nothing (K50/K51 territory). K108 pins the *dependency surface* instead - the
+// four fields whose change is the only thing that triggers the write - and the real-machine
+// numbers for "waiting is motionless / landing is 0" live in the wip note, not here.
+// ---------------------------------------------------------------------------
+
+/** Three scope descriptors, shaped like `bootstrap`'s answer. */
+const SCOPES = [
+  { id: 'all', labelKey: 'market.source.all', hasCategories: true, packageKind: 'files' },
+  { id: 'skillhub', labelKey: 'market.source.skillhub', hasCategories: true, packageKind: 'files' },
+  { id: 'clawhub', labelKey: 'market.source.clawhub', hasCategories: true, packageKind: 'files' },
+];
+
+/** One category, enough for the chip row to be "visible". */
+const CATEGORIES = [{ key: 'dev-tools', name: '开发工具', count: 10 }];
+
+/** A store on the market tab with one page of cards and a boot answer already in. */
+function filterStore(extra) {
+  return marketStore((it) => {
+    it.actions.marketPageAppended({
+      pages: [{ sourceId: 'all', page: { items: [item()], next: 'c2' } }],
+      merged: [item()],
+    });
+    it.actions.marketBootReady({ source: 'all', sources: SCOPES, categories: CATEGORIES, categoriesOk: true, total: 100, countsOk: true });
+    if (typeof extra === 'function') extra(it);
+  });
+}
+
+test('K106 换来源的等待期：旧卡直出、不换骨架、不插尾部占位；答案落地整表替换', () => {
+  const count = (html, needle) => html.split(needle).length - 1;
+
+  const waiting = filterStore((it) => {
+    // What the panel does after a scope pick: the store restarts paging, its effect calls
+    // `marketListLoading` and the request is in flight.
+    it.actions.marketSetFilter({ source: 'clawhub' });
+    it.actions.marketListLoading();
+  });
+  const html = renderStore(waiting);
+  const market = waiting.getSnapshot().market;
+  assert.equal(market.filters.source, 'clawhub', '来源确实换了（这条用例测的是换来源那条路径）');
+  assert.equal(market.items.length, 1, '旧卡还在');
+  assert.equal(market.pages, 0, '分页归零：这是首屏重取，不是追加');
+  assert.equal(market.page.status, 'loading', '请求在飞（否则这条什么都没测）');
+  assert.equal(market.categoriesLoading, true, '计数在补拉');
+
+  assert.equal(count(html, 'data-skc-market-id'), 1, '真卡片留在屏幕上');
+  assert.equal(placeholderCards(html), 0, '一张占位卡都没有（既不是整页 6 张，也不是尾部 3 张）');
+  assert.equal(hasSkeletonGrid(html), false, '没有换成整页骨架');
+  assert.equal(count(html, 'skc_marketLoadMore'), 0, '没有「正在加载更多」这一行（高度不变）');
+  assert.match(html, /<ul class="[^"]*skc_marketGrid"[^>]*aria-busy="true"/, '网格标了 busy（读屏知道它在等新数据）');
+  assert.equal(count(html, 'role="status"'), 1, '整页只有一条播报（筛选态与 U13 的两态互斥）');
+  assert.equal(count(html, '正在加载更多'), 0, '重取不说「加载更多」');
+
+  // The answer replaces the grid wholesale: page one is merged without `existing`.
+  const answered = filterStore((it) => {
+    it.actions.marketSetFilter({ source: 'clawhub' });
+    it.actions.marketListLoading();
+    const next = [item({ sourceId: 'clawhub', id: 'clawhub:ivan:design', displayName: 'Design Kit' })];
+    it.actions.marketPageAppended({
+      pages: [{ sourceId: 'clawhub', page: { items: next, next: null } }],
+      merged: next,
+    });
+  });
+  const landed = renderStore(answered);
+  assert.equal(count(landed, 'data-skc-market-id'), 1, '答案落地后只有一张卡（不是旧卡 + 新卡）');
+  assert.equal(landed.includes('data-skc-market-id="clawhub:ivan:design"'), true, '留下的是新 scope 的卡');
+  assert.equal(landed.includes('data-skc-market-id="skillhub:ake:dev-god"'), false, '旧 scope 的卡没有串进新查询');
+  assert.equal(placeholderCards(landed), 0, '答案落地后也没有占位卡');
+});
+
+test('K107 换来源时 chips 行只有一行：旧数字留着就地换，不再叠一行占位（网格不被推下 42px）', () => {
+  const count = (html, needle) => html.split(needle).length - 1;
+
+  // 有 chips 行 + categoriesLoading：不画占位行（改前是真行 + 6 根占位条同屏两行）。
+  const switching = filterStore((it) => it.actions.marketSetFilter({ source: 'clawhub' }));
+  const html = renderStore(switching);
+  assert.equal(switching.getSnapshot().market.categoriesLoading, true, '计数确实在补拉');
+  assert.equal(count(html, 'skc_marketSkeletonChip'), 0, '没有 chips 占位条（不再同屏两行）');
+  assert.equal(count(html, 'class="skc_marketChips"'), 1, 'chips 行恰好一行');
+  assert.match(html, /class="[^"]*skc_marketChips"[^>]*role="group"/, '那一行是真 chip 行（不是骨架）');
+  assert.equal(count(html, 'skc_marketChipCount'), 1 + CATEGORIES.length, '旧数字仍在（「全部」+ 各分类），就地等新数字替换');
+
+  // 首屏（还没有 chips 行）才画 chips 骨架——这条既有行为不能被顺手改掉。
+  const firstScreen = renderMarket((it) => {
+    it.actions.marketBootLoading();
+    it.actions.marketListLoading();
+  });
+  assert.equal(count(firstScreen, 'skc_marketSkeletonChip'), 6, '首屏仍有 6 根 chips 占位条');
+  assert.equal(firstScreen.includes('role="group"'), false, '首屏没有真 chip 行');
 });

@@ -321,8 +321,14 @@ export function createStore() {
       setMarket({ keyword, input: keyword, ...clearedPaging(state.market) });
     },
     /**
-     * Narrow the query by source, category or sort. Changing any of them empties the
-     * list (the old results belong to the old query) and closes an open detail view.
+     * Narrow the query by source, category or sort. Paging restarts and an open detail view
+     * closes, but the cards stay on screen until the answer arrives: `clearedPaging` keeps
+     * `listStatus` at `ready` while `items` is non-empty, so the page does not trade a full
+     * grid for the six-card skeleton (that swap moved the document by ~1k px and let the
+     * browser clamp the scroll offset to the top). The answer replaces the list wholesale -
+     * `loadFirst` merges without `existing`, so no old card survives into the new scope.
+     * A scope change also reloads the counts: `categoriesLoading` puts the chip row in its
+     * placeholder while `boot` re-reads that scope's table.
      * @param {{source?: string, category?: string|null, sort?: string}} patch - the filters to change.
      * @returns {void}
      */
@@ -343,10 +349,9 @@ export function createStore() {
       const scopeChanged = filters.source !== state.market.filters.source;
       setMarket({
         filters,
-        items: [],
         detail: null,
         ...(scopeChanged ? { categoriesLoading: true } : {}),
-        ...clearedPaging({ ...state.market, items: [] }),
+        ...clearedPaging(state.market),
       });
     },
     /**

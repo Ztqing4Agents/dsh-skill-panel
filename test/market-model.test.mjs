@@ -3,7 +3,8 @@
  *
  * Contract: docs/contracts/data-model.md §3.8.2 (`mergeBatches` interleave / yield /
  * dedupe / stable order, the pure-function inventory) and docs/contracts/market.md
- * §7.2 (short pages, missing versions); case id K37.
+ * §7.2 (short pages, missing versions); case ids K37, K98 (scopes, sorts, and what a
+ * scope change restarts).
  *
  * The one rule that earns its own test: "is there another page" is `next === null`,
  * never "did this page have fewer rows than I asked for". ClawHub answers one row to
@@ -545,7 +546,7 @@ test('K37 detailFacts：六行固定顺序，未知就说未知，installTo 用�
   }
 });
 
-test('K98 客户端三 scope + 四排序：默认 all，三个 scope 都有 chips，切 scope 清列表并等计数', () => {
+test('K98 客户端三 scope + 四排序：默认 all，三个 scope 都有 chips，切 scope 只清分页并等计数', () => {
   assert.equal(MARKET_DEFAULT_SOURCE, 'all', '默认 scope 是「所有来源」');
   assert.deepEqual(MARKET_SORTS, ['recommended', 'updated', 'downloads', 'stars'], '四档排序');
   assert.deepEqual(
@@ -562,7 +563,8 @@ test('K98 客户端三 scope + 四排序：默认 all，三个 scope 都有 chip
     assert.equal(row.items.length, 1, `${scope} 下拿到分类表`);
   }
 
-  // A scope change empties the list and puts only the chips row into its skeleton.
+  // A scope change restarts paging and keeps the cards on screen (M10): the list is only
+  // replaced when the new scope's answer lands.
   const store = createStore();
   store.actions.marketPageAppended({
     pages: [{ sourceId: 'all', page: { items: [item({ id: 'skillhub:ake:a' })], next: 'c2' } }],
@@ -570,15 +572,24 @@ test('K98 客户端三 scope + 四排序：默认 all，三个 scope 都有 chip
   });
   store.actions.marketBootReady({ source: 'all', sources, categories, categoriesOk: true, total: 23193, countsOk: true });
   assert.equal(store.getSnapshot().market.bootScope, 'all', '记下这份数字属于哪一档');
+  store.actions.marketDetailOpen(item({ id: 'skillhub:ake:a' }));
+  const beforeFilter = store.getSnapshot().market;
   store.actions.marketSetFilter({ source: 'clawhub' });
   const after = store.getSnapshot().market;
-  assert.deepEqual(after.items, [], '切 scope 清列表');
+  // U13/M10：不再是「消失—骨架—重来」，重取期间旧卡直出（这是与旧断言唯一的分歧点）。
+  assert.deepEqual(after.items, [item({ id: 'skillhub:ake:a' })], '切 scope 保留列表（旧卡直出）');
+  assert.equal(after.items, beforeFilter.items, '同一个数组引用：卡片不重挂、不换骨架');
+  assert.equal(after.listStatus, 'ready', '列表状态仍是 ready（整页骨架的判据是 loading + 空列表）');
+  // 「从头再来」仍只落在分页与详情上——这三条不许被放宽掉。
   assert.deepEqual(after.cursors, {}, '切 scope 清游标');
-  assert.equal(after.categoriesLoading, true, '切 scope 让 chips 进骨架');
+  assert.deepEqual(after.exhausted, {}, '切 scope 清耗尽标记');
+  assert.equal(after.pages, 0, '切 scope 分页归零');
+  assert.equal(after.detail, null, '切 scope 关详情');
+  assert.equal(after.categoriesLoading, true, '切 scope 补拉计数（面板据此换一份 chips 数字）');
   assert.equal(after.bootScope, 'all', '新数字还没到，bootScope 仍是旧的（面板据此补一次 bootstrap）');
   store.actions.marketBootReady({ source: 'clawhub', sources, categories, categoriesOk: true, total: 13048, countsOk: true });
   assert.equal(store.getSnapshot().market.bootScope, 'clawhub', '新 scope 的数字到了就换 bootScope');
-  assert.equal(store.getSnapshot().market.categoriesLoading, false, '骨架收起');
+  assert.equal(store.getSnapshot().market.categoriesLoading, false, '计数到位后停下');
   assert.equal(store.getSnapshot().market.total, 13048, 'total 也跟着换');
 });
 
@@ -612,7 +623,7 @@ test('K98 all 档的空态语义与换 scope 的过渡：空列表不当「来�
   store.actions.marketBootLoading();
   assert.equal(store.getSnapshot().market.boot, 'ready', '换 scope 的 bootstrap 不把整页打回骨架');
   assert.equal(store.getSnapshot().market.categoriesLoading, true, '只有 chips 进骨架');
-  assert.equal(store.getSnapshot().market.items.length, 2, '卡片原地不动（清空发生在选完 scope 那一刻）');
+  assert.equal(store.getSnapshot().market.items.length, 2, '卡片原地不动（M10 起切 scope 也不再清列表）');
 
   // A late answer for the scope the user already left is detectable: bootScope stops
   // matching filters.source, and the panel's effect re-boots on that mismatch.

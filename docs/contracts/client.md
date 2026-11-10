@@ -72,7 +72,7 @@ market = {
   sources / categories / categoriesOk,            // 失败时 sources 回落内置双源、categoriesOk=false
   total / countsOk,                               // 分类 chip 的数量：'全部' 用 total，各分类用 categories[].count
   filters: {source, category, sort},              // source 是 **scope**：'all'（默认）|'skillhub'|'clawhub'；sort 四值
-  bootScope / categoriesLoading,                  // 这份 categories+counts 属于哪个 scope；切 scope 只让 chips 进骨架（卡片不动）
+  bootScope / categoriesLoading,                  // 这份 categories+counts 属于哪个 scope；切 scope 只补一次 bootstrap（卡片与 chips 都不动，旧数字就地换新）
   keyword / input,                                // 已提交关键词 / 输入框现值（防抖在组件里，store 不持定时器）
   items / pages,                                  // 已合并去重后的列表、已加载页数（返回详情后要恢复）
   cursors / exhausted,                            // 每源自己的不透明游标与「已耗尽」
@@ -96,10 +96,12 @@ market = {
 | 首次进入市场页签 | `boot=loading`，并发发 `bootstrap` + `installed` + 第一页（默认 scope「所有来源」） | 骨架（分类条也是占位） |
 | `bootstrap` 成功 | `boot=ready` | 填 `sources/categories`；`categoriesOk=false` 时分类行换成一句说明 |
 | `bootstrap` 失败 | `boot=ready`（**不是 error**） | `sources` 回落内置三 scope，列表照打，分类行换成一句说明 |
-| 关键词变化 | 250ms 防抖后提交；**IME 组字期间先攒着，组字结束才提交**（否则中文用户会被半成品过滤） | 请求中**保留旧 items**（`aria-busy`），不换骨架；工具栏不动；尾部也不插占位卡（`pages` 已归零，那是首屏重取不是追加） |
+| 关键词变化 | 250ms 防抖后提交；**IME 组字期间先攒着，组字结束才提交**（否则中文用户会被半成品过滤） | 请求中**保留旧 items**（`aria-busy`），不换骨架；工具栏不动；尾部也不插占位卡（`pages` 已归零，那是首屏重取不是追加）；**提交那一刻 `scrollTop` 写 0**（见下条落点） |
 | 页头「刷新」（市场页签） | `marketReload`：清 `pages/cursors/exhausted`、关详情；**`items` 与 `icons`/`iconsTried`/`names` 都保留** | 重取期间旧列表直出（`aria-busy`），不换骨架、不滚回顶部、头像不回退成字母；`pages=0` 让尾部也不插占位卡 |
 | 回车（非组字）/ 点 × / 清空输入 | 立刻提交，不经防抖（× 与回车都取消在飞的防抖） | × 在**框内**（`.skc_marketSearchField` 里绝对定位），同时清 `input` 与 `keyword` 并把焦点送回输入框；不动 scope 与分类 |
-| 切 scope / 分类 / 排序 | 清 `items/pages/cursors/exhausted/detail`，滚回顶部；`bootScope !== filters.source` 时补一次 `bootstrap?source=`（带 token 守卫，旧响应不覆盖新数字） | 值没变时不重拉；切 scope 只让 chips 进骨架 |
+| 切 scope / 分类 / 排序 | 清 `pages/cursors/exhausted`、关详情；**`items` 保留**（旧卡直出，`clearedPaging` 按「有 items 就 ready」给 `listStatus`）；`bootScope !== filters.source` 时补一次 `bootstrap?source=`（带 token 守卫，旧响应不覆盖新数字） | 值没变时不重拉；重取期间不换骨架，答案落地时整表替换（`loadFirst` 不带 `existing`，旧卡不会串进新查询）；切 scope 时 chips 行留着旧数字就地换新，**只有还没有 chips 行时才画 chips 骨架**；落点见下一条 |
+| 落点：`source`/`category`/`sort`/`keyword` 任一真的变化 | —— | 面板的 paint effect（`useLayoutEffect`；字符串渲染时降级成 `useEffect`）瞬时把**面板自己那个滚动容器**的 `scrollTop` 写 **0**，不做平滑滚动、不等浏览器夹取：跳变是那一帧的初始状态，不是动画。三条筛选与搜索的落点因此由我们决定、与答案长短无关（真机四条路径都落在 0，且换表那一帧 `scrollTop` 就已经是 0）。刷新**不在**这条里（U13：保留原位置）；翻页、加载态、详情往返也不在（键没变）。落地后首卡在吸顶页头之下 150px，不会被压住 |
+| 关掉来源 / 排序菜单 | —— | 选的是**同一个值**时滚动位置不变。宿主的 `Menu` 关闭时把焦点还给锚点，焦点落在吸顶栏上会让 `.skc_pageBody` 滚回 0（实测 300 → 0，关闭后约 12 ms）；`.skc_marketFilters` 在关闭后把这个 0 写回原偏移（见 `decisions.md` 附录 P-3）。选的是**不同的值**时补偿自动解除，落点交给上一条的 paint effect（顶） |
 | 一页返回 | `listStatus=ready`，`page` 进 `more` 或 `done` | 列表 = 已有项 + 这一页按序拼接（`mergeBatches` 仍接受多源数组，但市场一次只看一个源，只喂一项）；不跨源重排 |
 | 请求失败 | `listStatus=error` | 整页错误态 + 重试；**不出空态**（空 ≠ 失败）。单源没有「部分源失败」这种中间态 |
 | 追加返回 | `page` 进 `more` 或 `done` | 当前源 `cursor !== null` 才追加；`items` 追加去重，不重排已有项 |
@@ -126,7 +128,7 @@ SkillsPage (page.jsx：页头 + 两个页签)
     ├─ MarketDetail (market-detail.jsx)：面包屑 + 头 + 事实表 + 概览 + 文件
     └─ MarketConfirm (market-confirm.jsx)：Modal（width:min(480px,100vw - 32px)）
 MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
-icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安装行共用的视觉单元）
+icon-tile.jsx：IconTile / tileElement / useIconState（市场三处 + 已安装行共用的视觉单元）
 ```
 
 八条结构约束：
@@ -149,7 +151,7 @@ icon-tile.jsx：IconTile / tileElement / useIconFailure（市场三处 + 已安�
 | `marketBootFallback(sources)` | 描述符数组 | `boot='ready'`、`categoriesOk=false`、`countsOk=false`（失败不是错误态） |
 | `marketSetInput(text)` | string | 只改 `input` |
 | `marketCommitKeyword(text)` | string | `keyword=input=text`，清分页；**保留 items** |
-| `marketSetFilter({source?,category?,sort?})` | 部分 filters | 合并 + 清 items/分页 + 关详情；值没变就什么都不做 |
+| `marketSetFilter({source?,category?,sort?})` | 部分 filters | 合并 + 清分页 + 关详情；**`items` 保留**（重取期间卡片留在屏上，`clearedPaging` 给出 `listStatus`）；切 scope 时 `categoriesLoading=true`；值没变就什么都不做 |
 | `marketReload()` | —— | 页头「刷新」在市场页签的行为：清已加载页，由面板 effect 重拉第一页；**只清分页与详情**（`items` 与图标/标题缓存保留，`clearedPaging` 按「有 items 就 ready」给出 `listStatus`） |
 | `marketListLoading()` / `marketListFailed({code,message})` | —— / 错误 | 整页态 |
 | `marketPageStart()` | —— | `page.status='loading'`（追加用，不清 items） |

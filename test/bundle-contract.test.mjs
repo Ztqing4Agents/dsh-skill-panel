@@ -79,5 +79,11 @@ test('产物体积没有异常膨胀（防止误把依赖打进来）', async ()
   const text = await bundle();
   const size = Buffer.byteLength(text);
   assert.equal(size > 40_000, true, `产物不小于 40 KB（实际 ${size} B，说明 ui 代码确实在里面）`);
-  assert.equal(size < 120_000, true, `产物不超过 120 KB（实际 ${size} B，说明没有把 react 之类打进来）`);
+  // The failure this catches is a lost `external`: bundling react/react-dom instead of
+  // requiring them from the shell takes the same sources to ~190 KB (measured with the
+  // committed build options), so a 128 KB ceiling still leaves ~60 KB of discriminator and
+  // bills the mistake on the first build. It is a tripwire, not a design target: M10 raised
+  // it from 120 KB when the real artifact reached 121147 B, and it should not be raised
+  // again without deleting something first.
+  assert.equal(size < 128_000, true, `产物不超过 128 KB（实际 ${size} B，说明没有把 react 之类打进来）`);
 });

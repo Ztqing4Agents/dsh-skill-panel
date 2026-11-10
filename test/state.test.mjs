@@ -3,7 +3,9 @@
  *
  * Contract: docs/contracts/client.md §3.5 (state machine, store scope) and §3.9.3 (the
  * market sub-state's 30 actions; the bookmark write side was removed in U5 - see
- * docs/contracts/decisions.md appendix L - and only the read side is left); case id K45.
+ * docs/contracts/decisions.md appendix L - and only the read side is left); case ids K45,
+ * K105 (a filter change keeps `items`, M10) and K108 (the four fields the landing paint
+ * effect depends on, see §3.9.1 "落点").
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -427,3 +429,100 @@ test('K45 reload / boot 兜底都不动收藏，也不把 favoritesOk 置 true',
   assert.equal(store.getSnapshot().market.favoritesOk, false, '也不虚报可用');
 });
 
+
+// ---------------------------------------------------------------------------
+// M10 — 切筛选（来源 / 分类 / 排序）不再清空列表。与 U13 同一条判据：`clearedPaging`
+// 按「有 items 就 ready」给 `listStatus`，面板据此保留旧卡；分页与详情照旧从头再来。
+// ---------------------------------------------------------------------------
+
+test('K105 marketSetFilter 的三条路径都保留列表、只清分页（M10）', () => {
+  const items = [marketItem('skillhub:ake:a'), marketItem('skillhub:ake:b')];
+  const seeded = () => {
+    const store = createStore();
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'all', page: { items, next: 'c2' } }],
+      merged: items,
+    });
+    store.actions.marketDetailOpen(items[0]);
+    return store;
+  };
+
+  // 三条筛选路径各自的补丁，以及只有它才该有的副作用。
+  const paths = [
+    ['换来源', { source: 'clawhub' }, { categoriesLoading: true }],
+    ['换分类', { category: 'dev-tools' }, { categoriesLoading: false }],
+    ['换排序', { sort: 'downloads' }, { categoriesLoading: false }],
+  ];
+  for (const [label, patch, extra] of paths) {
+    const store = seeded();
+    const before = store.getSnapshot().market;
+    store.actions.marketSetFilter(patch);
+    const after = store.getSnapshot().market;
+    assert.deepEqual(after.filters, { ...before.filters, ...patch }, `${label}：筛选值落定`);
+    // 这条是与旧行为唯一的分歧点：旧语义是 items 清空、listStatus 回 idle。
+    assert.equal(after.items, before.items, `${label}：卡片留在屏幕上（同一数组引用，不重挂）`);
+    assert.equal(after.items.length, 2, `${label}：数量不变`);
+    assert.equal(after.listStatus, 'ready', `${label}：listStatus 仍是 ready（不切骨架）`);
+    // 「从头再来」仍落在分页与详情上——这几条不许被放宽掉。
+    assert.equal(after.pages, 0, `${label}：分页归零`);
+    assert.deepEqual(after.cursors, {}, `${label}：游标清空（下一次是第一页）`);
+    assert.deepEqual(after.exhausted, {}, `${label}：耗尽标记清空`);
+    assert.equal(after.page.status, 'idle', `${label}：尾部回 idle`);
+    assert.equal(after.detail, null, `${label}：详情关闭`);
+    // 只有换 scope 才需要重读计数；同 scope 内换分类/排序不碰 chips。
+    assert.equal(after.categoriesLoading, extra.categoriesLoading, `${label}：categoriesLoading 只在换 scope 时置位`);
+
+    // 面板紧接着发的第一页请求：列表还在，所以骨架判据（loading + 空列表）不成立。
+    store.actions.marketListLoading();
+    const loading = store.getSnapshot().market;
+    assert.equal(loading.listStatus, 'loading', `${label}：请求在飞`);
+    assert.equal(loading.items.length, 2, `${label}：请求在飞时旧卡还在（判据 loading && items.length === 0 不成立）`);
+  }
+
+  // 值没变就什么都不做（既有语义，别因为这次改动被顺手改掉）。
+  const store = seeded();
+  const untouched = store.getSnapshot().market;
+  store.actions.marketSetFilter({ source: 'all' });
+  store.actions.marketSetFilter({ category: null });
+  store.actions.marketSetFilter({ sort: 'recommended' });
+  assert.equal(store.getSnapshot().market, untouched, '三个筛选都是原值时状态对象一动不动');
+});
+
+test('K108 落点键只被筛选与搜索改动：刷新 / 翻页 / 加载态 / 详情往返 / 滚动都不动它', () => {
+  // 面板的 paint effect 以 `source|category|sort|keyword` 为依赖（client.md §3.9.1「落点」）：
+  // 键不变就不写 scrollTop，所以「刷新保住原位置」正是靠这四条字段不被别的动作碰到。
+  const keyOf = (market) => `${market.filters.source}|${market.filters.category}|${market.filters.sort}|${market.keyword}`;
+  const store = createStore();
+  const items = [marketItem('skillhub:ake:a')];
+  store.actions.marketPageAppended({ pages: [{ sourceId: 'all', page: { items, next: 'c2' } }], merged: items });
+  store.actions.marketSetScroll(300);
+  const key = keyOf(store.getSnapshot().market);
+  assert.equal(key, 'all|null|recommended|', '键的构成：四条查询输入，默认值也参与');
+
+  const untouched = [
+    ['页头刷新（U13：保住原位置）', () => store.actions.marketReload()],
+    ['第一页请求在飞', () => store.actions.marketListLoading()],
+    ['追加请求在飞', () => store.actions.marketPageStart()],
+    ['一页答案落地', () => store.actions.marketPageAppended({
+      pages: [{ sourceId: 'all', page: { items, next: null } }],
+      merged: items,
+    })],
+    ['打开详情', () => store.actions.marketDetailOpen(items[0])],
+    ['详情答案落地', () => store.actions.marketDetailReady({ item: items[0] })],
+    ['关闭详情', () => store.actions.marketDetailClose()],
+    ['记滚动位置', () => store.actions.marketSetScroll(120)],
+    ['装完一页（安装态）', () => store.actions.marketInstallOk('skillhub:ake:a', { name: 'a', version: null, path: '/tmp/a' })],
+  ];
+  for (const [label, act] of untouched) {
+    act();
+    assert.equal(keyOf(store.getSnapshot().market), key, `${label}：键不变（不会把位置写回顶部）`);
+  }
+
+  // 只有「换了一个查询」才变——这才是落点回到第一张卡的时刻。
+  store.actions.marketSetFilter({ category: 'dev-tools' });
+  assert.equal(keyOf(store.getSnapshot().market), 'all|dev-tools|recommended|', '换分类改键');
+  store.actions.marketCommitKeyword('pdf');
+  assert.equal(keyOf(store.getSnapshot().market), 'all|dev-tools|recommended|pdf', '搜索改键');
+  store.actions.marketSetFilter({ source: 'clawhub', sort: 'stars' });
+  assert.equal(keyOf(store.getSnapshot().market), 'clawhub|dev-tools|stars|pdf', '换来源与排序同时改键');
+});

@@ -212,14 +212,14 @@ sequenceDiagram
 
     U->>MP: 输入关键词（250ms 防抖）/ 回车（立即）/ 清空（立即）
     MP->>ST: keyword 变化 → 清分页
-    Note over MP,ST: 请求中保留旧 items，只有筛选切换才回骨架
+    Note over MP,ST: 请求中保留旧 items —— 刷新、搜索、切筛选都一样，不换骨架
 
     U->>MP: 触底（距底 200px）
     MP->>API: 当前源 cursor !== null 才发一次（cursor 原样回传）
     Note over MP: next === null 即到底，显示「没有更多了」
 ```
 
-四条分支与两条失败分支的判据：切来源 / 切分类 / 切排序 ⇒ 清 `items/pages/cursors/exhausted/detail` 并重拉第一页；换关键词与页头刷新 ⇒ 同上但**保留 `items`**（旧列表直出，不滚回顶部）；首屏失败 ⇒ 整页错误态；追加失败 ⇒ 已有卡片留着，尾部给「重试」（`market/list` 用 HTTP 状态码表达失败，见 `docs/contracts/routes.md` §3.7.2）。市场一次只看一个来源，所以没有「部分源失败」这一支。
+四条分支与两条失败分支的判据：切来源 / 切分类 / 切排序 / 换关键词 / 页头刷新 ⇒ 都清 `pages/cursors/exhausted/detail` 并重拉第一页，且都**保留 `items`**（旧列表直出，不换骨架、不滚回顶部）；答案落地时整表替换（首屏重取不带 `existing`）；首屏失败 ⇒ 整页错误态；追加失败 ⇒ 已有卡片留着，尾部给「重试」（`market/list` 用 HTTP 状态码表达失败，见 `docs/contracts/routes.md` §3.7.2）。市场一次只看一个来源，所以没有「部分源失败」这一支。
 
 ### 4.6 市场安装
 
