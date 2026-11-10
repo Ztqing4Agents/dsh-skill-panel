@@ -211,22 +211,30 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
     void loadDetail(detailRow);
   }, [detailRow, loadDetail]);
 
-  // Back to the list: the offset was read before the detail replaced the rows, and it is
-  // written back once they are in the document again. No request, no smooth scroll - the
-  // restore is the frame's first state, exactly like the market's detail return.
+  // Two moves, both in a paint effect so neither is visible as a jump:
+  //   entering the detail -> 0, because the page header is gone and the detail starts at the
+  //     breadcrumb (an offset from the list would start it mid-page);
+  //   leaving it -> the offset that was read while the rows were still on screen.
+  // No request, no smooth scroll: the restore is the frame's first state, as the market does.
   usePaintEffect(() => {
-    if (detailKey !== null) return;
-    const top = store.getSnapshot().detailScrollTop;
-    if (top <= 0) return;
     const body = bodyRef.current;
     if (body === null) return;
-    body.scrollTop = top;
+    if (detailKey !== null) {
+      body.scrollTop = 0;
+      return;
+    }
+    const top = store.getSnapshot().detailScrollTop;
+    if (top > 0) body.scrollTop = top;
   }, [detailKey, store]);
 
   const groups = toGroups(state.payload);
   const counts = state.payload?.counts;
   const excluded = Number.isInteger(counts?.excluded) ? counts.excluded : 0;
   const showsInstalled = state.tab === TAB_INSTALLED;
+  // The host replaces the whole page header when a plugin's detail opens, and the installed
+  // detail follows it: breadcrumb first, nothing above it. The market keeps its header and
+  // swaps only the grid - that difference is deliberate (host parity is per page).
+  const detailOpen = showsInstalled && detailKey !== null;
   const loadingFirst = state.status === 'loading' && state.payload === null;
   const failedFirst = state.status === 'error' && state.payload === null;
   // The header's one refresh button follows the tab: the installed list below, the
@@ -268,169 +276,179 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
   return (
     <section className={cn('page')} data-skc-panel="" aria-busy={state.status === 'loading' || refreshing}>
       <div className={cn('pageBody')} data-skc-body="" ref={bodyRef}>
-        <div
-          className={cn('pageBar', 'pageBarWithTabs')}
-          data-skc-bar=""
-          ref={headerRef}
-        >
-          <header className={cn('pageHead')} data-window-drag="">
-            <div className={cn('pageHeading')}>
-              <h1 className={cn('pageTitle')} data-skc-header-part="title">{t('page.title')}</h1>
-              <div className={cn('pageIntro')} data-skc-header-part="intro">
-                <span>{t('page.intro')}</span>
-                <Tooltip
-                  label={t('page.infoDescription')}
-                  side="bottom"
-                  delayMs={300}
-                  maxWidth={300}
-                  portal
-                  openOnClick
-                >
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className={cn('infoButton')}
-                    aria-label={t('page.infoLabel')}
-                  >
-                    <IconInfoOutlineRegular size={11} aria-hidden="true" />
-                  </Button>
-                </Tooltip>
-              </div>
-            </div>
-            <div
-              className={cn('toolbar')}
-              data-skc-header-part="toolbar"
-            >
-              {showsInstalled && state.payload !== null
-                ? <span className={cn('status')}>{statusLine(counts, t)}</span>
-                : null}
-              <Tooltip
-                label={t('page.refresh')}
-                delayMs={500}
-                focusDelayMs={500}
-                side="bottom"
-                portal
-                disabled={refreshing}
-              >
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={cn('addButton')}
-                  aria-label={t('page.refresh')}
-                  aria-busy={refreshing || marketBusy}
-                  disabled={refreshing || marketBusy}
-                  onClick={() => {
-                    if (!showsInstalled) {
-                      store.actions.marketReload();
-                      return;
-                    }
-                    // A refresh re-reads the list, and the detail view is a view of that
-                    // list: closing it first is the same rule the market's reload follows.
-                    store.actions.closeDetail();
-                    void load('refresh');
-                  }}
-                  icon={refreshing || marketBusy
-                    ? <StateDot state="ongoing" size={13} />
-                    : <IconRefreshOutlineRegular size={13} />}
-                >
-                  <span className={cn('toolbarLabel')}>{t('page.refresh')}</span>
-                </Button>
-              </Tooltip>
-              {showsInstalled ? (
-                <span className={cn('addGroup')} role="group" aria-label={t('add.label')} title={t('add.comingSoon')}>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    className={cn('addPrimary')}
-                    aria-label={t('add.label')}
-                    disabled
-                    icon={<IconPlusOutlineRegular size={13} />}
-                  >
-                    <span className={cn('toolbarLabel')}>{t('add.label')}</span>
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    className={cn('addMore')}
-                    aria-label={t('add.comingSoon')}
-                    disabled
-                  >
-                    <IconChevronDownOutlineRegular size={13} aria-hidden="true" />
-                  </Button>
-                </span>
-              ) : null}
-            </div>
-            <div className={cn('pageTabs')} data-skc-header-part="tabs">
-              <SegmentedTabs
-                size="sm"
-                className={cn('pageTabList')}
-                label={t('tabs.label')}
-                value={state.tab}
-                onChange={(next) => store.actions.setTab(next)}
-                items={[
-                  {
-                    value: TAB_INSTALLED,
-                    label: t('tabs.installed'),
-                    id: `${tabsId}-${TAB_INSTALLED}`,
-                    panelId: `${tabsId}-${TAB_INSTALLED}-panel`,
-                  },
-                  {
-                    value: TAB_MARKET,
-                    label: t('tabs.market'),
-                    id: `${tabsId}-${TAB_MARKET}`,
-                    panelId: `${tabsId}-${TAB_MARKET}-panel`,
-                  },
-                ]}
-              />
-            </div>
-          </header>
-        </div>
-        {showsInstalled ? (
-          <div
-            className={cn('installedPanel')}
-            role="tabpanel"
-            id={`${tabsId}-${TAB_INSTALLED}-panel`}
-            aria-labelledby={`${tabsId}-${TAB_INSTALLED}`}
-          >
-            {loadingFirst ? <ListSkeleton label={t('page.loading')} /> : null}
-            {failedFirst ? (
-              <div className={cn('failure')} role="alert">
-                <StateDot state="error" />
-                <p>{t('page.error')}</p>
-                <Button variant="outline" size="sm" onClick={() => void load('initial')}>
-                  {t('page.retry')}
-                </Button>
-              </div>
-            ) : null}
-            {state.payload === null ? null : (detailKey === null ? (
-              <Fragment>
-                {groups.map(renderGroup)}
-                {excluded > 0 ? <p className={cn('footer')}>{t('footer.excluded', { count: excluded })}</p> : null}
-              </Fragment>
-            ) : (
-              <InstalledDetail
-                detail={state.detail}
-                row={detailRow}
-                rows={state.rows}
-                t={t}
-                status={detailStatus}
-                iconUrl={detailRow === null ? null : rowIconUrl(detailRow)}
-                title={detailRow === null ? '' : rowTitleOf(detailRow, state.market)}
-                onBack={closeDetail}
-                onRetry={retryDetail}
-                onToggle={onToggle}
-              />
-            ))}
+        {detailOpen ? (
+          <div className={cn('detailPage')}>
+            {/* A window drag region cannot go on the whole card: it would swallow text
+                selection and every button. An empty strip with the header's darwin inset
+                keeps the window draggable and nothing else. */}
+            <div className={cn('detailDrag')} data-window-drag="" />
+            <InstalledDetail
+              detail={state.detail}
+              row={detailRow}
+              rows={state.rows}
+              t={t}
+              status={detailStatus}
+              iconUrl={detailRow === null ? null : rowIconUrl(detailRow)}
+              title={detailRow === null ? '' : rowTitleOf(detailRow, state.market)}
+              onBack={closeDetail}
+              onRetry={retryDetail}
+              onToggle={onToggle}
+            />
           </div>
         ) : (
-          <div
-            className={cn('tabPanel')}
-            role="tabpanel"
-            id={`${tabsId}-${TAB_MARKET}-panel`}
-            aria-labelledby={`${tabsId}-${TAB_MARKET}`}
-          >
-            <MarketPanel store={store} api={api} t={t} />
-          </div>
+          <Fragment>
+            <div
+              className={cn('pageBar', 'pageBarWithTabs')}
+              data-skc-bar=""
+              ref={headerRef}
+            >
+              <header className={cn('pageHead')} data-window-drag="">
+                <div className={cn('pageHeading')}>
+                  <h1 className={cn('pageTitle')} data-skc-header-part="title">{t('page.title')}</h1>
+                  <div className={cn('pageIntro')} data-skc-header-part="intro">
+                    <span>{t('page.intro')}</span>
+                    <Tooltip
+                      label={t('page.infoDescription')}
+                      side="bottom"
+                      delayMs={300}
+                      maxWidth={300}
+                      portal
+                      openOnClick
+                    >
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={cn('infoButton')}
+                        aria-label={t('page.infoLabel')}
+                      >
+                        <IconInfoOutlineRegular size={11} aria-hidden="true" />
+                      </Button>
+                    </Tooltip>
+                  </div>
+                </div>
+                <div
+                  className={cn('toolbar')}
+                  data-skc-header-part="toolbar"
+                >
+                  {showsInstalled && state.payload !== null
+                    ? <span className={cn('status')}>{statusLine(counts, t)}</span>
+                    : null}
+                  <Tooltip
+                    label={t('page.refresh')}
+                    delayMs={500}
+                    focusDelayMs={500}
+                    side="bottom"
+                    portal
+                    disabled={refreshing}
+                  >
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={cn('addButton')}
+                      aria-label={t('page.refresh')}
+                      aria-busy={refreshing || marketBusy}
+                      disabled={refreshing || marketBusy}
+                      onClick={() => {
+                        if (!showsInstalled) {
+                          store.actions.marketReload();
+                          return;
+                        }
+                        // A refresh re-reads the list, and the detail view is a view of that
+                        // list: closing it first is the same rule the market's reload follows.
+                        store.actions.closeDetail();
+                        void load('refresh');
+                      }}
+                      icon={refreshing || marketBusy
+                        ? <StateDot state="ongoing" size={13} />
+                        : <IconRefreshOutlineRegular size={13} />}
+                    >
+                      <span className={cn('toolbarLabel')}>{t('page.refresh')}</span>
+                    </Button>
+                  </Tooltip>
+                  {showsInstalled ? (
+                    <span className={cn('addGroup')} role="group" aria-label={t('add.label')} title={t('add.comingSoon')}>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className={cn('addPrimary')}
+                        aria-label={t('add.label')}
+                        disabled
+                        icon={<IconPlusOutlineRegular size={13} />}
+                      >
+                        <span className={cn('toolbarLabel')}>{t('add.label')}</span>
+                      </Button>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className={cn('addMore')}
+                        aria-label={t('add.comingSoon')}
+                        disabled
+                      >
+                        <IconChevronDownOutlineRegular size={13} aria-hidden="true" />
+                      </Button>
+                    </span>
+                  ) : null}
+                </div>
+                <div className={cn('pageTabs')} data-skc-header-part="tabs">
+                  <SegmentedTabs
+                    size="sm"
+                    className={cn('pageTabList')}
+                    label={t('tabs.label')}
+                    value={state.tab}
+                    onChange={(next) => store.actions.setTab(next)}
+                    items={[
+                      {
+                        value: TAB_INSTALLED,
+                        label: t('tabs.installed'),
+                        id: `${tabsId}-${TAB_INSTALLED}`,
+                        panelId: `${tabsId}-${TAB_INSTALLED}-panel`,
+                      },
+                      {
+                        value: TAB_MARKET,
+                        label: t('tabs.market'),
+                        id: `${tabsId}-${TAB_MARKET}`,
+                        panelId: `${tabsId}-${TAB_MARKET}-panel`,
+                      },
+                    ]}
+                  />
+                </div>
+              </header>
+            </div>
+            {showsInstalled ? (
+              <div
+                className={cn('installedPanel')}
+                role="tabpanel"
+                id={`${tabsId}-${TAB_INSTALLED}-panel`}
+                aria-labelledby={`${tabsId}-${TAB_INSTALLED}`}
+              >
+                {loadingFirst ? <ListSkeleton label={t('page.loading')} /> : null}
+                {failedFirst ? (
+                  <div className={cn('failure')} role="alert">
+                    <StateDot state="error" />
+                    <p>{t('page.error')}</p>
+                    <Button variant="outline" size="sm" onClick={() => void load('initial')}>
+                      {t('page.retry')}
+                    </Button>
+                  </div>
+                ) : null}
+                {state.payload === null ? null : (
+                  <Fragment>
+                    {groups.map(renderGroup)}
+                    {excluded > 0 ? <p className={cn('footer')}>{t('footer.excluded', { count: excluded })}</p> : null}
+                  </Fragment>
+                )}
+              </div>
+            ) : (
+              <div
+                className={cn('tabPanel')}
+                role="tabpanel"
+                id={`${tabsId}-${TAB_MARKET}-panel`}
+                aria-labelledby={`${tabsId}-${TAB_MARKET}`}
+              >
+                <MarketPanel store={store} api={api} t={t} />
+              </div>
+            )}
+          </Fragment>
         )}
       </div>
     </section>

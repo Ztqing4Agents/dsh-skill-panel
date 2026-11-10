@@ -28,6 +28,8 @@
 
 ## 页面结构（自上而下）
 
+**整页替换**：详情打开时**页头整块不渲染**（标题 / 介绍 / 计数 / 刷新 / 添加技能 / 页签全部不可见），详情从面包屑开始，`pageBody` 里只有一个详情容器；容器顶端有一条**仅用于拖窗口的空条**（`.skc_detailDrag`，`data-window-drag` 只挂在这一条上——整块当拖动区会吃掉文字选择与按钮点击；高度 = 页头的顶部内边距，darwin 再叠加安全区，所以进出详情头部不跳）。市场详情不是这样：它仍就地替换网格、页头保留（宿主只对插件详情覆盖整页，我们只对齐已安装详情）。
+
 | # | 区块 | 内容 |
 | --- | --- | --- |
 | 1 | 面包屑 | `detail.back`（值「技能」/`Skills`，与宿主的 `crumbRoot` 同义），唯一返回入口（`.skc_marketCrumb` 配方） |
@@ -41,7 +43,7 @@
 | 9 | 来源信息（**页尾**） | 仅 `row.upstream !== null`：`detail.sectionSource` 标题 + `market.source.<sourceId>` + `owner/slug`，三段纯文本、**不可点**；位置在文件清单之后（宿主也把「来源信息」放在正文下方的技术区） |
 | 10 | 失效态 | 按 `detail.key` 在 `payload` 里取不到行 ⇒ 只渲染面包屑 + `error.E_NOT_FOUND` 一行，不抛异常 |
 
-区块骨架逐字复用 `.skc_marketDetail*` 族（**详情族，两个页签共用**，不改名）。已安装详情新增刻度共 7 条，规则体只有一处真源：`docs/contracts/visual.md` A.5（`.skc_detailIdentity` / `.skc_detailCallName` / `.skc_detailBody` / `.skc_detailTop` / `.skc_detailActions` / `.skc_detailIntro` / `.skc_detailAuthor`），实现逐字相同，在 `src/client/styles.js`。
+区块骨架逐字复用 `.skc_marketDetail*` 族（**详情族，两个页签共用**，不改名）。已安装详情新增刻度共 9 条，规则体只有一处真源：`docs/contracts/visual.md` A.5（`.skc_detailPage` / `.skc_detailDrag` / `.skc_detailTop` / `.skc_detailActions` / `.skc_detailIntro` / `.skc_detailAuthor` / `.skc_detailIdentity` / `.skc_detailCallName` / `.skc_detailBody`），实现逐字相同，在 `src/client/styles.js`。
 
 ## 状态与返回
 
@@ -58,9 +60,10 @@ store.detailScrollTop = number      // 打开详情前记下的 .skc_pageBody �
 | `closeDetail()` | `detail = null`（滚动位置由页面的 paint effect 写回） |
 | `rememberDetailScroll(top)` | 只记 `detailScrollTop`（打开前调一次，此时行还在屏幕上） |
 
-- 返回：`closeDetail()` + `useLayoutEffect` 把 `detailScrollTop` 写回 `.skc_pageBody`，**不重拉 `list`**。
-- 切页签：`detail` 在模块级 store 里，切回来还在详情（与市场详情的同一条规则）。
-- 页头刷新：详情打开时 = 关详情 + `load('refresh')`（与 `marketReload` 关详情同一条规则）。
+- **打开时把滚动归零**：`detailKey !== null` 的 paint effect 写 `scrollTop = 0`——页头一撤，沿用列表那个偏移会让详情从中间开始。
+- 返回：`closeDetail()` + 同一个 paint effect 把 `detailScrollTop` 写回 `.skc_pageBody`，**不重拉 `list`**。
+- **详情打开时页签不可见**，所以不存在「切页签」这条路径（`detail` 仍留在 store 里，返回后回到列表与页签，数据不丢）。
+- **详情打开时刷新按钮不可见**，所以「页头刷新 = 关详情 + 重扫」这条路径**不可达**；返回列表后再刷新即可（`load('refresh')` 仍只在列表态执行）。
 - **不支持 Esc**（与市场详情一致：加全局 keydown 会让两个详情页行为分叉）。
 - 开关：详情头里就是行内那一个 `EnableSwitch`，读同一份 `state.rows`；失败原因 `.skc_reason` 照旧显示在头下。
 

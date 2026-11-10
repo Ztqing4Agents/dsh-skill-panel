@@ -427,18 +427,102 @@ test('K111 面包屑返回：detail 变 null 且不再请求任何路由', async
   assert.deepEqual(calls, [], '返回不重拉 list、也不重读正文');
 });
 
-test('K111 详情打开时点页头刷新：关详情 + 重扫一次 list', async () => {
+test('K111 详情态是整页替换：没有页头 / 页签 / 刷新，只有 detailPage（拖动条 + 面包屑）', () => {
+  const html = renderPage({
+    after: (store) => {
+      store.actions.openDetail(row({ name: 'ui-design', partition: 'installed', rule: 'R7' }));
+      store.actions.detailReady('filesystem#ui-design', { body: '正文', files: [], filesTruncated: false });
+    },
+  });
+  // 宿主插件详情页就是这样：详情顶端只有面包屑，没有任何页头与页签。
+  for (const gone of ['skc_pageBar', 'skc_pageHead', 'skc_pageTitle', 'skc_pageIntro', 'skc_toolbar', 'skc_pageTabs', 'skc_pageTabList']) {
+    assert.equal(html.includes(gone), false, `详情态没有 .${gone}`);
+  }
+  assert.equal(html.includes(t('page.refresh')), false, '详情态连「刷新」这几个字都没有');
+  assert.equal(html.includes('skc_detailPage'), true, '详情态有 .skc_detailPage');
+  assert.ok(html.includes('data-skc-installed-detail="filesystem#ui-design"'), '详情内容在');
+  assert.ok(html.includes('class="skc_marketCrumb"'), '面包屑是第一眼内容');
+  // 面板级钩子还在（整页替换只换内容，不换面板）
+  assert.ok(/data-skc-panel=""/.test(html), '面板挂点仍在');
+  assert.equal(/aria-busy="false"|aria-busy="true"/.test(html), true, 'aria-busy 仍在');
+});
+
+test('K111 拖动条：data-window-drag 只在空条上，不落到 detailPage / 详情容器里', () => {
+  const html = renderPage({
+    after: (store) => {
+      store.actions.openDetail(row({ name: 'ui-design', partition: 'installed', rule: 'R7' }));
+      store.actions.detailReady('filesystem#ui-design', { body: '正文', files: [], filesTruncated: false });
+    },
+  });
+  const tags = [...html.matchAll(/<[^>]*data-window-drag[^>]*>/g)].map((match) => match[0]);
+  assert.equal(tags.length, 1, `整页只有一个拖动区（实测 ${tags.length}）`);
+  assert.match(tags[0], /class="skc_detailDrag"/, '拖动区就是那条空条');
+  // 空条是 detailPage 的第一个子节点、且在详情内容之前：窗口拖动靠它，内容区不接管拖动
+  // （否则文字选择与所有按钮都会被吃掉）。
+  const page = /<div class="skc_detailPage">([\s\S]*?)<div class="skc_marketDetail"/.exec(html);
+  assert.ok(page !== null, 'detailPage 里紧跟详情内容');
+  assert.equal(page[1].trim(), '<div class="skc_detailDrag" data-window-drag=""></div>', 'detailPage 的第一个子节点就是空拖动条');
+  assert.equal(/skc_detailPage" data-window-drag/.test(html), false, 'detailPage 自己不接管拖动');
+  assert.equal(/data-skc-installed-detail="[^"]*"[^>]*data-window-drag/.test(html), false, '详情容器不接管拖动');
+});
+
+test('K111 detailPage 是 pageBody 的直接子元素（沿用 960 宽与页面内边距）', () => {
+  const html = renderPage({
+    after: (store) => {
+      store.actions.openDetail(row({ name: 'ui-design', partition: 'installed', rule: 'R7' }));
+      store.actions.detailReady('filesystem#ui-design', { body: '正文', files: [], filesTruncated: false });
+    },
+  });
+  assert.ok(/<div class="skc_pageBody" data-skc-body="">\s*<div class="skc_detailPage">/.test(html),
+    'pageBody 的第一个子元素就是 detailPage（没有中间层，宽度与内边距照旧由 pageBody 给）');
+  assert.equal((html.match(/class="skc_pageBody"/g) ?? []).length, 1, '只有一个滚动容器');
+});
+
+test('K111 返回列表后页头与刷新都回来了，刷新仍走「关详情 + 重扫一次 list」', async () => {
   const calls = [];
   const { store, render } = mountPage(recordingApi(calls));
   store.actions.openDetail(row({ name: 'ui-design', partition: 'installed', rule: 'R7' }));
   store.actions.detailReady('filesystem#ui-design', { body: '正文', files: [], filesTruncated: false });
+  assert.equal(
+    elementsOf(render()).some((element) => element.props?.['aria-label'] === t('page.refresh')),
+    false,
+    '详情态找不到刷新按钮（页头整块没渲染）',
+  );
+
+  // 面包屑返回：页头重建，刷新按钮回到页头。
+  const detailElement = elementsOf(render()).find((element) => element.type === modules.installedDetail.InstalledDetail);
+  const crumb = elementsOf(modules.installedDetail.InstalledDetail(detailElement.props))
+    .find((element) => element.props?.className === 'skc_marketCrumb');
+  crumb.props.onClick();
+  assert.equal(store.getSnapshot().detail, null, '返回后详情关了');
+
   const refresh = elementsOf(render()).find((element) => element.props?.['aria-label'] === t('page.refresh'));
-  assert.ok(refresh !== undefined, '页头有刷新按钮');
+  assert.ok(refresh !== undefined, '返回列表后页头刷新回来了');
   assert.equal(refresh.props.disabled, false, '空闲时可点');
 
   refresh.props.onClick();
-  assert.equal(store.getSnapshot().detail, null, '刷新先关详情（与市场 reload 同一条规则）');
-  assert.deepEqual(calls, ['list'], '然后走一次 list');
+  assert.equal(store.getSnapshot().detail, null, '刷新之后仍没有详情');
+  assert.deepEqual(calls, ['list'], '刷新走一次 list（不额外重读正文）');
   assert.equal(store.getSnapshot().status, 'loading', '列表进入加载态');
   await new Promise((resolve) => setTimeout(resolve, 450));
+});
+
+test('K111 市场页签不跟着改：页头与页签仍在，市场详情仍只替换网格', () => {
+  const item = { id: 'skillhub:ake:pdf', sourceId: 'skillhub', owner: 'ake', slug: 'pdf', displayName: 'PDF 工具' };
+  const listState = renderPage({ after: (store) => { store.actions.setTab('market'); } });
+  assert.ok(listState.includes('skc_pageBar'), '市场态有页头');
+  assert.ok(listState.includes('skc_pageTabList') || listState.includes('skc_pageTabs'), '市场态有页签');
+  assert.ok(listState.includes(t('page.refresh')), '市场态有刷新');
+
+  const detailState = renderPage({
+    after: (store) => {
+      store.actions.setTab('market');
+      store.actions.marketDetailOpen(item);
+    },
+  });
+  assert.ok(detailState.includes('skc_pageBar'), '市场详情打开时页头仍在（与已安装的整页替换刻意不同）');
+  assert.ok(detailState.includes('data-skc-market-detail'), '市场详情在场');
+  assert.equal(detailState.includes('data-skc-market-id'), false, '网格被就地替换掉了');
+  assert.equal(detailState.includes('skc_detailPage'), false, '市场详情不走 detailPage（那是已安装页签的整页替换）');
+  assert.equal(detailState.includes('skc_detailDrag'), false, '市场详情也没有那条拖动条');
 });

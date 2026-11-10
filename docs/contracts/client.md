@@ -134,7 +134,7 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 八条结构约束：
 
 1. **整卡可点只有一个手段**：标题按钮 `.skc_marketCardOpen::after{inset:0}` 铺满整卡，**唯一的动作位**用显式层级浮在上面——安装位 `.skc_marketCardEnd{z-index:1}`（U5 起坐在头部右侧）；卡片里只有这一个动作位，其余区域（含**标签行**与三段数字）都落在点击层上、点的都是「进详情」。不做 `<a href>`、不加第二个可点区域、不用 JS 拦冒泡代替层级。**「已安装」的行用同一条手段**（U1 起）：标题按钮 `.skc_cardOpen::after{inset:0}` 铺满整行、开关位 `.skc_cardEnd{z-index:1}` 浮起，软链行的 `roTag` 不浮起、不可点；两处都不许出现「看着能点、点了没反应」。
-2. **详情就地替换网格**（`detail !== null` 时返回详情而不是网格），与宿主的页内详情同构；返回不重拉任何东西。
+2. **两种详情替换范围不同，是刻意的**：市场详情就地替换网格（页头保留）；**已安装详情替换整页页头 + 列表**（标题/介绍/计数/刷新/添加技能/页签全部不可见，详情从面包屑开始，顶端只留一条拖窗口的空条），与宿主的插件详情同构。两者返回都不重拉任何东西。
 3. 详情正文用宿主 primitives 的 `MarkdownText` 渲染（与对话里的第三方 markdown 同一个渲染器，不自造 sanitizer）；渲染抛错或正文为空时回落纯文本 + `market.detailNoOverview`。
 4. 组件只读 props（`store/api/t`）写 `store.actions`，不直接 `fetch`；只有滚动位置恢复与触底预取读 DOM，且都在 `useEffect` 里（字符串渲染不触发）。
 5. **一次只问一个 scope**：来源菜单是 `所有来源`（默认）/`SkillHub`/`ClawHub` 三项——`all` 上游就是一次不带 `source` 的请求，所以仍不存在「两源同屏」「部分源失败提示条」，当前 scope 失败即整页错误态（可重试）。分类行三个 scope 都渲染（同一张 12 类表，计数按 scope 各算），menu 选项与计数来自 `bootScope` 那一份；`all` 下不判「这个来源暂时没有技能」。

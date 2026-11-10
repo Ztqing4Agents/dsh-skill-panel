@@ -159,7 +159,7 @@ const CSS = `
   font-size: 13px; line-height: 18px;
 }
 .skc_cardEnd{ z-index: 1; flex: none; align-items: center; gap: 8px; display: inline-flex; position: relative }
-/* the whole-row click layer: an inset:0 ::after on the title button, .skc_cardEnd floats above */
+/* the whole-row click layer: inset:0 ::after; .skc_cardEnd floats above it */
 .skc_cardOpen{
   flex: 0 1 auto; min-width: 0; max-width: 100%; padding: 0; border: 0; background: 0 0;
   color: inherit; font: inherit; text-align: left; cursor: pointer; text-overflow: ellipsis; white-space: nowrap;
@@ -197,7 +197,7 @@ const CSS = `
 .skc_skeletonHeading{ width: 48px }
 .skc_skeletonTitle{ width: min(144px, 60%) }
 .skc_skeletonDescription{ width: min(280px, 85%) }
-/* keep the skeleton grey on its own rule and clip it like .skc_cardIcon */
+/* skeleton stays grey on its own rule, clipped like .skc_cardIcon */
 .skc_skeletonIcon{
   border-color: #0000;
   background: var(--dsw-alias-bg-skeleton); background-clip: padding-box;
@@ -250,7 +250,7 @@ const CSS = `
 /* market: toolbar and chips; only the trailing menu cancels the gap (decisions K) */
 .skc_marketSection{ flex-direction: column; gap: 16px; display: flex }
 .skc_marketToolbar{ flex-wrap: wrap; align-items: center; gap: 8px; display: flex }
-/* the clear button lives inside the field, so showing it never moves the toolbar */
+/* the clear button sits inside the field, so it never moves the toolbar */
 .skc_marketSearchField{
   min-width: 120px; flex: 1; align-items: center; display: flex; position: relative;
 }
@@ -293,7 +293,7 @@ const CSS = `
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;
   margin: 0; padding: 0; list-style: none; display: grid;
 }
-/* fills the content box; the concentric radius keeps the hairline on top */
+/* fills the content box; concentric radius keeps the hairline on top */
 /* contain, not cover: upstream wordmarks would be cropped */
 .skc_marketIconImg{
   border-radius: calc(var(--dsw-radius-lg) - .5px); width: 100%; height: 100%;
@@ -313,7 +313,7 @@ const CSS = `
 /* one rhythm: 8px here and 8px in the card - every gap has one source */
 .skc_marketBody{ flex-direction: column; gap: 8px; min-width: 0; display: flex }
 .skc_marketMain{ flex-direction: column; flex: 1; gap: 2px; min-width: 0; display: flex }
-/* content-wide, not block-wide; nowrap is load-bearing (a wrapping row breaks before shrinking) */
+/* content-wide, not block-wide; nowrap is load-bearing (it breaks before shrinking) */
 .skc_marketTitleRow{
   flex-wrap: nowrap; align-items: center; gap: 8px; min-width: 0;
   align-self: flex-start; max-width: 100%; display: flex;
@@ -337,12 +337,12 @@ const CSS = `
   -webkit-box-orient: vertical; font-size: 13px; line-height: 20px;
   display: -webkit-box; overflow: hidden;
 }
-/* one line: a 129-char handle must not grow the head 48 -> 66px */
+/* one line: a 129-char handle would grow the head 48 -> 66px */
 .skc_marketMeta{
   color: var(--dsw-alias-label-tertiary); margin: 0; text-overflow: ellipsis;
   white-space: nowrap; overflow: hidden; font-size: 12px; line-height: 18px;
 }
-/* three fixed slots so a column lands on the same x; tabular-nums */
+/* fixed slots, so a column lands on the same x; tabular-nums */
 .skc_marketStats{
   grid-template-columns: repeat(3, minmax(0, 72px)); gap: 8px; justify-content: start;
   margin: 0; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums;
@@ -356,7 +356,7 @@ const CSS = `
 .skc_marketStatValue{ min-width: 0; overflow: hidden; text-overflow: ellipsis }
 /* the source's brand mark: 16px at 2x, decoration not a control */
 .skc_marketSourceMark{ border-radius: var(--dsw-radius-sm); width: 16px; height: 16px; flex: none; display: block }
-/* chips are clamped: a long topic must not stretch the row */
+/* chips clamped: a long topic must not stretch the row */
 .skc_marketTags{ flex-wrap: wrap; gap: 6px; min-width: 0; margin: 0; padding: 0; display: flex; list-style: none }
 .skc_marketTag{
   border: .5px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-sm);
@@ -435,8 +435,12 @@ const CSS = `
 }
 .skc_marketFileSize{ color: var(--dsw-alias-label-tertiary); flex: none; font-size: 12px; line-height: 18px }
 
-/* the installed detail reuses the family above; these are all it adds. The head mirrors the
-   host plugin detail page: one row of icon + actions, then the intro block underneath */
+/* the installed detail reuses the family above; these are all it adds (host head order) */
+.skc_detailPage{ display: flex; flex-direction: column; min-width: 0 }
+/* keeps the window draggable while the header is gone: the header's darwin inset, and it
+   must stay empty - a drag region over the card eats selection and buttons */
+.skc_detailDrag{ flex: none; height: var(--skc-page-top-inset) }
+[data-platform=darwin] .skc_detailDrag{ height: calc(var(--skc-page-top-inset) + var(--dsh-frame-top-clearance, 0px)) }
 .skc_detailTop{ display: flex; align-items: flex-start; gap: 14px }
 .skc_detailActions{ margin-left: auto; display: inline-flex; align-items: center; gap: 8px }
 .skc_detailIntro{ display: flex; flex-direction: column; gap: 6px }

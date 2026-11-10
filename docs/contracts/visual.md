@@ -192,7 +192,14 @@
 }
 
 /* 详情族（.skc_marketDetail / Crumb / DetailHead / DetailTitle / DetailSection / SectionTitle /
-   Facts / Files）的语义是「详情页骨架，两个页签共用」，**不改名**；已安装详情只补这七条 */
+   Facts / Files）的语义是「详情页骨架，两个页签共用」，**不改名**；已安装详情只补这九条 */
+/* 整页替换时 pageBody 里只有这一个详情容器；顶端那条空条只承载窗口拖动（页头没了，
+   这段拖动区不能跟着丢）。高度 = 页头在 darwin 下预留的同一个顶部安全区；拖动区只能
+   挂在这条空条上——整块当拖动区会吃掉文字选择与按钮点击。基础值就是页头的顶部内边距
+   （`--skc-page-top-inset`，web 28px），darwin 再叠加安全区，所以进出详情时头部不跳 */
+.skc_detailPage{ display: flex; flex-direction: column; min-width: 0 }
+.skc_detailDrag{ flex: none; height: var(--skc-page-top-inset) }
+[data-platform=darwin] .skc_detailDrag{ height: calc(var(--skc-page-top-inset) + var(--dsh-frame-top-clearance, 0px)) }
 /* 头部第一行：图标 + 右侧动作组。14 与宿主行内 gap 同值；图标与动作组顶端对齐，
    所以是 flex-start（不是 center——按钮比 48 图标矮，居中会让图标看着偏下） */
 .skc_detailTop{ display: flex; align-items: flex-start; gap: 14px }
