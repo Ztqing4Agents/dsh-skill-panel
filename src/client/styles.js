@@ -236,10 +236,11 @@ const CSS = `
 @container skc-page-bar (width < 372px){ .skc_pageTabList{ min-width: 0 } }
 
 /* market: toolbar and chips, transcribed from the host market's DiscoverSection.
-   One departure: the host's marketButton rule carries margin-left:-8px to cancel the
-   toolbar's 8px gap, which welds the menus to the search box (and, once a keyword is
-   typed, to the clear button). Both menus keep the class for the weight and the cap;
-   the negative margin is gone - see decisions, appendix K. */
+   One departure: the host's marketButton rule carries margin-left:-8px on both menus,
+   which cancels the toolbar's 8px gap twice and welds all three controls into one run
+   (the search box's border then sits flush against the first menu, and a typed keyword
+   welds the clear button too). Here the first menu keeps its 8px; only the trailing menu
+   cancels the gap, so the two menus read as one group - see decisions, appendix K. */
 .skc_marketSection{ flex-direction: column; gap: 16px; display: flex }
 .skc_marketToolbar{ flex-wrap: wrap; align-items: center; gap: 8px; display: flex }
 /* The search box and its clear button are one control: the button sits inside the field,
@@ -273,6 +274,12 @@ const CSS = `
   outline-offset: 1px;
 }
 .skc_marketSelect{ max-width: 240px; font-weight: 500 }
+/* A ghost button paints no box, so the gap between the two menus reads as the gap plus
+   the trailing menu's own 10px inset: 8 + 10 = 18, against the 8 that separates the
+   search box (which does paint a border) from the first menu. Cancel the gap for the
+   trailing menu only - the pair then reads 8 / 10, and the boxes stay adjacent instead of
+   the host's weld-everything -8 on both. */
+.skc_marketSelectTrailing{ margin-left: -8px }
 .skc_marketSelectLabel{ text-overflow: ellipsis; white-space: nowrap; overflow: hidden }
 .skc_marketChips{ flex-wrap: wrap; align-items: center; gap: 6px; display: flex }
 .skc_marketScope{ color: var(--dsw-alias-label-tertiary); margin: 0; font-size: 13px; line-height: 20px }

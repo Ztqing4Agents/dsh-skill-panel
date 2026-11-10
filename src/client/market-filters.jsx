@@ -221,7 +221,7 @@ export function MarketFilters({ market, t, onInput, onCommit, onFilter }) {
           value={selectedSort}
           items={sortItems}
           menu={menu}
-          className={cn('marketSelect')}
+          className={cn('marketSelect', 'marketSelectTrailing')}
           onToggle={onToggle}
           onSelect={onSelect}
         />
