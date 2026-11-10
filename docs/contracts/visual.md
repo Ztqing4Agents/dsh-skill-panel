@@ -318,7 +318,7 @@
 | 列表 gap / 行外扩 | 2px / `margin:0 -8px` | `.skc_cards` / `.skc_card` |
 | 行内 gap / padding | 14px / 8px → 行高 64px | `.skc_cardHead` |
 | 图标 | 外框 48×48、底色 47×47（`background-clip: padding-box`），`.5px` `border-l3`，`radius-lg`（16px）；**17px / 700** 大写首字母居中；**6 组** accent 10%（天空 12%）底 + accent 实色字按技能名散列，对齐 skillhub.cn，**字母对比度约 2–3:1（刻意放弃原 ≥4.5:1）** | `.skc_cardIcon`（色板与散列见 `src/client/avatar.js`，理由见 A.5 与 `decisions.md` 附录 H） |
-| 名称 / 描述 | 14/20/500 · 13/18 tertiary 单行 | `.skc_cardTitle` / `.skc_cardDesc` |
+| 名称 / 描述 | 14/20/500 · 13/18 tertiary 单行（**已安装行**；市场卡描述三行，刻度在 `docs/contracts/market.md` 附录 F） | `.skc_cardTitle` / `.skc_cardDesc` |
 | 开关 | 36×20（`Switch`），左侧预留 14px + 8px | `.skc_bundleToggle` |
 | 软链标记 | 高 18px，padding 0 6px，11/18，`bg-layer-3`，图标 12px | `.skc_roTag` |
 | 骨架条 | 高 12px，`radius-xs`；`48px` / `min(144px,60%)` / `min(280px,85%)` / `58px×20px` | `.skc_skeleton*` |

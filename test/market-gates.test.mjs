@@ -157,7 +157,16 @@ test('K40 市场刻度逐条落地：网格 280/12、卡片竖排 14、cardOpen 
   assert.match(ruleOf('.skc_marketSkeletonStat'), /width: 56px; height: 12px/, '骨架三段 56×12（新刻度 ⑨）');
   assert.match(ruleOf('.skc_marketSkeletonStat'), /border-radius: var\(--dsw-radius-xs\)/, '骨架三段用 radius-xs');
   assert.match(ruleOf('.skc_marketSkeletonTag'), /width: 48px; height: 19px/, '骨架标签与真件同盒 48×19（新刻度 ⑬）');
-  assert.match(ruleOf('.skc_marketDesc'), /-webkit-line-clamp: 2/, '描述两行（新刻度 ⑩）');
+  // U14: the clamp is a *value* change, not a new tick (market.md 附录 F: `.skc_marketDesc` 由
+  // 1 行 → 2 行（U5）→ 3 行（U14）). The number stays pinned: 3 lines × 18px = the 54px box the
+  // real-machine check measures, so a "just check that line-clamp exists" assertion would let a
+  // silent 2-line regression through.
+  const desc = ruleOf('.skc_marketDesc');
+  assert.match(desc, /-webkit-line-clamp: 3(?!\d)/, '描述三行（U14 取值变更；不算新刻度）');
+  assert.match(desc, /font-size: 13px; line-height: 18px/, '描述刻度 13/18（三行 ⇒ 描述盒 54px）');
+  assert.match(desc, /display: -webkit-box/, '多行截断走 -webkit-box（不是单行 nowrap）');
+  assert.match(desc, /overflow: hidden/, '超出隐藏（第三行末尾省略号）');
+  assert.match(desc, /-webkit-box-orient: vertical/, '竖排方向，配合 clamp');
   // The title keeps its own width (grow 0) and still shrinks (shrink 1 + min-width:0), so
   // the source mark stays right after it and a long title ellipsises instead of wrapping.
   const openRule = ruleOf('.skc_marketCardOpen');

@@ -123,7 +123,7 @@ SkillsPage (page.jsx：页头 + 两个页签)
 └─ tabPanel(market) → MarketPanel (market-panel.jsx)
     ├─ MarketFilters (market-filters.jsx)：Input(250ms 防抖，× 在框内) / Menu(来源 = 所有来源｜SkillHub｜ClawHub) / Menu(排序) —— **工具栏恒三个子元素** / Pill(分类 chips + 数量)
     ├─ 首屏骨架｜整页错误态（当前源失败）｜空态
-    ├─ ul.skc_marketGrid → MarketCard (market-card.jsx) × N（**头部 = 48 头像 + 标题行（标题 + 来源图）/ 作者行 + 安装位**；正文 = 描述 2 行 / 标签 chips / 三段 `评分·下载·收藏`；动作位只有安装；**追加下一页时**尾部 3 张骨架；头像位是 MarketIcon → tileElement）
+    ├─ ul.skc_marketGrid → MarketCard (market-card.jsx) × N（**头部 = 48 头像 + 标题行（标题 + 来源图）/ 作者行 + 安装位**；正文 = 描述 3 行 / 标签 chips / 三段 `评分·下载·收藏`；动作位只有安装；**追加下一页时**尾部 3 张骨架；头像位是 MarketIcon → tileElement）
     ├─ ul 之后：加载更多一行（`skc_marketLoadMore` = 圆点 + `market.loadingMore`，**视觉件 `aria-hidden`**，只在「已有卡片 + 正在追加」时出现；播报仍由上面那条 sr-only `role="status"` 负责）
     ├─ MarketDetail (market-detail.jsx)：面包屑 + 头 + 事实表 + 概览 + 文件
     └─ MarketConfirm (market-confirm.jsx)：Modal（width:min(480px,100vw - 32px)）

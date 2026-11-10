@@ -352,7 +352,7 @@ const CSS = `
   outline-offset: 2px;
 }
 .skc_marketDesc{
-  color: var(--dsw-alias-label-tertiary); -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  color: var(--dsw-alias-label-tertiary); -webkit-line-clamp: 3; -webkit-box-orient: vertical;
   font-size: 13px; line-height: 18px; display: -webkit-box; overflow: hidden;
 }
 /* the author line stays one line: an owner/slug handle can reach 129 characters, and

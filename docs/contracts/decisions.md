@@ -132,7 +132,7 @@
 
 ## 附录 K 市场工具栏间距（2026-11-09）
 
-> 用户指着「技能市场」工具栏右侧那一组（搜索框右端 + `SkillHub ⌄` + `推荐 ⌄`）说「间距有些问题」。实测在隔离实例里做完再定，完整过程见 `.agents/work/wip/U4-toolbar-spacing.md`；刻度表在 `docs/contracts/market.md` 附录 F。
+> 用户指着「技能市场」工具栏右侧那一组（搜索框右端 + `SkillHub ⌄` + `推荐 ⌄`）说「间距有些问题」。实测在隔离实例里做完再定，逐条结论见下表；刻度表在 `docs/contracts/market.md` 附录 F，`test/market-gates.test.mjs` 逐条守着这几个值。
 
 | # | 待定说法 | 实际（逐字证据 / 算式） | 处理 |
 | --- | --- | --- | --- |
@@ -144,7 +144,7 @@
 
 ## 附录 L 市场卡片重排（U5，2026-11-09）
 
-> 用户看完 U2 真机截图说「和我想的不一样」，给了一张 646×360 的草图；用户原话「具体的间距等情况应该是你来定的，这个只是我画的一个草图」。逐行结构见 `.agents/work/wip/U5-card-relayout.md`。
+> 用户看完 U2 真机截图说「和我想的不一样」，给了一张 646×360 的草图；用户原话「具体的间距等情况应该是你来定的，这个只是我画的一个草图」。逐行结构见 `docs/contracts/client.md` §3.9.2 的组件树与 `docs/contracts/market.md` 附录 F 的卡片刻度行。
 
 | # | 待定说法 | 实际（证据 / 算式） | 处理 |
 | --- | --- | --- | --- |
@@ -158,7 +158,7 @@
 
 ## 附录 N ClawHub 数据源改走 SkillHub 镜像（2026-11-09）
 
-> 用户原话：「ClawHub 的数据来源，你看 skillhub.cn/skills?sortBy=score&source=clawhub 这个网站就有下载量等情况」。完整设计见 `.agents/work/wip/U6-clawhub-stats.md`。
+> 用户原话：「ClawHub 的数据来源，你看 skillhub.cn/skills?sortBy=score&source=clawhub 这个网站就有下载量等情况」。字段口径见 `docs/contracts/market.md` §7 与 `docs/contracts/routes.md` §3.7；用例见 `docs/contracts/acceptance.md` 的 K86–K88。
 
 | # | 待定说法 | 实际（实测证据） | 处理 |
 | --- | --- | --- | --- |
@@ -178,7 +178,7 @@
 
 ## 附录 O 筛选向 skillhub.cn 靠拢（2026-11-10）
 
-> 用户原话：「ClawHub 顶部的类别是不是应该有，另外，你看下镜像站的 skillhub 和 clawhub 及其所有来源，是怎么排的（比如所有来源），我想完全向它靠拢」。完整设计见 `.agents/work/wip/U8-source-and-sort-align.md`。
+> 用户原话：「ClawHub 顶部的类别是不是应该有，另外，你看下镜像站的 skillhub 和 clawhub 及其所有来源，是怎么排的（比如所有来源），我想完全向它靠拢」。逐值对照见下表；用例见 `docs/contracts/acceptance.md` 的 K98 与 `docs/contracts/market.md` §7。
 
 | # | 事项 | 站点做法（bundle 抠出 / 实测） | 我们的处置 |
 | --- | --- | --- | --- |
