@@ -178,7 +178,12 @@ test('K40 市场刻度逐条落地：网格 280/12、卡片竖排 14、cardOpen 
   // (② quietly drops back to 4px), so the whole shorthand is pinned.
   assert.match(desc, /margin: 0 0 4px(?!\d)/, '描述 margin: 0 0 4px —— 上边距归零（UA `1em` 会多给 13px）+ 下边距 4px 是 ② 的一半（删了描述→标签退回 4）');
   assert.match(desc, /-webkit-line-clamp: 3(?!\d)/, '描述三行（U14 取值变更；不算新刻度）');
-  assert.match(desc, /font-size: 13px; line-height: 18px/, '描述刻度 13/18（三行 ⇒ 描述盒 54px）');
+  // U17: 13/18 (leading 1.38) read tight; the card's type scale is {16, 18, 20} and 20 is
+  // already on it (the title is 14/20), so the body paragraph moved to 13/20 - three lines
+  // ⇒ a 60px box, and the card grew 187 → 193. Both halves stay pinned: the size and the
+  // line-height are one scale decision, and dropping the size to a bare line-height check
+  // would let 12/20 or 14/20 through.
+  assert.match(desc, /font-size: 13px; line-height: 20px/, '描述刻度 13/20（U17；三行 ⇒ 描述盒 60px）');
   assert.match(desc, /display: -webkit-box/, '多行截断走 -webkit-box（不是单行 nowrap）');
   assert.match(desc, /overflow: hidden/, '超出隐藏（第三行末尾省略号）');
   assert.match(desc, /-webkit-box-orient: vertical/, '竖排方向，配合 clamp');

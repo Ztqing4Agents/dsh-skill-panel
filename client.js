@@ -327,9 +327,13 @@ var __defProp=Object.defineProperty;var __getOwnPropDesc=Object.getOwnPropertyDe
    alone; the 4px bottom margin is deliberate and is the second half of description -> tags
    (body gap 4px + this 4px = 8px). it sits here rather than on the tag row so that a card
    without a summary still reads head -> tags as the plain 8px. */
+/* 13/20 (leading 1.54) is the loose end of the card's type scale on purpose: the three
+   blocks sit 8 / 8 / 4 apart, so the breathing room lives inside the paragraph and the block
+   itself still reads as one piece. 20 is also already on the scale (the title is 14/20), so
+   no fourth line-height joins the card; three lines measure 60px. */
 .skc_marketDesc{
   margin: 0 0 4px; color: var(--dsw-alias-label-tertiary); -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical; font-size: 13px; line-height: 18px;
+  -webkit-box-orient: vertical; font-size: 13px; line-height: 20px;
   display: -webkit-box; overflow: hidden;
 }
 /* the author line stays one line: an owner/slug handle can reach 129 characters, and
