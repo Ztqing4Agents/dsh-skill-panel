@@ -222,8 +222,8 @@
 .skc_detailDanger:disabled{ opacity: .4 }
 /* 正文内滚动盒：宿主在 1440×920 下实测 552px（盒 height:552 + padding:12px 0、overflow-y:auto）。
    552/920 = 0.6，所以取 60vh（推断，不是宿主声明值）。
-   **它紧跟描述、前面没有区块标题**（宿主描述下面直接是 README）；标签行、事实表、文件清单、
-   来源信息全在它下面，其中后两者跟页面滚。三态（loading/error/noBody）也在盒内就地呈现 */
+   **它紧跟描述、前面没有区块标题**（宿主描述下面直接是 README）；版本、来源信息与「查看仓库」
+   全在它下面、跟页面滚（整页以宿主为准：分区/软链 Tag 与事实表不再渲染）。三态在盒内就地呈现 */
 .skc_detailBodyBox{ max-height: 60vh; padding: 12px 0; overflow-y: auto }
 /* 版本区块：标题沿用 14/20/500、右侧小按钮是 Button size=sm；卡片 1px 描边 + radius-lg + 16
    内边距（宿主那张圆角卡，卡内 px 未采，取值按本页既有刻度定）；✓ 圆底 32、底色为 success

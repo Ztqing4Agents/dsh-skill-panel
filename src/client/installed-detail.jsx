@@ -26,10 +26,9 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives';
 
 import { IconTile } from './icon-tile.jsx';
-import { FactsTable } from './market-detail.jsx';
 import { MarkdownBlock } from './markdown.jsx';
 import { cn } from './styles.js';
-import { detailFactsOf, isPending, partitionTagKey, rowKey, switchMode } from './model.js';
+import { isPending, rowKey, switchMode } from './model.js';
 import { EnableSwitch, ReadonlyTag } from './row.jsx';
 
 /** How long the copy button shows the tick, in milliseconds. */
@@ -115,7 +114,6 @@ export function InstalledDetail({
   const body = typeof data?.body === 'string' && data.body.trim() !== '' ? data.body : null;
   const reason = rows?.get?.(key)?.reason ?? null;
   const mode = switchMode(row);
-  const partitionKey = partitionTagKey(row);
   const upstream = row.upstream ?? null;
   const version = typeof row.version === 'string' && row.version !== '' ? row.version : null;
   // The verdict belongs to this row only: a verdict left over from another skill must not
@@ -207,15 +205,6 @@ export function InstalledDetail({
       </div>
       {reason === null ? null : <p className={cn('reason')} role="alert">{reason}</p>}
       <div className={cn('detailBodyBox')}>{bodyContent}</div>
-      {partitionKey === null && row.readonlyReason !== 'symlink' ? null : (
-        <ul className={cn('marketTags')}>
-          {partitionKey === null ? null : <li className={cn('marketTag')}>{t(partitionKey)}</li>}
-          {row.readonlyReason === 'symlink'
-            ? <li className={cn('marketTag')}>{t('row.symlinkReadonly')}</li>
-            : null}
-        </ul>
-      )}
-      <FactsTable rows={detailFactsOf(row, t)} />
       <section className={cn('marketDetailSection')}>
         <div className={cn('detailVersionHead')}>
           <h4 className={cn('marketSectionTitle')}>{t('detail.sectionVersion')}</h4>

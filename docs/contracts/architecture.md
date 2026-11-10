@@ -327,7 +327,7 @@ ledger.readAll() ─────────────────┘   （R5�
 | `src/client/index.jsx` | `apply(ctx)`：注册 locale 字典、注入样式表、注册 `sidebar.panellist` + `main` + `shell.overlay`（toast），返回 disposer |
 | `src/client/api.js` | `SkillCenterApi`：`list()` / `toggle({name,path,enabled})` / `toggleProvider({provider,name,enabled})` / `skillDetail({name})`；文档相对 URL；把 `{code,data,message}` 归一成 `ApiError{code}` |
 | `src/client/state.js` | 模块级 store（`createStore` 形状：`getSnapshot`/`subscribe`/`actions`）：`tab` / `payload` / `status` / `error` / `rows` / `notice` / `detail`（详情三态）/ `detailScrollTop` |
-| `src/client/model.js` | **纯函数**：`toGroups(payload)`、`statusLine(counts, t)`、`rowViewState(row, rows)`、`isPending(rows, key)`、`groupEmptyKey(key)`、`rowByKey(payload, key)`、`detailStateOf(state, key)`、`detailFactsOf(row, t)`、`partitionTagKey(row)` |
+| `src/client/model.js` | **纯函数**：`toGroups(payload)`、`statusLine(counts, t)`、`rowViewState(row, rows)`、`isPending(rows, key)`、`groupEmptyKey(key)`、`rowByKey(payload, key)`、`detailStateOf(state, key)` |
 | `src/client/avatar.js` | **纯函数（无 React）**：`SKC_AVATAR_TONES`（12 组 `{bg, ink}` 粉彩，色相 30° 等分）+ `avatarOf(name)`（首个 `\p{L}`/`\p{N}` 大写字母 + FNV-1a 散列选色），node 可直接测 |
 | `src/client/page.jsx` | 页面组件：`page` → `pageBody` → `pageBar`(header) + 两个 `tabPanel`；骨架/空/错/页脚的组装 |
 | `src/client/row.jsx` | `SkillRow`（首字母头像/标题/描述/`cardEnd`）、`EnableSwitch`（`bundleToggle` + `toggleProgress` + primitives `Switch`）、`ReadonlyTag`（软链只读标记） |

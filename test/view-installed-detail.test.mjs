@@ -279,7 +279,7 @@ test('K114 非字符串版本不画：渲染层只认字符串（扫描层已把
 
 /* ------------------------------------------------- 页面结构（installed-detail.md） */
 
-test('详情页头：软链行只读、没有开关，事实表里有真实位置', () => {
+test('详情页头：软链行只读、没有开关，头部 roTag 是唯一说明（没有事实表）', () => {
   const html = render({
     row: row({
       symlink: true,
@@ -293,9 +293,16 @@ test('详情页头：软链行只读、没有开关，事实表里有真实位�
   assert.equal(html.includes('role="switch"'), false, '软链行的详情头没有开关（硬约束 5 的第二层）');
   assert.ok(html.includes('<span class="skc_roTag"'), '只读标记是 span，不是控件');
   assert.ok(html.includes('软链·只读'), '标记文案');
-  assert.ok(html.includes('<dt>真实位置</dt>'), '事实表有「真实位置」一行');
-  assert.ok(html.includes('<code>/Users/me/Skills/ui-design/SKILL.md</code>'), '真实位置是等宽路径');
-  assert.ok(html.includes('本地'), '分区 Tag 是「本地」');
+  // 整页以宿主为准：事实表整块删掉了，软链只读只由这个标记说明。
+  assert.equal(html.includes('class="skc_marketFacts"'), false, '没有事实表');
+  assert.equal(html.includes('<dt>'), false, '一个 dt 都没有');
+  assert.equal(html.includes('真实位置'), false, '也不再出现「真实位置」文案');
+  // 路径只留在 roTag 的 title 里（宿主同款 tooltip），不再作为可见文本上屏。
+  const realPath = '/Users/me/Skills/ui-design/SKILL.md';
+  assert.equal(html.includes(`>${realPath}<`), false, '真实路径不作为可见文本出现');
+  assert.equal(html.includes(`<code>${realPath}</code>`), false, '也不是等宽路径行（事实表已删）');
+  assert.ok(html.includes(t('row.symlinkTitle', { path: realPath })), '只出现在 roTag 的 title 里');
+  assert.equal(html.includes('本地'), false, '分区 Tag 行也删了，不再出现「本地」');
 });
 
 test('详情页头：行没了只渲染面包屑 + E_NOT_FOUND，不抛异常', () => {
@@ -551,9 +558,7 @@ test('H1 盒后顺序：标签 → 事实表 → 文件 → 来源信息（后�
   const version = html.indexOf(t('detail.sectionVersion'));
   const source = html.indexOf(t('detail.sectionSource'));
   const repo = html.indexOf('class="skc_detailRepoLink"');
-  assert.ok(box < tags, '标签行在正文盒之后');
-  assert.ok(tags < facts, '事实表在标签行之后');
-  assert.ok(facts < version, '版本区块在事实表之后');
+  assert.ok(box < version, '版本区块在正文盒之后');
   assert.ok(version < source, '来源信息在版本区块之后');
   assert.ok(source < repo, '查看仓库在最后');
 
@@ -591,11 +596,11 @@ const checkedAtText = (at) => new Date(at).toLocaleTimeString([], { hour: '2-dig
 
 test('版本区块：标题 + 重新检查，位置在事实表之后、来源信息之前', () => {
   const html = render({ row: marketRow() });
-  const facts = html.indexOf('class="skc_marketFacts"');
+  const box = html.indexOf('class="skc_detailBodyBox"');
   const version = html.indexOf(t('detail.sectionVersion'));
   const source = html.indexOf(t('detail.sectionSource'));
   assert.notEqual(version, -1, '有「版本」区块');
-  assert.ok(facts < version, '版本区块在事实表之后');
+  assert.ok(box < version, '版本区块在正文盒之后');
   assert.ok(version < source, '版本区块在来源信息之前');
   assert.ok(html.includes(`>${t('detail.checkAgain')}</button>`), '有「重新检查」按钮');
   assert.equal(html.includes(FILES_HEADING), false, '「文件」区块已经不存在');
@@ -682,4 +687,48 @@ test('来源信息：没有 version 时代码来源只有 owner/slug，当前版
   const source = html.slice(html.indexOf(t('detail.sectionSource')));
   assert.ok(source.includes(`<dt>${t('detail.factCodeSource')}</dt><dd><code>ake/dev-god</code></dd>`), '没有 @version 尾巴');
   assert.equal(source.includes(t('detail.factVersion')), false, '没有版本就不画「当前版本」这一行');
+});
+
+/* ------------- 整页以宿主为准：分区 Tag 行与事实表整块删除（负向钉住） ------------- */
+
+/** Every row shape that used to paint the tag row and the facts table. */
+const DELETED_BLOCK_ROWS = [
+  ['从市场安装', () => marketRow()],
+  ['本地未分区', () => row({ partition: null })],
+  ['软链只读', () => row({ symlink: true, path: null, realPath: '/Users/me/Skills/ui-design/SKILL.md', writable: false, readonlyReason: 'symlink', partition: 'local' })],
+  ['no-file', () => row({ path: null, writable: false, readonlyReason: 'no-file', partition: 'local' })],
+  ['内置', () => row({ provider: 'runtime', partition: 'builtin', path: null, writable: false, readonlyReason: 'provider-store' })],
+];
+
+test('不再出现标签行与事实表：.skc_marketTags / .skc_marketFacts / 文件区块全为 0', () => {
+  for (const [shape, build] of DELETED_BLOCK_ROWS) {
+    const html = render({ row: build() });
+    assert.equal(html.includes('class="skc_marketTags"'), false, `${shape}：没有标签行`);
+    assert.equal(html.includes('class="skc_marketTag"'), false, `${shape}：连单个 tag 也没有`);
+    // `.skc_marketFacts` 这张类被「来源信息」两行复用：没有上游的行一个都没有，
+    // 有上游的行恰好一个、里面只有 代码来源 / 当前版本（不是被删的技术事实表）。
+    const factsCount = (html.match(/class="skc_marketFacts"/g) ?? []).length;
+    assert.equal(factsCount, shape === '从市场安装' ? 1 : 0, `${shape}：事实表类只可能来自来源信息（实测 ${factsCount}）`);
+    if (factsCount === 1) {
+      const factsBlock = html.slice(html.indexOf('class="skc_marketFacts"'), html.indexOf('</dl>', html.indexOf('class="skc_marketFacts"')));
+      assert.equal((factsBlock.match(/<dt>/g) ?? []).length, 2, '来源信息恰好两行');
+      assert.ok(factsBlock.includes(t('detail.factCodeSource')) && factsBlock.includes(t('detail.factVersion')), '两行是代码来源 + 当前版本');
+    }
+    assert.equal(html.includes(FILES_HEADING), false, `${shape}：没有「文件」区块`);
+    assert.equal(html.includes('class="skc_marketFiles"'), false, `${shape}：没有文件清单`);
+    // 只剩「版本」（+ 有上游时的「来源信息」）两段。
+    const sections = (html.match(/class="skc_marketDetailSection"/g) ?? []).length;
+    assert.equal(sections, shape === '从市场安装' ? 2 : 1, `${shape}：区块只剩 ${sections} 段`);
+  }
+});
+
+test('两块被删后，那五句文案一句都不出现（分区名 / 事实表四个标签）', () => {
+  const gone = ['技能文件', '提供者', '真实位置', '只读原因', '从市场安装', '本地', '内置', '这个技能没有可写的本地文件'];
+  for (const [shape, build] of DELETED_BLOCK_ROWS) {
+    const html = render({ row: build() });
+    for (const text of gone) {
+      // 「本地」只许出现在别的措辞里不受影响：这两块删掉后整页没有它。
+      assert.equal(html.includes(text), false, `${shape}：不出现「${text}」`);
+    }
+  }
 });

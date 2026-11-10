@@ -1,9 +1,9 @@
 # 已安装详情页（内嵌：本地事实 + 当场读盘的正文）
 
 > 类型：规范
-> 读者：改「已安装」页签详情页（`src/client/installed-detail.jsx`）、它的第 12 条路由或它那 33 个文案键的人
+> 读者：改「已安装」页签详情页（`src/client/installed-detail.jsx`）、它的第 12 条路由或它那 25 个文案键的人
 > 真源：`src/client/installed-detail.jsx`、`src/client/state.js` 的 `detail`、`lib/routes.js` 的 detail 路由与 `lib/scan.js` 的 `readSkillContent`
-> 更新触发：改区块顺序、状态机、返回口径、读盘围栏或这 33 个键时，本文件与 `docs/contracts/routes.md` §3.3.3 一起改
+> 更新触发：改区块顺序、状态机、返回口径、读盘围栏或这 25 个键时，本文件与 `docs/contracts/routes.md` §3.3.3 一起改
 > 规模上限：400
 
 `docs/contracts/client.md` §3.9.2 只留指针（那张表已到 400 行档位）。点击边界见 `AGENTS.md` 硬约束 9，刻度见 `docs/contracts/visual.md` A.5。
@@ -21,7 +21,7 @@
 `upstream === null` 是常态，所以**不**拿市场数据兜底：同一个技能在两个页签允许不一致。
 
 ## 数据：Row 快照 + 第 12 条路由
-- 事实（路径 / 真实位置 / 提供者 / 只读原因 / 版本）全部来自列表里的 `Row`：打开详情**不重扫列表、不重拉 `list`**。
+- 身份与版本（`upstream` / `version` / `name`）来自列表里的 `Row`：打开详情**不重扫列表、不重拉 `list`**。**整页以宿主为准**：分区 Tag、软链 Tag、技能文件/真实位置/提供者/只读原因那张事实表都不渲染（宿主没有这些块）；软链只读只靠头部的「软链·只读」标记说明，`no-file` 行不解释原因——这两条是有意的。
 - 正文与文件清单来自第 12 条路由 `GET /api/dsh-skill-center/detail?name=<kebab>` → `SkillContent{name,path,size,truncated,body,files,filesTruncated}`；围栏见 `docs/contracts/routes.md` §3.3.3。
 - `body === null` 是「这条没有可读文件」（内置行）⇒ `detail.noBody` 文案，**不是错误**；`files === null` 时文件段整段不渲染。
 - `Row.version` 是展示字段（`_meta.json` 的 `version`，0 次新增磁盘读），**不进任何判据**；为空时版本 Tag 整块不渲染，不写「未知」。
@@ -37,14 +37,12 @@
 | 3 | 标题组 | `.skc_detailIntro`（图标下方纵向，`gap:8`；到图标行 20 = 列 gap 32 − 12）——**四段，顺序固定**：标题 `h3.skc_marketDetailTitle`（20/28/500）+ 版本 Tag（复用 `market.metaVersion` = `v{version}`，有值才画）→ **作者行** `.skc_detailAuthor`（复用 `market.metaAuthor` = `@owner/slug`，**12/18 tertiary mono**，仅 `row.upstream !== null` 渲染）→ **调用名 + 复制**（`detail.callName` 标签 + 等宽 kebab + `detail.copy`；它顶替宿主的包名行）→ 描述（**`.skc_marketDetailDesc` 14/22 不截断**，空串整块不渲染） |
 | 4 | 失效原因（可选） | `reason` 非空时一行 `.skc_reason`（`role="alert"`），紧跟在标题组之后 |
 | 5 | 正文盒 | **紧跟描述**，**前面没有区块标题**（宿主也是描述下面直接是 README，`market.detailOverview` 只给市场详情用）：`.skc_detailBodyBox`（`max-height:60vh; padding:12px 0; overflow-y:auto`，宿主 1440×920 实测 552px = 60vh；不加 `tabindex`、不拦 `wheel`）。**三态与空态都在盒内就地呈现**：`loading` → 一行 `detail.loading`；`error` → 一行 `detail.error` + 「重试」按钮；`ready` 但无正文 → 一行 `detail.noBody`；`ready` 有正文 → `MarkdownBlock`（必须传 `labels`：6 个 `markdown.*`，缺了它宿主渲染代码围栏时抛错、整段回落纯文本）；`truncated === true` 时正文**下方**再加一行 `detail.truncated` |
-| 6 | 标签行 | 分区 Tag（`detail.partition.*`）+ 软链只读 Tag（仅软链行），`.skc_marketTags` 配方；**在正文盒下方** |
-| 7 | 事实表 | 技能文件（等宽）/ 真实位置（仅软链）/ 提供者（原样，不翻译）/ 只读原因（无开关的行：软链复用 `row.symlinkReadonly`，`no-file` 用 `detail.readonlyNoFile`；`provider-store` 有开关，不写原因）；**在正文盒下方** |
-| 8 | 版本（**新区块**） | `detail.sectionVersion` 标题 + 右侧小按钮（`detail.checkAgain` / `detail.checking`，检查中禁用）；下面是圆角卡：`upToDate` 显示 ✓ 圆底 + `detail.upToDate` + `detail.checkedAt`（`HH:MM`）；`newer` 显示 `detail.newerVersion`（带上游版本号）+ `detail.checkedAt`；其余四态在卡内各一行文案（见「检查更新」）。**本地技能（没有 upstream）也渲染本区块**，落在 `unavailable` |
-| 9 | 来源信息（**两行**） | 仅 `row.upstream !== null`：`detail.sectionSource` 标题 + 复用事实表样式（`.skc_marketFacts`，左 label / 右值、`.5px` 分隔线）——`detail.factCodeSource`：`owner/slug@version`（无 version 就 `owner/slug`，**值等宽**）；`detail.factVersion`：`row.version`（等宽），**没有 version 时这一行整行不渲染** |
-| 10 | 查看仓库 | 仅详情出参带 `repoUrl` 时（= 有 upstream 身份）：右下角 `<a href={data.repoUrl} target="_blank" rel="noopener noreferrer">` + `detail.viewRepo` + 外链图标；13/20 tertiary、hover 变主色。**URL 由宿主拼好**（`https://skillhub.cn/skills/<owner>/<slug>`，见 `docs/contracts/routes.md` §3.3.3）：浏览器半部不造上游 URL、不发请求（硬约束 13）。**详情页内的普通链接**，不属于「整区可点」（硬约束 9），`target=_blank` 只有这一处 |
-| 11 | 失效态 | 按 `detail.key` 在 `payload` 里取不到行 ⇒ 只渲染面包屑 + `error.E_NOT_FOUND` 一行，不抛异常 |
+| 6 | 版本（**新区块**） | `detail.sectionVersion` 标题 + 右侧小按钮（`detail.checkAgain` / `detail.checking`，检查中禁用）；下面是圆角卡：`upToDate` 显示 ✓ 圆底 + `detail.upToDate` + `detail.checkedAt`（`HH:MM`）；`newer` 显示 `detail.newerVersion`（带上游版本号）+ `detail.checkedAt`；其余四态在卡内各一行文案（见「检查更新」）。**本地技能（没有 upstream）也渲染本区块**，落在 `unavailable` |
+| 7 | 来源信息（**两行**） | 仅 `row.upstream !== null`：`detail.sectionSource` 标题 + 复用事实表样式（`.skc_marketFacts`，左 label / 右值、`.5px` 分隔线）——`detail.factCodeSource`：`owner/slug@version`（无 version 就 `owner/slug`，**值等宽**）；`detail.factVersion`：`row.version`（等宽），**没有 version 时这一行整行不渲染** |
+| 8 | 查看仓库 | 仅详情出参带 `repoUrl` 时（= 有 upstream 身份）：右下角 `<a href={data.repoUrl} target="_blank" rel="noopener noreferrer">` + `detail.viewRepo` + 外链图标；13/20 tertiary、hover 变主色。**URL 由宿主拼好**（`https://skillhub.cn/skills/<owner>/<slug>`，见 `docs/contracts/routes.md` §3.3.3）：浏览器半部不造上游 URL、不发请求（硬约束 13）。**详情页内的普通链接**，不属于「整区可点」（硬约束 9），`target=_blank` 只有这一处 |
+| 9 | 失效态 | 按 `detail.key` 在 `payload` 里取不到行 ⇒ 只渲染面包屑 + `error.E_NOT_FOUND` 一行，不抛异常 |
 
-顺序一句话：**面包屑 → 头行 → 标题组（标题+版本 / 作者 / 调用名+复制 / 描述）→ [reason] → 正文盒 → 标签行 → 事实表 → 版本 → 来源信息 → 查看仓库**。正文紧跟描述、其余技术区全在盒下；盒内滚正文，盒外跟页面滚。
+顺序一句话：**面包屑 → 头行（49 图标 + 卸载占位 + 开关 / 软链只读）→ 标题组（标题+版本 / 作者 / 调用名+复制 / 描述）→ [reason] → 正文盒 → 版本 → 来源信息 → 查看仓库**。正文紧跟描述，其余技术区全在盒下；盒内滚正文，盒外跟页面滚。
 
 **文件清单已整块删除**（U1e）：宿主详情页没有文件清单，底部的技术区是「版本 / 来源信息 / 查看仓库」。`market.detailFiles` 与 `detail.filesTruncated` 两个键**留着**——市场详情仍用前者，后者留给以后真需要时；本页不再渲染它们。
 
@@ -78,11 +76,11 @@ store.detailScrollTop = number      // 打开详情前记下的 .skc_pageBody �
 - **不支持 Esc**（与市场详情一致：加全局 keydown 会让两个详情页行为分叉）。
 - 开关：详情头里就是行内那一个 `EnableSwitch`，读同一份 `state.rows`；失败原因 `.skc_reason` 照旧显示在头下。
 
-## 文案（`locale/*.json`，单层扁平点号键，33 个）
+## 文案（`locale/*.json`，单层扁平点号键，25 个）
 
-`detail.{back,callName,copy,copied,loading,error,retry,noBody,truncated,filesTruncated,uninstall,uninstallSoon}`、版本与底部四个键组 `detail.{sectionVersion,checkAgain,checking,checkIdle,upToDate,checkedAt,newerVersion,checkUnavailable,checkFailed,factCodeSource,factVersion,viewRepo}`（`detail.back` = 「技能」/`Skills`，头部的面包屑根）、`detail.partition.{builtin,local,installed}`、`detail.{factPath,factRealPath,factProvider,factReadonly,readonlyNoFile,sectionSource}`。
+`detail.{back,callName,copy,copied,loading,error,retry,noBody,truncated,filesTruncated,uninstall,uninstallSoon}`、版本与底部四个键组 `detail.{sectionVersion,checkAgain,checking,checkIdle,upToDate,checkedAt,newerVersion,checkUnavailable,checkFailed,factCodeSource,factVersion,viewRepo}`（`detail.back` = 「技能」/`Skills`，头部的面包屑根）、`detail.sectionSource`（来源信息标题）。
 
-复用而不造同义词：`row.{enable,disable,applying,symlinkReadonly,symlinkTitle}`、`market.{detailOverview,detailFiles,factSource}` + `market.source.*`、`error.E_NOT_FOUND`。另加 6 个 `markdown.*`（`codeCopy`/`codeCopied`/`codePlain`/`codeWrap`/`codeUnwrap`/`footnotes`）：它们不是本页文案，而是宿主 `MarkdownText` 的**代码围栏与脚注 chrome**，`labels` 缺了它宿主读 `labels.code.copyLabel` 直接抛错、整篇正文回落成纯文本，所以两个详情页共用这一段。全字典 117 → 136 → 142 → 144 → **156**。`detail.filesTruncated` 与 `market.detailFiles` 不再上屏（文件清单已删），键留着。版本 Tag 与作者行不新增键：分别复用 `market.metaVersion`（`v{version}`）与 `market.metaAuthor`（`@{author}`）。
+复用而不造同义词：`row.{enable,disable,applying,symlinkReadonly,symlinkTitle}`、`market.{detailOverview,detailFiles,factSource}` + `market.source.*`、`error.E_NOT_FOUND`。另加 6 个 `markdown.*`（`codeCopy`/`codeCopied`/`codePlain`/`codeWrap`/`codeUnwrap`/`footnotes`）：它们不是本页文案，而是宿主 `MarkdownText` 的**代码围栏与脚注 chrome**，`labels` 缺了它宿主读 `labels.code.copyLabel` 直接抛错、整篇正文回落成纯文本，所以两个详情页共用这一段。全字典 117 → 136 → 142 → 144 → 156 → **148**（`check-i18n` 口径：146 个扁平键 + `meta` 两项；删掉分区 Tag 与事实表的 8 个键）。`detail.filesTruncated` 与 `market.detailFiles` 不再上屏（文件清单已删），键留着。版本 Tag 与作者行不新增键：分别复用 `market.metaVersion`（`v{version}`）与 `market.metaAuthor`（`@{author}`）。
 
 ## 点击边界与复制
 
