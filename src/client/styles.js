@@ -444,16 +444,9 @@ border-bottom: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, 
 .skc_sectionHead{ align-items: baseline; gap: 8px; display: flex }
 .skc_pluginCount{ color: var(--dsw-alias-label-secondary); font-size: 13px; line-height: 20px }
 .skc_pluginDesc{ display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
-.skc_callRow{ display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; position: relative }
+.skc_callRow{ display: flex; align-items: center; gap: 12px; padding: 10px 0; position: relative }
 .skc_callRow + .skc_callRow{ border-top: .5px solid var(--dsw-alias-border-l2) }
-.skc_callRow .skc_cardEnd{ align-self: flex-start; height: 20px }
 .skc_callMeta{ margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code); font-size: 12px; line-height: 18px }
-.skc_pluginState{
-color: var(--dsw-alias-label-secondary); white-space: nowrap; align-items: center; gap: 6px;
-font-size: 13px; line-height: 20px; display: inline-flex;
-}
-.skc_pluginDot{ width: 6px; height: 6px; border-radius: 999px; display: inline-block; background: var(--dsw-alias-state-success-primary) }
-.skc_pluginDotOff{ background: var(--dsw-alias-label-tertiary) }
 @media (hover: hover){ .skc_callRowOpen:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
 .skc_callRowOpen{ border-radius: var(--dsw-radius-xl); margin-inline: -8px; padding-inline: 8px }
 .skc_callRowOpen:active{ background: var(--dsw-alias-interactive-bg-hover) }

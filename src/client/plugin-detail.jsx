@@ -52,13 +52,7 @@ function SkillCallRow({ row, t, rows, onToggle, onOpen }) {
             block is one package), so it is not repeated per row. */}
         {row.displayName ? <p className={cn('callMeta')}>{row.name}</p> : null}
       </div>
-      <div className={cn('cardEnd')}>
-        <span className={cn('pluginState')}>
-          <span className={cn('pluginDot', row.enabled === true ? '' : 'pluginDotOff')} aria-hidden="true" />
-          {t(row.enabled === true ? 'plugin.running' : 'plugin.stopped')}
-        </span>
-        {end}
-      </div>
+      {end === null ? null : <div className={cn('cardEnd')}>{end}</div>}
     </div>
   );
 }

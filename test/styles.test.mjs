@@ -137,12 +137,13 @@ test('A.5 详情图标 49 走修饰类：.skc_cardIcon 仍是 48（列表行不�
   assert.match(detail, /(?:^|;)\s*height\s*:\s*49px/, '修饰类 49 高');
 });
 
-test('A.5 插件页组件行按宿主重排：padding 10 0 / flex-start / 四段 / 状态点 / 发丝线', () => {
+test('A.5 插件页组件行按宿主刻度：padding 10 0 / 垂直居中 / 两段 + 发丝线', () => {
   const row = ruleBody(capturedCss(), '.skc_callRow');
   // 74 = 图标 41 + 名称 20 + gap 2 + 描述 2 行 32 + padding 10×2 —— 与宿主那一行的 74 逐项相等。
   assert.match(row, /(?:^|;)\s*padding\s*:\s*10px 0(?!\d)/, '行高由 padding 10 撑起（74 = 41 + 20 + 2 + 32 + 10×2，不再写死 74）');
   assert.equal(/(?:^|;)\s*height\s*:/.test(row), false, '行高不再写死（内容决定：两行/一行/无描述三档）');
-  assert.match(row, /(?:^|;)\s*align-items\s*:\s*flex-start/, '顶对齐：图标与名称首行齐平');
+  assert.match(row, /(?:^|;)\s*align-items\s*:\s*center/, '垂直居中：图标中线与文字块中线同高（行内状态点已回退，顶对齐随之取消）');
+  assert.equal(/(?:^|;)\s*align-items\s*:\s*flex-start/.test(row), false, '顶对齐那版已经不在');
   assert.match(row, /(?:^|;)\s*gap\s*:\s*12px/, '三段之间 gap 12');
   // 行间发丝线：只在第 2 行起（相邻兄弟选择器），最后一行之后天然没有。
   const sep = ruleBody(capturedCss(), '.skc_callRow + .skc_callRow');
@@ -153,19 +154,11 @@ test('A.5 插件页组件行按宿主重排：padding 10 0 / flex-start / 四段
   assert.match(meta, /font-size\s*:\s*12px/, 'mono 12px');
   assert.match(meta, /line-height\s*:\s*18px/, 'mono 行高 18px');
   assert.match(meta, /color\s*:\s*var\(--dsw-alias-label-tertiary\)/, 'mono 用三级文字色');
-  // 右侧状态字与点。
-  const state = ruleBody(capturedCss(), '.skc_pluginState');
-  assert.match(state, /font-size\s*:\s*13px/, '状态字 13px');
-  assert.match(state, /line-height\s*:\s*20px/, '状态字行高 20px');
-  assert.match(state, /color\s*:\s*var\(--dsw-alias-label-secondary\)/, '状态字用二级文字色');
-  assert.match(state, /align-items\s*:\s*center/, '点与字垂直居中');
-  assert.match(state, /gap\s*:\s*6px/, '点与字 gap 6');
-  const dot = ruleBody(capturedCss(), '.skc_pluginDot');
-  assert.match(dot, /width\s*:\s*6px/, '点 6 宽');
-  assert.match(dot, /height\s*:\s*6px/, '点 6 高');
-  assert.match(dot, /background\s*:\s*var\(--dsw-alias-state-success-primary\)/, '运行中：成功绿');
-  const dotOff = ruleBody(capturedCss(), '.skc_pluginDotOff');
-  assert.match(dotOff, /background\s*:\s*var\(--dsw-alias-label-tertiary\)/, '已停用：三级文字色');
+  // 行内状态点与状态字已回退：「运行中」只剩区块计数那一处，所以这些类不该再留在样式表里。
+  const css = capturedCss();
+  for (const gone of ['.skc_pluginState{', '.skc_pluginDot{', '.skc_pluginDotOff{', '.skc_callRow .skc_cardEnd{']) {
+    assert.equal(css.includes(gone), false, `${gone.replace('{', '')} 已随回退删除`);
+  }
   // 区块头：标题与计数基线对齐、gap 8（计数紧跟标题，不再贴右缘）。
   const head = ruleBody(capturedCss(), '.skc_sectionHead');
   assert.match(head, /align-items\s*:\s*baseline/, '标题与计数基线对齐');

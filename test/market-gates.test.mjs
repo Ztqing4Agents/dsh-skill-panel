@@ -709,7 +709,7 @@ test('K115 visual.md A.5 有整行可点的三条刻度与「待真机取色」'
   }
 });
 
-test('K115 体积门禁抬到 150000，locale 恰好 153 键（含 6 个 markdown.* chrome 标签）', async () => {
+test('K115 体积门禁抬到 150000，locale 恰好 151 键（含 6 个 markdown.* chrome 标签）', async () => {
   const bundleTest = await readFile(join(ROOT, 'test', 'bundle-contract.test.mjs'), 'utf8');
   assert.match(bundleTest, /size < 150_000/, '产物上限是 150000 B');
   assert.equal(/size < 145_000/.test(bundleTest), false, '旧上限 145000 已经不在（不能两个都在）');
@@ -720,14 +720,14 @@ test('K115 体积门禁抬到 150000，locale 恰好 153 键（含 6 个 markdow
   assert.equal(gate.code, 0, `check:i18n 必须 exit 0：${gate.stdout}${gate.stderr}`);
   const summary = /check-i18n: OK \((\d+) keys in both dictionaries/.exec(gate.stdout);
   assert.ok(summary !== null, '门禁输出里带键数');
-  assert.equal(Number(summary[1]), 153, `locale 恰好 153 键（实际 ${summary[1]}）`);
+  assert.equal(Number(summary[1]), 151, `locale 恰好 151 键（实际 ${summary[1]}）`);
 
-  // 口径自查：151 个扁平键 + meta 的两项 = 153（嵌套字典会让界面显示原始键名）。
+  // 口径自查：149 个扁平键 + meta 的两项 = 151（嵌套字典会让界面显示原始键名）。
   const [zh, en] = await Promise.all(['zh', 'en'].map(async (language) => (
     JSON.parse(await readFile(join(ROOT, 'locale', `${language}.json`), 'utf8'))
   )));
   const flat = (dictionary) => Object.keys(dictionary).filter((key) => key !== 'meta');
-  assert.equal(flat(zh).length + Object.keys(zh.meta).length, 153, 'zh：151 扁平 + meta 两项');
+  assert.equal(flat(zh).length + Object.keys(zh.meta).length, 151, 'zh：149 扁平 + meta 两项');
   assert.deepEqual(flat(zh).sort(), flat(en).sort(), 'zh/en 键集一致');
   assert.deepEqual(
     flat(zh).filter((key) => key.startsWith('detail.')).sort(),
@@ -737,11 +737,11 @@ test('K115 体积门禁抬到 150000，locale 恰好 153 键（含 6 个 markdow
     'detail.* 恰好 25 个键（detail.callName 已删：区块标题改用 plugin.skills）',
   );
 
-  // 内置区折块 + 插件页：五个键（列表块副行、区块标题、计数行、行内状态两态）。
+  // 内置区折块 + 插件页：三个键（列表块副行、区块标题、计数行；行内状态点已回退，running/stopped 已删）。
   assert.deepEqual(
     flat(zh).filter((key) => key.startsWith('plugin.')).sort(),
-    ['plugin.countRunning', 'plugin.running', 'plugin.skills', 'plugin.skillsCount', 'plugin.stopped'],
-    'plugin.* 恰好 5 个键（skillsCount 列表块仍在用；running/stopped 是行内状态）',
+    ['plugin.countRunning', 'plugin.skills', 'plugin.skillsCount'],
+    'plugin.* 恰好 3 个键（plugin.countRunning 是唯一说「运行中」的地方）',
   );
 
   // 136 → 142 的那 6 个键不是文案需求，是宿主渲染器的 chrome：`MarkdownText` 的代码块读
