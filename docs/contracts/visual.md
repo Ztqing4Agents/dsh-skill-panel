@@ -208,13 +208,14 @@ min-width: 58px; height: 28px; display: inline-flex; position: relative }
 /* 图标行 → 标题组 = 20（宿主 detailMain 的 margin-top）：列 gap 32 减 12，一处来源；组内 gap 8 */
 .skc_detailIntro{ display: flex; flex-direction: column; gap: 8px; margin-top: -12px }
 /* 作者行 = 宿主的包名行：12/18、tertiary、mono（宿主那行用 ui-monospace 一族） */
-/* 标题下的那一行是**调用名**（原作者行的刻度：12/18 tertiary mono），行内 flex 让复制按钮贴着名字 */
-.skc_detailAuthor{ margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code); font-size: 12px; line-height: 18px }
+/* 标题下的那一行是**调用名**（原作者行刻度 12/18 tertiary mono），行内 flex 让复制按钮贴着名字；
+   行内按钮压到 22 高（.skc_detailCopyInline）——28 高的 ghost 会把这一行撑到 28，intro 比宿主大 9.5px */
+.skc_detailAuthor{ margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code); font-size: 12px; line-height: 18px; align-items: center; gap: 6px; display: inline-flex }
+.skc_detailCopyInline{ height: 22px; min-height: 22px; padding: 0 4px }
 /* 卸载占位：红字 + inset 1px 红环（不是 border，会让高度多 2px），红用 error 令牌 */
 .skc_detailDanger{ --dsh-button-outline-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent); --dsh-hairline-width: 1px; color: var(--dsw-alias-state-error-primary); height: 28px; padding: 0 10px; border-radius: 8px; gap: 4px; font-size: 12px; line-height: 18px }
 .skc_detailDanger:disabled{ opacity: .4 }
-/* 正文盒只有上下两条 0.5px 发丝线（左右 none、圆角 0、背景透明）；色取标签主色 5%：浅 ≈4% 黑、深 ≈5% 白，
-   随主题翻转（--dsw-alias-border-l3 约 12%，重 3 倍不用） */
+/* 正文盒只有上下两条 0.5px 发丝线（左右 none、圆角 0），色取标签主色 5% 随主题翻转（l3 约 12% 太重） */
 .skc_detailBodyBox{ max-height: 60vh; padding: 12px 0; overflow-y: auto; border-top: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent); border-bottom: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent) }
 /* 版本区块只在市场装的技能上渲染：标题 14/20/500 + Button size=sm；卡片 1px 描边 + 16 内边距（卡内
    px 未采）；✓ 圆底 32。「来源信息」复用 .skc_marketFacts（market.md 附录 F） */
@@ -228,13 +229,12 @@ min-width: 58px; height: 28px; display: inline-flex; position: relative }
 /* 「查看仓库」是页内普通链接（不是点击层）：右下角、13/20 tertiary、hover 变主色 */
 .skc_detailRepoLink{ align-self: flex-end; display: inline-flex; align-items: center; gap: 4px; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px; text-decoration: none }
 @media (hover: hover){ .skc_detailRepoLink:hover{ color: var(--dsw-alias-label-primary) } }
-/* 组件式行（宿主「包含的组件」实测 74 / 41 / 13.5·20·500 / 11.5·16 两行）只给插件页用——技能页那节已删，
-   调用名升到标题下。插件页 = .skc_detailTop/.skc_detailIcon(49) + .skc_detailIntro（标题 20/28/500 带
-   min-width:0 + overflow-wrap:anywhere；副行 14/22 margin 0；dd 行盒 22、`<code>` 芯片 18 + padding 2 同高） */
+/* 组件式行（宿主「包含的组件」实测 74 / 41 / 13.5·20·500 / 11.5·16）只给插件页用，技能页那节已删：
+   插件页 = .skc_detailTop/.skc_detailIcon(49) + .skc_detailIntro（标题 20/28/500 可断行；副行 14/22；dd 行盒 22） */
 .skc_callRow{ display: flex; align-items: center; gap: 12px; height: 74px; position: relative }
-/* hover 只给可点的行：插件页的行加 .skc_callRowOpen 才有反馈（硬约束 9），技能页那行不可点故不加 */
+/* hover 只给可点的行（硬约束 9）；margin -8 + padding 8 与 .skc_card 同套外扩，否则插件页灰底比列表窄 16px */
 @media (hover: hover){ .skc_callRowOpen:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
-.skc_callRowOpen{ border-radius: var(--dsw-radius-xl) }
+.skc_callRowOpen{ border-radius: var(--dsw-radius-xl); margin-inline: -8px; padding-inline: 8px }
 .skc_callRowOpen:active{ background: var(--dsw-alias-interactive-bg-hover) }
 .skc_callIcon{ width: 41px; height: 41px; border-radius: 12px }
 .skc_callBody{ display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 }

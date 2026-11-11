@@ -43,7 +43,7 @@ const COPIED_MS = 1500;
  * @param {{name: string, t: Function}} props - the kebab name and the translate function.
  * @returns {import('react').ReactElement} the button and its announcement.
  */
-function CopyName({ name, t }) {
+function CopyName({ name, t, className }) {
   const [copied, setCopied] = useState(false);
   const timer = useRef(null);
   useEffect(() => () => {
@@ -66,6 +66,7 @@ function CopyName({ name, t }) {
       <Button
         variant="ghost"
         size="sm"
+        className={className}
         aria-label={t('detail.copy')}
         title={t('detail.copy')}
         onClick={copy}
@@ -217,7 +218,7 @@ export function InstalledDetail({
             with it. The upstream identity still drives source, update check and repo link. */}
         <p className={cn('detailAuthor')}>
           <code>{row.name}</code>
-          <CopyName name={row.name} t={t} />
+          <CopyName name={row.name} t={t} className={cn('detailCopyInline')} />
         </p>
         {row.description === '' ? null : <p className={cn('marketDetailDesc')}>{row.description}</p>}
       </div>

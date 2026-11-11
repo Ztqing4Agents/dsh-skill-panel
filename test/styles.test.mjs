@@ -313,6 +313,16 @@ test('K110 可点行修饰类：.skc_callRowOpen 有 hover 与 active，基底 .
   assert.match(ruleBody(css, '.skc_callRowOpen:hover'), /background:\s*var\(--dsw-alias-interactive-bg-hover\)/, 'hover 底色走宿主令牌');
 });
 
+test('K110 调用名行的行内复制按钮 22 高、可点行外扩与等量内缩', () => {
+  const css = capturedCss();
+  const copy = ruleBody(css, '.skc_detailCopyInline');
+  assert.match(copy, /height:\s*22px/, '行内复制按钮 22 高（28 会把调用名行撑胖，文字级间距比宿主多 4.5px）');
+  assert.match(copy, /min-height:\s*22px/, 'min-height 也钉 22，宿主按钮的 min-height 不会把它顶回去');
+  const rowOpen = ruleBody(css, '.skc_callRowOpen');
+  assert.match(rowOpen, /margin-inline:\s*-8px/, '可点行向左右各外扩 8（与列表块同一取法）');
+  assert.match(rowOpen, /padding-inline:\s*8px/, '外扩用等量 padding 抵消，内容位置不动');
+});
+
 test('K110 行尾座与两处文字兜底：.skc_cardEnd 58×28、标题可断行、事实表 dd 行高 22', () => {
   const css = capturedCss();
   const end = ruleBody(css, '.skc_cardEnd');

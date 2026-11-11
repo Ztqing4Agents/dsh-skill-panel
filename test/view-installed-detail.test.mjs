@@ -324,8 +324,10 @@ test('详情页的调用名是 <code> + 行内复制按钮（不再借用宿主�
   assert.equal(html.includes('skc_callRow'), false, '页面上没有组件式行');
   assert.equal(html.includes('skc_callName'), false, '没有宿主行的名字类');
   assert.equal(html.includes('skc_detailCallName'), false, '旧的等宽调用名类已删除');
-  const copy = /<button type="button" aria-label="复制调用名" title="复制调用名">/.exec(html);
-  assert.ok(copy !== null, '复制是一个带 aria-label 的普通按钮');
+  // 按钮上多了自带类名，所以不再按属性顺序整体匹配，逐项钉。
+  assert.ok(/<button[^>]*aria-label="复制调用名"/.test(html), '复制按钮在，无障碍名是「复制调用名」');
+  assert.ok(/<button[^>]*title="复制调用名"/.test(html), 'title 也是「复制调用名」');
+  assert.ok(/<button[^>]*class="skc_detailCopyInline"/.test(html), '行内复制按钮带专用类（22 高那条规则挂在它身上）');
   assert.ok(html.includes('class="skc_progressAnnouncement" role="status"'), '复制结果有播报位');
   assert.equal(/skc_cardOpen/.test(html), false, '详情页内部没有整行点击层');
   const links = [...html.matchAll(/<a\b[^>]*>/g)].map((match) => match[0]);
@@ -918,10 +920,13 @@ test('描述为空时标题组只有标题 + 调用名行（不渲染空描述�
 test('调用名行内的复制按钮：aria-label 与 title 都是 detail.copy，旁边还有 role=status 播报位', () => {
   const html = render({ row: row({ name: 'ui-design' }) });
   const intro = html.slice(html.indexOf('class="skc_detailIntro"'), html.indexOf('class="skc_detailBodyBox"'));
-  const button = /<button type="button" aria-label="([^"]*)" title="([^"]*)"/.exec(intro);
-  assert.ok(button !== null, '调用名行里有一个带 aria-label 的按钮');
-  assert.equal(button[1], t('detail.copy'), 'aria-label 是 detail.copy');
-  assert.equal(button[2], t('detail.copy'), 'title 也是 detail.copy');
+  const aria = /<button[^>]*aria-label="([^"]*)"/.exec(intro);
+  assert.ok(aria !== null, '调用名行里有一个带 aria-label 的按钮');
+  assert.equal(aria[1], t('detail.copy'), 'aria-label 是 detail.copy');
+  const title = /<button[^>]*title="([^"]*)"/.exec(intro);
+  assert.ok(title !== null, '同一个按钮有 title');
+  assert.equal(title[1], t('detail.copy'), 'title 也是 detail.copy');
+  assert.ok(/<button[^>]*class="skc_detailCopyInline"/.test(intro), '按钮带 skc_detailCopyInline（22 高的行内规格）');
   assert.equal(intro.includes('role="switch"'), false, '调用名行里没有开关');
   assert.ok(intro.includes('role="status"'), '复制结果有播报位');
 });

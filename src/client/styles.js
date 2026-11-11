@@ -419,6 +419,8 @@ font-size: 12px; line-height: 18px;
 margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code);
 font-size: 12px; line-height: 18px; align-items: center; gap: 6px; display: inline-flex;
 }
+.skc_detailCopyInline{ height: 22px; min-height: 22px; padding: 0 4px;
+}
 .skc_detailDanger{
 --dsh-button-outline-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent);
 --dsh-hairline-width: 1px;
@@ -441,7 +443,7 @@ border-bottom: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, 
 @media (hover: hover){ .skc_detailRepoLink:hover{ color: var(--dsw-alias-label-primary) } }
 .skc_callRow{ display: flex; align-items: center; gap: 12px; height: 74px; position: relative }
 @media (hover: hover){ .skc_callRowOpen:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
-.skc_callRowOpen{ border-radius: var(--dsw-radius-xl) }
+.skc_callRowOpen{ border-radius: var(--dsw-radius-xl); margin-inline: -8px; padding-inline: 8px }
 .skc_callRowOpen:active{ background: var(--dsw-alias-interactive-bg-hover) }
 .skc_callIcon{ width: 41px; height: 41px; border-radius: 12px }
 .skc_callBody{ display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 }
