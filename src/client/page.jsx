@@ -99,11 +99,12 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
     return failed;
   }, [api, store]);
 
-  const loadDetail = useCallback(async (row) => {
+  const loadDetail = useCallback(async (row, inFlight) => {
     const key = rowKey(row);
     store.actions.detailLoading(key);
     try {
-      const data = await api.skillDetail({ name: row.name });
+      // `inFlight` lets the slow path reuse the request the prefetch already started.
+      const data = await (inFlight === undefined ? api.skillDetail({ name: row.name }) : inFlight);
       store.actions.detailReady(key, data ?? null);
     } catch (error) {
       store.actions.detailFailed(key, { code: error?.code ?? 'E_UNKNOWN', message: error?.message ?? '' });
@@ -115,18 +116,30 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
    * @param {object} row - the row that was clicked.
    * @returns {void}
    */
-  const openRow = useCallback((row) => {
+  const openRow = useCallback(async (row) => {
     const body = bodyRef.current;
+    const top = body === null ? 0 : body.scrollTop;
     // Two levels remember two offsets: a row opened from a provider page has to come back to
     // that page, not to the list, so the level it was opened from decides which one to write.
-    if (store.getSnapshot().pluginDetail === null) {
-      store.actions.rememberDetailScroll(body === null ? 0 : body.scrollTop);
-    } else {
-      store.actions.rememberPluginScroll(body === null ? 0 : body.scrollTop);
+    if (store.getSnapshot().pluginDetail === null) store.actions.rememberDetailScroll(top);
+    else store.actions.rememberPluginScroll(top);
+    // Read the text before the view changes, for at most 150 ms: a detail that opens on its
+    // final text never has a placeholder frame to move everything below the body.
+    const raw = api.skillDetail({ name: row.name });
+    const settled = raw.then(
+      (data) => ({ data: data ?? null }),
+      (error) => ({ data: { error: { code: error?.code ?? 'E_UNKNOWN' } } }),
+    );
+    const late = new Promise((resolve) => { setTimeout(() => resolve(null), 150); });
+    const first = await Promise.race([settled, late]);
+    if (first === null) {
+      // Too slow to wait for: show the list's own loading state, reusing the request.
+      store.actions.openDetail(row);
+      void loadDetail(row, raw);
+      return;
     }
-    store.actions.openDetail(row);
-    void loadDetail(row);
-  }, [loadDetail, store]);
+    store.actions.openDetail(row, first.data);
+  }, [api, loadDetail, store]);
 
   const closeDetail = useCallback(() => {
     store.actions.closeDetail();

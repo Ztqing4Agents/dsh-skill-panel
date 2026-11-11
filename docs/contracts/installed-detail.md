@@ -83,9 +83,12 @@ store.detailScrollTop = number      // 打开详情前记下的 .skc_pageBody �
 | action | 做什么 |
 | --- | --- |
 | `openDetail(row)` | `detail = {key: rowKey(row), status:'loading', data:null, code:null}`（不碰列表） |
+| `openDetail(row, data)` | 带文本进详情：`data.error` 存在 ⇒ `status:'error'` + `code`；否则 `status:'ready'` + `data`。**首帧即终态** |
 | `detailLoading(key)` | 只在 `detail.key === key` 时回到 `loading`（重试用） |
 | `detailReady(key, data)` / `detailFailed(key, error)` | 只在 `detail.key === key` 时落地；晚到的旧响应因此被丢弃 |
 | `closeDetail()` | `detail = null`（滚动位置由页面的 paint effect 写回） |
+
+**打开详情先取正文、最多等 150 ms**：点行（或插件页里的行）后页面先发 `skillDetail`，用 `Promise.race` 与 150 ms 计时器比速度——数据先到就 `openDetail(row, data)`，详情**首帧就是终态**；超时才 `openDetail(row)` 走上面那条 `loading` 路径，并把同一笔在飞的请求交给 `loadDetail(row, inFlight)` 复用（不发第二遍）。取数失败同样立刻带着 `error` 进详情，不让用户白等。理由是去抖：`loading` 占位（一行 `detail.loading`）与实体正文高度不同，先画占位再换正文会把正文盒下面的**包含的技能 / 版本 / 来源信息**整体下推（QA 实测 50px、`LayoutShift` 0.0074–0.0122）。**不给行加 `onPointerDown` 之类的旁路**：每行仍只有一个 `onClick`（硬约束 9）。
 | `rememberDetailScroll(top)` | 只记 `detailScrollTop`（打开前调一次，此时行还在屏幕上） |
 
 - **打开时把滚动归零**：`detailKey !== null` 的 paint effect 写 `scrollTop = 0`——页头一撤，沿用列表那个偏移会让详情从中间开始。

@@ -274,15 +274,22 @@ export function createStore() {
      * @param {object} row - the row that was opened.
      * @returns {void}
      */
-    openDetail: (row) => {
+    openDetail: (row, data) => {
       const key = rowKey(row);
       // Only a market install gets the version block at all, so a local or built-in row needs no
       // verdict. With a source but no version of its own there is still nothing to compare, and
       // that is the one case the block shows "cannot check".
       const up = row?.upstream ?? null;
       const noVersion = typeof row?.version !== 'string' || row.version === '';
+      // With the text already read (the page waits up to 150 ms for it) the detail opens on its
+      // final state, so nothing below the body has to move once it renders.
+      const text = data === undefined
+        ? { key, status: 'loading', data: null, code: null }
+        : (data?.error === undefined
+          ? { key, status: 'ready', data: data ?? null, code: null }
+          : { key, status: 'error', data: null, code: data.error?.code ?? null });
       set({
-        detail: { key, status: 'loading', data: null, code: null },
+        detail: text,
         check: up !== null && noVersion
           ? { key, busy: false, status: 'unavailable', latestVersion: null, at: null }
           : null,

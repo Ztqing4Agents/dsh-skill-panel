@@ -450,7 +450,7 @@ test('K111 详情打开时行消失：只有面包屑 + error.E_NOT_FOUND，页�
   assert.ok(html.includes('skc_marketCrumb') && html.includes('>技能<'), '面包屑仍可回（detail.back =「技能」）');
 });
 
-test('K111 点行进详情：记偏移 + 只读正文，不重拉 list', async () => {
+test('K111 点行进详情：正文先到就带着数据切视图（首帧即终态），只发一笔 skillDetail', async () => {
   const calls = [];
   const { store, render } = mountPage(recordingApi(calls));
   store.actions.rememberDetailScroll(0);
@@ -460,13 +460,73 @@ test('K111 点行进详情：记偏移 + 只读正文，不重拉 list', async (
   assert.ok(skillRow !== undefined, '页面渲染出了那一行');
   const target = skillRow.props.row;
 
-  skillRow.props.onOpen(target);
-  assert.deepEqual(store.getSnapshot().detail, { key: 'filesystem#ui-design', status: 'loading', data: null, code: null }, '先挂 loading 三态');
-  assert.deepEqual(calls, ['skillDetail:ui-design'], '只发一次正文请求，没有 list');
+  const pending = skillRow.props.onOpen(target);
+  // 还在等正文：视图不动（没有占位帧）。
+  assert.equal(store.getSnapshot().detail, null, '调用后 detail 仍为 null（不先挂 loading）');
+  assert.deepEqual(calls, ['skillDetail:ui-design'], '只发一笔正文请求，没有 list');
 
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(store.getSnapshot().detail.status, 'ready', '答案落地后是 ready');
+  await pending;
+  const snapshot = store.getSnapshot();
+  assert.equal(snapshot.detail.status, 'ready', '正文到手后直接 ready');
+  assert.deepEqual(snapshot.detail.data, { body: 'text', files: [], filesTruncated: false }, 'data 就是那份正文');
+  assert.equal(snapshot.detail.key, 'filesystem#ui-design', '键没歪');
+  assert.deepEqual(calls, ['skillDetail:ui-design'], '一笔请求：不重拉 list、不发第二遍正文');
   assert.equal(store.getSnapshot().payload.groups.length, 3, '列表快照还在（不重扫）');
+});
+
+test('K111 点行进详情：150 ms 还没到就退回 loading 态，正文后来到达也只会有 1 笔请求', async () => {
+  const calls = [];
+  let release = () => {};
+  const api = {
+    list: async () => { calls.push('list'); },
+    toggle: async () => {},
+    toggleProvider: async () => {},
+    skillDetail: (arg) => {
+      calls.push(`skillDetail:${arg?.name}`);
+      return new Promise((resolve) => { release = () => resolve({ body: '迟到正文', files: [], filesTruncated: false }); });
+    },
+    marketDetail: async () => ({ item: { version: '1.2.4' } }),
+  };
+  const { store, render } = mountPage(api);
+  const skillRow = elementsOf(render()).find(
+    (element) => element.type === modules.row.SkillRow && element.props.row.name === 'ui-design',
+  );
+  const pending = skillRow.props.onOpen(skillRow.props.row);
+  assert.equal(store.getSnapshot().detail, null, '刚点下去还在等');
+
+  await new Promise((resolve) => setTimeout(resolve, 220));
+  assert.equal(store.getSnapshot().detail.status, 'loading', '超过 150 ms 退回老的 loading 路径');
+  assert.deepEqual(calls, ['skillDetail:ui-design'], '超时这条也只发了一笔');
+
+  release();
+  await pending;
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(store.getSnapshot().detail.status, 'ready', '正文迟到也照样落成 ready');
+  assert.equal(store.getSnapshot().detail.data.body, '迟到正文', '用的是同一笔请求的结果');
+  assert.deepEqual(calls, ['skillDetail:ui-design'], '全程 1 笔正文请求、0 笔 list');
+});
+
+test('openDetail 两个入口：带 data 就是 ready、带 error 就是 error，check 的前置判定不受影响', () => {
+  const store = createStore();
+  store.actions.ready(payload());
+  const localRow = row({ name: 'ui-design', partition: 'installed', rule: 'R7' });
+
+  store.actions.openDetail(localRow, { body: '正文', files: [], filesTruncated: false });
+  assert.equal(store.getSnapshot().detail.status, 'ready', '带正文 ⇒ ready');
+  assert.equal(store.getSnapshot().detail.data.body, '正文', '正文落位');
+  assert.equal(store.getSnapshot().check, null, '没有 upstream ⇒ check 仍是 null');
+
+  store.actions.openDetail(localRow, { error: { code: 'E_READ' } });
+  assert.equal(store.getSnapshot().detail.status, 'error', '带 error ⇒ error');
+  assert.equal(store.getSnapshot().detail.code, 'E_READ', 'code 落位');
+  assert.equal(store.getSnapshot().detail.data, null, 'error 时没有 data');
+
+  // 有 upstream 但没有本地版本：两个入口都应该给出「无法检查」的前置判定。
+  const upstreamRow = row({ name: 'versioned', partition: 'installed', rule: 'R7', upstream: { kind: 'skillhub', owner: 'ake', slug: 'versioned' }, version: null });
+  store.actions.openDetail(upstreamRow, { body: '正文' });
+  assert.equal(store.getSnapshot().check.status, 'unavailable', 'ready 入口也走前置判定');
+  store.actions.openDetail(upstreamRow, { error: { code: 'E_READ' } });
+  assert.equal(store.getSnapshot().check.status, 'unavailable', 'error 入口同样走前置判定');
 });
 
 test('K111 面包屑返回：detail 变 null 且不再请求任何路由', async () => {
