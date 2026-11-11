@@ -212,30 +212,17 @@ export function InstalledDetail({
             ? <Tag tone="neutral">{t('market.metaVersion', { version: row.version })}</Tag>
             : null}
         </div>
-        {upstream === null
-          ? null
-          : (
-            <p className={cn('detailAuthor')}>
-              {t('market.metaAuthor', { author: `${upstream.owner}/${upstream.slug}` })}
-            </p>
-          )}
+        {/* The call name sits where the author line used to be: it is what a person types to
+            invoke the skill, so it belongs in the title group, and the copy button rides along
+            with it. The upstream identity still drives source, update check and repo link. */}
+        <p className={cn('detailAuthor')}>
+          <code>{row.name}</code>
+          <CopyName name={row.name} t={t} />
+        </p>
         {row.description === '' ? null : <p className={cn('marketDetailDesc')}>{row.description}</p>}
       </div>
       {reason === null ? null : <p className={cn('reason')} role="alert">{reason}</p>}
       <div className={cn('detailBodyBox')}>{bodyContent}</div>
-      <section className={cn('marketDetailSection')}>
-        <h4 className={cn('marketSectionTitle')}>{t('plugin.skills')}</h4>
-        <div className={cn('callRow')}>
-          <IconTile iconUrl={iconUrl} title={row.name} className="callIcon" />
-          <div className={cn('callBody')}>
-            <p className={cn('callName')}>{row.name}</p>
-            {row.description === '' ? null : <p className={cn('callDesc')}>{row.description}</p>}
-          </div>
-          <div className={cn('cardEnd')}>
-            <CopyName name={row.name} t={t} />
-          </div>
-        </div>
-      </section>
       {upstream === null ? null : (
       <section className={cn('marketDetailSection')}>
         <div className={cn('detailVersionHead')}>

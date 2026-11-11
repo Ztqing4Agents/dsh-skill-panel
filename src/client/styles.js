@@ -417,7 +417,7 @@ font-size: 12px; line-height: 18px;
 .skc_detailIntro{ display: flex; flex-direction: column; gap: 8px; margin-top: -12px }
 .skc_detailAuthor{
 margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code);
-font-size: 12px; line-height: 18px;
+font-size: 12px; line-height: 18px; align-items: center; gap: 6px; display: inline-flex;
 }
 .skc_detailDanger{
 --dsh-button-outline-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent);

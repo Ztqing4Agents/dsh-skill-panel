@@ -208,6 +208,7 @@ min-width: 58px; height: 28px; display: inline-flex; position: relative }
 /* 图标行 → 标题组 = 20（宿主 detailMain 的 margin-top）：列 gap 32 减 12，一处来源；组内 gap 8 */
 .skc_detailIntro{ display: flex; flex-direction: column; gap: 8px; margin-top: -12px }
 /* 作者行 = 宿主的包名行：12/18、tertiary、mono（宿主那行用 ui-monospace 一族） */
+/* 标题下的那一行是**调用名**（原作者行的刻度：12/18 tertiary mono），行内 flex 让复制按钮贴着名字 */
 .skc_detailAuthor{ margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code); font-size: 12px; line-height: 18px }
 /* 卸载占位：红字 + inset 1px 红环（不是 border，会让高度多 2px），红用 error 令牌 */
 .skc_detailDanger{ --dsh-button-outline-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent); --dsh-hairline-width: 1px; color: var(--dsw-alias-state-error-primary); height: 28px; padding: 0 10px; border-radius: 8px; gap: 4px; font-size: 12px; line-height: 18px }
@@ -227,10 +228,9 @@ min-width: 58px; height: 28px; display: inline-flex; position: relative }
 /* 「查看仓库」是页内普通链接（不是点击层）：右下角、13/20 tertiary、hover 变主色 */
 .skc_detailRepoLink{ align-self: flex-end; display: inline-flex; align-items: center; gap: 4px; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px; text-decoration: none }
 @media (hover: hover){ .skc_detailRepoLink:hover{ color: var(--dsw-alias-label-primary) } }
-/* 组件式行（宿主「包含的组件」实测 74 / 41 / 13.5·20·500 / 11.5·16 两行）用在内置块与插件页，不新增类：
-   块 = .skc_card + .skc_cardOpen；插件页 = .skc_detailTop/.skc_detailIcon(49) + .skc_detailIntro（标题
-   20/28/500 带 min-width:0 + overflow-wrap:anywhere 换行不裁；副行 14/22 margin 0；dd 行盒 22、其中
-   `<code>` 芯片 18 + 上下 padding 2 = 同高） */
+/* 组件式行（宿主「包含的组件」实测 74 / 41 / 13.5·20·500 / 11.5·16 两行）只给插件页用——技能页那节已删，
+   调用名升到标题下。插件页 = .skc_detailTop/.skc_detailIcon(49) + .skc_detailIntro（标题 20/28/500 带
+   min-width:0 + overflow-wrap:anywhere；副行 14/22 margin 0；dd 行盒 22、`<code>` 芯片 18 + padding 2 同高） */
 .skc_callRow{ display: flex; align-items: center; gap: 12px; height: 74px; position: relative }
 /* hover 只给可点的行：插件页的行加 .skc_callRowOpen 才有反馈（硬约束 9），技能页那行不可点故不加 */
 @media (hover: hover){ .skc_callRowOpen:hover{ background: var(--dsw-alias-interactive-bg-hover) } }

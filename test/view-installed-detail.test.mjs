@@ -318,15 +318,16 @@ test('详情页头：行没了只渲染面包屑 + E_NOT_FOUND，不抛异常', 
   assert.equal(html.includes('data-stub-markdown'), false, '失效态不渲染正文');
 });
 
-test('详情页的调用名按宿主「包含的组件」行渲染：普通 <p>（不是等宽 code），复制仍是普通按钮', () => {
+test('详情页的调用名是 <code> + 行内复制按钮（不再借用宿主「包含的组件」行）', () => {
   const html = render();
-  assert.ok(/<p class="skc_callName">ui-design<\/p>/.test(html), '名字是 <p class="skc_callName">');
+  assert.ok(html.includes('<p class="skc_detailAuthor"><code>ui-design</code>'), '调用名是等宽 <code>');
+  assert.equal(html.includes('skc_callRow'), false, '页面上没有组件式行');
+  assert.equal(html.includes('skc_callName'), false, '没有宿主行的名字类');
   assert.equal(html.includes('skc_detailCallName'), false, '旧的等宽调用名类已删除');
-  assert.equal(/<code>ui-design<\/code>/.test(html), false, '名字不再是 <code>（宿主那行是常规字体）');
   const copy = /<button type="button" aria-label="复制调用名" title="复制调用名">/.exec(html);
   assert.ok(copy !== null, '复制是一个带 aria-label 的普通按钮');
-  assert.equal(/skc_cardOpen/.test(html), false, '详情页内部复用行的整行点击层');
-  // 整行点击层仍然不是链接：详情里唯一的 <a> 是页尾那个「查看仓库」外链。
+  assert.ok(html.includes('class="skc_progressAnnouncement" role="status"'), '复制结果有播报位');
+  assert.equal(/skc_cardOpen/.test(html), false, '详情页内部没有整行点击层');
   const links = [...html.matchAll(/<a\b[^>]*>/g)].map((match) => match[0]);
   assert.equal(links.length, 1, '详情页只有一个链接');
   assert.match(links[0], /class="skc_detailRepoLink"/, '那个链接就是查看仓库');
@@ -430,72 +431,68 @@ test('H1 卸载是 disabled 占位：type=button、title=卸载功能尚未支�
   assert.equal(uninstall.props['aria-label'], undefined, '没有额外的 aria-label（文案就是按钮文字）');
 });
 
-test('H1 作者行：upstream 非空时是 @owner/slug，为空时整段不渲染', () => {
+test('H1 调用名行：<code>{name}</code> + 复制按钮，upstream 有无都渲染', () => {
   const withUpstream = render({ row: marketRow() });
-  assert.ok(withUpstream.includes('<p class="skc_detailAuthor">@ake/dev-god</p>'), '作者行是 @owner/slug');
+  assert.ok(withUpstream.includes('<p class="skc_detailAuthor"><code>dev-god</code>'), '调用名行是等宽 <code>（不再是 @owner/slug）');
+  assert.ok(withUpstream.includes('aria-label="复制调用名"'), '复制按钮就在这一行里');
+  assert.equal(withUpstream.includes('@ake/dev-god'), false, '作者行不再显示');
   assert.equal(withUpstream.includes('>@undefined'), false, '不会拼出 undefined');
 
   const bare = render({ row: marketRow({ upstream: null }) });
-  assert.equal(bare.includes('skc_detailAuthor'), false, '没有 upstream 就没有作者行');
+  assert.ok(bare.includes('<p class="skc_detailAuthor"><code>dev-god</code>'), '没有 upstream 也照样渲染调用名行');
+  assert.ok(bare.includes('aria-label="复制调用名"'), '复制按钮也在（调用名与上游无关）');
   assert.equal(bare.includes('@ake'), false, '不写作者');
   assert.equal(bare.includes('未知'), false, '也不写「未知」');
 });
 
-test('H1 页尾：正文盒 → 调用名 → 版本 → 来源信息 → 查看仓库；本地行没有版本区块与仓库链接', () => {
+test('H1 页尾：正文盒 → 版本 → 来源信息 → 查看仓库；调用名在正文盒之前；本地行没有版本区块与仓库链接', () => {
   const html = render({ row: marketRow() });
+  const callAt = html.indexOf('class="skc_detailAuthor"');
   const boxAt = html.indexOf('class="skc_detailBodyBox"');
-  const callAt = html.indexOf('class="skc_callRow"');
-  const versionAt = html.indexOf(t('detail.sectionVersion'));
+  const versionAt = html.indexOf(`<h4 class="skc_marketSectionTitle">${t('detail.sectionVersion')}</h4>`);
   const sourceAt = html.indexOf(t('detail.sectionSource'));
   const repoAt = html.indexOf('class="skc_detailRepoLink"');
-  assert.notEqual(callAt, -1, '有「调用名」区块');
+  assert.notEqual(callAt, -1, '标题组里有调用名行');
+  assert.notEqual(boxAt, -1, '有正文盒');
+  assert.ok(callAt < boxAt, '调用名行在正文盒之前（它属于标题组）');
   assert.notEqual(versionAt, -1, '有「版本」区块');
   assert.notEqual(sourceAt, -1, '有「来源信息」');
   assert.notEqual(repoAt, -1, '有「查看仓库」链接');
-  assert.ok(boxAt < callAt, '调用名在正文盒之后');
-  assert.ok(callAt < versionAt, '版本在调用名之后');
+  assert.ok(boxAt < versionAt, '版本在正文盒之后');
   assert.ok(versionAt < sourceAt, '来源信息在版本区块之后');
   assert.ok(sourceAt < repoAt, '查看仓库在来源信息之后（页尾最后一行）');
   assert.equal(html.includes('class="skc_marketFiles"'), false, '页面上没有文件清单');
-  // 来源信息改成两行事实表
+  assert.equal(html.includes('class="skc_callRow"'), false, '技能页没有组件式行（「包含的技能」已删）');
   assert.ok(html.includes(t('detail.factCodeSource')), '有「代码来源」行');
   assert.ok(html.includes(t('detail.factVersion')), '有「当前版本」行');
 
-  // 路由对没有 upstream 的行给 repoUrl:null（客户端只透传，不自己拼），所以这里喂 null 看渲染。
   const bare = render({ row: marketRow({ upstream: null }), data: content({ repoUrl: null }) });
-  // 来源信息恒渲染：本地行只剩代码来源一行（调用名已经独立成块）。
   assert.notEqual(bare.indexOf(t('detail.sectionSource')), -1, '没有 upstream 也有来源信息这一段');
-  assert.equal(bare.includes(`<dt>${t('detail.callName')}</dt>`), false, '来源信息里不再有调用名那行');
-  assert.notEqual(bare.indexOf('class="skc_callRow"'), -1, '调用名有自己的区块');
+  assert.equal(bare.includes(`<dt>${t('detail.callName')}</dt>`), false, '来源信息里没有调用名那行');
+  assert.notEqual(bare.indexOf('class="skc_detailAuthor"'), -1, '没有 upstream 也有调用名行');
   assert.ok(bare.includes(`<dt>${t('detail.factCodeSource')}</dt><dd><code>/skills/ui-design</code></dd>`), '代码来源是目录（path 去掉文件名）');
   assert.equal(bare.includes('class="skc_detailRepoLink"'), false, 'repoUrl 是 null 就不渲染查看仓库');
-  // 版本区块只属于市场装的行：本地/软链/内置整块不渲染，也不再出现「无法检查更新」。
-  // 注意用标记而不是文案：「当前版本」里也含「版本」两个字。
   assert.equal(bare.includes(`<h4 class="skc_marketSectionTitle">${t('detail.sectionVersion')}</h4>`), false, '没有 upstream 就没有版本区块');
   assert.equal(bare.includes('skc_detailVersionHead'), false, '连版本区块的表头都没有');
   assert.equal(bare.includes(t('detail.checkUnavailable')), false, '页面里不出现「无法检查更新」');
 });
 
-test('H1 可交互元素清单：面包屑 / 复制 / 开关 / 重新检查（错误态加重试），卸载不在其中', () => {
+test('H1 可交互元素清单：面包屑 / 开关 / 复制（调用名行内）/ 重新检查（错误态加重试），卸载不在其中', () => {
   const html = render({ row: marketRow() });
   const enabled = [...html.matchAll(/<button(?![^>]*\sdisabled="")[^>]*>/g)].map((match) => match[0]);
   assert.equal(enabled.length, 4, `就绪态四个可点按钮（实测 ${enabled.length}）`);
   assert.match(enabled[0], /class="skc_marketCrumb"/, '面包屑');
   assert.match(enabled[1], /role="switch"/, '开关');
-  // 顺序：复制按钮随调用名挪进「调用名」区块的行尾，DOM 上排在「重新检查」之前。
-  assert.match(enabled[2], /aria-label="复制调用名"/, '第三个是行尾的复制');
+  assert.match(enabled[2], /aria-label="复制调用名"/, '第三个是调用名行内的复制');
   assert.ok(html.includes('>重新检查</button>'), '第四个是重新检查');
-  // 复制按钮在 .skc_callRow 里、且在名字与描述之后（行尾）。
-  const rowBlock = html.slice(html.indexOf('class="skc_callRow"'), html.indexOf('</section>', html.indexOf('class="skc_callRow"')));
-  assert.ok(rowBlock.includes('aria-label="复制调用名"'), '复制按钮在调用名这一行里');
-  assert.ok(rowBlock.indexOf('skc_callName') < rowBlock.indexOf('aria-label="复制调用名"'), '在名字之后');
-  assert.ok(rowBlock.indexOf('skc_callDesc') < rowBlock.indexOf('aria-label="复制调用名"'), '在描述之后（行尾）');
+  // 复制按钮现在在标题组的调用名行里（不再有独立的「包含的技能」区块）。
   const introBlock = html.slice(html.indexOf('class="skc_detailIntro"'), html.indexOf('class="skc_detailBodyBox"'));
-  assert.equal(introBlock.includes('aria-label="复制调用名"'), false, '标题组里不再有复制按钮');
+  assert.ok(introBlock.includes('aria-label="复制调用名"'), '复制按钮在标题组里');
+  assert.ok(introBlock.indexOf('<code>dev-god</code>') < introBlock.indexOf('aria-label="复制调用名"'), '在调用名之后（行内右端）');
+  assert.equal(html.includes('class="skc_callRow"'), false, '页面上没有组件式行');
   assert.ok(html.includes('>重新检查</button>'), '重新检查按钮带文案');
   assert.equal(/<button[^>]*disabled=""[^>]*>[^<]*重新检查/.test(html), false, '空闲时重新检查可点');
   assert.equal(enabled.some((tag) => /卸载/.test(tag)), false, '卸载不在可交互清单里（它是 disabled）');
-  // 有 upstream 时页尾多一个外链——它是 <a>，不是按钮。
   assert.equal((html.match(/<a /g) ?? []).length, 1, '就绪态恰好一个链接（查看仓库）');
 
   const errorHtml = render({ row: marketRow(), status: 'error' });
@@ -503,8 +500,6 @@ test('H1 可交互元素清单：面包屑 / 复制 / 开关 / 重新检查（�
   assert.equal(errorEnabled.length, 5, '错误态五个：面包屑 / 开关 / 复制 / 重新检查 / 重试');
   assert.ok(/重试<\/button>/.test(errorHtml), '重试按钮在场');
 });
-
-/* ------------- H1 本轮（按宿主读数）：正文盒 / 区块节奏单源 / 卸载红环 ------------- */
 
 test('H1 正文装在 .skc_detailBodyBox 里：文件清单与来源信息在盒外', () => {
   const tree = modules.installedDetail.InstalledDetail(props({ row: marketRow() }));
@@ -561,7 +556,7 @@ test('H1 卸载红环不是 border：红字 + 1px 内环走 primitives 的两个
 
 /* ------------- H1 本轮（结构回归）：正文盒紧跟描述，其余内容下移 ------------- */
 
-test('H1 正文盒紧跟描述：中间不夹标签/事实/文件，盒前没有「概览」小标题', () => {
+test('H1 正文盒紧跟描述：中间不夹标签/事实/文件，盒后只剩版本与来源信息两段', () => {
   const html = render({ row: marketRow(), title: '编程大神' });
   const desc = html.indexOf('class="skc_marketDetailDesc"');
   const box = html.indexOf('class="skc_detailBodyBox"');
@@ -573,10 +568,9 @@ test('H1 正文盒紧跟描述：中间不夹标签/事实/文件，盒前没有
   for (const cls of ['skc_marketTags', 'skc_marketFacts', 'skc_marketFiles', 'skc_marketDetailSection', 'skc_marketSectionTitle']) {
     assert.equal(between.includes(cls), false, `描述与正文盒之间没有 .${cls}（实测夹了 ${cls}）`);
   }
-  // 「概览」这个区块标题在已安装详情里已经不画了（market.detailOverview 只给市场详情）。
   assert.equal(html.includes(t('market.detailOverview')), false, '没有「概览」小标题');
-  // 正文盒之后的区块：市场装是 调用名 + 版本 + 来源信息 三段。
-  assert.equal((html.match(/class="skc_marketDetailSection"/g) ?? []).length, 3, '区块恰好三段（调用名/版本/来源）');
+  // 盒后只剩版 本 + 来源信息两段（「包含的技能」那一段已经不在了）。
+  assert.equal((html.match(/class="skc_marketDetailSection"/g) ?? []).length, 2, '区块恰好两段（版本/来源）');
 });
 
 test('H1 盒后顺序：标签 → 事实表 → 文件 → 来源信息（后两者在盒外）', () => {
@@ -734,12 +728,10 @@ test('不再出现标签行与事实表：.skc_marketTags / .skc_marketFacts / �
     const html = render({ row: build() });
     assert.equal(html.includes('class="skc_marketTags"'), false, `${shape}：没有标签行`);
     assert.equal(html.includes('class="skc_marketTag"'), false, `${shape}：连单个 tag 也没有`);
-    // `.skc_marketFacts` 现在只属于「来源信息」这一段，而且**恒渲染**：行数看有没有上游 / 版本。
     const factsCount = (html.match(/class="skc_marketFacts"/g) ?? []).length;
     assert.equal(factsCount, 1, `${shape}：来源信息恒渲染，事实表类恰好 1 个（实测 ${factsCount}）`);
     const factsBlock = html.slice(html.indexOf('class="skc_marketFacts"'), html.indexOf('</dl>', html.indexOf('class="skc_marketFacts"')));
     const rows = (factsBlock.match(/<dt>/g) ?? []).length;
-    // 市场装：代码来源 + 当前版本 = 2；其余：代码来源 1 行（调用名已独立成块）。
     const expectedRows = shape === '从市场安装' ? 2 : 1;
     assert.equal(rows, expectedRows, `${shape}：来源信息 ${expectedRows} 行（实测 ${rows}）`);
     assert.equal(factsBlock.includes(`<dt>${t('detail.callName')}</dt>`), false, '来源信息里没有调用名那行');
@@ -748,9 +740,10 @@ test('不再出现标签行与事实表：.skc_marketTags / .skc_marketFacts / �
     assert.equal(factsBlock.includes(t('detail.factProvider')), false, '没有「提供者」这一行');
     assert.equal(html.includes(FILES_HEADING), false, `${shape}：没有「文件」区块`);
     assert.equal(html.includes('class="skc_marketFiles"'), false, `${shape}：没有文件清单`);
-    // 市场装三段（调用名 + 版本 + 来源信息）；本地/软链/内置两段（调用名 + 来源信息）。
+    // 盒后段数：市场装 = 版本 + 来源信息（2 段）；本地/软链/内置 = 只有来源信息（1 段）。
     const sections = (html.match(/class="skc_marketDetailSection"/g) ?? []).length;
-    assert.equal(sections, shape === '从市场安装' ? 3 : 2, `${shape}：区块 ${shape === '从市场安装' ? 3 : 2} 段（实测 ${sections}）`);
+    assert.equal(sections, shape === '从市场安装' ? 2 : 1, `${shape}：区块 ${shape === '从市场安装' ? 2 : 1} 段（实测 ${sections}）`);
+    assert.equal(html.includes('class="skc_callRow"'), false, `${shape}：技能页没有组件式行`);
   }
 });
 
@@ -767,15 +760,17 @@ test('两块被删后，那五句文案一句都不出现（分区名 / 事实�
 
 /* ------------- 来源信息恒渲染（调用名当第一行）与正文盒上下发丝线 ------------- */
 
-test('来源信息恒渲染：无 upstream 无 version 只剩代码来源一行（调用名已独立成块）', () => {
+test('来源信息恒渲染：无 upstream 无 version 只剩代码来源一行（调用名在标题组里）', () => {
   const html = render({ row: row({ upstream: null, version: null }), data: content({ repoUrl: null }) });
   const block = html.slice(html.indexOf('class="skc_marketFacts"'), html.indexOf('</dl>', html.indexOf('class="skc_marketFacts"')));
   assert.equal((block.match(/<dt>/g) ?? []).length, 1, '只剩代码来源一行');
   assert.equal(block.includes(`<dt>${t('detail.callName')}</dt>`), false, '来源信息里没有调用名');
   assert.ok(block.includes(`<dt>${t('detail.factCodeSource')}</dt><dd><code>/skills/ui-design</code></dd>`), '那一行是技能目录');
-  // 调用名（含复制按钮）搬到了独立区块里。
-  const callBlock = html.slice(html.indexOf('class="skc_callRow"'), html.indexOf('</section>', html.indexOf('class="skc_callRow"')));
-  assert.ok(callBlock.includes('aria-label="复制调用名"'), '复制按钮在调用名行尾');
+  // 调用名（含复制按钮）在标题组的那一行里，不在任何 section 里。
+  const intro = html.slice(html.indexOf('class="skc_detailIntro"'), html.indexOf('class="skc_detailBodyBox"'));
+  assert.ok(intro.includes('<code>ui-design</code>'), '调用名在标题组里');
+  assert.ok(intro.includes('aria-label="复制调用名"'), '复制按钮跟着调用名在标题组里');
+  assert.equal(html.includes('class="skc_callRow"'), false, '没有组件式行');
 });
 
 test('来源信息行数：市场装有 version = 2 行；市场装无 version / 本地 / 软链 / 内置 = 1 行', () => {
@@ -881,7 +876,7 @@ test('市场装无版本：版本区块仍在，卡内写「无法检查更新�
 
 /* ------------- 「调用名」区块：宿主「包含的组件」行样式（本轮） ------------- */
 
-test('区块恒渲染且标题是「包含的技能」：本地/软链/内置/市场装四种行都有（无计数）', () => {
+test('技能页没有「包含的技能」区块：本地/软链/内置/市场装四种行都没有 .skc_callRow', () => {
   for (const [shape, target] of [
     ['市场装', marketRow()],
     ['本地', row({})],
@@ -889,41 +884,45 @@ test('区块恒渲染且标题是「包含的技能」：本地/软链/内置/�
     ['内置', row({ provider: 'runtime', partition: 'builtin', path: null, realPath: null })],
   ]) {
     const html = render({ row: target, data: content({ repoUrl: null }) });
-    assert.ok(html.includes('class="skc_callRow"'), `${shape}：有调用名行`);
-    assert.ok(html.includes(`<h4 class="skc_marketSectionTitle">${t('plugin.skills')}</h4>`), `${shape}：标题是「包含的技能」`);
-    assert.equal(/<h4 class="skc_marketSectionTitle">包含的技能\s*\d+/.test(html), false, `${shape}：标题不带计数`);
-    // 复制按钮的无障碍名仍是「复制调用名」（这轮只改了区块标题），所以只钉住 h4 那一层。
-    assert.equal(/<h4[^>]*>调用名/.test(html), false, `${shape}：旧区块标题「调用名」已不再出现`);
+    assert.equal(html.includes('class="skc_callRow"'), false, `${shape}：没有组件式行（那一节只属于插件页）`);
+    assert.equal(html.includes('skc_callIcon'), false, `${shape}：没有行内图标`);
+    assert.equal(html.includes('skc_callName'), false, `${shape}：没有行内名字`);
+    assert.equal(html.includes(`<h4 class="skc_marketSectionTitle">${t('plugin.skills')}</h4>`), false, `${shape}：没有「包含的技能」标题`);
+    // 调用名仍然是标题组里那一行（<code> + 复制）。
+    assert.ok(html.includes(`<code>${target.name}</code>`), `${shape}：调用名行在`);
+    assert.ok(html.includes('aria-label="复制调用名"'), `${shape}：复制按钮在`);
   }
 });
 
-test('调用名行结构：图标 + 名字（普通 p）+ 描述，复制按钮在最右', () => {
+test('技能页没有组件式行：.skc_callRow / skc_callIcon / skc_callName / skc_callDesc 全为 0', () => {
   const html = render({ row: row({ name: 'ui-design', description: 'Comprehensive UI design skill.' }) });
-  const start = html.indexOf('class="skc_callRow"');
-  const block = html.slice(start, html.indexOf('</section>', start));
-  assert.ok(block.includes('class="skc_cardIcon skc_callIcon"'), '图标是 41 的修饰类');
-  assert.ok(block.includes('<p class="skc_callName">ui-design</p>'), '名字是普通 <p>');
-  assert.ok(block.includes('<p class="skc_callDesc">Comprehensive UI design skill.</p>'), '描述是 <p class="skc_callDesc">');
-  const order = ['skc_callIcon', 'skc_callName', 'skc_callDesc', 'aria-label="复制调用名"'].map((needle) => block.indexOf(needle));
-  assert.ok(order.every((at) => at !== -1), '四个部件都在');
-  assert.ok(order[0] < order[1] && order[1] < order[2] && order[2] < order[3], '顺序：图标 → 名字 → 描述 → 复制');
+  for (const cls of ['skc_callRow', 'skc_callIcon', 'skc_callName', 'skc_callDesc']) {
+    assert.equal(html.includes(cls), false, `${cls} 不在这页上（那套类留给插件页）`);
+  }
+  // 这一页的「名字 + 复制」在标题组那一行里。
+  const intro = html.slice(html.indexOf('class="skc_detailIntro"'), html.indexOf('class="skc_detailBodyBox"'));
+  assert.ok(intro.includes('<p class="skc_detailAuthor"><code>ui-design</code>'), '调用名在标题组');
+  assert.ok(intro.includes('aria-label="复制调用名"'), '复制按钮同行');
+  assert.ok(intro.includes('<p class="skc_marketDetailDesc">Comprehensive UI design skill.</p>'), '描述仍是 marketDetailDesc');
 });
 
-test('调用名行：描述为空时不渲染那一行（名字仍是 13.5/20 的单行）', () => {
+test('描述为空时标题组只有标题 + 调用名行（不渲染空描述）', () => {
   const html = render({ row: row({ name: 'ui-design', description: '' }) });
-  const start = html.indexOf('class="skc_callRow"');
-  const block = html.slice(start, html.indexOf('</section>', start));
-  assert.equal(block.includes('skc_callDesc'), false, '没有描述就不渲染 <p class="skc_callDesc">');
-  assert.ok(block.includes('<p class="skc_callName">ui-design</p>'), '名字照旧');
+  const intro = html.slice(html.indexOf('class="skc_detailIntro"'), html.indexOf('class="skc_detailBodyBox"'));
+  assert.equal(intro.includes('skc_marketDetailDesc'), false, '没有描述就不渲染 <p class="skc_marketDetailDesc">');
+  assert.ok(intro.includes('<code>ui-design</code>'), '调用名照旧');
+  assert.ok(intro.includes('skc_marketTitleRow'), '标题行照旧');
+  assert.equal((intro.match(/<p /g) ?? []).length, 1, '标题组里只剩调用名那一行 <p>');
 });
 
-test('调用名行尾的复制按钮：aria-label 与 title 都是 detail.copy，且不是 code', () => {
+test('调用名行内的复制按钮：aria-label 与 title 都是 detail.copy，旁边还有 role=status 播报位', () => {
   const html = render({ row: row({ name: 'ui-design' }) });
-  const start = html.indexOf('class="skc_callRow"');
-  const block = html.slice(start, html.indexOf('</section>', start));
-  const button = /<button type="button" aria-label="([^"]*)" title="([^"]*)"/.exec(block);
-  assert.ok(button !== null, '行尾有一个带 aria-label 的按钮');
+  const intro = html.slice(html.indexOf('class="skc_detailIntro"'), html.indexOf('class="skc_detailBodyBox"'));
+  const button = /<button type="button" aria-label="([^"]*)" title="([^"]*)"/.exec(intro);
+  assert.ok(button !== null, '调用名行里有一个带 aria-label 的按钮');
   assert.equal(button[1], t('detail.copy'), 'aria-label 是 detail.copy');
   assert.equal(button[2], t('detail.copy'), 'title 也是 detail.copy');
-  assert.equal(block.includes('role="switch"'), false, '调用名行里没有开关');
+  assert.equal(intro.includes('role="switch"'), false, '调用名行里没有开关');
+  assert.ok(intro.includes('role="status"'), '复制结果有播报位');
 });
+
