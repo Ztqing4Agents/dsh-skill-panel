@@ -44,8 +44,9 @@ function builtinOf(provider, name, overrides = {}) {
 }
 
 /** A block of one provider, keyed by its plugin package name. */
-function blockOf(provider, names, key = `pkg-${provider}`) {
-  return { key, provider, skills: names.map((name) => builtinOf(provider, name)) };
+function blockOf(provider, names, key = `pkg-${provider}`, extra = {}) {
+  // toPluginBlocks 给每个块都会填 version/description/iconUrl（缺就是 null），fixture 照抄这个形状。
+  return { key, provider, iconUrl: null, version: null, description: null, skills: names.map((name) => builtinOf(provider, name)), ...extra };
 }
 
 /** Render the plugin page. */
@@ -61,25 +62,47 @@ function render(block, setup = {}) {
   }));
 }
 
-test('插件页：面包屑 → 插件包名头（图标 + 名 + 技能数）→ 包含的技能 → 来源信息（内置）', () => {
+test('插件页：面包屑 → 包名头（图标 + 版本 Tag）→ 包含的技能（右侧计数）→ 来源信息', () => {
   const html = render(blockOf('univer', ['sheet', 'docx'], 'dsh-univer-office'));
   const order = [
     'class="skc_marketCrumb"',
     'class="skc_detailTop"',
     `<h3 class="skc_marketDetailTitle">dsh-univer-office</h3>`,
-    t('plugin.skills'),
+    'class="skc_sectionHead"',
     'class="skc_marketFacts"',
   ].map((needle) => html.indexOf(needle));
   assert.ok(order.every((at) => at !== -1), '五段都在');
   assert.deepEqual([...order].sort((a, b) => a - b), order, '顺序：面包屑 → 头 → 包含的技能 → 来源信息');
-  assert.ok(html.includes(t('plugin.skillsCount', { count: 2 })), '头上写着「2 个技能」');
-  // 副行与标题都用技能详情页那一套类，两页才对得齐（本轮对齐改动）。
-  assert.ok(html.includes(`<p class="skc_marketDetailDesc">${t('plugin.skillsCount', { count: 2 })}</p>`), '副行是 marketDetailDesc（不再是 cardDesc）');
-  assert.equal(/<p class="skc_cardDesc">/.test(html.split('skc_marketSectionTitle')[0]), false, '头部不再用 cardDesc');
-  assert.ok(html.includes(`<dt>${t('detail.factCodeSource')}</dt><dd>${t('detail.sourceBuiltin')}</dd>`), '来源信息一行：代码来源 = 内置');
+  // 计数行：区块标题右边那一个 span，文字走 plugin.countRunning。
+  assert.equal(
+    /<span class="skc_pluginCount">([^<]*)<\/span>/.exec(html)?.[1],
+    t('plugin.countRunning', { count: 2, running: 2 }),
+    '计数行写「共 N 个 · M 运行中」',
+  );
+  // 没有 manifest 三件套：没有 Tag、没有副行（intro 里只剩标题行）、来源信息一行 = 包名。
+  assert.equal(/data-tone="neutral"/.test(html), false, '没有 version 就不画 Tag');
+  assert.equal(html.includes('skc_marketDetailDesc'), false, '没有描述就不画副行');
+  assert.ok(html.includes(`<dt>${t('detail.factCodeSource')}</dt><dd><code>dsh-univer-office</code></dd>`), '来源信息一行：代码来源 = 包名');
+  assert.equal(html.includes(`<dt>${t('detail.factVersion')}</dt>`), false, '没有 version 就没有「当前版本」行');
   // 挂点仍是 provider id（开关写盘用它），包名单列一个属性。
   assert.ok(html.includes('data-skc-plugin-detail="univer"'), '插件页挂点 = provider id');
   assert.ok(html.includes('data-skc-plugin-pkg="dsh-univer-office"'), '包名在 data-skc-plugin-pkg 上');
+
+  // 三件套齐（version + description）：Tag、副行、来源信息两行都跟着变。
+  const full = render(blockOf('univer', ['sheet', 'docx'], 'dsh-univer-office', { version: '0.4.0', description: 'DSH × Univer integration.' }));
+  assert.ok(full.includes('<span data-tone="neutral">v0.4.0</span>'), '标题旁有版本 Tag');
+  // 副行复用技能页那一套类，只多一个 pluginDesc 修饰类（两行裁切只挂在修饰类上，见 styles 的 K110）。
+  const descTag = /<p class="([^"]*)">DSH × Univer integration\.<\/p>/.exec(full);
+  assert.ok(descTag !== null, '副行是插件描述');
+  assert.ok(descTag[1].split(' ').includes('skc_marketDetailDesc'), '副行带 marketDetailDesc（与技能页共用排版）');
+  assert.ok(descTag[1].split(' ').includes('skc_pluginDesc'), '副行还带 pluginDesc（两行裁切只加这个修饰类）');
+  assert.ok(full.includes(`<dd><code>dsh-univer-office@0.4.0</code></dd>`), '代码来源 = 包名@版本');
+  assert.ok(full.includes(`<dt>${t('detail.factVersion')}</dt><dd><code>0.4.0</code></dd>`), '多一行「当前版本」');
+  assert.equal(
+    /<span class="skc_pluginCount">([^<]*)<\/span>/.exec(full)?.[1],
+    t('plugin.countRunning', { count: 2, running: 2 }),
+    '计数行与有没有三件套无关',
+  );
 });
 
 test('插件页没有版本区块、没有查看仓库、也没有「无法检查更新」', () => {

@@ -194,8 +194,7 @@ min-width: 58px; height: 28px; display: inline-flex; position: relative }
    Facts / Files）的语义是「详情页骨架，两个页签共用」，**不改名**；已安装详情只补这些。
    以下刻度全部对照宿主「插件详情页」真机读数（1440×920、DPR 1，见
    `docs/reference/host-plugin-page.md` §7 与 `.agents/work/scratch/host-detail-metrics.md`） */
-/* 整页替换时 pageBody 里只有这一个详情容器；空条只承载窗口拖动（页头没了这段不能丢），高度 =
-   页头预留的同一顶部内边距 + darwin 安全区，进出详情头部不跳；拖动区挂整块会吃掉选择与点击 */
+/* 整页替换时 pageBody 里只有这一个详情容器；空条只承载窗口拖动（页头没了这段不能丢），高度 = 页头预留的同一顶部内边距 + darwin 安全区，进出详情头部不跳；拖动区挂整块会吃掉选择与点击 */
 .skc_detailPage{ display: flex; flex-direction: column; min-width: 0 }
 .skc_detailDrag{ flex: none; height: var(--skc-page-top-inset) }
 [data-platform=darwin] .skc_detailDrag{ height: calc(var(--skc-page-top-inset) + var(--dsh-frame-top-clearance, 0px)) }
@@ -208,8 +207,7 @@ min-width: 58px; height: 28px; display: inline-flex; position: relative }
 /* 图标行 → 标题组 = 20（宿主 detailMain 的 margin-top）：列 gap 32 减 12，一处来源；组内 gap 8 */
 .skc_detailIntro{ display: flex; flex-direction: column; gap: 8px; margin-top: -12px }
 /* 作者行 = 宿主的包名行：12/18、tertiary、mono（宿主那行用 ui-monospace 一族） */
-/* 标题下的那一行是**调用名**（原作者行刻度 12/18 tertiary mono），行内 flex 让复制按钮贴着名字；
-   行内按钮压到 22 高（.skc_detailCopyInline）——28 高的 ghost 会把这一行撑到 28，intro 比宿主大 9.5px */
+/* 标题下那行是调用名（原作者行刻度 12/18 mono），行内 flex 贴名字；按钮压到 22 高，否则 intro 比宿主大 9.5px */
 .skc_detailAuthor{ margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code); font-size: 12px; line-height: 18px; align-items: center; gap: 6px; display: inline-flex }
 .skc_detailCopyInline{ height: 22px; min-height: 22px; padding: 0 4px }
 /* 卸载占位：红字 + inset 1px 红环（不是 border，会让高度多 2px），红用 error 令牌 */
@@ -217,8 +215,7 @@ min-width: 58px; height: 28px; display: inline-flex; position: relative }
 .skc_detailDanger:disabled{ opacity: .4 }
 /* 正文盒只有上下两条 0.5px 发丝线（左右 none、圆角 0），色取标签主色 5% 随主题翻转（l3 约 12% 太重） */
 .skc_detailBodyBox{ max-height: 60vh; padding: 12px 0; overflow-y: auto; border-top: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent); border-bottom: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent) }
-/* 版本区块只在市场装的技能上渲染：标题 14/20/500 + Button size=sm；卡片 1px 描边 + 16 内边距（卡内
-   px 未采）；✓ 圆底 32。「来源信息」复用 .skc_marketFacts（market.md 附录 F） */
+/* 版本区块只在市场装的技能上渲染：标题 14/20/500 + Button sm；卡片 1px 描边 + 16 内边距；✓ 圆底 32 */
 .skc_detailVersionHead{ display: flex; align-items: center; justify-content: space-between; gap: 12px }
 .skc_detailVersionCard{ border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); padding: 16px; display: flex; align-items: flex-start }
 .skc_detailVersionRow{ display: flex; align-items: flex-start; gap: 12px; min-width: 0 }
@@ -229,8 +226,11 @@ min-width: 58px; height: 28px; display: inline-flex; position: relative }
 /* 「查看仓库」是页内普通链接（不是点击层）：右下角、13/20 tertiary、hover 变主色 */
 .skc_detailRepoLink{ align-self: flex-end; display: inline-flex; align-items: center; gap: 4px; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px; text-decoration: none }
 @media (hover: hover){ .skc_detailRepoLink:hover{ color: var(--dsw-alias-label-primary) } }
-/* 组件式行（宿主「包含的组件」实测 74 / 41 / 13.5·20·500 / 11.5·16）只给插件页用，技能页那节已删：
-   插件页 = .skc_detailTop/.skc_detailIcon(49) + .skc_detailIntro（标题 20/28/500 可断行；副行 14/22；dd 行盒 22） */
+/* 组件式行（宿主「包含的组件」实测 74 / 41 / 13.5·20·500 / 11.5·16）只给插件页用，技能页那节已删： 插件页 = .skc_detailTop/.skc_detailIcon(49) + .skc_detailIntro（标题 20/28/500 + v Tag；副行 14/22 + .skc_pluginDesc 两行裁切）+ .skc_sectionHead */
+.skc_sectionHead{ justify-content: space-between; align-items: center; gap: 12px; display: flex }
+.skc_pluginCount{ color: var(--dsw-alias-label-secondary); font-size: 13px; line-height: 20px }
+/* 两行裁切只给插件页副行（技能页描述故意不裁）：1320 宽看似两行是巧合，700 宽会到三行 */
+.skc_pluginDesc{ display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
 .skc_callRow{ display: flex; align-items: center; gap: 12px; height: 74px; position: relative }
 /* hover 只给可点的行（硬约束 9）；margin -8 + padding 8 与 .skc_card 同套外扩，否则插件页灰底比列表窄 16px */
 @media (hover: hover){ .skc_callRowOpen:hover{ background: var(--dsw-alias-interactive-bg-hover) } }

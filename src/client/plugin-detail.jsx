@@ -9,6 +9,8 @@
  * upstream identity to compare or to link to (the rule settled for local skills applies to
  * them as well - see docs/contracts/installed-detail.md).
  */
+import { Tag } from '@deepseek-ai/dsh-client-ui-primitives';
+
 import { DetailCrumb } from './installed-detail.jsx';
 import { IconTile } from './icon-tile.jsx';
 import { cn } from './styles.js';
@@ -53,13 +55,14 @@ function SkillCallRow({ row, t, rows, onToggle, onOpen }) {
 
 /**
  * Render one provider's page.
- * @param {{block: {key: string, provider: string, iconUrl: string|null, skills: object[]},
- *   t: Function, rows: Map<string, object>, onBack: Function, onToggle: Function,
- *   onOpenRow: Function}} props - the block, translate, per-row write state, and the back /
- *   switch / open handlers.
+ * @param {{block: {key: string, provider: string, iconUrl: string|null, version: string|null,
+ *   description: string|null, skills: object[]}, t: Function, rows: Map<string, object>,
+ *   onBack: Function, onToggle: Function, onOpenRow: Function}} props - the block, translate,
+ *   per-row write state, and the back / switch / open handlers.
  * @returns {import('react').ReactElement} the page.
  */
 export function PluginDetail({ block, t, rows, onBack, onToggle, onOpenRow }) {
+  const running = block.skills.filter((row) => row.enabled === true).length;
   return (
     <div className={cn('marketDetail')} data-skc-plugin-detail={block.provider} data-skc-plugin-pkg={block.key}>
       <DetailCrumb t={t} onBack={onBack} />
@@ -71,11 +74,21 @@ export function PluginDetail({ block, t, rows, onBack, onToggle, onOpenRow }) {
       <div className={cn('detailIntro')}>
         <div className={cn('marketTitleRow')}>
           <h3 className={cn('marketDetailTitle')}>{block.key}</h3>
+          {block.version === null
+            ? null
+            : <Tag tone="neutral">{t('market.metaVersion', { version: block.version })}</Tag>}
         </div>
-        <p className={cn('marketDetailDesc')}>{t('plugin.skillsCount', { count: block.skills.length })}</p>
+        {block.description === null
+          ? null
+          : <p className={cn('marketDetailDesc', 'pluginDesc')}>{block.description}</p>}
       </div>
       <section className={cn('marketDetailSection')}>
-        <h4 className={cn('marketSectionTitle')}>{t('plugin.skills')}</h4>
+        <div className={cn('sectionHead')}>
+          <h4 className={cn('marketSectionTitle')}>{t('plugin.skills')}</h4>
+          <span className={cn('pluginCount')}>
+            {t('plugin.countRunning', { count: block.skills.length, running })}
+          </span>
+        </div>
         <div className={cn('cards')}>
           {block.skills.map((row) => (
             <SkillCallRow
@@ -94,8 +107,16 @@ export function PluginDetail({ block, t, rows, onBack, onToggle, onOpenRow }) {
         <dl className={cn('marketFacts')}>
           <div>
             <dt>{t('detail.factCodeSource')}</dt>
-            <dd>{t('detail.sourceBuiltin')}</dd>
+            <dd>
+              <code>{block.version === null ? block.key : `${block.key}@${block.version}`}</code>
+            </dd>
           </div>
+          {block.version === null ? null : (
+            <div>
+              <dt>{t('detail.factVersion')}</dt>
+              <dd><code>{block.version}</code></dd>
+            </div>
+          )}
         </dl>
       </section>
     </div>

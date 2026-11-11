@@ -313,6 +313,18 @@ test('K110 可点行修饰类：.skc_callRowOpen 有 hover 与 active，基底 .
   assert.match(ruleBody(css, '.skc_callRowOpen:hover'), /background:\s*var\(--dsw-alias-interactive-bg-hover\)/, 'hover 底色走宿主令牌');
 });
 
+test('K110 插件页副行两行裁切、技能页描述故意不裁', () => {
+  const css = capturedCss();
+  const clamp = ruleBody(css, '.skc_pluginDesc');
+  assert.match(clamp, /display:\s*-webkit-box/, '副行靠 -webkit-box 才能裁');
+  assert.match(clamp, /-webkit-line-clamp:\s*2\b/, '裁到两行');
+  assert.match(clamp, /-webkit-box-orient:\s*vertical/, '纵向排列，缺这条裁切不生效');
+  assert.match(clamp, /overflow:\s*hidden/, '溢出必须隐藏（只有 clamp 不配 overflow 会露出第三行）');
+  const desc = ruleBody(css, '.skc_marketDetailDesc');
+  assert.equal(/line-clamp/.test(desc), false, '技能页描述不裁：marketDetailDesc 上不许出现 line-clamp');
+  assert.equal(/overflow:\s*hidden/.test(desc), false, 'marketDetailDesc 也不许 overflow:hidden');
+});
+
 test('K110 调用名行的行内复制按钮 22 高、可点行外扩与等量内缩', () => {
   const css = capturedCss();
   const copy = ruleBody(css, '.skc_detailCopyInline');

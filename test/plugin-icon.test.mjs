@@ -168,7 +168,7 @@ test('packageInfoOf：link 安装（没有 node_modules 段）时向上找到包
     await mkdir(join(base, 'my-link-plug', 'skills', 'demo'), { recursive: true });
     await writeFile(join(base, 'my-link-plug', 'package.json'), JSON.stringify({ name: 'my-link-plug', version: '0.1.0' }));
     const info = await packageInfoOf(join(base, 'my-link-plug', 'skills', 'demo'));
-    assert.deepEqual(info, { root: join(base, 'my-link-plug'), name: 'my-link-plug' }, '命中最近的那层 manifest');
+    assert.deepEqual(info, { root: join(base, 'my-link-plug'), name: 'my-link-plug', version: '0.1.0', description: null }, '命中最近的那层 manifest（version 带出来，没描述就是 null）');
   });
 });
 
@@ -177,7 +177,7 @@ test('packageInfoOf：中间几层没有 manifest 也继续向上（技能目录
     const pkg = join(base, 'deep-plug');
     await mkdir(join(pkg, 'a', 'b', 'c', 'skills', 'demo'), { recursive: true });
     await writeFile(join(pkg, 'package.json'), JSON.stringify({ name: 'deep-plug' }));
-    assert.deepEqual(await packageInfoOf(join(pkg, 'a', 'b', 'c', 'skills', 'demo')), { root: pkg, name: 'deep-plug' }, '跨三层也找得到');
+    assert.deepEqual(await packageInfoOf(join(pkg, 'a', 'b', 'c', 'skills', 'demo')), { root: pkg, name: 'deep-plug', version: null, description: null }, '跨三层也找得到（缺 version/description 时为 null）');
   });
 });
 
@@ -187,7 +187,7 @@ test('packageInfoOf：向上最多 6 层——第 6 层有 manifest 命中，第
     const hitRoot = join(base, 'hit-plug');
     await mkdir(join(hitRoot, 's1', 's2', 's3', 's4', 's5', 'demo'), { recursive: true });
     await writeFile(join(hitRoot, 'package.json'), JSON.stringify({ name: 'hit-plug' }));
-    assert.deepEqual(await packageInfoOf(join(hitRoot, 's1', 's2', 's3', 's4', 's5', 'demo')), { root: hitRoot, name: 'hit-plug' }, '第 6 层命中');
+    assert.deepEqual(await packageInfoOf(join(hitRoot, 's1', 's2', 's3', 's4', 's5', 'demo')), { root: hitRoot, name: 'hit-plug', version: null, description: null }, '第 6 层命中');
 
     // 再多一层：manifest 落在第 7 次才会到的地方 —— 不命中。
     const missRoot = join(base, 'miss-plug');
@@ -229,7 +229,7 @@ test('packageInfoOf：坏 JSON / name 为空 / name 不是字符串都算「这�
       ['name 不是字符串', JSON.stringify({ name: 42 })],
     ]) {
       await writeFile(join(pkg, 'mid', 'package.json'), content);
-      assert.deepEqual(await packageInfoOf(join(pkg, 'mid', 'demo')), { root: pkg, name: 'multi-plug' }, `${label}：跳过这层，命中上一层`);
+      assert.deepEqual(await packageInfoOf(join(pkg, 'mid', 'demo')), { root: pkg, name: 'multi-plug', version: null, description: null }, `${label}：跳过这层，命中上一层`);
     }
   });
 });

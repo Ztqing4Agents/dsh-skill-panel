@@ -441,6 +441,9 @@ border-bottom: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, 
 .skc_detailVersionTitle{ margin: 0; font-size: 14px; line-height: 22px }
 .skc_detailRepoLink{ align-self: flex-end; display: inline-flex; align-items: center; gap: 4px; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px; text-decoration: none }
 @media (hover: hover){ .skc_detailRepoLink:hover{ color: var(--dsw-alias-label-primary) } }
+.skc_sectionHead{ justify-content: space-between; align-items: center; gap: 12px; display: flex }
+.skc_pluginCount{ color: var(--dsw-alias-label-secondary); font-size: 13px; line-height: 20px }
+.skc_pluginDesc{ display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
 .skc_callRow{ display: flex; align-items: center; gap: 12px; height: 74px; position: relative }
 @media (hover: hover){ .skc_callRowOpen:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
 .skc_callRowOpen{ border-radius: var(--dsw-radius-xl); margin-inline: -8px; padding-inline: 8px }
