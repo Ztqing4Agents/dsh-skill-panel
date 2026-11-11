@@ -83,6 +83,8 @@ sort 映射（`sort` 四个值，路由层已白名单化；**默认仍是 `reco
 | `downloads`（显示「下载量」） | `sortBy=downloads&order=desc` |
 | `stars`（显示「收藏量」） | `sortBy=stars&order=desc` |
 
+**`updated` 不做跨页边界归并**：排序由上游 `sortBy=updated_at&order=desc` 决定，服务端那一页本身就是全局有序的；客户端只按页码翻页（不是 keyset，不会重复取到同一条），`sortByUpdatedDesc` 在页内只做一件事——把 `updatedAt: null` 的条目挪到页尾。即使跨页边界出现错序也不可感知：`updatedAt` 按 §7.4 的约定**不上屏**。
+
 **`paged` 的分裂不特殊处理**：clawhub 的 list 与 search **都能翻页**（镜像同一端点），统一由「本次 `next` 是否为 `null`」表达；客户端只问一句「还有 next 吗」，不读 `caps.paged`。
 
 **三个 scope 都有分类表**（同一张：**12 类**——上游 `/api/v1/categories` 给 13 个 key，商业档 `pay-skill` 被 `HIDDEN_CATEGORIES` 滤掉；表本身不带 `source`），计数按 scope 各自算；`caps.categories` 恒 `true`，chips 行恒渲染（U8 之前 ClawHub 那一档没有类别，用户问的就是这句）。
@@ -98,6 +100,8 @@ sort 映射（`sort` 四个值，路由层已白名单化；**默认仍是 `reco
 | 3 | `locale/zh.json` 与 `locale/en.json` 各加一条 `market.source.<id>` | **1 键 × 2 文件** |
 | 4 | （只在要加**筛选范围**时）`SCOPES` 加一项 + 一个文案键；`all` 这类跨身份的范围**永远不进 `SOURCES`**（它没有身份） | **1 行 + 1 键 × 2 文件** |
 | 5 | 源的启停与排序（设置面）本轮不做，也不预留占位 UI | 0 |
+
+**自定义源不做**：`SOURCES` 只收本仓库内置的适配器，没有「用户填一个源地址」的入口——浏览器半部不直连上游（`AGENTS.md` 硬约束 13），origin 由 `lib/market/upstream.js` 固定。加一个源的代价必须停在「仓库里加一个文件 + 一行注册」，而不是运行时可配置项：后者会把白名单、错误码、图标与详情链路全部变成需要用户自己保证的东西。
 
 页面骨架、卡片渲染、合并逻辑、安装流程、路由**一行都不用改**：来源筛选项由 `market/bootstrap` 返回的 `sources[]`（三个 scope）渲染，`caps.categories` 恒 `true`，包形态由 `caps.package` 决定（当前两源都是 `files`；`zip` 分支已于 U7 退役，`install.js` 只走清单那条路）。
 

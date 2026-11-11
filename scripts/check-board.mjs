@@ -4,7 +4,9 @@
  * machine-checkable — a column index, not prose.
  *
  * The board is gitignored (`.agents/work/`), so a fresh clone has none: that is not a
- * failure, it prints `skip` and exits 0. Everything else here is structural.
+ * failure, it prints `skip` and exits 0. Everything else here is structural. The same
+ * rules apply to `BOARD-archive.md`, the overflow of the completed table, so the history
+ * side cannot rot either.
  *
  * Red = the board cannot be trusted (broken shape, dangling anchor, missing WIP).
  * Warn = size only.
@@ -12,7 +14,7 @@
  * Usage: node scripts/check-board.mjs [--root <dir>] [--quiet]
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const argv = process.argv.slice(2);
@@ -486,6 +488,124 @@ doneRows.forEach((row, i) => {
     }
   }
 });
+
+/* ------------------------------------------- R10 归档区（BOARD-archive.md） */
+
+const ARCHIVE_REL = '.agents/work/BOARD-archive.md';
+const ARCHIVE_PATH = join(ROOT, ARCHIVE_REL);
+/** 活跃区保留的完成行数；更早的按时间倒序移进归档区。 */
+const DONE_WINDOW = 12;
+
+if (existsSync(ARCHIVE_PATH)) {
+  let archiveText = null;
+  let entry = null;
+  try {
+    // lstat, not stat: a symlink or a directory named `*.md` must be a red, never a stack.
+    entry = lstatSync(ARCHIVE_PATH);
+  } catch (error) {
+    red('R10', `${ARCHIVE_REL}: 读不出来（${error.code ?? 'EUNKNOWN'}）`);
+  }
+  if (entry !== null && !entry.isFile()) {
+    red('R10', `${ARCHIVE_REL}: 必须是一个普通文件（目录 / 软链都不行）`);
+  } else if (entry !== null) {
+    try {
+      archiveText = readFileSync(ARCHIVE_PATH, 'utf8');
+    } catch (error) {
+      red('R10', `${ARCHIVE_REL}: 读不出来（${error.code ?? 'EUNKNOWN'}）`);
+    }
+  }
+  if (archiveText !== null) {
+    const archiveLines = archiveText.split('\n');
+    const at = archiveLines.findIndex((line) => line.trimStart().startsWith('|'));
+    if (at < 0) {
+      red('R10', `${ARCHIVE_REL}: 没有表格（归档区只有一张完成表）`);
+    } else {
+      const archiveHeader = splitCells(archiveLines[at]);
+      if (!sameList(archiveHeader, DONE_HEADER)) {
+        red('R10', `${ARCHIVE_REL}: 表头应为「${DONE_HEADER.join(' | ')}」，实际「${archiveHeader.join(' | ')}」`);
+      }
+      const hasSeparator = isSeparatorRow(archiveLines[at + 1] ?? '');
+      if (!hasSeparator) red('R10', `${ARCHIVE_REL}: 表头下一行必须是分隔行（| --- | …）`);
+      const archiveRows = [];
+      for (let i = at + (hasSeparator ? 2 : 1); i < archiveLines.length; i += 1) {
+        if (!archiveLines[i].trimStart().startsWith('|')) break;
+        archiveRows.push(splitCells(archiveLines[i]));
+      }
+      if (archiveRows.length === 0) red('R10', `${ARCHIVE_REL}: 归档区没有完成行`);
+
+      let previousArchiveDate = null;
+      archiveRows.forEach((row, i) => {
+        const where = `${ARCHIVE_REL}: 第 ${i + 1} 行`;
+        if (row.length !== DONE_HEADER.length) {
+          red('R10', `${where} 有 ${row.length} 格，表头是 ${DONE_HEADER.length} 格`);
+          return;
+        }
+        const id = cell(row, 0);
+        const finishedAt = cell(row, 1);
+        const oneThing = cell(row, 2);
+        const commits = cell(row, 3);
+
+        if (id !== NO_ID) {
+          if (!TODO_ID.test(id)) {
+            red('R2', `${where} ID「${id}」既不是 U/M/V/D + 数字，也不是「${NO_ID}」`);
+          } else if (seenIds.has(id)) {
+            // 完成＝从活跃区移出；同一个 ID 在归档里再出现一次，等于两份记录打架。
+            red('R3', `${where} ID「${id}」重复（首次出现于 ${seenIds.get(id)}）`);
+          } else {
+            seenIds.set(id, where);
+          }
+        }
+
+        if (!DATE.test(finishedAt) || Number.isNaN(Date.parse(finishedAt))) {
+          red('R10', `${where} 完成于「${finishedAt}」不是 YYYY-MM-DD`);
+        } else {
+          if (previousArchiveDate !== null && finishedAt > previousArchiveDate) {
+            red('R10', `${where} 完成于 ${finishedAt} 晚于上一行 ${previousArchiveDate} —— 归档区也要时间倒序`);
+          }
+          previousArchiveDate = finishedAt;
+        }
+
+        if (!oneThing) {
+          red('R10', `${where} 一件事为空`);
+        } else if ([...oneThing].length > MAX_ITEM_CHARS) {
+          red('R10', `${where} 一件事 ${[...oneThing].length} 字，超过 ${MAX_ITEM_CHARS} 字`);
+        }
+
+        if (commits !== '—') {
+          const parts = commits.split(/[·、,，]/).map((part) => part.trim()).filter(Boolean);
+          if (parts.length === 0) {
+            red('R10', `${where} commit「${commits}」既不是「—」也不是短 sha`);
+          }
+          for (const part of parts) {
+            if (!HEX.test(part)) {
+              red('R10', `${where} commit「${part}」不是 7–40 位短 sha（无代码变更写「—」）`);
+              continue;
+            }
+            if (checkedShas.has(part)) continue;
+            checkedShas.add(part);
+            if (!gitReady) {
+              warn('R10', `${where} 非 git 仓库，跳过 sha 校验 → ${part}`);
+            } else if (!commitExists(part)) {
+              red('R10', `${where} commit「${part}」在本仓库里不存在`);
+            }
+          }
+        }
+      });
+
+      // 跨文件衔接：归档首行不许比活跃区末行更新，否则说明移出的不是尾部。
+      const boardOldest = doneRows.length > 0 ? cell(doneRows[doneRows.length - 1], 1) : null;
+      const archiveNewest = archiveRows.length > 0 ? cell(archiveRows[0], 1) : null;
+      if (boardOldest !== null && archiveNewest !== null
+        && DATE.test(boardOldest) && DATE.test(archiveNewest) && archiveNewest > boardOldest) {
+        red('R10', `${ARCHIVE_REL}: 首行 ${archiveNewest} 比 BOARD.md 末行 ${boardOldest} 更新 —— 归档只能从活跃区尾部按序移出`);
+      }
+    }
+  }
+}
+
+if (doneRows.length > DONE_WINDOW) {
+  warn('W', `BOARD.md: 已完成 ${doneRows.length} 行（>${DONE_WINDOW}）—— 把最老的移进 ${ARCHIVE_REL}`);
+}
 
 /* ------------------------------------------------------------------- 体量告警 */
 

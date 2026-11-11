@@ -449,6 +449,97 @@ test('R9 已完成表：完成于自下而上不得更晚（时间倒序）', as
   }
 });
 
+/* ----------------------------------------------- 归档区：BOARD-archive.md */
+
+/** The smallest legal archive: one completed row, older than the board's own. */
+const ARCHIVE = `# 看板完成记录（历史区）
+
+> 溢出区。
+
+| ID | 完成于 | 一件事 | commit |
+| --- | --- | --- | --- |
+| — | 2026-11-08 | 更早的一件事 | \`deadbeef\` |
+`;
+
+/** Put an archive next to a board in a temp tree. */
+const withArchive = (archive) => ({ ...BASELINE, '.agents/work/BOARD-archive.md': archive });
+
+test('归档区合法：活跃区 + 归档区一起全绿', async () => {
+  const { dir, cleanup } = await tree(withArchive(ARCHIVE));
+  try {
+    const { status, out } = runGate(dir);
+    assert.equal(status, 0, out);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('R10 归档区：日期自下而上不得更晚（归档也要时间倒序）', async () => {
+  const broken = ARCHIVE.replace(
+    '| — | 2026-11-08 | 更早的一件事 | `deadbeef` |\n',
+    '| — | 2026-11-08 | 更早的一件事 | `deadbeef` |\n| — | 2026-11-09 | 更新的一件事 | `deadbeef` |\n',
+  );
+  const { dir, cleanup } = await tree(withArchive(broken));
+  try {
+    const { status, out } = runGate(dir);
+    assert.equal(status, 1, out);
+    assert.match(out, /RED\s+R10 .*归档区也要时间倒序/);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('R10 归档区：首行比活跃区末行更新必须红（只能从尾部按序移出）', async () => {
+  const broken = ARCHIVE.replace('| — | 2026-11-08 |', '| — | 2026-11-10 |');
+  const { dir, cleanup } = await tree(withArchive(broken));
+  try {
+    const { status, out } = runGate(dir);
+    assert.equal(status, 1, out);
+    assert.match(out, /RED\s+R10 .*比 BOARD\.md 末行/);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('R10 归档区：commit 写成非 sha 的任意花样、缺分隔行都必须红', async () => {
+  for (const [archive, pattern] of [
+    [ARCHIVE.replace('`deadbeef`', '`xyz`'), /RED\s+R10 .*xyz/],
+    [ARCHIVE.replace('| --- | --- | --- | --- |\n', ''), /RED\s+R10 .*分隔行/],
+  ]) {
+    const { dir, cleanup } = await tree(withArchive(archive));
+    try {
+      const { status, out } = runGate(dir);
+      assert.equal(status, 1, out);
+      assert.match(out, pattern);
+    } finally {
+      await cleanup();
+    }
+  }
+});
+
+test('R3 归档区：同一 ID 又从活跃区搬回归档必须红（一份记录只能在一个地方）', async () => {
+  const { dir, cleanup } = await tree(withArchive(ARCHIVE.replace('| — | 2026-11-08 |', '| U1 | 2026-11-08 |')));
+  try {
+    const { status, out } = runGate(dir);
+    assert.equal(status, 1, out);
+    assert.match(out, /RED\s+R3 .*U1.*重复/);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('W 体量：活跃区完成行超过 12 行只告警、不判红（该把最老的移进归档）', async () => {
+  const rows = Array.from({ length: 13 }, (unused, i) => `| — | 2026-11-09 | 第 ${i + 1} 件事 | \`deadbeef\` |\n`).join('');
+  const { dir, cleanup } = await tree({ ...BASELINE, '.agents/work/BOARD.md': boardDone(rows) });
+  try {
+    const { status, out } = runGate(dir);
+    assert.equal(status, 0, out);
+    assert.match(out, /warn W .*已完成 13 行/);
+  } finally {
+    await cleanup();
+  }
+});
+
 test(
   '本仓库真板：现存的 .agents/work/BOARD.md 必须过门禁',
   { skip: existsSync(REAL_BOARD) ? false : '本仓库没有 .agents/work/BOARD.md（工作现场不入库）' },
