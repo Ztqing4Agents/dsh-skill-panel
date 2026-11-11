@@ -174,7 +174,7 @@ isSafeRelativePath(value: string): boolean
 isUpstreamIdentity(sourceId: string, owner: string, slug: string): boolean
 // 三段同时过 UPSTREAM_SOURCE_ID / UPSTREAM_OWNER / UPSTREAM_SLUG，且都不含 '..'；`market/query.js` 的上游白名单就是这三个常量的别名（一处定义两处消费，别抄第二份）
 // 真: ('skillhub','ake','dev-god')    假: ('nope!','a','b') | ('clawhub','../x','y') | (undefined,…)
-// Row 的三个**展示**字段（都不进 classifySkill），全由同一个「包根」推导：`originPath` = 宿主 `SkillSummary.resourceBase.path`；`pluginPackage` = 该包 `package.json` 的 `name`（内置块的分组键与标题，`link:` 安装靠它——包不在 node_modules 下时向上最多 6 层找最近的 manifest）；`pluginIcon` = 该包 `package.json.icon` 读成的 base64 data URL（`lib/plugin-icon.js`，≤16 KB / svg·png·webp·jpg / 不跟随软链 / 不出包根）。三者失败都是 null。
+// Row 的三个**展示**字段（都不进 classifySkill），全由同一个「包根」推导：`originPath` = 宿主 `SkillSummary.resourceBase.path`；`pluginPackage` = 该包 `package.json` 的 `name`（内置块的分组键与标题，`link:` 安装靠它——包不在 node_modules 下时向上最多 6 层找最近的 manifest）；`pluginIcon` = 该包 `package.json.icon`（或没有它时的 `exports["./icon"]` 指向的图片文件）读成的 base64 data URL（`lib/plugin-icon.js`，≤256 KiB / svg·png·jpg·jpeg·webp / 不跟随软链 / 不出包根 / 绝不加载模块式导出）。三者失败都是 null。
 // `ScanCandidate.upstream` 只由 `_meta.json` 的 source/ownerId/slug 过本判据后给出：`ownerId` 语义因写者而异（我们写 handle，ClawHub CLI 写内部 Convex id，后者当 owner 查 404）⇒ 身份只认我们写的记录，**不从目录名反推**、不按名字 join，也不进任何分区判据（不变式见 routes.md §3.3.1）
 ```
 

@@ -68,21 +68,62 @@ test('pluginIconOf：没有 icon 字段 / 文件缺失 / 后缀不认识 → nul
   });
 });
 
-test('pluginIconOf：越界路径 / 绝对路径 / 反斜杠 / 超 16 KB / 软链一律 null', async () => {
+test('pluginIconOf：越界路径 / 绝对路径 / 超 256 KiB / 软链一律 null', async () => {
   await withRoot(async (root) => {
     await makePackage(root, 'pkg-escape', { icon: '../evil.svg' }, {});
     await makePackage(root, 'pkg-abs', { icon: '/etc/passwd' }, {});
-    await makePackage(root, 'pkg-big', { icon: 'icon.svg' }, { 'icon.svg': 'x'.repeat(16385) });
-    await makePackage(root, 'pkg-edge', { icon: 'icon.svg' }, { 'icon.svg': 'x'.repeat(16384) });
+    await makePackage(root, 'pkg-big', { icon: 'icon.svg' }, { 'icon.svg': 'x'.repeat(262145) });
+    await makePackage(root, 'pkg-edge', { icon: 'icon.svg' }, { 'icon.svg': 'x'.repeat(262144) });
     const linkDir = await makePackage(root, 'pkg-link', { icon: 'icon.svg' }, {});
     await writeFile(join(root, 'outside.svg'), SVG);
     await symlink(join(root, 'outside.svg'), join(linkDir, 'icon.svg'));
 
     assert.equal(await pluginIconOf(join(root, 'node_modules/pkg-escape/skills/a/SKILL.md')), null, '../ 越界');
     assert.equal(await pluginIconOf(join(root, 'node_modules/pkg-abs/skills/a/SKILL.md')), null, '绝对路径');
-    assert.equal(await pluginIconOf(join(root, 'node_modules/pkg-big/skills/a/SKILL.md')), null, '16385 B 超限');
-    assert.ok((await pluginIconOf(join(root, 'node_modules/pkg-edge/skills/a/SKILL.md')) ?? '').startsWith('data:image/svg+xml'), '16384 B 恰好放行（边界值）');
+    assert.equal(await pluginIconOf(join(root, 'node_modules/pkg-big/skills/a/SKILL.md')), null, '262145 B 超限');
+    assert.ok((await pluginIconOf(join(root, 'node_modules/pkg-edge/skills/a/SKILL.md')) ?? '').startsWith('data:image/svg+xml'), '262144 B 恰好放行（边界值）');
     assert.equal(await pluginIconOf(join(root, 'node_modules/pkg-link/skills/a/SKILL.md')), null, '软链不跟随');
+  });
+});
+
+test('pluginIconOf：上限抬到 256 KiB 之后，16 KiB 与 200 KiB 的图都能出（两个档都验）', async () => {
+  await withRoot(async (root) => {
+    await makePackage(root, 'pkg-16k', { icon: 'icon.svg' }, { 'icon.svg': 'x'.repeat(16385) });
+    await makePackage(root, 'pkg-200k', { icon: 'icon.png' }, { 'icon.png': Buffer.alloc(204800, 7) });
+    const small = await pluginIconOf(join(root, 'node_modules/pkg-16k/skills/a/SKILL.md'));
+    assert.ok((small ?? '').startsWith('data:image/svg+xml;base64,'), '16385 B 现在应该出图（旧上限 16 KiB 已抬走）');
+    const big = await pluginIconOf(join(root, 'node_modules/pkg-200k/skills/a/SKILL.md'));
+    assert.ok((big ?? '').startsWith('data:image/png;base64,'), '200 KiB 的 png 也应该出图');
+    assert.ok((big ?? '').length > 200000, '整份 200 KiB 都进了 base64');
+  });
+});
+
+test('pluginIconOf：没有 icon 字段时读 exports["./icon"]（宿主那条来源）', async () => {
+  await withRoot(async (root) => {
+    await makePackage(root, 'pkg-export', { exports: { './icon': './icon.svg' } }, { 'icon.svg': SVG });
+    assert.equal(
+      await pluginIconOf(join(root, 'node_modules/pkg-export/skills/a/SKILL.md')),
+      `data:image/svg+xml;base64,${Buffer.from(SVG).toString('base64')}`,
+      'exports["./icon"] 是字符串路径 ⇒ 出图',
+    );
+  });
+});
+
+test('pluginIconOf：exports["./icon"] 是模块式导出（{default: "./lib/icon.js"}）⇒ null，不加载别人的模块', async () => {
+  await withRoot(async (root) => {
+    await makePackage(root, 'pkg-export-module', { exports: { './icon': { default: './lib/icon.js' } } }, { 'lib/icon.js': 'export default 1;' });
+    assert.equal(
+      await pluginIconOf(join(root, 'node_modules/pkg-export-module/skills/a/SKILL.md')),
+      null,
+      '指向 .js 的导出不是图，跳过（绝不 import）',
+    );
+    // 另一个包：模块式导出的同时还有真 icon 字段，确认是「跳过那一条」而不是「整包放弃」
+    // （每个包根只读一次并缓存，所以这里必须换一个包名）。
+    await makePackage(root, 'pkg-export-module-b', { exports: { './icon': { default: './lib/icon.js' } }, icon: 'icon.svg' }, { 'lib/icon.js': 'export default 1;', 'icon.svg': SVG });
+    assert.ok(
+      (await pluginIconOf(join(root, 'node_modules/pkg-export-module-b/skills/a/SKILL.md')) ?? '').startsWith('data:image/svg+xml'),
+      'icon 字段仍然优先（模块式导出不影响它）',
+    );
   });
 });
 

@@ -53,7 +53,9 @@
 
 「内置」分区在列表里**不单列技能**，而是每个**提供它的插件包**折成一个块（见 `docs/contracts/client.md` §3.9.2）；点块进这一页。只有 `partition === 'builtin'` 的行进块，`local` / `installed` 行照旧是列表行；块按**包名**升序。
 
-**块与插件页头的图标取插件包的 `package.json` 的 `icon`**（相对包根，≤16 KB，只认 `.svg/.png/.webp/.jpg`），由 Host 半部读成 base64 data URL 随行下发为 `Row.pluginIcon`；读不到（无该字段、文件不合法、超限、是软链、越出包根）就回退**首字母头像**——两种块在样式上没有区别，`IconTile` 只是多一张图。
+**块与插件页头的图标**按宿主的来源顺序取两处：① `package.json` 的 `icon`；② 没有可用 `icon` 时看 `exports["./icon"]` 指向的**图片文件**（值可能是字符串，也可能是 `{default: …}` 条件对象）。两处都过同一套闸：相对包根、`resolve` 后不出包根、`lstat` 普通文件（不跟随软链）、只认 `.svg/.png/.jpg/.jpeg/.webp`、≤ **256 KiB**（与宿主一致）；都拿不到就回退**首字母头像**——两种块在样式上没有区别，`IconTile` 只是多一张图。由 Host 半部读成 base64 data URL 随行下发为 `Row.pluginIcon`。
+
+与宿主的两处**已知差异**：① 宿主在拿不到图时用内置的通用插件插画（`PluginArtworkDefault`），我们用首字母头像；② 宿主会把 `exports["./icon"]` 当模块**加载**（所以 `.js` 形态也能出图），我们**只认图片文件、绝不执行别人的模块**（副作用风险）——指向 `.js/.mjs/.cjs` 的导出就当没有。
 
 **分组键与块标题都是包名**，不是 provider id：`dsh-univer-office` 这个包在它自己的注册代码里把 provider 名注册成 `univer`，它的 12 个技能（`office` / `office-docx` / `univer-sheet` …）同属一个包，标题写 `univer` 会让人以为「office 被塞进了 univer」。包名按**三层优先级**取：① `Row.pluginPackage`（Host 读该包 `package.json` 的 `name`，`link:` 安装也覆盖——包不在 `node_modules` 下时从技能目录向上**最多 6 层**找最近的 manifest，不跟随软链）；② `originPath` 里**最后一个 `node_modules/`** 之后的一段，`@scope/name` 取两段；③ 都取不到才退回 provider id。`provider` id 仍留在块数据里——它是开关写存储时的身份（`data-skc-plugin` 仍写 provider，另加 `data-skc-plugin-pkg` 写包名）。
 

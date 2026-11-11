@@ -65,7 +65,7 @@ body 上限 **64 KiB**（`readBoundedJson(req, 65536)`；超过即 `400`，不 d
 }
 ```
 
-`originPath` / `pluginPackage` / `pluginIcon` 也是**展示字段**，不进 `classifySkill`（同一个包根推导出后两个）：`originPath` 是宿主 `SkillSummary.resourceBase.path`（provider 送来的技能才有），内置块用它算「提供者的包名」；`pluginIcon` 由 `lib/plugin-icon.js` 读 `<包根>/package.json` 的 `icon` 生成（≤16 KB、`.svg/.png/.webp/.jpg`、不跟随软链、不出包根），任何一步不满足就是 `null`，客户端回退首字母头像。`version` 同样只做展示：来源只有本插件安装器写的 `_meta.json` 的那一份，非字符串、空串或长度 >64 一律 `null`；它不进 `classifySkill`，也不参与同名裁决，界面上为空时整块不渲染（不写「未知」）。
+`originPath` / `pluginPackage` / `pluginIcon` 也是**展示字段**，不进 `classifySkill`（同一个包根推导出后两个）：`originPath` 是宿主 `SkillSummary.resourceBase.path`（provider 送来的技能才有），内置块用它算「提供者的包名」；`pluginIcon` 由 `lib/plugin-icon.js` 读 `<包根>/package.json` 的 `icon`（没有则 `exports["./icon"]` 的图片）生成（≤256 KiB、`.svg/.png/.jpg/.jpeg/.webp`、不跟随软链、不出包根、不加载模块），任何一步不满足就是 `null`，客户端回退首字母头像。`version` 同样只做展示：来源只有本插件安装器写的 `_meta.json` 的那一份，非字符串、空串或长度 >64 一律 `null`；它不进 `classifySkill`，也不参与同名裁决，界面上为空时整块不渲染（不写「未知」）。
 
 不变式：`writable === false ⇔ readonlyReason !== null`；`partition === 'builtin'` ⇒ `readonlyReason ∈ {'provider-store','no-file'}` 且 `symlink === false`；`symlink === true` ⇒ `path === null && realPath !== null && writable === false && readonlyReason === 'symlink'`；`symlink === false` ⇒ `realPath === null`。
 
