@@ -3,7 +3,7 @@
  * Documentation gate for this repo.
  *
  * Contract: docs/contracts/*.md (head notes, required sections), docs/reference/*.md
- * (freshness), CHANGELOG.md (Keep a Changelog shape), AGENTS.md (size).
+ * (freshness), CHANGELOG.md (Keep a Changelog shape), AGENTS.md / README.md (size).
  *
  * Red = structure missing / contradiction / dangling reference. Warn = size, freshness.
  * The gate never rewrites anything; it only reads.
@@ -297,6 +297,13 @@ for (const f of allDocs) {
 if (text.has('AGENTS.md')) {
   const n = lines('AGENTS.md').length;
   if (n > 100) warn('R10', `AGENTS.md: ${n} lines (>100) —— 把内容送进契约，地图留指针`);
+}
+
+if (text.has('README.md')) {
+  const n = lines('README.md').length;
+  // The README is the only doc written for users: it stays short on purpose, and a size
+  // warning is the cheapest reminder that a new feature paragraph belongs in CHANGELOG.md.
+  if (n > 120) warn('R12', `README.md: ${n} lines (>120) —— 只写使用者视角，细节进 CHANGELOG / 契约`);
 }
 
 for (const [f, limit] of declaredLimit) {

@@ -257,3 +257,15 @@ test('R10 体量：AGENTS.md 超 100 行只告警，不判红', async () => {
     await cleanup();
   }
 });
+
+test('R12 体量：README.md 超 120 行只告警，不判红', async () => {
+  const long = `# README\n\n${Array.from({ length: 120 }, (_, i) => `- 行 ${i + 1}`).join('\n')}\n`;
+  const { dir, cleanup } = await tree({ ...BASELINE, 'README.md': long });
+  try {
+    const { status, out } = runGate(dir);
+    assert.equal(status, 0, out);
+    assert.match(out, /warn R12 README\.md: \d+ lines/);
+  } finally {
+    await cleanup();
+  }
+});

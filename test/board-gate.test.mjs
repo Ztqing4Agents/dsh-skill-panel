@@ -6,9 +6,9 @@
  * `.agents/work/` (gitignored), so the whole fixture tree is built under `mkdtemp` —
  * no real work scene is ever read or written.
  *
- * The last case runs the gate against this repo's real board, and skips when the clone
- * has none: a fresh checkout has no `.agents/work/BOARD.md`, and the gate must not be
- * red there.
+ * One case runs the gate against this repo's real board, and skips when the clone has
+ * none: a fresh checkout has no `.agents/work/BOARD.md`, and the gate must not be red
+ * there.
  *
  * Anchors are assembled at run time (`sec()`): the docs gate scans `test/*.mjs` headers
  * for literal `§x.y` references, so a hard-coded broken anchor in this file would make
