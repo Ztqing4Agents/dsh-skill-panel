@@ -331,6 +331,15 @@ test('K110 行尾座与两处文字兜底：.skc_cardEnd 58×28、标题可断�
   assert.match(ruleBody(css, '.skc_marketFacts dd'), /line-height:\s*22px/, '18 + 2 + 2 = 22 才与纯文本行同高');
 });
 
+test('K110 滚动条沟槽：.skc_pageBody 预留 stable 沟槽，不用 overflow-y: scroll 那种重做法', () => {
+  const css = capturedCss();
+  const body = ruleBody(css, '.skc_pageBody');
+  assert.match(body, /scrollbar-gutter:\s*stable/, '预留滚动条沟槽（否则有滚动条的页与没滚动条的页宽度会差一个滚动条）');
+  // 反向：不许用「常驻滚动条」的做法（观感更重，且会改掉右侧留白）。
+  assert.equal(/overflow(-y)?:\s*[^;]*\bscroll\b/.test(css), false, '不得出现 overflow-y: scroll');
+  assert.equal(css.includes('overflow-y: scroll'), false, '不得出现 overflow-y: scroll');
+});
+
 /**
  * The declaration body of one rule, by selector.
  * @param {string} css - the stylesheet text.

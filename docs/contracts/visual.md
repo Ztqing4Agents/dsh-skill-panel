@@ -31,7 +31,7 @@
 ## A.2 滚动容器与页头条（含停靠机制）
 
 ```css
-/* [PM-CSS] .pageBody */
+/* [PM-CSS] .pageBody —— scrollbar-gutter:stable 预留沟槽：否则有无滚动条时整宽元素右边缘差一个滚动条宽（无头 5px / macOS 常显 15px）；右侧恒留空沟槽是代价，不是 bug */
 .skc_pageBody{
   min-height: 0;
   width: calc(100% + 2 * var(--skc-page-inset));
@@ -39,7 +39,7 @@
   box-sizing: border-box; padding: 0 var(--skc-page-inset) 48px;
   scroll-padding-top: var(--skc-header-scroll-padding, 0px);
   display: flex; flex: 1; flex-direction: column; align-items: center; gap: 32px;
-  position: relative; overflow: hidden auto;
+  position: relative; overflow: hidden auto; scrollbar-gutter: stable;
 }
 .skc_pageBody > *{ flex: none; width: 100%; max-width: 960px }
 

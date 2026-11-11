@@ -23,7 +23,7 @@ max-width: none; margin-inline: calc(-1 * var(--skc-page-inset));
 box-sizing: border-box; padding: 0 var(--skc-page-inset) 48px;
 scroll-padding-top: var(--skc-header-scroll-padding, 0px);
 display: flex; flex: 1; flex-direction: column; align-items: center; gap: 32px;
-position: relative; overflow: hidden auto;
+position: relative; overflow: hidden auto; scrollbar-gutter: stable;
 }
 .skc_pageBody > *{ flex: none; width: 100%; max-width: 960px }
 .skc_pageBar{
