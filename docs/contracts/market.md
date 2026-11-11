@@ -282,7 +282,7 @@ Client 半部（`src/client/`，纯逻辑模块 node 可直接 import）：
 | `src/client/market-model.js` | **纯函数**：`marketKeyOf` / `mergeBatches` / `metaSegments` / `visibleCategories` / `chipList` / `installViewOf` / `emptyKindOf` / `detailFacts` / `reasonKeyOf` |
 | `src/client/market-panel.jsx` | `MarketPanel`：工具栏 / 分类 chips / 网格 / 尾部（骨架 / 重试 / 没有更多了）/ 整页态 / 详情切换 / 确认弹窗 / 触底预取 |
 | `src/client/market-filters.jsx` | 搜索框（250ms 防抖 + 回车立即 + 清空复位）、来源选择、排序选择、分类 chips、分类作用域说明 |
-| `src/client/market-card.jsx` | 一张卡：头像（复用 `avatar.js`）+ 标题按钮（`skc_marketCardOpen` 铺满整卡）+ 来源品牌图 + 收藏按钮 + 作者行 + 描述（3 行）+ 三段等宽数字 + 安装动作位 |
+| `src/client/market-card.jsx` | 一张卡：头像（复用 `avatar.js`）+ 标题按钮（`skc_marketCardOpen` 铺满整卡）+ 来源品牌图 + 作者行 + 描述（3 行）+ 三段等宽数字 + 安装动作位 |
 | `src/client/market-detail.jsx` | 内嵌详情：面包屑返回 + 头（头像/标题/版本 Tag/动作）+ 事实表 + 概览 + 文件清单 + 三种失败态 |
 | `src/client/market-skeleton.jsx` | 首屏 6 张卡骨架 + 分类 chips 占位；尾部 3 张骨架 |
 | `src/client/market-confirm.jsx` | 安装确认（primitives `Modal` + 头像 + 名称 + 版本 + 事实表 + 第三方提示） |

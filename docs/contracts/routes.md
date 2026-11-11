@@ -268,8 +268,8 @@ const SORTS     = new Set(['recommended', 'updated', 'downloads']);
 | S0 入参 | `source/owner/slug/version` 过 §3.7.3 白名单；`source` 必须在注册表 | `400 E_BAD_QUERY` |
 | S1 互斥 | 先按 `source:owner:slug` 加锁（进程内 `Set`），全局在跑的超 2 个即拒 | `429 E_INSTALL_BUSY` |
 | S2 解析 | `plan()`：拿版本 + 包形态 + 文件清单；包里自带 `_meta.json` 的版本与请求版本不符即拒 | `502/503/504` 透传 / `422 E_PACKAGE_INVALID` |
-| S3 清单 | SkillHub 清单；ClawHub 下载 zip 并读中央目录 | `502 E_DOWNLOAD_FAILED` / `422 E_PACKAGE_INVALID`（zip 结构非法、无 `SKILL.md`、条目超限） |
-| S4 取 `SKILL.md` | 只下这一个文件并校验（SkillHub `sha256` + `size`；ClawHub CRC32 + `size`） | `502 E_DOWNLOAD_FAILED`（网络）/ `422 E_PACKAGE_INVALID`（校验不符） |
+| S3 清单 | 两源同一套：`GET …/files` 取清单（只有 `files` 一种包形态，zip 读取链路随 U7 退役） | `502 E_DOWNLOAD_FAILED` / `422 E_PACKAGE_INVALID`（空清单） |
+| S4 取 `SKILL.md` | 只下这一个文件，按清单比 `size` 与 `sha256`（镜像的 `sha256` 为 `null` 时只比 `size`） | `502 E_DOWNLOAD_FAILED`（网络）/ `422 E_PACKAGE_INVALID`（校验不符、清单没列 `SKILL.md`） |
 | S5 名字 | `parseFrontmatter(text).name` → `trim()` → `isSkillName()` | `422 E_SKILL_NAME_INVALID`（`data.declaredName` 带原文；**不改名、不用 slug 顶替**。判名文法就是宿主加载器的 `SKILL_NAME`，不合规的目录宿主也不会加载，理由见 `docs/contracts/market.md` §7.2） |
 | S6 冲突 | `lstat(skillsRoot/<name>)`：**存在即拒绝**（目录/文件/软链一视同仁）；台账有记录但目录不存在 → 允许 | `409 E_ALREADY_INSTALLED`（`data.path` + `data.existing{name,version}`；version 取自目标目录的 `_meta.json`，读不到为 `null`） |
 | S7 临时目录 | `mkdir(skillsRoot/.skc-install-<pid>-<rand6>, 0o755)`（点开头 → `scan.js` 跳过） | `500 E_INSTALL_IO` |
@@ -313,7 +313,7 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 
 自有台账 `$DSH_HOME/dsh-skill-center/installed.json` 的形状是 `{version:1, installs:[{source,owner,slug,name,version,installedAt,files,bytes}]}`：`installs[].name` 正是 `lib/ledger.js` 的 `own-record` 读取器要找的字段（`installs[].files` / `bytes` 与 install 出参同口径）。因此装完的技能必然命中 R5，`lib/classify.js` 一行不改。
 
-包内容的安全边界（逐条）：条目数 ≤ 200；单文件 ≤ 5 MiB；解压总量 ≤ 20 MiB；压缩体 ≤ 40 MiB；路径过 `isSafeRelativePath`；**符号链接条目直接拒绝整包**（不「跳过该条目」）；加密条目拒绝；压缩方法只接受 `0`（store）与 `8`（deflate）；可执行位一律不保留（目录 0755、文件 0644）；**永不执行**包内任何文件；只写清单里列出的 `path`。
+包内容的安全边界（逐条，`files` 形态下没有压缩包要解）：清单非空且含 `SKILL.md`；路径过 `isSafeRelativePath` 且落在临时目录内（`isWithin`）；同一路径两次 ⇒ 拒绝整包；逐文件比 `size`（清单给了 `sha256` 再比摘要）；**永不执行**包内任何文件；只写清单里列出的 `path`；落位前磁盘上唯一的痕迹是点开头的临时目录（目录 0755、文件 0644）。
 
 ---
 
@@ -337,7 +337,7 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 3. **进程内串行化**：两个并发 POST 在 `lib/market/favorites.js` 里被一条 Promise 链排队，读-改-写整体排他，不会互相覆盖。跨进程并发不处理（与 `install.js` 同一档次的本机单宿主假设，见 `docs/contracts/market.md` §7.7）。
 4. **响应永远是权威全量** `favorites[]`（最新在前）：客户端整份替换，不做增量合并。
 5. **写失败** ⇒ `500 E_FAVORITE_IO`，`message` 带系统错误摘要；日志只记 `{route, code}`，**永不**记 owner / slug。
-6. **U5 起没有 UI 入口**：卡片上的收藏按钮已按用户决定撤除（`docs/contracts/decisions.md` 附录 L），本路由与 `bootstrap` 的 `favorites` / `favoritesOk` 原样保留，等 M8 的「收藏」入口接回；K76 仍守着它。
+6. **U5 起没有 UI 入口**：卡片上的收藏按钮已按用户决定撤除（`docs/contracts/decisions.md` 附录 L），本路由与 `bootstrap` 的 `favorites` / `favoritesOk` 原样保留（将来要接回入口时零 Host 改动，当前不排期）；K76 仍守着它。
 
 ---
 
@@ -381,7 +381,7 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 | `E_SOURCE_TIMEOUT` | 504 | 连接或总超时（10s / 6s / 30s / 安装 120s 预算） | 同上 |
 | `E_SOURCE_BAD_RESPONSE` | 502 | 上游响应不是 JSON，或形状不符（字段改名、缺数组） | 同上（与超时分开，便于排查上游改动） |
 | `E_DOWNLOAD_FAILED` | 502 | 安装取包时网络失败（单文件下载阶段把 503/502 归一成这一条） | 卡片行内原因 + 「重试」 |
-| `E_PACKAGE_INVALID` | 422 | 包不合规：zip 结构非法、路径越界、符号链接/加密条目、条目数或体积超限、`sha256`/CRC/`size` 不符、无 `SKILL.md`、版本不符 | 行内原因 + 「重试」 |
+| `E_PACKAGE_INVALID` | 422 | 包不合规：清单为空 / 没有 `SKILL.md` / 路径不安全（`..`、绝对路径、逃逸临时目录、同一路径两次）/ `size` 或 `sha256` 不符 / 版本不符 | 行内原因 + 「重试」 |
 | `E_SKILL_NAME_INVALID` | 422 | 包内 `SKILL.md` 声明的 `name` 不合 `^[a-z0-9]+(?:-[a-z0-9]+)*$` | 行内原因，回显 `data.declaredName`；**不改名、不用 slug 顶替** |
 | `E_ALREADY_INSTALLED` | 409 | 目标目录已存在（手装、别的工具装、本面板装过都算） | 行内原因 + `data.path`；**无覆盖入口** |
 | `E_INSTALL_BUSY` | 429 | 同一目标正在安装，或全局安装数已满 | 行内原因，提示稍候 |

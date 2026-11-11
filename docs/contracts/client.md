@@ -81,7 +81,7 @@ market = {
   installs: {[id]: {state, reason?, path?, version?, seq?}},   // 确认/安装中/已安装/失败
   icons / iconsTried,                             // 图标缓存 {[key]: url} 与「本会话已问过」{[key]: true}；两个消费者共用（市场条目 + 已装行的 upstream）
   names,                                          // 上游标题缓存 {[key]: title}；与 icons 同键空间、同生命周期
-  favorites / favoritesOk,                        // 本地收藏 {[id]:true} 与可用性；**U5 起没有 UI 入口**，只为 M8 与 bootstrap 对齐而留（写侧已撤）
+  favorites / favoritesOk,                        // 本地收藏 {[id]:true} 与可用性；**U5 起没有 UI 入口**（L-5），只为将来接回入口与 bootstrap 对齐而留（写侧已撤）
   installedDirty,                                 // 已安装页签标脏
   scrollTop,                                      // 进详情前记下，返回时恢复
 }
