@@ -103,6 +103,22 @@ test('插件页：面包屑 → 包名头（图标 + 版本 Tag）→ 包含的�
     t('plugin.countRunning', { count: 2, running: 2 }),
     '计数行与有没有三件套无关',
   );
+
+  // 行内三段：kebab 只在有显示名时才值得占一行；包名是页级信息，绝不进行内。
+  assert.equal((html.match(/class="skc_callMeta"/g) ?? []).length, 0, '没有 displayName：一行 kebab 都不渲染');
+  const named = render({
+    ...blockOf('univer', ['sheet'], 'dsh-univer-office'),
+    skills: [builtinOf('univer', 'sheet', { displayName: '表格工作台' })],
+  });
+  const meta = /<p class="skc_callMeta">([^<]*)<\/p>/.exec(named);
+  assert.ok(meta !== null, '有 displayName：出现 kebab 行');
+  assert.equal(meta[1], 'sheet', 'kebab 行写的是 name（显示名已在名称按钮上）');
+  assert.ok(named.includes('<button type="button" class="skc_cardTitle skc_cardOpen skc_callName" title="表格工作台">表格工作台</button>'), '名称按钮用显示名，title 也是它');
+  // 包名只在标题与来源信息里：把两个 row 区域切出来单独看。
+  for (const page of [html, full, named]) {
+    const rowsHtml = page.slice(page.indexOf('class="skc_cards"'), page.indexOf('class="skc_marketFacts"'));
+    assert.equal(rowsHtml.includes('dsh-univer-office'), false, '行内不出现包名（页级信息只留在 h3 与来源信息）');
+  }
 });
 
 test('插件页没有版本区块、没有查看仓库、也没有「无法检查更新」', () => {

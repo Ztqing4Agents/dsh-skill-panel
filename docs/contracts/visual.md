@@ -155,10 +155,7 @@
 .skc_card:active{ background: var(--dsw-alias-interactive-bg-hover) }
 .skc_cardHead{ align-items: center; gap: 14px; padding: 8px; display: flex }
 /* .cardIcon —— 容器逐字回归 [PM-CSS]（边框、圆角、尺寸、盒模型都是宿主的）；
-   `background` / `background-clip` / `color` / `font-*` 是本插件新增的**内容层**：
-   底与字色由行内 `--skc-avatar-bg` / `--skc-avatar-ink` 传入（见 A.5 下方注），
-   两个 fallback 供骨架态与缺值兜底。`background-clip: padding-box` 不可省：
-   宿主边框是半透明的（`.5px` `border-l3`），不裁到 padding box 就会被粉彩底盖掉 */
+   `background` / `background-clip` / `color` / `font-*` 是本插件新增的**内容层**： 底与字色由行内 `--skc-avatar-bg` / `--skc-avatar-ink` 传入（见 A.5 下方注）， 两个 fallback 供骨架态与缺值兜底。`background-clip: padding-box` 不可省： 宿主边框是半透明的（`.5px` `border-l3`），不裁到 padding box 就会被粉彩底盖掉 */
 .skc_cardIcon{
   box-sizing: border-box;
   border: .5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-lg);
@@ -190,10 +187,8 @@ min-width: 58px; height: 28px; display: inline-flex; position: relative }
   outline-offset: 2px;
 }
 
-/* 详情族（.skc_marketDetail / Crumb / DetailHead / DetailTitle / DetailSection / SectionTitle /
-   Facts / Files）的语义是「详情页骨架，两个页签共用」，**不改名**；已安装详情只补这些。
-   以下刻度全部对照宿主「插件详情页」真机读数（1440×920、DPR 1，见
-   `docs/reference/host-plugin-page.md` §7 与 `.agents/work/scratch/host-detail-metrics.md`） */
+/* 详情族（.skc_marketDetail / Crumb / DetailHead / DetailTitle / DetailSection / SectionTitle / Facts / Files）的语义是「详情页骨架，两个页签共用」，**不改名**；
+   已安装详情只补这些。 以下刻度全部对照宿主「插件详情页」真机读数（1440×920、DPR 1，见 `docs/reference/host-plugin-page.md` §7 与 `.agents/work/scratch/host-detail-metrics.md`） */
 /* 整页替换时 pageBody 里只有这一个详情容器；空条只承载窗口拖动（页头没了这段不能丢），高度 = 页头预留的同一顶部内边距 + darwin 安全区，进出详情头部不跳；拖动区挂整块会吃掉选择与点击 */
 .skc_detailPage{ display: flex; flex-direction: column; min-width: 0 }
 .skc_detailDrag{ flex: none; height: var(--skc-page-top-inset) }
@@ -227,11 +222,18 @@ min-width: 58px; height: 28px; display: inline-flex; position: relative }
 .skc_detailRepoLink{ align-self: flex-end; display: inline-flex; align-items: center; gap: 4px; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px; text-decoration: none }
 @media (hover: hover){ .skc_detailRepoLink:hover{ color: var(--dsw-alias-label-primary) } }
 /* 组件式行（宿主「包含的组件」实测 74 / 41 / 13.5·20·500 / 11.5·16）只给插件页用，技能页那节已删： 插件页 = .skc_detailTop/.skc_detailIcon(49) + .skc_detailIntro（标题 20/28/500 + v Tag；副行 14/22 + .skc_pluginDesc 两行裁切）+ .skc_sectionHead */
-.skc_sectionHead{ justify-content: space-between; align-items: center; gap: 12px; display: flex }
+.skc_sectionHead{ align-items: baseline; gap: 8px; display: flex }
 .skc_pluginCount{ color: var(--dsw-alias-label-secondary); font-size: 13px; line-height: 20px }
 /* 两行裁切只给插件页副行（技能页描述故意不裁）：1320 宽看似两行是巧合，700 宽会到三行 */
 .skc_pluginDesc{ display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
-.skc_callRow{ display: flex; align-items: center; gap: 12px; height: 74px; position: relative }
+/* 行高不再写死：padding 10 0 = 宿主组件行 74 的拆分（41 图标 + 20 名称 + 2 + 32 描述 + 10×2；有 kebab 时 +20） */
+.skc_callRow{ display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; position: relative }
+.skc_callRow + .skc_callRow{ border-top: .5px solid var(--dsw-alias-border-l2) }
+.skc_callMeta{ margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code); font-size: 12px; line-height: 18px }
+/* 组件行里的状态座压到 20 高并顶端对齐（名称首行同 y）；列表行的 .skc_cardEnd 仍是 28 */
+.skc_callRow .skc_cardEnd{ align-self: flex-start; height: 20px }
+.skc_pluginState{ color: var(--dsw-alias-label-secondary); white-space: nowrap; align-items: center; gap: 6px; font-size: 13px; line-height: 20px; display: inline-flex }
+.skc_pluginDot{ width: 6px; height: 6px; border-radius: 999px; display: inline-block; background: var(--dsw-alias-state-success-primary) }.skc_pluginDotOff{ background: var(--dsw-alias-label-tertiary) }
 /* hover 只给可点的行（硬约束 9）；margin -8 + padding 8 与 .skc_card 同套外扩，否则插件页灰底比列表窄 16px */
 @media (hover: hover){ .skc_callRowOpen:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
 .skc_callRowOpen{ border-radius: var(--dsw-radius-xl); margin-inline: -8px; padding-inline: 8px }
@@ -303,11 +305,7 @@ min-width: 58px; height: 28px; display: inline-flex; position: relative }
 .skc_skeletonHeading{ width: 48px }
 .skc_skeletonTitle{ width: min(144px, 60%) }
 .skc_skeletonDescription{ width: min(280px, 85%) }
-/* 骨架图标：`border-color: #0000` 是宿主原文（唯一保留的透明字面量）。
-   `background` / `background-clip` 是本面板补的（[PM-CSS] 里没有）：`.skc_cardIcon`
-   现在画 `--skc-avatar-bg` 的粉彩色块，骨架态必须保持灰色、且灰底与头像一样裁到
-   padding box（宿主边框半透明）；这两条排在 `.skc_skeletonFill` 之后，规则顺序被改动
-   也漏不出彩色块 */
+/* 骨架图标：`border-color: #0000` 是宿主原文（唯一保留的透明字面量）。 `background` / `background-clip` 是本面板补的（[PM-CSS] 里没有）：`.skc_cardIcon` 现在画 `--skc-avatar-bg` 的粉彩色块，骨架态必须保持灰色、且灰底与头像一样裁到 padding box（宿主边框半透明）；这两条排在 `.skc_skeletonFill` 之后，规则顺序被改动 也漏不出彩色块 */
 .skc_skeletonIcon{ border-color: #0000; background: var(--dsw-alias-bg-skeleton); background-clip: padding-box }
 .skc_skeletonActions{ width: calc(36px + var(--skc-toggle-gap) + var(--skc-progress-size)); height: 20px }
 ```

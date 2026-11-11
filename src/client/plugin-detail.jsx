@@ -25,7 +25,7 @@ import { isPending, rowKey, switchMode } from './model.js';
  * skill's own page through the title button, whose `::after` covers the row (hard
  * constraint 9); nothing here intercepts events.
  * @param {{row: object, t: Function, rows: Map<string, object>, onToggle: Function,
- *   onOpen: Function}} props - the skill, translate, per-row write state and both handlers.
+ *   onOpen: Function}} props - the skill, translate, per-row write state, and both handlers.
  * @returns {import('react').ReactElement} the row.
  */
 function SkillCallRow({ row, t, rows, onToggle, onOpen }) {
@@ -47,8 +47,18 @@ function SkillCallRow({ row, t, rows, onToggle, onOpen }) {
           {row.displayName ?? row.name}
         </button>
         {row.description === '' ? null : <p className={cn('callDesc')}>{row.description}</p>}
+        {/* The kebab line is only worth a row when it says something the name does not - which
+            is exactly when a display name exists. The package is page-level information (one
+            block is one package), so it is not repeated per row. */}
+        {row.displayName ? <p className={cn('callMeta')}>{row.name}</p> : null}
       </div>
-      {end === null ? null : <div className={cn('cardEnd')}>{end}</div>}
+      <div className={cn('cardEnd')}>
+        <span className={cn('pluginState')}>
+          <span className={cn('pluginDot', row.enabled === true ? '' : 'pluginDotOff')} aria-hidden="true" />
+          {t(row.enabled === true ? 'plugin.running' : 'plugin.stopped')}
+        </span>
+        {end}
+      </div>
     </div>
   );
 }

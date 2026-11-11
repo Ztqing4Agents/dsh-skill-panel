@@ -137,25 +137,51 @@ test('A.5 详情图标 49 走修饰类：.skc_cardIcon 仍是 48（列表行不�
   assert.match(detail, /(?:^|;)\s*height\s*:\s*49px/, '修饰类 49 高');
 });
 
-test('A.5 调用名行按宿主「包含的组件」刻度：行高 74 / 图标 41 圆角 12 / 名字 13.5-20-500 / 描述 11.5-16 两行裁切', () => {
+test('A.5 插件页组件行按宿主重排：padding 10 0 / flex-start / 四段 / 状态点 / 发丝线', () => {
   const row = ruleBody(capturedCss(), '.skc_callRow');
-  assert.match(row, /(?:^|;)\s*height\s*:\s*74px/, '行高 74');
-  assert.match(row, /(?:^|;)\s*align-items\s*:\s*center/, '垂直居中');
+  // 74 = 图标 41 + 名称 20 + gap 2 + 描述 2 行 32 + padding 10×2 —— 与宿主那一行的 74 逐项相等。
+  assert.match(row, /(?:^|;)\s*padding\s*:\s*10px 0(?!\d)/, '行高由 padding 10 撑起（74 = 41 + 20 + 2 + 32 + 10×2，不再写死 74）');
+  assert.equal(/(?:^|;)\s*height\s*:/.test(row), false, '行高不再写死（内容决定：两行/一行/无描述三档）');
+  assert.match(row, /(?:^|;)\s*align-items\s*:\s*flex-start/, '顶对齐：图标与名称首行齐平');
+  assert.match(row, /(?:^|;)\s*gap\s*:\s*12px/, '三段之间 gap 12');
+  // 行间发丝线：只在第 2 行起（相邻兄弟选择器），最后一行之后天然没有。
+  const sep = ruleBody(capturedCss(), '.skc_callRow + .skc_callRow');
+  assert.match(sep, /border-top\s*:\s*\.5px\s+solid\s+var\(--dsw-alias-border-l2\)/, '相邻行之间 0.5px 发丝线（与事实表同族 l2）');
+  // 四段里的两行 mono。
+  const meta = ruleBody(capturedCss(), '.skc_callMeta');
+  assert.match(meta, /font-family\s*:\s*var\(--ds-font-family-code\)/, 'kebab / 包名是等宽');
+  assert.match(meta, /font-size\s*:\s*12px/, 'mono 12px');
+  assert.match(meta, /line-height\s*:\s*18px/, 'mono 行高 18px');
+  assert.match(meta, /color\s*:\s*var\(--dsw-alias-label-tertiary\)/, 'mono 用三级文字色');
+  // 右侧状态字与点。
+  const state = ruleBody(capturedCss(), '.skc_pluginState');
+  assert.match(state, /font-size\s*:\s*13px/, '状态字 13px');
+  assert.match(state, /line-height\s*:\s*20px/, '状态字行高 20px');
+  assert.match(state, /color\s*:\s*var\(--dsw-alias-label-secondary\)/, '状态字用二级文字色');
+  assert.match(state, /align-items\s*:\s*center/, '点与字垂直居中');
+  assert.match(state, /gap\s*:\s*6px/, '点与字 gap 6');
+  const dot = ruleBody(capturedCss(), '.skc_pluginDot');
+  assert.match(dot, /width\s*:\s*6px/, '点 6 宽');
+  assert.match(dot, /height\s*:\s*6px/, '点 6 高');
+  assert.match(dot, /background\s*:\s*var\(--dsw-alias-state-success-primary\)/, '运行中：成功绿');
+  const dotOff = ruleBody(capturedCss(), '.skc_pluginDotOff');
+  assert.match(dotOff, /background\s*:\s*var\(--dsw-alias-label-tertiary\)/, '已停用：三级文字色');
+  // 区块头：标题与计数基线对齐、gap 8（计数紧跟标题，不再贴右缘）。
+  const head = ruleBody(capturedCss(), '.skc_sectionHead');
+  assert.match(head, /align-items\s*:\s*baseline/, '标题与计数基线对齐');
+  assert.match(head, /gap\s*:\s*8px/, '计数紧跟标题（gap 8）');
+  assert.equal(/justify-content\s*:\s*space-between/.test(head), false, '不再左右分置');
+  // 图标与名字/描述的刻度没变。
   const icon = ruleBody(capturedCss(), '.skc_callIcon');
-  assert.match(icon, /(?:^|;)\s*width\s*:\s*41px/, '图标 41 宽');
-  assert.match(icon, /(?:^|;)\s*height\s*:\s*41px/, '图标 41 高');
-  assert.match(icon, /(?:^|;)\s*border-radius\s*:\s*12px/, '图标圆角 12');
+  assert.match(icon, /width\s*:\s*41px/, '图标 41 宽');
+  assert.match(icon, /border-radius\s*:\s*12px/, '图标圆角 12');
   const name = ruleBody(capturedCss(), '.skc_callName');
   assert.match(name, /font-size\s*:\s*13\.5px[^;]*;?/, '名字 13.5px');
   assert.match(name, /line-height\s*:\s*20px/, '名字行高 20px');
-  assert.match(name, /font-weight\s*:\s*500/, '名字 500');
-  assert.match(name, /white-space\s*:\s*nowrap/, '名字单行不折');
-  assert.match(name, /text-overflow\s*:\s*ellipsis/, '名字超出省略');
   const desc = ruleBody(capturedCss(), '.skc_callDesc');
   assert.match(desc, /font-size\s*:\s*11\.5px/, '描述 11.5px');
   assert.match(desc, /line-height\s*:\s*16px/, '描述行高 16px');
   assert.match(desc, /-webkit-line-clamp\s*:\s*2/, '描述两行裁切');
-  assert.match(desc, /overflow\s*:\s*hidden/, '裁切靠 overflow:hidden');
 });
 
 test('A.5 正文盒只有上下两条 .5px 发丝线：左右没有、无圆角（宿主 4% 黑 / 6% 白 的等价物）', () => {
