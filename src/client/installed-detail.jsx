@@ -231,7 +231,9 @@ export function InstalledDetail({
             <p className={cn('callName')}>{row.name}</p>
             {row.description === '' ? null : <p className={cn('callDesc')}>{row.description}</p>}
           </div>
-          <CopyName name={row.name} t={t} />
+          <div className={cn('cardEnd')}>
+            <CopyName name={row.name} t={t} />
+          </div>
         </div>
       </section>
       {upstream === null ? null : (

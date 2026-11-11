@@ -292,12 +292,43 @@ test('K110 hover / active 只跟着可点的东西走：开关位、只读标记
   // 正文与事实表是详情页的内容，谁都不该有悬停或按下反馈（看着能点、点了没反应）。
   for (const inert of [
     '.skc_bundleToggle', '.skc_roTag', '.skc_detailBody', '.skc_callName', '.skc_marketFacts', '.skc_marketFiles',
+    // 详情页的组件式行只有在插件页才可点（走 .skc_callRowOpen）；技能页那一行不可点，不许有反馈。
+    '.skc_callRow',
   ]) {
     assert.equal(css.includes(`${inert}:hover`), false, `${inert} 没有 hover 底色`);
     assert.equal(css.includes(`${inert}:active`), false, `${inert} 没有按下底色`);
   }
   const actives = [...css.matchAll(/\.(skc_[\w-]+):active/g)].map((match) => match[1]);
-  assert.deepEqual([...new Set(actives)], ['skc_card'], ':active 只出现在可点的行上');
+  assert.deepEqual([...new Set(actives)], ['skc_card', 'skc_callRowOpen'], ':active 只出现在可点的行上（列表行与插件页的可点行）');
+});
+
+test('K110 可点行修饰类：.skc_callRowOpen 有 hover 与 active，基底 .skc_callRow 一点都没有', () => {
+  const css = capturedCss();
+  assert.ok(css.includes('.skc_callRowOpen:hover'), '可点行有 hover 底色');
+  assert.ok(css.includes('.skc_callRowOpen:active'), '可点行有按下底色');
+  assert.equal(css.includes('.skc_callRow:hover'), false, '基底 .skc_callRow 没有 hover（技能页那一行不可点）');
+  assert.equal(css.includes('.skc_callRow:active'), false, '基底 .skc_callRow 没有 active');
+  // 圆角与列表行同族（列表行用 --dsw-radius-xl），底色走宿主的 hover 令牌。
+  assert.match(ruleBody(css, '.skc_callRowOpen'), /border-radius:\s*var\(--dsw-radius-xl\)/, '圆角与列表行同值');
+  assert.match(ruleBody(css, '.skc_callRowOpen:hover'), /background:\s*var\(--dsw-alias-interactive-bg-hover\)/, 'hover 底色走宿主令牌');
+});
+
+test('K110 行尾座与两处文字兜底：.skc_cardEnd 58×28、标题可断行、事实表 dd 行高 22', () => {
+  const css = capturedCss();
+  const end = ruleBody(css, '.skc_cardEnd');
+  assert.match(end, /min-width:\s*58px/, '行尾座最小宽 58');
+  assert.match(end, /height:\s*28px/, '行尾座高 28（与技能页复制按钮同高）');
+  assert.match(end, /justify-content:\s*flex-end/, '行尾靠右对齐');
+  const title = ruleBody(css, '.skc_marketDetailTitle');
+  assert.match(title, /min-width:\s*0/, '标题允许收缩');
+  assert.match(title, /overflow-wrap:\s*anywhere/, '标题可在任意处断行（不加省略号）');
+  assert.equal(/text-overflow|line-clamp/.test(title), false, '标题不裁切、不加省略号');
+  assert.match(ruleBody(css, '.skc_marketFacts dd'), /line-height:\s*22px/, '事实表取值行高 22（芯片与纯文本同高）');
+  // 行盒 22 = 芯片行高 18 + 上下 padding 各 2：改任一项都要同时改另外两项，否则两行又会差 1px。
+  const chip = ruleBody(css, '.skc_marketFacts code');
+  assert.match(chip, /line-height:\s*18px/, '芯片行高 18');
+  assert.match(chip, /padding:\s*2px 6px/, '芯片上下 padding 2');
+  assert.match(ruleBody(css, '.skc_marketFacts dd'), /line-height:\s*22px/, '18 + 2 + 2 = 22 才与纯文本行同高');
 });
 
 /**

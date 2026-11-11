@@ -66,7 +66,7 @@
 | 1 | 面包屑 | 复用 `DetailCrumb`（`detail.back`），返回**列表** |
 | 2 | 头行 | 复用 `.skc_detailTop` + `.skc_detailIcon`：**49×49** 的 `IconTile`（插件包自己的图标，见上），**右侧留空**——内置没有卸载、也没有属于这个包的开关 |
 | 3 | 标题组 | 与技能详情**同一套 intro 刻度**：`.skc_detailIntro` + `.skc_marketTitleRow`（这一层只放标题，不放假版本 Tag）里放包名 `.skc_marketDetailTitle`（**20/28/500**）+ 副行 `.skc_marketDetailDesc`（**14/22、margin 0**，文案 `plugin.skillsCount`）。**不拼「共 N 个」** |
-| 4 | 包含的技能 | `plugin.skills` 标题 + 一个 `.skc_cards` 容器，里面每行是**组件式行**：`.skc_callRow`（`height:74px`、`gap:12`、`position:relative`——给点击层定位）＝ 41×41 图标（`.skc_callIcon`）+ `.skc_callBody`（名字 `.skc_callName` 13.5/20/500 单行省略、描述 `.skc_callDesc` 11.5/16 tertiary 两行裁切）+ **行尾开关**（`.skc_cardEnd` 里放 `EnableSwitch`，软链行放 `ReadonlyTag`）。**整行可点**：名字是 `cardTitle cardOpen` 按钮，`::after` 铺满整行（硬约束 9），开关是唯一独立动作位；点行进**那个技能的详情页** |
+| 4 | 包含的技能 | `plugin.skills` 标题 + 一个 `.skc_cards` 容器，里面每行是**组件式行**：`.skc_callRow`（`height:74px`、`gap:12`、`position:relative`——给点击层定位）＝ 41×41 图标（`.skc_callIcon`）+ `.skc_callBody`（名字 `.skc_callName` 13.5/20/500 单行省略、描述 `.skc_callDesc` 11.5/16 tertiary 两行裁切）+ **行尾开关**（`.skc_cardEnd` 里放 `EnableSwitch`，软链行放 `ReadonlyTag`）。**整行可点**：名字是 `cardTitle cardOpen` 按钮，`::after` 铺满整行（硬约束 9），开关是唯一独立动作位；点行进**那个技能的详情页**。因为可点，这一行带 `.skc_callRowOpen`：hover / active 才有 `interactive-bg-hover` 底色（技能页那一行不可点，**不加**这个修饰类、也没有 hover）；行尾控件与技能页**同一个座**（`.skc_cardEnd`，`min-width:58px; height:28px`，内容右对齐）——技能页那格放复制按钮（36×28），这里放开关（36×20 垂直居中），两页 `callBody` 因此等宽 |
 | 5 | 来源信息 | `detail.sectionSource` 标题 + 一行事实：`detail.factCodeSource` = `detail.sourceBuiltin`（「内置」） |
 
 **没有**正文盒、版本区块与查看仓库：内置技能不检查更新，也没有上游仓库。

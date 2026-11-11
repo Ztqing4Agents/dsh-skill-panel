@@ -153,7 +153,10 @@ color: var(--dsw-alias-label-tertiary); display: -webkit-box;
 -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
 font-size: 13px; line-height: 18px;
 }
-.skc_cardEnd{ z-index: 1; flex: none; align-items: center; gap: 8px; display: inline-flex; position: relative }
+.skc_cardEnd{
+z-index: 1; flex: none; align-items: center; justify-content: flex-end; gap: 8px;
+min-width: 58px; height: 28px; display: inline-flex; position: relative;
+}
 .skc_cardOpen{
 flex: 0 1 auto; min-width: 0; max-width: 100%; padding: 0; border: 0; background: 0 0;
 color: inherit; font: inherit; text-align: left; cursor: pointer; text-overflow: ellipsis; white-space: nowrap;
@@ -372,7 +375,7 @@ outline-offset: 2px;
 }
 .skc_marketCrumbIcon{ transform: rotate(90deg) }
 .skc_marketDetailHead{ align-items: center; gap: 14px; display: flex }
-.skc_marketDetailTitle{ margin: 0; font-size: 20px; font-weight: 500; line-height: 28px }
+.skc_marketDetailTitle{ margin: 0; min-width: 0; overflow-wrap: anywhere; font-size: 20px; font-weight: 500; line-height: 28px }
 .skc_marketDetailDesc{
 color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; margin: 0;
 font-size: 14px; line-height: 22px;
@@ -386,11 +389,12 @@ align-items: center; gap: 16px; padding: 8px 2px; display: flex;
 }
 .skc_marketFacts dt{ color: var(--dsw-alias-label-secondary); flex: none; font-size: 13px; line-height: 20px }
 .skc_marketFacts dd{
-text-align: end; overflow-wrap: anywhere; min-width: 0; margin: 0; font-size: 13px; line-height: 20px;
+text-align: end; overflow-wrap: anywhere; min-width: 0; margin: 0; font-size: 13px; line-height: 22px;
 }
 .skc_marketFacts code{
 background: var(--dsw-alias-bg-module-platform); box-decoration-break: clone;
 font-family: var(--ds-font-family-code); border-radius: 4px; padding: 2px 6px; font-size: 12px;
+line-height: 18px;
 }
 .skc_marketFiles{ margin: 0; padding: 0; list-style: none }
 .skc_marketFiles li{
@@ -436,6 +440,9 @@ border-bottom: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, 
 .skc_detailRepoLink{ align-self: flex-end; display: inline-flex; align-items: center; gap: 4px; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px; text-decoration: none }
 @media (hover: hover){ .skc_detailRepoLink:hover{ color: var(--dsw-alias-label-primary) } }
 .skc_callRow{ display: flex; align-items: center; gap: 12px; height: 74px; position: relative }
+@media (hover: hover){ .skc_callRowOpen:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
+.skc_callRowOpen{ border-radius: var(--dsw-radius-xl) }
+.skc_callRowOpen:active{ background: var(--dsw-alias-interactive-bg-hover) }
 .skc_callIcon{ width: 41px; height: 41px; border-radius: 12px }
 .skc_callBody{ display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 }
 .skc_callName{ margin: 0; font-size: 13.5px; line-height: 20px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }

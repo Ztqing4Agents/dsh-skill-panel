@@ -33,7 +33,7 @@ function SkillCallRow({ row, t, rows, onToggle, onOpen }) {
     ? (row.readonlyReason === 'symlink' ? <ReadonlyTag row={row} t={t} /> : null)
     : <EnableSwitch row={row} t={t} pending={isPending(rows, key)} onToggle={onToggle} />;
   return (
-    <div className={cn('callRow')} data-skc-row={key}>
+    <div className={cn('callRow', 'callRowOpen')} data-skc-row={key}>
       <IconTile title={row.name} className="callIcon" />
       <div className={cn('callBody')}>
         <button

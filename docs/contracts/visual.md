@@ -179,9 +179,9 @@
   -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
   font-size: 13px; line-height: 18px;
 }
-.skc_cardEnd{ z-index: 1; flex: none; align-items: center; gap: 8px; display: inline-flex; position: relative }
-/* 整行可点的唯一手段：标题按钮铺一层 inset:0 的 ::after 盖住整行，开关位靠 z-index:1 浮在上面 */
-/* font: inherit 会把标题的字号冲回继承值，所以这三条必需（与 .skc_cardTitle 同值） */
+.skc_cardEnd{ z-index: 1; flex: none; align-items: center; justify-content: flex-end; gap: 8px;
+min-width: 58px; height: 28px; display: inline-flex; position: relative }
+/* 整行可点 = 标题按钮铺 inset:0 的 ::after + 动作位 z-index:1 浮起；font:inherit 会冲掉字阶，故后三条必需 */
 .skc_cardOpen{ flex: 0 1 auto; min-width: 0; max-width: 100%; padding: 0; border: 0; background: 0 0; color: inherit; font: inherit; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 500; line-height: 20px }
 .skc_cardOpen::after{ content: ""; border-radius: var(--dsw-radius-xl); position: absolute; inset: 0 }
 .skc_cardOpen:focus-visible{ outline: none }
@@ -194,9 +194,8 @@
    Facts / Files）的语义是「详情页骨架，两个页签共用」，**不改名**；已安装详情只补这些。
    以下刻度全部对照宿主「插件详情页」真机读数（1440×920、DPR 1，见
    `docs/reference/host-plugin-page.md` §7 与 `.agents/work/scratch/host-detail-metrics.md`） */
-/* 整页替换时 pageBody 里只有这一个详情容器；顶端那条空条只承载窗口拖动（页头没了，这段不能
-   丢）。高度 = 页头预留的同一顶部内边距（web 28px），darwin 再叠安全区，进出详情头部不跳；
-   拖动区只能挂在这条空条上——整块当拖动区会吃掉文字选择与按钮点击 */
+/* 整页替换时 pageBody 里只有这一个详情容器；空条只承载窗口拖动（页头没了这段不能丢），高度 =
+   页头预留的同一顶部内边距 + darwin 安全区，进出详情头部不跳；拖动区挂整块会吃掉选择与点击 */
 .skc_detailPage{ display: flex; flex-direction: column; min-width: 0 }
 .skc_detailDrag{ flex: none; height: var(--skc-page-top-inset) }
 [data-platform=darwin] .skc_detailDrag{ height: calc(var(--skc-page-top-inset) + var(--dsh-frame-top-clearance, 0px)) }
@@ -213,11 +212,11 @@
 /* 卸载占位：红字 + inset 1px 红环（不是 border，会让高度多 2px），红用 error 令牌 */
 .skc_detailDanger{ --dsh-button-outline-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent); --dsh-hairline-width: 1px; color: var(--dsw-alias-state-error-primary); height: 28px; padding: 0 10px; border-radius: 8px; gap: 4px; font-size: 12px; line-height: 18px }
 .skc_detailDanger:disabled{ opacity: .4 }
-/* 正文盒**只有上下两条 0.5px 发丝线**（宿主实测：左右 none、圆角 0、背景透明）。颜色取「标签主色
-   5%」：浅色 ≈4% 黑、深色 ≈5% 白，随主题翻转；--dsw-alias-border-l3 约 12%，重 3 倍故不用 */
+/* 正文盒只有上下两条 0.5px 发丝线（左右 none、圆角 0、背景透明）；色取标签主色 5%：浅 ≈4% 黑、深 ≈5% 白，
+   随主题翻转（--dsw-alias-border-l3 约 12%，重 3 倍不用） */
 .skc_detailBodyBox{ max-height: 60vh; padding: 12px 0; overflow-y: auto; border-top: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent); border-bottom: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent) }
-/* 版本区块**只在市场装的技能上渲染**：标题 14/20/500 + Button size=sm；卡片 1px 描边 + radius-lg +
-   16 内边距（卡内 px 未采）；✓ 圆底 32。「来源信息」复用 .skc_marketFacts（market.md 附录 F） */
+/* 版本区块只在市场装的技能上渲染：标题 14/20/500 + Button size=sm；卡片 1px 描边 + 16 内边距（卡内
+   px 未采）；✓ 圆底 32。「来源信息」复用 .skc_marketFacts（market.md 附录 F） */
 .skc_detailVersionHead{ display: flex; align-items: center; justify-content: space-between; gap: 12px }
 .skc_detailVersionCard{ border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); padding: 16px; display: flex; align-items: flex-start }
 .skc_detailVersionRow{ display: flex; align-items: flex-start; gap: 12px; min-width: 0 }
@@ -228,12 +227,15 @@
 /* 「查看仓库」是页内普通链接（不是点击层）：右下角、13/20 tertiary、hover 变主色 */
 .skc_detailRepoLink{ align-self: flex-end; display: inline-flex; align-items: center; gap: 4px; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px; text-decoration: none }
 @media (hover: hover){ .skc_detailRepoLink:hover{ color: var(--dsw-alias-label-primary) } }
-/* 调用名区块：一行照宿主「包含的组件」的组件行（实测 74 / 41 / 13.5·20·500 / 11.5·16 两行），
-   图标沿用 IconTile 的基类再加这层修饰，右侧挂复制按钮；标题不带计数（宿主的「共 N 个」没意义） */
-/* 内置块与插件页**不新增任何类**：块 = .skc_card + .skc_cardOpen；插件页 = .skc_detailTop/.skc_detailIcon(49)
-   + .skc_detailIntro（标题 .skc_marketDetailTitle 20/28/500、副行 .skc_marketDetailDesc 14/22 margin 0，两页同刻度）
-   + .skc_marketSectionTitle + .skc_callRow 那一套组件式行（行高 74 / 图标 41） */
+/* 组件式行（宿主「包含的组件」实测 74 / 41 / 13.5·20·500 / 11.5·16 两行）用在内置块与插件页，不新增类：
+   块 = .skc_card + .skc_cardOpen；插件页 = .skc_detailTop/.skc_detailIcon(49) + .skc_detailIntro（标题
+   20/28/500 带 min-width:0 + overflow-wrap:anywhere 换行不裁；副行 14/22 margin 0；dd 行盒 22、其中
+   `<code>` 芯片 18 + 上下 padding 2 = 同高） */
 .skc_callRow{ display: flex; align-items: center; gap: 12px; height: 74px; position: relative }
+/* hover 只给可点的行：插件页的行加 .skc_callRowOpen 才有反馈（硬约束 9），技能页那行不可点故不加 */
+@media (hover: hover){ .skc_callRowOpen:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
+.skc_callRowOpen{ border-radius: var(--dsw-radius-xl) }
+.skc_callRowOpen:active{ background: var(--dsw-alias-interactive-bg-hover) }
 .skc_callIcon{ width: 41px; height: 41px; border-radius: 12px }
 .skc_callBody{ display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 }
 .skc_callName{ margin: 0; font-size: 13.5px; line-height: 20px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }

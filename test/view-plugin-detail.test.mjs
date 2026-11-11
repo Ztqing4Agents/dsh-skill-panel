@@ -112,8 +112,9 @@ test('插件页的面包屑带 onClick（返回上一级由调用方决定，两
 
 test('插件页的行是组件式行：74 高壳 + 41 图标 + 13.5/20/500 名字 + 两行描述 + 行尾开关', () => {
   const html = render(blockOf('univer', ['sheet', 'docx']));
-  const rows = html.match(/<div class="skc_callRow"[\s\S]*?(?=<div class="skc_callRow"|<\/div><\/div>)/g) ?? [];
+  const rows = html.match(/<div class="skc_callRow[\s\S]*?(?=<div class="skc_callRow|<\/div><\/div>)/g) ?? [];
   assert.equal(rows.length >= 2, true, '每行都是 .skc_callRow 壳');
+  assert.equal((html.match(/class="skc_callRow skc_callRowOpen"/g) ?? []).length, 2, '插件页的行带可点修饰类（hover/active 只挂在它身上）');
   // 图标位同时带宿主行的 cardIcon（尺寸由 .skc_callIcon 覆写成 41 / 圆角 12）。
   assert.equal((html.match(/class="skc_cardIcon skc_callIcon"/g) ?? []).length, 2, '每行一个 41 图标');
   assert.equal((html.match(/class="skc_cardTitle skc_cardOpen skc_callName"/g) ?? []).length, 2, '名字是可点按钮（callName）');
