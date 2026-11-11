@@ -62,6 +62,11 @@ function render(block, setup = {}) {
   }));
 }
 
+/** Just the rows block: from the `.skc_cards` container to the facts table. */
+function rowsOf(html) {
+  return html.slice(html.indexOf('class="skc_cards"'), html.indexOf('class="skc_marketFacts"'));
+}
+
 test('插件页：面包屑 → 包名头（图标 + 版本 Tag）→ 包含的技能（右侧计数）→ 来源信息', () => {
   const html = render(blockOf('univer', ['sheet', 'docx'], 'dsh-univer-office'));
   const order = [
@@ -104,8 +109,11 @@ test('插件页：面包屑 → 包名头（图标 + 版本 Tag）→ 包含的�
     '计数行与有没有三件套无关',
   );
 
-  // 行底那行恒渲染：只剩 <code>kebab</code>（复制命令已整块删掉）；包名是页级信息，绝不进行内。
-  assert.equal((html.match(/<p class="skc_callMeta"><code>/g) ?? []).length, 2, '每行行底都有 kebab 行（与有没有 displayName 无关）');
+  // 行底那行等宽 kebab 已删（`.skc_callMeta` 那条规则与那行 DOM 一起没了）：
+  // 行段里一个 <code> 都没有，与有没有 displayName 无关；包名是页级信息，绝不进行内。
+  const rowsHtml = rowsOf(html);
+  assert.equal(rowsHtml.includes('skc_callMeta'), false, '每行行底都没有 kebab 行（与有没有 displayName 无关）');
+  assert.equal((rowsHtml.match(/<code>/g) ?? []).length, 0, '行段内 <code> 数 = 0');
   assert.equal(html.includes('skc_callCommand'), false, '命令行那套修饰类已随复制按钮删除');
   assert.equal(/aria-label="[^"]*复制/.test(html), false, '整页没有复制按钮');
   const named = render({
@@ -113,13 +121,13 @@ test('插件页：面包屑 → 包名头（图标 + 版本 Tag）→ 包含的�
     skills: [builtinOf('univer', 'sheet', { displayName: '表格工作台' })],
   });
   assert.ok(named.includes('<p class="skc_callName">表格工作台</p>'), '有 displayName：名字用显示名');
-  const namedCode = /<p class="skc_callMeta"><code>([^<]*)<\/code><\/p>/.exec(named);
-  assert.ok(namedCode !== null, '有 displayName：kebab 行仍在');
-  assert.equal(namedCode[1], 'sheet', 'kebab 行写调用名（显示名替代不了它）');
+  const namedRows = rowsOf(named);
+  assert.equal(namedRows.includes('skc_callMeta'), false, '有 displayName：也没有 kebab 行（显示名那行就是唯一的名字）');
+  assert.equal((namedRows.match(/<code>/g) ?? []).length, 0, '有 displayName：行段内 <code> 数也是 0');
   // 包名只在标题与来源信息里：把行区域切出来单独看。
   for (const page of [html, full, named]) {
-    const rowsHtml = page.slice(page.indexOf('class="skc_cards"'), page.indexOf('class="skc_marketFacts"'));
-    assert.equal(rowsHtml.includes('dsh-univer-office'), false, '行内不出现包名（页级信息只留在 h3 与来源信息）');
+    const pageRows = rowsOf(page);
+    assert.equal(pageRows.includes('dsh-univer-office'), false, '行内不出现包名（页级信息只留在 h3 与来源信息）');
   }
 });
 
@@ -151,7 +159,7 @@ test('插件页的面包屑带 onClick（返回上一级由调用方决定，两
   assert.equal(html.includes(t('detail.back')), true, '按钮文字是 detail.back');
 });
 
-test('插件页的行是只读信息行：只有 .skc_callRow、没有点击层、行底只有 kebab', () => {
+test('插件页的行是只读信息行：只有 .skc_callRow、没有点击层、行内没有 kebab', () => {
   const html = render(blockOf('univer', ['sheet', 'docx']));
   // 1) 容器类只有基类：可点修饰类与卡片点击层都不在。
   assert.equal((html.match(/class="skc_callRow"/g) ?? []).length, 2, '两行都是纯 .skc_callRow');
@@ -163,11 +171,23 @@ test('插件页的行是只读信息行：只有 .skc_callRow、没有点击层�
   assert.equal((html.match(/<p class="skc_callName">/g) ?? []).length, 2, '名字是不可点的 <p>');
   assert.equal((html.match(/<p class="skc_callDesc">/g) ?? []).length, 2, '描述是 callDesc');
   assert.equal(/<button[^>]*class="[^"]*skc_callName/.test(html), false, '名字不是按钮');
-  // 3) 行底：只有等宽 kebab，没有复制按钮、没有播报位。
-  const command = /<p class="skc_callMeta"><code>([^<]*)<\/code><\/p>/g;
-  const found = [...html.matchAll(command)];
-  assert.equal(found.length, 2, '每行行底只有 <code>kebab</code>');
-  assert.deepEqual(found.map((m) => m[1]), ['sheet', 'docx'], 'code 里是 kebab 调用名');
+  // 3) 行底没有等宽 kebab：行段内 <code> 数 = 0、skc_callMeta 不出现；
+  //    行内文字只剩名称与描述（右侧状态 + 开关见第 4 段），没有第三行、没有复制按钮。
+  const rowsHtml = rowsOf(html);
+  assert.equal((rowsHtml.match(/<code>/g) ?? []).length, 0, '行段内 <code> 数 = 0');
+  assert.equal(rowsHtml.includes('skc_callMeta'), false, '行内不出现 skc_callMeta');
+  const bodies = [...rowsHtml.matchAll(/<div class="skc_callBody">([\s\S]*?)<\/div>/g)].map((m) => m[1]);
+  assert.equal(bodies.length, 2, '两行都有文字块');
+  for (const body of bodies) {
+    const paragraphs = [...body.matchAll(/<p class="([^"]*)">([\s\S]*?)<\/p>/g)];
+    assert.deepEqual(
+      paragraphs.map((m) => m[1]),
+      ['skc_callName', 'skc_callDesc'],
+      `文字块里只有名称与描述（实测 ${paragraphs.map((m) => m[1]).join(' / ')}）`,
+    );
+    assert.equal(body.includes('<code>'), false, '文字块里没有 <code>');
+  }
+  assert.deepEqual(bodies.map((body) => /<p class="skc_callName">([^<]*)<\/p>/.exec(body)?.[1]), ['sheet', 'docx'], '名称就是调用名（这两行没有 displayName）');
   assert.equal(/aria-label="[^"]*复制/.test(html), false, '行内没有复制按钮');
   assert.equal(html.includes('skc_detailCopyInline'), false, '复制按钮专用类不在');
   // 行内唯一的 role=status 是开关自己的进度播报。

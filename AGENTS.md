@@ -66,7 +66,7 @@ npm test             # node --test test/（测试由 QA 维护）
 7. **frontmatter 改写只能走 `lib/frontmatter.js`**：现成实现（含 skill-explorer 的
    `setFrontmatterField`）会把 CRLF 洗成 LF。本机 `indiv-guipi--find-skills/SKILL.md` 就是 CRLF 样本。
 8. **`exports["./client"]` 必须是字符串 `"./client.js"`**：宿主 `clientExportOf()` 硬契约。
-9. **点击边界按页签划（三处）**：「已安装」页签的**行可点**（进本地详情页，见 `docs/contracts/installed-detail.md`），手段只有宿主那一个——标题按钮 `cardOpen::after{inset:0}` 铺满整行 + **唯一的动作位**用显式 `z-index` 浮在上层（开关位 `.skc_cardEnd{z-index:1}`；软链行的 `roTag` **不浮起、不可点**）；「技能市场」页签的卡不变（`marketCardOpen::after` + `marketCardEnd{z-index:1}`，安装是唯一动作位）；**详情页内部**的面包屑、复制按钮、开关、重试是普通按钮，不属于「整区可点」。
+9. **点击边界按页签划（三处）**：「已安装」页签的**行可点**（进本地详情页，见 `docs/contracts/installed-detail.md`），手段只有宿主那一个——标题按钮 `cardOpen::after{inset:0}` 铺满整行 + **唯一的动作位**用显式 `z-index` 浮在上层（开关位 `.skc_cardEnd{z-index:1}`；软链行的 `roTag` **不浮起、不可点**）；「技能市场」页签的卡不变（`marketCardOpen::after` + `marketCardEnd{z-index:1}`，安装是唯一动作位）；**详情页内部**的面包屑、开关、重新检查 / 重试是普通按钮，不属于「整区可点」；**两页都没有复制入口**（调用名是可选中的纯文本）。
    三处都**不许**做成 `<a href>`、不许加第二个可点区域、不许用 JS 拦冒泡代替层级；行 hover/active 只出现在可点的行上，不许出现「看着能点、点了没反应」。
 10. **不写别人的存储**：`~/.dsh/skills-manager/state.json`、`skill-market/*`、`.skills-lock.json` 只读。
 11. **Client 半部必须 `export const inject = ['slots', 'locale']`，且与 `ctx.*` 读取严格对齐**：

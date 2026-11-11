@@ -229,7 +229,6 @@ min-width: 58px; height: 28px; display: inline-flex; position: relative }
    没有点击层也没有 hover（硬约束 9：点不了就不给反馈），所以没有 .skc_callRowOpen 那套外扩 */
 .skc_callRow{ display: flex; align-items: center; gap: 12px; padding: 10px 0; position: relative }
 .skc_callRow + .skc_callRow{ border-top: .5px solid var(--dsw-alias-border-l2) }
-.skc_callMeta{ margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code); font-size: 12px; line-height: 18px }
 .skc_pluginState{
 color: var(--dsw-alias-label-secondary); white-space: nowrap; align-items: center; gap: 6px;
 font-size: 13px; line-height: 20px; display: inline-flex;

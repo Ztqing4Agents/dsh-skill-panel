@@ -139,21 +139,34 @@ test('A.5 详情图标 49 走修饰类：.skc_cardIcon 仍是 48（列表行不�
 
 test('A.5 插件页组件行按宿主刻度：padding 10 0 / 垂直居中 / 两段 + 发丝线', () => {
   const row = ruleBody(capturedCss(), '.skc_callRow');
-  // 74 = 图标 41 + 名称 20 + gap 2 + 描述 2 行 32 + padding 10×2 —— 与宿主那一行的 74 逐项相等。
-  assert.match(row, /(?:^|;)\s*padding\s*:\s*10px 0(?!\d)/, '行高由 padding 10 撑起（74 = 41 + 20 + 2 + 32 + 10×2，不再写死 74）');
-  assert.equal(/(?:^|;)\s*height\s*:/.test(row), false, '行高不再写死（内容决定：两行/一行/无描述三档）');
+  // 行高不写死，三档全由盒模型算出来（与宿主那一行的 74 逐项相等）：
+  //   两行描述 74 = 10 + max(41 图标, 20 名称 + 2 + 32 描述) + 10 —— 撑起 74 的是文字块 54；
+  //   一行描述的文字块只有 20 + 2 + 16 = 38，空描述只有 20，都矮于 41 图标，
+  //   所以这两档都是 10 + 41 + 10 = 61（41 图标托底）。
+  assert.match(row, /(?:^|;)\s*padding\s*:\s*10px 0(?!\d)/, '行高由 padding 10 撑起（74 = 10 + 54 + 10）');
+  assert.equal(/(?:^|;)\s*height\s*:/.test(row), false, '行高不写死（内容 + 图标托底决定：两行 74 / 一行 61 / 空描述 61 三档）');
   assert.match(row, /(?:^|;)\s*align-items\s*:\s*center/, '垂直居中：图标中线与文字块中线同高（行内状态点已回退，顶对齐随之取消）');
   assert.equal(/(?:^|;)\s*align-items\s*:\s*flex-start/.test(row), false, '顶对齐那版已经不在');
   assert.match(row, /(?:^|;)\s*gap\s*:\s*12px/, '三段之间 gap 12');
   // 行间发丝线：只在第 2 行起（相邻兄弟选择器），最后一行之后天然没有。
   const sep = ruleBody(capturedCss(), '.skc_callRow + .skc_callRow');
   assert.match(sep, /border-top\s*:\s*\.5px\s+solid\s+var\(--dsw-alias-border-l2\)/, '相邻行之间 0.5px 发丝线（与事实表同族 l2）');
-  // 四段里的两行 mono。
-  const meta = ruleBody(capturedCss(), '.skc_callMeta');
-  assert.match(meta, /font-family\s*:\s*var\(--ds-font-family-code\)/, 'kebab / 包名是等宽');
-  assert.match(meta, /font-size\s*:\s*12px/, 'mono 12px');
-  assert.match(meta, /line-height\s*:\s*18px/, 'mono 行高 18px');
-  assert.match(meta, /color\s*:\s*var\(--dsw-alias-label-tertiary\)/, 'mono 用三级文字色');
+  // 三档行高按真实取值算一遍，算式就是刻度本身（改任何一项都会在这里露出来）：
+  //   ｜两行描述｜ = 10 + max(41, 20 + 2 + 16×2) + 10 = 74
+  //   ｜一行描述｜ = 10 + max(41, 20 + 2 + 16) + 10 = 61（38 矮于 41，图标托底）
+  //   ｜空描述　｜ = 10 + max(41, 20) + 10        = 61（同样 41 托底）
+  const px = (body, property) => Number(new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*(\\d+(?:\\.\\d+)?)px`).exec(body)?.[1]);
+  const pad = px(row, 'padding');
+  const bodyGap = px(ruleBody(capturedCss(), '.skc_callBody'), 'gap');
+  const nameLh = px(ruleBody(capturedCss(), '.skc_callName'), 'line-height');
+  const descLh = px(ruleBody(capturedCss(), '.skc_callDesc'), 'line-height');
+  const iconH = px(ruleBody(capturedCss(), '.skc_callIcon'), 'height');
+  const rowHeightOf = (descLines) => pad * 2 + Math.max(iconH, nameLh + (descLines === 0 ? 0 : bodyGap + descLh * descLines));
+  assert.equal(rowHeightOf(2), 74, `两行描述 74 = 10 + (${nameLh} 名称 + ${bodyGap} + ${descLh * 2} 描述) + 10`);
+  assert.equal(rowHeightOf(1), 61, `一行描述 61：文字块 ${nameLh + bodyGap + descLh} 矮于 ${iconH} 图标，41 托底`);
+  assert.equal(rowHeightOf(0), 61, `空描述 61：文字块只有 ${nameLh}，同样 41 图标托底`);
+  // 行底那行等宽 kebab 已整条删除（.skc_callMeta 在样式表里零出场）。
+  assert.equal(capturedCss().includes('.skc_callMeta'), false, '.skc_callMeta 已随行底 kebab 删除');
   // 行内状态：字 13/20 secondary、点 6×6 成功绿、停用时三级文字色（行是只读信息行，状态只在这里说）。
   const state = ruleBody(capturedCss(), '.skc_pluginState');
   assert.match(state, /font-size\s*:\s*13px/, '状态字 13px');
@@ -166,7 +179,7 @@ test('A.5 插件页组件行按宿主刻度：padding 10 0 / 垂直居中 / 两�
   assert.match(dot, /height\s*:\s*6px/, '点 6 高');
   assert.match(dot, /background\s*:\s*var\(--dsw-alias-state-success-primary\)/, '运行中：成功绿');
   assert.match(ruleBody(capturedCss(), '.skc_pluginDotOff'), /background\s*:\s*var\(--dsw-alias-label-tertiary\)/, '已停用：三级文字色');
-  // 复制入口整块删掉之后，命令行那套 flex 布局也一起没有了：行底只剩一行等宽 text。
+  // 复制入口与行底 kebab 都删了，命令行那套 flex 布局自然也没有了。
   assert.equal(capturedCss().includes('.skc_callCommand'), false, '.skc_callCommand 已随复制按钮删除');
   // 区块头：标题与计数基线对齐、gap 8（计数紧跟标题，不再贴右缘）。
   const head = ruleBody(capturedCss(), '.skc_sectionHead');

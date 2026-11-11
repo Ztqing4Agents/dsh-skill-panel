@@ -19,10 +19,10 @@ import { EnableSwitch, ReadonlyTag } from './row.jsx';
 import { isPending, rowKey, switchMode } from './model.js';
 
 /**
- * One skill inside a provider page, as the component row both detail pages use.
+ * One skill inside a provider page, as the component row this page lists skills with.
  *
- * Same 10/10 padded row as the host's component list: 41 icon, name, up to two lines of
- * description and the mono invocation name underneath. The row is not clickable -
+ * Same 10/10 padded row as the host's component list: 41 icon, name and up to two lines of
+ * description, which puts the row back on the host's 74. The row is not clickable -
  * a builtin skill has no page below - so it carries no click layer and no hover, and the
  * switch stays the row's only action (hard constraint 9).
  * @param {{row: object, t: Function, rows: Map<string, object>, onToggle: Function}} props -
@@ -41,8 +41,6 @@ function SkillCallRow({ row, t, rows, onToggle }) {
       <div className={cn('callBody')}>
         <p className={cn('callName')}>{row.displayName ?? row.name}</p>
         {row.description === '' ? null : <p className={cn('callDesc')}>{row.description}</p>}
-        {/* The bottom line is the kebab name a person types, mono like the host's module line. */}
-        <p className={cn('callMeta')}><code>{row.name}</code></p>
       </div>
       <div className={cn('cardEnd')}>
         <span className={cn('pluginState')}>

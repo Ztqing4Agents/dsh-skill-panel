@@ -444,7 +444,6 @@ border-bottom: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, 
 .skc_pluginDesc{ display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
 .skc_callRow{ display: flex; align-items: center; gap: 12px; padding: 10px 0; position: relative }
 .skc_callRow + .skc_callRow{ border-top: .5px solid var(--dsw-alias-border-l2) }
-.skc_callMeta{ margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code); font-size: 12px; line-height: 18px }
 .skc_pluginState{
 color: var(--dsw-alias-label-secondary); white-space: nowrap; align-items: center; gap: 6px;
 font-size: 13px; line-height: 20px; display: inline-flex;
