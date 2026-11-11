@@ -1,9 +1,9 @@
 # 已安装详情页（内嵌：本地事实 + 当场读盘的正文）
 
 > 类型：规范
-> 读者：改「已安装」页签详情页（`src/client/installed-detail.jsx`）、它的第 12 条路由或它那 25 个文案键的人
+> 读者：改「已安装」页签详情页（`src/client/installed-detail.jsx`）、它的第 12 条路由或它那 23 个文案键的人
 > 真源：`src/client/installed-detail.jsx`、`src/client/state.js` 的 `detail`、`lib/routes.js` 的 detail 路由与 `lib/scan.js` 的 `readSkillContent`
-> 更新触发：改区块顺序、状态机、返回口径、读盘围栏或这 25 个键时，本文件与 `docs/contracts/routes.md` §3.3.3 一起改
+> 更新触发：改区块顺序、状态机、返回口径、读盘围栏或这 23 个键时，本文件与 `docs/contracts/routes.md` §3.3.3 一起改
 > 规模上限：400
 
 `docs/contracts/client.md` §3.9.2 只留指针（那张表已到 400 行档位）。点击边界见 `AGENTS.md` 硬约束 9，刻度见 `docs/contracts/visual.md` A.5。
@@ -34,7 +34,7 @@
 | --- | --- | --- |
 | 1 | 面包屑 | `detail.back`（值「技能」/`Skills`，与宿主的 `crumbRoot` 同义），唯一返回入口（`.skc_marketCrumb` 配方） |
 | 2 | 头行 | `.skc_detailTop`（`space-between` + `align-items:center`）：左 `IconTile` 加 **`.skc_detailIcon`**（**49×49**，宿主详情页的值；列表行仍是 48）；右侧 `.skc_detailActions`（`gap:16`）= **卸载占位按钮 + 开关**。卸载 = `Button variant="outline" size="sm" className=detailDanger disabled title=detail.uninstallSoon` + `IconTrashOutlineRegular size={13}` + 文案 `detail.uninstall`，**没有 onClick**（真实卸载见看板 M6；可见的不可点，与 `＋ 添加技能` 的 C-3 同一处置）。开关：`switchMode(row)` 非空 → `EnableSwitch`；软链行 → `ReadonlyTag`；其余不渲染 |
-| 3 | 标题组 | `.skc_detailIntro`（图标下方纵向，`gap:8`；到图标行 20 = 列 gap 32 − 12）——**三段，顺序固定**：① 标题行 `.skc_marketTitleRow`：标题 `h3.skc_marketDetailTitle`（20/28/500）+ 版本 Tag（复用 `market.metaVersion` = `v{version}`，有值才画）；② **调用名行** `.skc_detailAuthor`（沿用作者行那条刻度：**12/18 tertiary mono**，改成 `inline-flex + gap:6`）：`<code>{kebab 名}</code>` + **复制按钮**（`CopyName`，ghost sm、图标 13、`aria-label` = `detail.copy`；**压到 22 高**——`.skc_detailCopyInline`，28 高的 ghost 会把这一行撑大、intro 比宿主多 9.5px）；③ 描述（**`.skc_marketDetailDesc` 14/22 不截断**，空串整块不渲染）。**作者行不再显示**——`upstream` 仍供「代码来源 / 版本检查 / 查看仓库」用，只是不露在人眼前 |
+| 3 | 标题组 | `.skc_detailIntro`（图标下方纵向，`gap:8`；到图标行 20 = 列 gap 32 − 12）——**三段，顺序固定**：① 标题行 `.skc_marketTitleRow`：标题 `h3.skc_marketDetailTitle`（20/28/500）+ 版本 Tag（复用 `market.metaVersion` = `v{version}`，有值才画）；② **调用名行** `.skc_detailAuthor`（作者行那条刻度：**12/18 tertiary mono**，纯文本块）：`<code>{kebab 名}</code>`，**只有文字、没有复制按钮**——所以行高就是 18（不再被 22 高的按钮撑到 22），intro 三段总高 = 28 + 8 + 18 + 8 + 22 = **84**，文字级间距 ≈13/13，正好落到宿主的 13.0/12.5（这是去掉按钮的附带收益）；③ 描述（**`.skc_marketDetailDesc` 14/22 不截断**，空串整块不渲染）。**作者行不再显示**——`upstream` 仍供「代码来源 / 版本检查 / 查看仓库」用，只是不露在人眼前 |
 | 4 | 失效原因（可选） | `reason` 非空时一行 `.skc_reason`（`role="alert"`），紧跟在标题组之后 |
 | 5 | 正文盒 | **紧跟描述**，**前面没有区块标题**（宿主也是描述下面直接是 README，`market.detailOverview` 只给市场详情用）：`.skc_detailBodyBox`（`max-height:60vh; padding:12px 0; overflow-y:auto`，宿主 1440×920 实测 552px = 60vh；**上下各一条 0.5px 发丝线、左右无、圆角 0**——宿主就是这样，颜色取标签主色 5% 以随主题翻转；不加 `tabindex`、不拦 `wheel`）。**三态与空态都在盒内就地呈现**：`loading` → 一行 `detail.loading`；`error` → 一行 `detail.error` + 「重试」按钮；`ready` 但无正文 → 一行 `detail.noBody`；`ready` 有正文 → `MarkdownBlock`（必须传 `labels`：6 个 `markdown.*`，缺了它宿主渲染代码围栏时抛错、整段回落纯文本）；`truncated === true` 时正文**下方**再加一行 `detail.truncated` |
 | 6 | 版本（**条件块：仅 `row.upstream !== null`，即市场装的技能**） | 本地技能（手工装 / 软链指向的技能目录 / 内置）**整块不渲染**——宿主对本地插件就没有这块，不再显示「无法检查更新」。块内：`detail.sectionVersion` 标题 + 右侧小按钮（`detail.checkAgain` / `detail.checking`，检查中禁用）；下面是圆角卡：`upToDate` 显示 ✓ 圆底 + `detail.upToDate` + `detail.checkedAt`（`HH:MM`）；`newer` 显示 `detail.newerVersion`（带上游版本号）+ `detail.checkedAt`；其余四态在卡内各一行文案（见「检查更新」）。**`unavailable` 只剩「有 upstream 但没有本地 version」这一条路径** |
@@ -65,7 +65,7 @@
 | 1 | 面包屑 | 复用 `DetailCrumb`（`detail.back`），返回**列表** |
 | 2 | 头行 | 复用 `.skc_detailTop` + `.skc_detailIcon`：**49×49** 的 `IconTile`（插件包自己的图标，见上），**右侧留空**——内置没有卸载、也没有属于这个包的开关 |
 | 3 | 标题组 | 与技能详情**同一套 intro 刻度**：`.skc_detailIntro` + `.skc_marketTitleRow` 里放包名 `.skc_marketDetailTitle`（**20/28/500**）+ **`v{pluginVersion}` Tag**（复用 `market.metaVersion`，有版本才画）；副行 `.skc_marketDetailDesc` + **`.skc_pluginDesc`**（14/22、margin 0，**2 行裁切**——裁切只加在这个修饰类上，技能页的描述故意不裁）= 插件包 `package.json.description`（`Row.pluginDescription`，≤200 字），**没有描述整行不渲染** |
-| 4 | 包含的技能 | `.skc_sectionHead`（`flex; align-items:baseline; gap:8`）：`plugin.skills` 标题（14/20/500）**紧跟**一个 `.skc_pluginCount`（secondary 13/20）「共 {N} 个 · {M} 运行中」（`plugin.countRunning`，M = 该块里 `enabled === true` 的行数）——宿主就是贴着标题放，**不贴右缘**；标题区不再写「N 个技能」。正文是 `.skc_cards` 容器，行间靠 `border-top: .5px`（`--dsw-alias-border-l2` 那一族）分隔，**第一行没有**。每行是**只读信息行**（`.skc_callRow`：`gap:12`、`padding:10px 0`、`align-items:center`；`10` 是宿主组件行的拆分：41 图标 + 20 名称 + 2 + 32 描述 + 10×2）：**不可点、无 hover**——名称是纯文本 `<p class="skc_callName">`（13.5/20/500），没有 `cardOpen` 点击层、没有 `.skc_callRowOpen`、没有外扩负边距；内置技能没有下一级页面，插件页的行不提供详情入口（详情入口只在「已安装」列表里）。行内顺序固定：**名称** + **描述**（`.skc_callDesc`，11.5/16 tertiary、两行裁切、空串不渲染）+ **行底复制行** `.skc_callCommand`（`.skc_callMeta` 的 12/18 mono tertiary 上加 `flex + gap 6`）：`<code>{kebab 调用名}</code>` + 复制按钮（`.skc_detailCopyInline`，22 高、图标 13，`aria-label`/`title` = `plugin.copyCommand`「复制命令」，写剪贴板并 `role=status` 播报「已复制」）；**没有包名行**（一块就是一包，属页级信息）。右 `.skc_cardEnd`（本体 28 高、垂直居中）里：`.skc_pluginState`（绿点 + `plugin.running` / 灰点 + `plugin.stopped`，13/20 secondary）**+ 开关**（软链行放 `ReadonlyTag`），状态与开关同一水平线、行内垂直居中 |
+| 4 | 包含的技能 | `.skc_sectionHead`（`flex; align-items:baseline; gap:8`）：`plugin.skills` 标题（14/20/500）**紧跟**一个 `.skc_pluginCount`（secondary 13/20）「共 {N} 个 · {M} 运行中」（`plugin.countRunning`，M = 该块里 `enabled === true` 的行数）——宿主就是贴着标题放，**不贴右缘**；标题区不再写「N 个技能」。正文是 `.skc_cards` 容器，行间靠 `border-top: .5px`（`--dsw-alias-border-l2` 那一族）分隔，**第一行没有**。每行是**只读信息行**（`.skc_callRow`：`gap:12`、`padding:10px 0`、`align-items:center`；`10` 是宿主组件行的拆分：41 图标 + 20 名称 + 2 + 32 描述 + 10×2）：**不可点、无 hover**——名称是纯文本 `<p class="skc_callName">`（13.5/20/500），没有 `cardOpen` 点击层、没有 `.skc_callRowOpen`、没有外扩负边距；内置技能没有下一级页面，插件页的行不提供详情入口（详情入口只在「已安装」列表里）。行内顺序固定：**名称** + **描述**（`.skc_callDesc`，11.5/16 tertiary、两行裁切、空串不渲染）+ **行底等宽调用名** `<p class="skc_callMeta"><code>{kebab}</code></p>`（`.skc_callMeta` 12/18 mono tertiary，对应宿主那行的模块名；**只有文字、没有复制按钮**，行高因此是 18，整行 = 10 + 20 + 2 + 32 + 2 + 18 + 10 = **~76**）；**没有包名行**（一块就是一包，属页级信息）。右 `.skc_cardEnd`（本体 28 高、垂直居中）里：`.skc_pluginState`（绿点 + `plugin.running` / 灰点 + `plugin.stopped`，13/20 secondary）**+ 开关**（软链行放 `ReadonlyTag`），状态与开关同一水平线、行内垂直居中 |
 | 5 | 来源信息 | `detail.sectionSource` 标题 + 复用事实表样式（`.skc_marketFacts`，dd 行盒 22）：`detail.factCodeSource` = **`<pkg>@<version>`**（等宽；**三件套全缺时 fallback 成包名 `<code>{pkg}</code>`**，有 version 才拼 `@` 并多出下面那行）、`detail.factVersion` = `<version>`（等宽；**没有 version 这一行整行不渲染**） |
 
 **没有**正文盒、版本区块与查看仓库：内置技能不检查更新，也没有上游仓库。
@@ -107,7 +107,7 @@ store.detailScrollTop = number      // 打开详情前记下的 .skc_pageBody �
 - **不支持 Esc**（与市场详情一致：加全局 keydown 会让两个详情页行为分叉）。
 - 开关：详情头里就是行内那一个 `EnableSwitch`，读同一份 `state.rows`；失败原因 `.skc_reason` 照旧显示在头下。
 
-## 文案（`locale/*.json`，单层扁平点号键，25 个）
+## 文案（`locale/*.json`，单层扁平点号键，23 个）
 
 `detail.{back,copy,copied,loading,error,retry,noBody,truncated,filesTruncated,uninstall,uninstallSoon}`、版本与底部四个键组 `detail.{sectionVersion,checkAgain,checking,checkIdle,upToDate,checkedAt,newerVersion,checkUnavailable,checkFailed,factCodeSource,factVersion,viewRepo}`（`detail.back` = 「技能」/`Skills`，头部的面包屑根）、`detail.{sectionSource,sourceBuiltin}`（来源信息标题、「内置」）。
 
@@ -117,7 +117,7 @@ store.detailScrollTop = number      // 打开详情前记下的 .skc_pageBody �
 
 - 行可点只用 `AGENTS.md` 硬约束 9 的那一个手段：标题 `<button class="skc_cardTitle skc_cardOpen">` 的 `::after{inset:0}` 铺满整行 + `.skc_cardEnd{z-index:1}` 浮起；`<li>` 上不加 `onClick` / `role` / `tabIndex`，也不加 `<a>` 与第二可点区域。
 - 可点的行才给 hover / active 底色（hover 只在 `@media (hover:hover)`，`:active` 是触屏唯一可靠证据），键盘走 `:focus-visible::after`；**不加 chevron、不加「点开详情」文案**。
-- 详情页内部的面包屑、复制按钮、开关、重试是普通按钮，不开第二套点击层。
+- 详情页内部的面包屑、开关、重新检查是普通按钮，不开第二套点击层（复制入口已全部去掉）。
 - 复制：`navigator.clipboard.writeText`；成功把图标换成对勾、1.5 s 后换回，并用 `aria-live` 播报 `detail.copied`；clipboard 不可用时**静默什么都不做**（文本本身可选中），不新增 toast kind。
 
 ## 不做

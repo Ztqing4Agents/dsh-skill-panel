@@ -12,7 +12,7 @@
  */
 import { Tag } from '@deepseek-ai/dsh-client-ui-primitives';
 
-import { CopyName, DetailCrumb } from './installed-detail.jsx';
+import { DetailCrumb } from './installed-detail.jsx';
 import { IconTile } from './icon-tile.jsx';
 import { cn } from './styles.js';
 import { EnableSwitch, ReadonlyTag } from './row.jsx';
@@ -22,7 +22,7 @@ import { isPending, rowKey, switchMode } from './model.js';
  * One skill inside a provider page, as the component row both detail pages use.
  *
  * Same 10/10 padded row as the host's component list: 41 icon, name, up to two lines of
- * description and a bottom line that copies the invocation name. The row is not clickable -
+ * description and the mono invocation name underneath. The row is not clickable -
  * a builtin skill has no page below - so it carries no click layer and no hover, and the
  * switch stays the row's only action (hard constraint 9).
  * @param {{row: object, t: Function, rows: Map<string, object>, onToggle: Function}} props -
@@ -41,11 +41,8 @@ function SkillCallRow({ row, t, rows, onToggle }) {
       <div className={cn('callBody')}>
         <p className={cn('callName')}>{row.displayName ?? row.name}</p>
         {row.description === '' ? null : <p className={cn('callDesc')}>{row.description}</p>}
-        {/* The bottom line is the command a person needs: the kebab name plus a copy button. */}
-        <p className={cn('callMeta', 'callCommand')}>
-          <code>{row.name}</code>
-          <CopyName name={row.name} t={t} className={cn('detailCopyInline')} label="plugin.copyCommand" />
-        </p>
+        {/* The bottom line is the kebab name a person types, mono like the host's module line. */}
+        <p className={cn('callMeta')}><code>{row.name}</code></p>
       </div>
       <div className={cn('cardEnd')}>
         <span className={cn('pluginState')}>

@@ -12,14 +12,12 @@
  * panel (hard constraint 5), so this page shows its read-only marker and its real location
  * instead of pretending a control exists.
  */
-import { useEffect, useRef, useState } from 'react';
 import {
   Button,
   StateDot,
   Tag,
   IconCheckOutlineRegular,
   IconChevronDownOutlineRegular,
-  IconCopyOutlineRegular,
   IconLinkOutlineRegular,
   IconRefreshOutlineRegular,
   IconTrashOutlineRegular,
@@ -30,52 +28,6 @@ import { MarkdownBlock } from './markdown.jsx';
 import { cn } from './styles.js';
 import { isPending, rowKey, switchMode } from './model.js';
 import { EnableSwitch, ReadonlyTag } from './row.jsx';
-
-/** How long the copy button shows the tick, in milliseconds. */
-const COPIED_MS = 1500;
-
-/**
- * The copy affordance of the invocation name.
- *
- * The text beside it is selectable, so this is the second way in, not the only one: a
- * browser that refuses clipboard access (or a non-secure origin) leaves the button doing
- * nothing at all, which is why the name itself is plain selectable text.
- * @param {{name: string, t: Function}} props - the kebab name and the translate function.
- * @returns {import('react').ReactElement} the button and its announcement.
- */
-export function CopyName({ name, t, className, label = 'detail.copy' }) {
-  const [copied, setCopied] = useState(false);
-  const timer = useRef(null);
-  useEffect(() => () => {
-    if (timer.current !== null) clearTimeout(timer.current);
-  }, []);
-  const copy = () => {
-    const clipboard = typeof navigator === 'undefined' ? null : navigator.clipboard;
-    if (clipboard === null || typeof clipboard.writeText !== 'function') return;
-    void clipboard.writeText(name).then(() => {
-      setCopied(true);
-      if (timer.current !== null) clearTimeout(timer.current);
-      timer.current = setTimeout(() => setCopied(false), COPIED_MS);
-    }).catch(() => {
-      // Silent by design: the name is right there to select, and a toast for a failed
-      // clipboard write would be the only notice of its kind in the panel.
-    });
-  };
-  return (
-    <>
-      <Button
-        variant="ghost"
-        size="sm"
-        className={className}
-        aria-label={t(label)}
-        title={t(label)}
-        onClick={copy}
-        icon={copied ? <IconCheckOutlineRegular size={13} /> : <IconCopyOutlineRegular size={13} />}
-      />
-      <span className={cn('progressAnnouncement')} role="status">{copied ? t('detail.copied') : ''}</span>
-    </>
-  );
-}
 
 /**
  * The one way back: a chevron and the word "skills". Shared by both installed views, so the
@@ -214,12 +166,9 @@ export function InstalledDetail({
             : null}
         </div>
         {/* The call name sits where the author line used to be: it is what a person types to
-            invoke the skill, so it belongs in the title group, and the copy button rides along
-            with it. The upstream identity still drives source, update check and repo link. */}
-        <p className={cn('detailAuthor')}>
-          <code>{row.name}</code>
-          <CopyName name={row.name} t={t} className={cn('detailCopyInline')} />
-        </p>
+            invoke the skill, so it belongs in the title group. The upstream identity still
+            drives source, update check and repo link. */}
+        <p className={cn('detailAuthor')}><code>{row.name}</code></p>
         {row.description === '' ? null : <p className={cn('marketDetailDesc')}>{row.description}</p>}
       </div>
       {reason === null ? null : <p className={cn('reason')} role="alert">{reason}</p>}

@@ -709,7 +709,7 @@ test('K115 visual.md A.5 有整行可点的三条刻度与「待真机取色」'
   }
 });
 
-test('K115 体积门禁抬到 150000，locale 恰好 154 键（含 6 个 markdown.* chrome 标签）', async () => {
+test('K115 体积门禁抬到 150000，locale 恰好 151 键（含 6 个 markdown.* chrome 标签）', async () => {
   const bundleTest = await readFile(join(ROOT, 'test', 'bundle-contract.test.mjs'), 'utf8');
   assert.match(bundleTest, /size < 150_000/, '产物上限是 150000 B');
   assert.equal(/size < 145_000/.test(bundleTest), false, '旧上限 145000 已经不在（不能两个都在）');
@@ -720,28 +720,28 @@ test('K115 体积门禁抬到 150000，locale 恰好 154 键（含 6 个 markdow
   assert.equal(gate.code, 0, `check:i18n 必须 exit 0：${gate.stdout}${gate.stderr}`);
   const summary = /check-i18n: OK \((\d+) keys in both dictionaries/.exec(gate.stdout);
   assert.ok(summary !== null, '门禁输出里带键数');
-  assert.equal(Number(summary[1]), 154, `locale 恰好 154 键（实际 ${summary[1]}）`);
+  assert.equal(Number(summary[1]), 151, `locale 恰好 151 键（实际 ${summary[1]}）`);
 
-  // 口径自查：152 个扁平键 + meta 的两项 = 154（嵌套字典会让界面显示原始键名）。
+  // 口径自查：149 个扁平键 + meta 的两项 = 151（嵌套字典会让界面显示原始键名）。
   const [zh, en] = await Promise.all(['zh', 'en'].map(async (language) => (
     JSON.parse(await readFile(join(ROOT, 'locale', `${language}.json`), 'utf8'))
   )));
   const flat = (dictionary) => Object.keys(dictionary).filter((key) => key !== 'meta');
-  assert.equal(flat(zh).length + Object.keys(zh.meta).length, 154, 'zh：152 扁平 + meta 两项');
+  assert.equal(flat(zh).length + Object.keys(zh.meta).length, 151, 'zh：149 扁平 + meta 两项');
   assert.deepEqual(flat(zh).sort(), flat(en).sort(), 'zh/en 键集一致');
   assert.deepEqual(
     flat(zh).filter((key) => key.startsWith('detail.')).sort(),
     [
-      'detail.back', 'detail.checkAgain', 'detail.checkFailed', 'detail.checkIdle', 'detail.checkUnavailable', 'detail.checkedAt', 'detail.checking', 'detail.copied', 'detail.copy', 'detail.error', 'detail.factCodeSource', 'detail.factVersion', 'detail.filesTruncated', 'detail.loading', 'detail.newerVersion', 'detail.noBody', 'detail.retry', 'detail.sectionSource', 'detail.sectionVersion', 'detail.sourceBuiltin', 'detail.truncated', 'detail.uninstall', 'detail.uninstallSoon', 'detail.upToDate', 'detail.viewRepo',
+      'detail.back', 'detail.checkAgain', 'detail.checkFailed', 'detail.checkIdle', 'detail.checkUnavailable', 'detail.checkedAt', 'detail.checking', 'detail.error', 'detail.factCodeSource', 'detail.factVersion', 'detail.filesTruncated', 'detail.loading', 'detail.newerVersion', 'detail.noBody', 'detail.retry', 'detail.sectionSource', 'detail.sectionVersion', 'detail.sourceBuiltin', 'detail.truncated', 'detail.uninstall', 'detail.uninstallSoon', 'detail.upToDate', 'detail.viewRepo',
     ],
-    'detail.* 恰好 25 个键（detail.callName 已删：区块标题改用 plugin.skills）',
+    'detail.* 恰好 23 个键（复制入口已删：detail.copy / detail.copied 随之移除）',
   );
 
-  // 内置区折块 + 插件页：六个键（列表块副行、区块标题、计数行、行底复制、行内状态两态）。
+  // 内置区折块 + 插件页：五个键（列表块副行、区块标题、计数行、行内状态两态；复制命令已删）。
   assert.deepEqual(
     flat(zh).filter((key) => key.startsWith('plugin.')).sort(),
-    ['plugin.copyCommand', 'plugin.countRunning', 'plugin.running', 'plugin.skills', 'plugin.skillsCount', 'plugin.stopped'],
-    'plugin.* 恰好 6 个键（copyCommand 是行底复制按钮的无障碍名）',
+    ['plugin.countRunning', 'plugin.running', 'plugin.skills', 'plugin.skillsCount', 'plugin.stopped'],
+    'plugin.* 恰好 5 个键（plugin.copyCommand 已随复制按钮删除）',
   );
 
   // 136 → 142 的那 6 个键不是文案需求，是宿主渲染器的 chrome：`MarkdownText` 的代码块读
@@ -774,8 +774,8 @@ test('K115 文档里写的 detail 键数与字典一致（19 → 21 这种漂移
   const zh = JSON.parse(await readFile(join(ROOT, 'locale', 'zh.json'), 'utf8'));
   const actual = Object.keys(zh).filter((key) => key.startsWith('detail.')).length;
 
-  // 每一处「这一页有几个键」的说法都点出来逐个核：本页键数是 21（19 + uninstall/uninstallSoon），
-  // 上一轮 17 → 19 → 21 改了两次值，改值的轮次都漏过至少一处头注。
+  // 每一处「这一页有几个键」的说法都点出来逐个核：本页键数是 23（21 + 两个复制键之后又删掉复制），
+  // 键数每轮都在动，凡是写死数字的头注都必须跟着改。
   const claims = [
     ['installed-detail.md 读者行', installedDetail, /它那 (\d+) 个文案键/],
     ['installed-detail.md 更新触发行', installedDetail, /这 (\d+) 个键时/],

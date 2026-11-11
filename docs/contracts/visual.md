@@ -203,8 +203,7 @@ min-width: 58px; height: 28px; display: inline-flex; position: relative }
 .skc_detailIntro{ display: flex; flex-direction: column; gap: 8px; margin-top: -12px }
 /* 作者行 = 宿主的包名行：12/18、tertiary、mono（宿主那行用 ui-monospace 一族） */
 /* 标题下那行是调用名（原作者行刻度 12/18 mono），行内 flex 贴名字；按钮压到 22 高，否则 intro 比宿主大 9.5px */
-.skc_detailAuthor{ margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code); font-size: 12px; line-height: 18px; align-items: center; gap: 6px; display: inline-flex }
-.skc_detailCopyInline{ height: 22px; min-height: 22px; padding: 0 4px }
+.skc_detailAuthor{ margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code); font-size: 12px; line-height: 18px }
 /* 卸载占位：红字 + inset 1px 红环（不是 border，会让高度多 2px），红用 error 令牌 */
 .skc_detailDanger{ --dsh-button-outline-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent); --dsh-hairline-width: 1px; color: var(--dsw-alias-state-error-primary); height: 28px; padding: 0 10px; border-radius: 8px; gap: 4px; font-size: 12px; line-height: 18px }
 .skc_detailDanger:disabled{ opacity: .4 }
@@ -231,8 +230,6 @@ min-width: 58px; height: 28px; display: inline-flex; position: relative }
 .skc_callRow{ display: flex; align-items: center; gap: 12px; padding: 10px 0; position: relative }
 .skc_callRow + .skc_callRow{ border-top: .5px solid var(--dsw-alias-border-l2) }
 .skc_callMeta{ margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code); font-size: 12px; line-height: 18px }
-/* 行底那一条是「复制命令」：等宽 kebab 名 + 22 高的复制按钮（.skc_detailCopyInline），按钮贴名字 */
-.skc_callCommand{ align-items: center; gap: 6px; display: flex }
 .skc_pluginState{
 color: var(--dsw-alias-label-secondary); white-space: nowrap; align-items: center; gap: 6px;
 font-size: 13px; line-height: 20px; display: inline-flex;

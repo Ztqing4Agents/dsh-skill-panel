@@ -166,11 +166,8 @@ test('A.5 插件页组件行按宿主刻度：padding 10 0 / 垂直居中 / 两�
   assert.match(dot, /height\s*:\s*6px/, '点 6 高');
   assert.match(dot, /background\s*:\s*var\(--dsw-alias-state-success-primary\)/, '运行中：成功绿');
   assert.match(ruleBody(capturedCss(), '.skc_pluginDotOff'), /background\s*:\s*var\(--dsw-alias-label-tertiary\)/, '已停用：三级文字色');
-  // 行底命令行：等宽 kebab + 复制按钮同一行。
-  const cmd = ruleBody(capturedCss(), '.skc_callCommand');
-  assert.match(cmd, /display\s*:\s*flex/, '命令行是一行 flex');
-  assert.match(cmd, /align-items\s*:\s*center/, 'kebab 与复制按钮垂直居中');
-  assert.match(cmd, /gap\s*:\s*6px/, 'kebab 与按钮 gap 6');
+  // 复制入口整块删掉之后，命令行那套 flex 布局也一起没有了：行底只剩一行等宽 text。
+  assert.equal(capturedCss().includes('.skc_callCommand'), false, '.skc_callCommand 已随复制按钮删除');
   // 区块头：标题与计数基线对齐、gap 8（计数紧跟标题，不再贴右缘）。
   const head = ruleBody(capturedCss(), '.skc_sectionHead');
   assert.match(head, /align-items\s*:\s*baseline/, '标题与计数基线对齐');
@@ -356,14 +353,13 @@ test('K110 插件页副行两行裁切、技能页描述故意不裁', () => {
   assert.equal(/overflow:\s*hidden/.test(desc), false, 'marketDetailDesc 也不许 overflow:hidden');
 });
 
-test('K110 行内复制按钮 22 高（技能页调用名行与插件页命令行共用同一个类）', () => {
+test('K110 复制按钮类已整块删除：.skc_detailCopyInline 不存在', () => {
   const css = capturedCss();
-  const copy = ruleBody(css, '.skc_detailCopyInline');
-  assert.match(copy, /height:\s*22px/, '行内复制按钮 22 高（28 会把调用名行撑胖，文字级间距比宿主多 4.5px）');
-  assert.match(copy, /min-height:\s*22px/, 'min-height 也钉 22，宿主按钮的 min-height 不会把它顶回去');
-  // 插件页那一行只读化之后再没有负边距外扩（那是可点行才需要的东西）。
-  assert.equal(css.includes('margin-inline: -8px'), false, '没有为可点行留的外扩规则');
+  assert.equal(css.includes('.skc_detailCopyInline'), false, '.skc_detailCopyInline 已随 CopyName 组件删除');
+  assert.ok(css.includes('.skc_progressAnnouncement'), '开关自己的播报位还留着（只是不再有复制那一份）');
 });
+
+
 
 test('K110 行尾座与两处文字兜底：.skc_cardEnd 58×28、标题可断行、事实表 dd 行高 22', () => {
   const css = capturedCss();
