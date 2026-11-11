@@ -269,3 +269,17 @@ test('R12 体量：README.md 超 120 行只告警，不判红', async () => {
     await cleanup();
   }
 });
+
+
+test('R5 参考类：缺「来源版本」必须红（外部升级是第一过期触发器，不能只有采集日期）', async () => {
+  const noVersion = REFERENCE.replace('> 来源版本：demo/1.0.0\n', '');
+  assert.notEqual(noVersion, REFERENCE, 'R5 用例没有删到来源版本');
+  const { dir, cleanup } = await tree({ ...BASELINE, 'docs/reference/example.md': noVersion });
+  try {
+    const { status, out } = runGate(dir);
+    assert.equal(status, 1, out);
+    assert.match(out, /RED\s+R5 .*来源版本/);
+  } finally {
+    await cleanup();
+  }
+});

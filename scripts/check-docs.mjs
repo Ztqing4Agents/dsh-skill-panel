@@ -166,8 +166,10 @@ for (const f of files) {
     }
   }
 
-  // R5: reference freshness
+  // R5: reference freshness. Two keys, because an external shape has two expiry
+  // triggers: time (180 days) and the source version moving (upgrade = re-collect).
   if (type === '参考') {
+    if (!head['来源版本']) red('R5', `${f}: 类型 参考 missing 「来源版本:」`);
     const collected = head['采集日期'];
     if (!collected) {
       red('R5', `${f}: 类型 参考 missing 「采集日期:」`);
