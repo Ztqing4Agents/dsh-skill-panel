@@ -447,9 +447,13 @@ border-bottom: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, 
 .skc_callRow{ display: flex; align-items: center; gap: 12px; padding: 10px 0; position: relative }
 .skc_callRow + .skc_callRow{ border-top: .5px solid var(--dsw-alias-border-l2) }
 .skc_callMeta{ margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code); font-size: 12px; line-height: 18px }
-@media (hover: hover){ .skc_callRowOpen:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
-.skc_callRowOpen{ border-radius: var(--dsw-radius-xl); margin-inline: -8px; padding-inline: 8px }
-.skc_callRowOpen:active{ background: var(--dsw-alias-interactive-bg-hover) }
+.skc_callCommand{ align-items: center; gap: 6px; display: flex }
+.skc_pluginState{
+color: var(--dsw-alias-label-secondary); white-space: nowrap; align-items: center; gap: 6px;
+font-size: 13px; line-height: 20px; display: inline-flex;
+}
+.skc_pluginDot{ width: 6px; height: 6px; border-radius: 999px; display: inline-block; background: var(--dsw-alias-state-success-primary) }
+.skc_pluginDotOff{ background: var(--dsw-alias-label-tertiary) }
 .skc_callIcon{ width: 41px; height: 41px; border-radius: 12px }
 .skc_callBody{ display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 }
 .skc_callName{ margin: 0; font-size: 13.5px; line-height: 20px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }

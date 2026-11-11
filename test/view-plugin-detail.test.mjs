@@ -104,17 +104,17 @@ test('插件页：面包屑 → 包名头（图标 + 版本 Tag）→ 包含的�
     '计数行与有没有三件套无关',
   );
 
-  // 行内三段：kebab 只在有显示名时才值得占一行；包名是页级信息，绝不进行内。
-  assert.equal((html.match(/class="skc_callMeta"/g) ?? []).length, 0, '没有 displayName：一行 kebab 都不渲染');
+  // 行底那行恒渲染：<code>kebab</code> + 复制命令；包名是页级信息，绝不进行内。
+  assert.equal((html.match(/class="skc_callMeta skc_callCommand"/g) ?? []).length, 2, '每行行底都有命令行（与有没有 displayName 无关）');
   const named = render({
     ...blockOf('univer', ['sheet'], 'dsh-univer-office'),
     skills: [builtinOf('univer', 'sheet', { displayName: '表格工作台' })],
   });
-  const meta = /<p class="skc_callMeta">([^<]*)<\/p>/.exec(named);
-  assert.ok(meta !== null, '有 displayName：出现 kebab 行');
-  assert.equal(meta[1], 'sheet', 'kebab 行写的是 name（显示名已在名称按钮上）');
-  assert.ok(named.includes('<button type="button" class="skc_cardTitle skc_cardOpen skc_callName" title="表格工作台">表格工作台</button>'), '名称按钮用显示名，title 也是它');
-  // 包名只在标题与来源信息里：把两个 row 区域切出来单独看。
+  assert.ok(named.includes('<p class="skc_callName">表格工作台</p>'), '有 displayName：名字用显示名');
+  const namedCode = /<p class="skc_callMeta skc_callCommand"><code>([^<]*)<\/code>/.exec(named);
+  assert.ok(namedCode !== null, '有 displayName：命令行仍在');
+  assert.equal(namedCode[1], 'sheet', '命令行写 kebab（显示名替代不了调用名）');
+  // 包名只在标题与来源信息里：把行区域切出来单独看。
   for (const page of [html, full, named]) {
     const rowsHtml = page.slice(page.indexOf('class="skc_cards"'), page.indexOf('class="skc_marketFacts"'));
     assert.equal(rowsHtml.includes('dsh-univer-office'), false, '行内不出现包名（页级信息只留在 h3 与来源信息）');
@@ -149,19 +149,33 @@ test('插件页的面包屑带 onClick（返回上一级由调用方决定，两
   assert.equal(html.includes(t('detail.back')), true, '按钮文字是 detail.back');
 });
 
-test('插件页的行是组件式行：74 高壳 + 41 图标 + 13.5/20/500 名字 + 两行描述 + 行尾开关', () => {
+test('插件页的行是只读信息行：只有 .skc_callRow、没有点击层、行底是 kebab + 复制命令', () => {
   const html = render(blockOf('univer', ['sheet', 'docx']));
-  const rows = html.match(/<div class="skc_callRow[\s\S]*?(?=<div class="skc_callRow|<\/div><\/div>)/g) ?? [];
-  assert.equal(rows.length >= 2, true, '每行都是 .skc_callRow 壳');
-  assert.equal((html.match(/class="skc_callRow skc_callRowOpen"/g) ?? []).length, 2, '插件页的行带可点修饰类（hover/active 只挂在它身上）');
-  // 图标位同时带宿主行的 cardIcon（尺寸由 .skc_callIcon 覆写成 41 / 圆角 12）。
+  // 1) 容器类只有基类：可点修饰类与卡片点击层都不在。
+  assert.equal((html.match(/class="skc_callRow"/g) ?? []).length, 2, '两行都是纯 .skc_callRow');
+  for (const gone of ['skc_callRowOpen', 'cardOpen', 'skc_cardTitle', 'skc_cardOpen']) {
+    assert.equal(html.includes(gone), false, `行内没有 ${gone}（没有整行点击层）`);
+  }
+  // 2) 三段内容：41 图标 / 名字（普通 p，不再是按钮）/ 描述。
   assert.equal((html.match(/class="skc_cardIcon skc_callIcon"/g) ?? []).length, 2, '每行一个 41 图标');
-  assert.equal((html.match(/class="skc_cardTitle skc_cardOpen skc_callName"/g) ?? []).length, 2, '名字是可点按钮（callName）');
+  assert.equal((html.match(/<p class="skc_callName">/g) ?? []).length, 2, '名字是不可点的 <p>');
   assert.equal((html.match(/<p class="skc_callDesc">/g) ?? []).length, 2, '描述是 callDesc');
-  const ends = html.match(/<div class="skc_cardEnd">[\s\S]*?<\/div>/g) ?? [];
-  assert.equal(ends.length, 2, '行尾的开关在 .skc_cardEnd 里');
-  assert.ok(ends.every((chunk) => chunk.includes('role="switch"')), '每个行尾都是开关');
-  assert.equal(html.includes('data-skc-row="univer#sheet"'), true, '行上带着技能键（可点进技能详情）');
+  assert.equal(/<button[^>]*class="[^"]*skc_callName/.test(html), false, '名字不是按钮');
+  // 3) 行底：等宽 kebab + 复制命令按钮。
+  const command = /<p class="skc_callMeta skc_callCommand"><code>([^<]*)<\/code><button type="button" class="skc_detailCopyInline" aria-label="([^"]*)" title="([^"]*)"/g;
+  const found = [...html.matchAll(command)];
+  assert.equal(found.length, 2, '每行行底都是 <code>kebab</code> + 复制按钮');
+  assert.deepEqual(found.map((m) => m[1]), ['sheet', 'docx'], 'code 里是 kebab 调用名');
+  assert.ok(found.every((m) => m[2] === t('plugin.copyCommand') && m[3] === t('plugin.copyCommand')), 'aria-label 与 title 都是「复制命令」');
+  assert.equal((html.match(/class="skc_progressAnnouncement" role="status"/g) ?? []).length, 2, '每行一个复制播报位');
+  // 4) 行尾：状态点 + 文字 + 开关。
+  const ends = html.match(/<div class="skc_cardEnd">[\s\S]*?<\/div><\/div>/g) ?? [];
+  assert.equal(ends.length, 2, '行尾座在');
+  assert.ok(ends.every((chunk) => chunk.includes('skc_pluginState')), '行尾有状态字');
+  assert.ok(ends.every((chunk) => chunk.includes('role="switch"')), '行尾有开关');
+  assert.equal((html.match(/class="skc_pluginDot skc_"/g) ?? []).length, 2, '运行中的点不带 Off 修饰类');
+  // 5) 行的身份还在（列表/写盘都用它），只是不再可点。
+  assert.ok(html.includes('data-skc-row="univer#sheet"'), '行上仍带技能键');
 });
 
 test('插件页没有正文盒 / 版本卡 / 仓库链接 / 旧的头行类名', () => {

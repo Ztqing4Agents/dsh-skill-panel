@@ -386,7 +386,6 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
                 rows={state.rows}
                 onBack={closePlugin}
                 onToggle={onToggle}
-                onOpenRow={openRow}
               />
             ) : (
             <InstalledDetail

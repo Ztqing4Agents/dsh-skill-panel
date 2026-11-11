@@ -154,11 +154,23 @@ test('A.5 插件页组件行按宿主刻度：padding 10 0 / 垂直居中 / 两�
   assert.match(meta, /font-size\s*:\s*12px/, 'mono 12px');
   assert.match(meta, /line-height\s*:\s*18px/, 'mono 行高 18px');
   assert.match(meta, /color\s*:\s*var\(--dsw-alias-label-tertiary\)/, 'mono 用三级文字色');
-  // 行内状态点与状态字已回退：「运行中」只剩区块计数那一处，所以这些类不该再留在样式表里。
-  const css = capturedCss();
-  for (const gone of ['.skc_pluginState{', '.skc_pluginDot{', '.skc_pluginDotOff{', '.skc_callRow .skc_cardEnd{']) {
-    assert.equal(css.includes(gone), false, `${gone.replace('{', '')} 已随回退删除`);
-  }
+  // 行内状态：字 13/20 secondary、点 6×6 成功绿、停用时三级文字色（行是只读信息行，状态只在这里说）。
+  const state = ruleBody(capturedCss(), '.skc_pluginState');
+  assert.match(state, /font-size\s*:\s*13px/, '状态字 13px');
+  assert.match(state, /line-height\s*:\s*20px/, '状态字行高 20px');
+  assert.match(state, /color\s*:\s*var\(--dsw-alias-label-secondary\)/, '状态字二级文字色');
+  assert.match(state, /align-items\s*:\s*center/, '点与字垂直居中');
+  assert.match(state, /gap\s*:\s*6px/, '点与字 gap 6');
+  const dot = ruleBody(capturedCss(), '.skc_pluginDot');
+  assert.match(dot, /width\s*:\s*6px/, '点 6 宽');
+  assert.match(dot, /height\s*:\s*6px/, '点 6 高');
+  assert.match(dot, /background\s*:\s*var\(--dsw-alias-state-success-primary\)/, '运行中：成功绿');
+  assert.match(ruleBody(capturedCss(), '.skc_pluginDotOff'), /background\s*:\s*var\(--dsw-alias-label-tertiary\)/, '已停用：三级文字色');
+  // 行底命令行：等宽 kebab + 复制按钮同一行。
+  const cmd = ruleBody(capturedCss(), '.skc_callCommand');
+  assert.match(cmd, /display\s*:\s*flex/, '命令行是一行 flex');
+  assert.match(cmd, /align-items\s*:\s*center/, 'kebab 与复制按钮垂直居中');
+  assert.match(cmd, /gap\s*:\s*6px/, 'kebab 与按钮 gap 6');
   // 区块头：标题与计数基线对齐、gap 8（计数紧跟标题，不再贴右缘）。
   const head = ruleBody(capturedCss(), '.skc_sectionHead');
   assert.match(head, /align-items\s*:\s*baseline/, '标题与计数基线对齐');
@@ -318,18 +330,18 @@ test('K110 hover / active 只跟着可点的东西走：开关位、只读标记
     assert.equal(css.includes(`${inert}:active`), false, `${inert} 没有按下底色`);
   }
   const actives = [...css.matchAll(/\.(skc_[\w-]+):active/g)].map((match) => match[1]);
-  assert.deepEqual([...new Set(actives)], ['skc_card', 'skc_callRowOpen'], ':active 只出现在可点的行上（列表行与插件页的可点行）');
+  assert.deepEqual([...new Set(actives)], ['skc_card'], ':active 只出现在列表行上（插件页的行已改成只读信息行，没有按下反馈）');
 });
 
-test('K110 可点行修饰类：.skc_callRowOpen 有 hover 与 active，基底 .skc_callRow 一点都没有', () => {
+test('K110 插件页的行是只读信息行：没有 .skc_callRowOpen，也没有 hover / active 反馈', () => {
   const css = capturedCss();
-  assert.ok(css.includes('.skc_callRowOpen:hover'), '可点行有 hover 底色');
-  assert.ok(css.includes('.skc_callRowOpen:active'), '可点行有按下底色');
-  assert.equal(css.includes('.skc_callRow:hover'), false, '基底 .skc_callRow 没有 hover（技能页那一行不可点）');
-  assert.equal(css.includes('.skc_callRow:active'), false, '基底 .skc_callRow 没有 active');
-  // 圆角与列表行同族（列表行用 --dsw-radius-xl），底色走宿主的 hover 令牌。
-  assert.match(ruleBody(css, '.skc_callRowOpen'), /border-radius:\s*var\(--dsw-radius-xl\)/, '圆角与列表行同值');
-  assert.match(ruleBody(css, '.skc_callRowOpen:hover'), /background:\s*var\(--dsw-alias-interactive-bg-hover\)/, 'hover 底色走宿主令牌');
+  // 整族类名都不该存在（JSX 只挂基类 .skc_callRow），任何残留都意味着「看着能点」。
+  assert.equal(css.includes('.skc_callRowOpen'), false, '.skc_callRowOpen 已随只读化删除');
+  assert.equal(css.includes('.skc_callRow:hover'), false, '只读行没有 hover 底色');
+  assert.equal(css.includes('.skc_callRow:active'), false, '只读行没有按下底色');
+  const row = ruleBody(css, '.skc_callRow');
+  assert.match(row, /position\s*:\s*relative/, '行仍是定位上下文');
+  assert.equal(/background\s*:/.test(row), false, '基类自己不带底色');
 });
 
 test('K110 插件页副行两行裁切、技能页描述故意不裁', () => {
@@ -344,14 +356,13 @@ test('K110 插件页副行两行裁切、技能页描述故意不裁', () => {
   assert.equal(/overflow:\s*hidden/.test(desc), false, 'marketDetailDesc 也不许 overflow:hidden');
 });
 
-test('K110 调用名行的行内复制按钮 22 高、可点行外扩与等量内缩', () => {
+test('K110 行内复制按钮 22 高（技能页调用名行与插件页命令行共用同一个类）', () => {
   const css = capturedCss();
   const copy = ruleBody(css, '.skc_detailCopyInline');
   assert.match(copy, /height:\s*22px/, '行内复制按钮 22 高（28 会把调用名行撑胖，文字级间距比宿主多 4.5px）');
   assert.match(copy, /min-height:\s*22px/, 'min-height 也钉 22，宿主按钮的 min-height 不会把它顶回去');
-  const rowOpen = ruleBody(css, '.skc_callRowOpen');
-  assert.match(rowOpen, /margin-inline:\s*-8px/, '可点行向左右各外扩 8（与列表块同一取法）');
-  assert.match(rowOpen, /padding-inline:\s*8px/, '外扩用等量 padding 抵消，内容位置不动');
+  // 插件页那一行只读化之后再没有负边距外扩（那是可点行才需要的东西）。
+  assert.equal(css.includes('margin-inline: -8px'), false, '没有为可点行留的外扩规则');
 });
 
 test('K110 行尾座与两处文字兜底：.skc_cardEnd 58×28、标题可断行、事实表 dd 行高 22', () => {

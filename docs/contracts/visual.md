@@ -226,14 +226,19 @@ min-width: 58px; height: 28px; display: inline-flex; position: relative }
 .skc_pluginCount{ color: var(--dsw-alias-label-secondary); font-size: 13px; line-height: 20px }
 /* 两行裁切只给插件页副行（技能页描述故意不裁）：1320 宽看似两行是巧合，700 宽会到三行 */
 .skc_pluginDesc{ display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
-/* 行高不再写死：padding 10 0 = 宿主组件行 74 的拆分（41 图标 + 20 名称 + 2 + 32 描述 + 10×2；有 kebab 时 +20） */
+/* 行高不写死：padding 10 0 = 宿主组件行的拆分（41 图标 + 20 名称 + 2 + 32 描述 + 10×2）；这行是只读信息行，
+   没有点击层也没有 hover（硬约束 9：点不了就不给反馈），所以没有 .skc_callRowOpen 那套外扩 */
 .skc_callRow{ display: flex; align-items: center; gap: 12px; padding: 10px 0; position: relative }
 .skc_callRow + .skc_callRow{ border-top: .5px solid var(--dsw-alias-border-l2) }
 .skc_callMeta{ margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code); font-size: 12px; line-height: 18px }
-/* hover 只给可点的行（硬约束 9）；margin -8 + padding 8 与 .skc_card 同套外扩，否则插件页灰底比列表窄 16px */
-@media (hover: hover){ .skc_callRowOpen:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
-.skc_callRowOpen{ border-radius: var(--dsw-radius-xl); margin-inline: -8px; padding-inline: 8px }
-.skc_callRowOpen:active{ background: var(--dsw-alias-interactive-bg-hover) }
+/* 行底那一条是「复制命令」：等宽 kebab 名 + 22 高的复制按钮（.skc_detailCopyInline），按钮贴名字 */
+.skc_callCommand{ align-items: center; gap: 6px; display: flex }
+.skc_pluginState{
+color: var(--dsw-alias-label-secondary); white-space: nowrap; align-items: center; gap: 6px;
+font-size: 13px; line-height: 20px; display: inline-flex;
+}
+.skc_pluginDot{ width: 6px; height: 6px; border-radius: 999px; display: inline-block; background: var(--dsw-alias-state-success-primary) }
+.skc_pluginDotOff{ background: var(--dsw-alias-label-tertiary) }
 .skc_callIcon{ width: 41px; height: 41px; border-radius: 12px }
 .skc_callBody{ display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 }
 .skc_callName{ margin: 0; font-size: 13.5px; line-height: 20px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }

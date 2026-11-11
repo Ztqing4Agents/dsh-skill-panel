@@ -43,7 +43,7 @@ const COPIED_MS = 1500;
  * @param {{name: string, t: Function}} props - the kebab name and the translate function.
  * @returns {import('react').ReactElement} the button and its announcement.
  */
-function CopyName({ name, t, className }) {
+export function CopyName({ name, t, className, label = 'detail.copy' }) {
   const [copied, setCopied] = useState(false);
   const timer = useRef(null);
   useEffect(() => () => {
@@ -67,8 +67,8 @@ function CopyName({ name, t, className }) {
         variant="ghost"
         size="sm"
         className={className}
-        aria-label={t('detail.copy')}
-        title={t('detail.copy')}
+        aria-label={t(label)}
+        title={t(label)}
         onClick={copy}
         icon={copied ? <IconCheckOutlineRegular size={13} /> : <IconCopyOutlineRegular size={13} />}
       />
