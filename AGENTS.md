@@ -69,18 +69,12 @@ npm test             # node --test test/（测试由 QA 维护）
 9. **点击边界按页签划（三处）**：「已安装」页签的**行可点**（进本地详情页，见 `docs/contracts/installed-detail.md`），手段只有宿主那一个——标题按钮 `cardOpen::after{inset:0}` 铺满整行 + **唯一的动作位**用显式 `z-index` 浮在上层（开关位 `.skc_cardEnd{z-index:1}`；软链行的 `roTag` **不浮起、不可点**）；「技能市场」页签的卡不变（`marketCardOpen::after` + `marketCardEnd{z-index:1}`，安装是唯一动作位）；**详情页内部**的面包屑、开关、重新检查 / 重试是普通按钮，不属于「整区可点」；**两页都没有复制入口**（调用名是可选中的纯文本）。
    三处都**不许**做成 `<a href>`、不许加第二个可点区域、不许用 JS 拦冒泡代替层级；行 hover/active 只出现在可点的行上，不许出现「看着能点、点了没反应」。
 10. **不写别人的存储**：`~/.dsh/skills-manager/state.json`、`skill-market/*`、`.skills-lock.json` 只读。
-11. **Client 半部必须 `export const inject = ['slots', 'locale']`，且与 `ctx.*` 读取严格对齐**：
-    cordis 按 fiber 的 inject 声明解析服务，读到未声明的服务直接抛
-    `cannot get property "X" without inject` —— 那次是**整页 web boot 失败**（不是单个面板不显示），
-    宿主还会自动把 entry 写进 profile 打成 `disabled: true`。`ctx.effect` 是核心能力，不要写进 inject；
-    `ctx.theme` 若将来真用上才加。`test/client-entry.test.mjs` 用严格 Proxy ctx 加载**真实 `client.js`** 守住这条。
-12. **`locale/*.json` 必须是单层扁平点号键**（`"panel.label": "技能"`，不是 `{"panel":{"label":…}}`）：
-    `ctx.locale` 取键是**字面量属性查找**（`dict[key]`，取不到直接回落成键名），不做嵌套遍历；
-    嵌套字典的后果是**整页显示 `page.title`、`group.builtin` 这类原始键名**（真机踩过一次）。
-    唯一允许的嵌套是顶层 `meta` 块（`{meta:{title,description}}`）—— 它只给宿主插件列表读
-    （`dsh-app-boot` 的 `dictionariesOf` 读 `parsed.meta.title`），`src/client/index.jsx` 在
-    `register` 前会把它滤掉，不进运行时字典；**不要**把 `meta` 改成 `"meta.title"` 扁平键，
-    那会让插件列表里的名字掉回包名。`npm run check:i18n` 与 `test/i18n.test.mjs` 双向守这条。
+11. **Client 半部 `inject` 与 `ctx.*` 严格对齐**：读到未声明的服务会抛 `cannot get property "X" without inject`，
+    后果是**整页 web boot 失败**（不是单个面板不显示），宿主还会把 entry 打成 `disabled: true`。
+    `ctx.effect` 是核心能力、不要写进 inject；`test/client-entry.test.mjs` 用严格 Proxy ctx 加载真实 `client.js` 守这条。
+12. **`locale/*.json` 必须是单层扁平点号键**：`ctx.locale` 只做字面量查找，嵌套字典会让整页显示
+    `page.title` 这种原始键名（真机踩过一次）。唯一例外是顶层 `meta` 块（只给宿主插件列表读，
+    改成扁平键会让插件名掉回包名）。`check:i18n` 与 `test/i18n.test.mjs` 双向守，细节见 `docs/contracts/client.md` §8.3。
 13. **浏览器半部不直连上游**：单上游 `api.skillhub.cn`（三个 scope）一律走 Host 代理（`lib/market/upstream.js` 是唯一出口）；`src/client/**` 里出现 `fetch('https://api.skillhub.cn…')` 即返工。
 14. **安装只写清单里的文件**：不执行包内脚本、不跟随包内符号链接、不写包外路径；任一步失败必须删掉 `.skc-install-*` 临时目录，`skills/<name>` 与自有台账要么都有、要么都没有（唯一例外：台账写失败时目录保留并报 `E_INSTALL_IO`，见 `docs/contracts/routes.md` §3.7）。`files` 形态下**空清单 / 无 `SKILL.md` / 路径不安全**三态一律 `E_PACKAGE_INVALID`——镜像单源之后这是唯一的包闸。
 
