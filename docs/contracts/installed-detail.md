@@ -65,11 +65,13 @@
 | --- | --- | --- |
 | 1 | 面包屑 | 复用 `DetailCrumb`（`detail.back`），返回**列表** |
 | 2 | 头行 | 复用 `.skc_detailTop` + `.skc_detailIcon`：**49×49** 的 `IconTile`（插件包自己的图标，见上），**右侧留空**——内置没有卸载、也没有属于这个包的开关 |
-| 3 | 标题组 | 复用 `.skc_detailIntro` + `.skc_marketTitleRow`：包名（`.skc_marketSectionTitle` 14/20/500）+ 副行 `plugin.skillsCount`（复用 `.skc_cardDesc` 13/18 tertiary）。**不拼「共 N 个」** |
+| 3 | 标题组 | 与技能详情**同一套 intro 刻度**：`.skc_detailIntro` + `.skc_marketTitleRow`（这一层只放标题，不放假版本 Tag）里放包名 `.skc_marketDetailTitle`（**20/28/500**）+ 副行 `.skc_marketDetailDesc`（**14/22、margin 0**，文案 `plugin.skillsCount`）。**不拼「共 N 个」** |
 | 4 | 包含的技能 | `plugin.skills` 标题 + 一个 `.skc_cards` 容器，里面每行是**组件式行**：`.skc_callRow`（`height:74px`、`gap:12`、`position:relative`——给点击层定位）＝ 41×41 图标（`.skc_callIcon`）+ `.skc_callBody`（名字 `.skc_callName` 13.5/20/500 单行省略、描述 `.skc_callDesc` 11.5/16 tertiary 两行裁切）+ **行尾开关**（`.skc_cardEnd` 里放 `EnableSwitch`，软链行放 `ReadonlyTag`）。**整行可点**：名字是 `cardTitle cardOpen` 按钮，`::after` 铺满整行（硬约束 9），开关是唯一独立动作位；点行进**那个技能的详情页** |
 | 5 | 来源信息 | `detail.sectionSource` 标题 + 一行事实：`detail.factCodeSource` = `detail.sourceBuiltin`（「内置」） |
 
-**没有**正文盒、版本区块与查看仓库：内置技能不检查更新，也没有上游仓库。返回链是**两级**：`列表 → 插件详情 → 技能详情`。**离开技能页签再回来会复位**（列表页、插件页与两个滚动偏移全清，等价于重新进入）；页签**内部**的返回仍还原偏移——两条规则不冲突，只有跨页签才复位。
+**没有**正文盒、版本区块与查看仓库：内置技能不检查更新，也没有上游仓库。
+
+**两页唯一允许的纵向差异**：技能页有正文盒（45）+ 盒后间距（32），合计 85px 是结构差；再叠加副行行数差（每行 22px，插件页固定 1 行「N 个技能」、技能页是技能描述可能 1–3 行），所以首个区块通常低 **85 + 22×n**（n≥0，实测典型 99px）。面包屑、头行（49 图标）、intro 起点、标题 20/28/500、副行 14/22 `margin 0`、区块标题、组件式行（74/41）两页逐项相同（实测 Δ0）。这些差值都是**内容差异不是错位**，别当 bug 再「修」。返回链是**两级**：`列表 → 插件详情 → 技能详情`。**离开技能页签再回来会复位**（列表页、插件页与两个滚动偏移全清，等价于重新进入）；页签**内部**的返回仍还原偏移——两条规则不冲突，只有跨页签才复位。
 
 整页替换口径与技能详情一致：页头整块不渲染，`pageBody` 里只有一个 `.skc_detailPage`（含那条拖窗口的空条）。
 

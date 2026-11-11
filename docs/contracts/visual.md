@@ -231,7 +231,8 @@
 /* 调用名区块：一行照宿主「包含的组件」的组件行（实测 74 / 41 / 13.5·20·500 / 11.5·16 两行），
    图标沿用 IconTile 的基类再加这层修饰，右侧挂复制按钮；标题不带计数（宿主的「共 N 个」没意义） */
 /* 内置块与插件页**不新增任何类**：块 = .skc_card + .skc_cardOpen；插件页 = .skc_detailTop/.skc_detailIcon(49)
-   + .skc_detailIntro + .skc_marketSectionTitle + .skc_callRow 那一套组件式行（行高 74 / 图标 41） */
+   + .skc_detailIntro（标题 .skc_marketDetailTitle 20/28/500、副行 .skc_marketDetailDesc 14/22 margin 0，两页同刻度）
+   + .skc_marketSectionTitle + .skc_callRow 那一套组件式行（行高 74 / 图标 41） */
 .skc_callRow{ display: flex; align-items: center; gap: 12px; height: 74px; position: relative }
 .skc_callIcon{ width: 41px; height: 41px; border-radius: 12px }
 .skc_callBody{ display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 }

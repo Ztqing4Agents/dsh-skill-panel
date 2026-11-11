@@ -70,9 +70,9 @@ export function PluginDetail({ block, t, rows, onBack, onToggle, onOpenRow }) {
       </div>
       <div className={cn('detailIntro')}>
         <div className={cn('marketTitleRow')}>
-          <h3 className={cn('marketSectionTitle')}>{block.key}</h3>
+          <h3 className={cn('marketDetailTitle')}>{block.key}</h3>
         </div>
-        <p className={cn('cardDesc')}>{t('plugin.skillsCount', { count: block.skills.length })}</p>
+        <p className={cn('marketDetailDesc')}>{t('plugin.skillsCount', { count: block.skills.length })}</p>
       </div>
       <section className={cn('marketDetailSection')}>
         <h4 className={cn('marketSectionTitle')}>{t('plugin.skills')}</h4>

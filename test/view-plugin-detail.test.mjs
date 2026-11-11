@@ -66,13 +66,16 @@ test('插件页：面包屑 → 插件包名头（图标 + 名 + 技能数）→
   const order = [
     'class="skc_marketCrumb"',
     'class="skc_detailTop"',
-    `<h3 class="skc_marketSectionTitle">dsh-univer-office</h3>`,
+    `<h3 class="skc_marketDetailTitle">dsh-univer-office</h3>`,
     t('plugin.skills'),
     'class="skc_marketFacts"',
   ].map((needle) => html.indexOf(needle));
   assert.ok(order.every((at) => at !== -1), '五段都在');
   assert.deepEqual([...order].sort((a, b) => a - b), order, '顺序：面包屑 → 头 → 包含的技能 → 来源信息');
   assert.ok(html.includes(t('plugin.skillsCount', { count: 2 })), '头上写着「2 个技能」');
+  // 副行与标题都用技能详情页那一套类，两页才对得齐（本轮对齐改动）。
+  assert.ok(html.includes(`<p class="skc_marketDetailDesc">${t('plugin.skillsCount', { count: 2 })}</p>`), '副行是 marketDetailDesc（不再是 cardDesc）');
+  assert.equal(/<p class="skc_cardDesc">/.test(html.split('skc_marketSectionTitle')[0]), false, '头部不再用 cardDesc');
   assert.ok(html.includes(`<dt>${t('detail.factCodeSource')}</dt><dd>${t('detail.sourceBuiltin')}</dd>`), '来源信息一行：代码来源 = 内置');
   // 挂点仍是 provider id（开关写盘用它），包名单列一个属性。
   assert.ok(html.includes('data-skc-plugin-detail="univer"'), '插件页挂点 = provider id');
