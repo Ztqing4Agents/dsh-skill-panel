@@ -156,7 +156,18 @@ export function strictContext(module, t = (key) => key) {
   const registrations = [];
   const dictionaries = [];
   const cleanups = [];
+  /** Every `uiWorkspace.startSession(...)` call, so a test can count and read the args. */
+  const sessions = [];
   const services = {
+    // The shell's session seat: the add menu's second row starts a Creator draft with it.
+    // Only declared services exist on the strict ctx, so a page that forgets to declare it
+    // fails at boot instead of at click time.
+    uiWorkspace: {
+      startSession: (...args) => {
+        sessions.push(args);
+        return {};
+      },
+    },
     locale: {
       register: (namespace, dictionary) => {
         dictionaries.push({ namespace, dictionary });
@@ -190,7 +201,7 @@ export function strictContext(module, t = (key) => key) {
     },
     has: (_target, key) => key === 'effect' || declared.has(key),
   });
-  return { ctx, registrations, dictionaries, cleanups };
+  return { ctx, registrations, dictionaries, cleanups, sessions };
 }
 
 /** Resolve a package dependency path, so tests never guess file locations. */

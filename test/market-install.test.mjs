@@ -229,9 +229,13 @@ test('K34 成功路径：SKILL.md + _meta.json{source,ownerId,slug,version} + �
         files: 4,
         bytes: result.bytes,
         // U20 的白名单多了两个字段（`lib/local/**` 记录「从哪个本机目录来的」用）；
-        // 市场装没有这两个事实，归一成空串而不是缺字段（decisions.md 附录 S-7）。
+        // U21 又多了三个 git 字段（`github:o/r#path:` 形态记来源）。市场装没有这些事实，
+        // 一律归一成空串而不是缺字段（decisions.md 附录 S-7）。
         dirName: '',
         fromPath: '',
+        repo: '',
+        ref: '',
+        commit: '',
         installedAt: undefined,
       },
       '台账记录形状与 §3.7.4 一致',

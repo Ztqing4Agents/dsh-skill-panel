@@ -442,11 +442,10 @@ function capturedCss() {
   return captured;
 }
 
-test('K136 U20 零新增样式：四个已有挂点仍在、类名总数没涨', () => {
+test('K136 类名总数与既有挂点的规则条数（U20 起；U22 的添加菜单加了三个类）', () => {
   const css = capturedCss();
-  // 添加技能与删除技能复用宿主的按钮形状，所以本轮 `styles.js` 应当零字节变化。
-  // 「零新增」用两件事一起钉：四个挂点仍各有规则（名称没被改名/删掉），以及**类名总数**
-  // 恰好是本轮实测的 134 —— 多数一个，就是有人顺手加了新类。
+  // 用两件事一起钉：几个挂点仍各有规则（名称没被改名/删掉），以及**类名总数**恰好是
+  // 实测值 —— 多一个，就是有人顺手加了新类。
   // 注：不能要求「每个挂点只出现一次」：`.skc_addPrimary` 本来就有三条规则
   // （基础形状 / 圆角修正 / 页头内的修正），`skc_addMore` 与 `skc_detailDanger` 各两条。
   const counts = (selector) => (css.match(new RegExp(`\\.${selector}(?![A-Za-z0-9_])`, 'g')) ?? []).length;
@@ -455,10 +454,29 @@ test('K136 U20 零新增样式：四个已有挂点仍在、类名总数没涨',
     assert.equal(counts(selector), want, `.skc_${selector.slice(5)} 的规则条数是 ${want}（实际 ${counts(selector)}）`);
   }
   const classes = [...new Set([...css.matchAll(/\.(skc_[A-Za-z0-9_]+)/g)].map((match) => match[1]))];
-  assert.equal(classes.length, 134, `skc_ 类名总数是 134（实际 ${classes.length}：多一个就说明新增了类）`);
+  assert.equal(classes.length, 137, `skc_ 类名总数是 137（实际 ${classes.length}）：U22 的添加菜单加了 .skc_addMenu / .skc_addMenuItem / .skc_addMenuDescription`);
   // 弹窗与确认框用的是市场面那套（skc_marketDialog / skc_marketConfirmBody / skc_detailActions）：
   // 它们已经在表里，U20 只是复用。
   for (const reused of ['.skc_marketDialog', '.skc_marketConfirmBody', '.skc_detailActions']) {
     assert.ok(css.includes(reused), `${reused} 已有规则（复用它，不另造一套）`);
   }
+});
+
+test('K148 添加菜单的四条宿主刻度（逐字取宿主「插件」页那个菜单）', () => {
+  const css = capturedCss();
+  // 卡片宽：宿主 320，窄屏夹到视口减 48（两边各 24 的页边距）。
+  assert.match(css, /\.skc_addMenu\{[^}]*width: 320px/, '菜单卡片宽 320px');
+  assert.match(css, /\.skc_addMenu\{[^}]*max-width: calc\(100vw - 48px\)/, '窄屏时 max-width 是 calc(100vw - 48px)');
+  // 行：高 72、border-box、图标与文字 gap 10、内边距 6px 12px（简写写全，别让 6px 单独过）。
+  assert.match(css, /\.skc_addMenu \[role='menuitem'\]\{[^}]*height: 72px(?![0-9])/, '行高 72px');
+  assert.match(css, /\.skc_addMenu \[role='menuitem'\]\{[^}]*box-sizing: border-box/, '行是 border-box（72 含内边距）');
+  assert.match(css, /\.skc_addMenu \[role='menuitem'\]\{[^}]*gap: 10px(?![0-9])/, '图标与文字 gap 10px');
+  assert.match(css, /\.skc_addMenu \[role='menuitem'\]\{[^}]*padding: 6px 12px(?![0-9])/, '行内边距 6px 12px（两个值都钉）');
+  // 两项的标题 + 副行竖排 gap 2。
+  assert.match(css, /\.skc_addMenuItem\{[^}]*flex-direction: column/, '标题与副行竖排');
+  assert.match(css, /\.skc_addMenuItem\{[^}]*gap: 2px(?![0-9])/, '两块之间 gap 2px');
+  // 副行：12/18 成对钉，两行截断（-webkit-line-clamp 与 -webkit-box-orient 一起才有效）。
+  assert.match(css, /\.skc_addMenuDescription\{[^}]*font-size: 12px; line-height: 18px/, '副行字号与行高成对钉在 12/18');
+  assert.match(css, /\.skc_addMenuDescription\{[^}]*-webkit-line-clamp: 2(?![0-9])/, '副行最多两行');
+  assert.match(css, /\.skc_addMenuDescription\{[^}]*-webkit-box-orient: vertical/, '-webkit-box 方向是 vertical（否则没有截断）');
 });

@@ -63,6 +63,17 @@ const MARKET_ERROR_CODES = new Set([
   'E_ADD_NOT_SKILL_DIR',
   'E_ADD_SHADOWED',
   'E_DELETE_IO',
+  // The GitHub-link form of the same two routes: a spec that cannot be read, a host we do
+  // not support, a clone that failed four different ways, and a repository holding several
+  // SKILL.md files. One entry each - a missing code would print E_UNKNOWN for a refusal
+  // that has its own sentence.
+  'E_GIT_SPEC_INVALID',
+  'E_GIT_NOT_SUPPORTED',
+  'E_GIT_REPO_NOT_FOUND',
+  'E_GIT_UNREACHABLE',
+  'E_GIT_TIMEOUT',
+  'E_GIT_MISSING',
+  'E_ADD_AMBIGUOUS_SKILL',
 ]);
 
 /**

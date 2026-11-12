@@ -22,28 +22,39 @@ import { cn } from './styles.js';
 /**
  * Render the add-a-skill dialog.
  *
- * Three states, and the footer changes with them: `idle` asks for a path, `busy` reports
- * the request and refuses to send a second one, `done` replaces the form with the outcome.
- * A failure never leaves this component in a state of its own - the page puts it back to
- * `idle` with the error code, and the line under the field says what the route refused,
- * with the typed path still in the box.
+ * Three states, and the footer changes with them: `idle` asks for a spec, `busy` reports the
+ * request, `done` replaces the form with the outcome. A failure never lives here - the page
+ * puts the form back with the route's code under the field, the typed spec still in the box.
  * @param {{t: Function, status?: 'idle'|'busy'|'done', value?: string, code?: string|null,
- *   params?: object|null, result?: {name?: string, path?: string}|null, onChange?: Function,
- *   onSubmit?: Function, onClose: Function}} props - translate, the three states, the typed
- *   path, the failure code and its placeholders, the route's answer for the outcome line,
- *   and the change / submit / close handlers.
+ *   params?: object|null, result?: object|null, slow?: boolean, data?: object|null,
+ *   onChange?: Function, onSubmit?: Function, onClose: Function}} props - translate, the
+ *   states, the typed spec, the failure code with its placeholders, the route's answer,
+ *   whether the request outlived the fast path, the failure's own `data` (candidate
+ *   subdirectories and their owner/repo), and the change / submit / close handlers.
  * @returns {import('react').ReactElement} the dialog.
  */
 export function AddSkillDialog({
-  t, status = 'idle', value = '', code = null, params = null, result = null,
-  onChange, onSubmit, onClose,
+  t, status = 'idle', value = '', code = null, params = null, result = null, slow = false,
+  data = null, onChange, onSubmit, onClose,
 }) {
   /** True while an IME composition owns the field (pinyin/zhuyin/kana in progress). */
   const composing = useRef(false);
   const busy = status === 'busy';
   const done = status === 'done';
   const landed = typeof result?.path === 'string' && result.path !== '' ? result.path : '';
+  // A clone takes tens of seconds; the second sentence says which half we are in. `slow` is
+  // the page's clock (it owns the request), the key choice is here.
+  const busyKey = slow ? 'add.fetching' : 'add.busy';
   const closeLabel = done ? t('add.close') : t('market.confirmCancel');
+  // Several SKILL.md files in one repository: a pick rewrites the spec, it never submits -
+  // the reader still presses Add.
+  const shown = Array.isArray(data?.candidates) ? data.candidates : [];
+  const hidden = Number.isInteger(data?.candidateTotal) && data.candidateTotal > shown.length
+    ? data.candidateTotal - shown.length
+    : 0;
+  const repo = typeof data?.owner === 'string' && data.owner !== '' && typeof data?.repo === 'string' && data.repo !== ''
+    ? `${data.owner}/${data.repo}`
+    : '';
 
   const submit = () => {
     if (busy || done) return;
@@ -72,7 +83,7 @@ export function AddSkillDialog({
             onClick={done ? onClose : submit}
             icon={busy ? <StateDot state="ongoing" size={13} /> : null}
           >
-            {t(done ? 'add.close' : (busy ? 'add.busy' : 'add.run'))}
+            {t(done ? 'add.close' : (busy ? busyKey : 'add.run'))}
           </Button>
         </>
       )}
@@ -81,6 +92,13 @@ export function AddSkillDialog({
         {done ? (
           <>
             <p className={cn('marketDetailTitle')} role="status">{t('add.done')}</p>
+            {typeof result?.repo === 'string' && result.repo !== '' ? (
+              <p className={cn('marketScope')}>
+                {t('add.doneFrom', {
+                  repo: typeof result.ref === 'string' && result.ref !== '' ? `${result.repo}@${result.ref}` : result.repo,
+                })}
+              </p>
+            ) : null}
             {landed === '' ? null : <p className={cn('marketScope')}>{t('market.installOkHint', { path: landed })}</p>}
           </>
         ) : (
@@ -118,6 +136,24 @@ export function AddSkillDialog({
                 <StateDot state="error" />
                 {t(reasonKeyOf(code), params ?? undefined)}
               </p>
+            )}
+            {shown.length === 0 || repo === '' ? null : (
+              <div className={cn('marketConfirmBody')} role="group">
+                {shown.map((sub) => (
+                  <Button
+                    key={sub}
+                    variant="ghost"
+                    size="sm"
+                    aria-label={t('add.chooseCandidate', { path: sub })}
+                    onClick={() => onChange?.(`github:${repo}#path:${sub}`)}
+                  >
+                    <code>{sub}</code>
+                  </Button>
+                ))}
+                {hidden === 0 ? null : (
+                  <p className={cn('marketScope')}>{t('add.moreCandidates', { count: hidden })}</p>
+                )}
+              </div>
             )}
             <p className={cn('marketNotice')} role="note">
               <IconWarningOutlineRegular size={14} aria-hidden="true" />

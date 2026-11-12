@@ -265,9 +265,7 @@ setDisableModelInvocation(original: Buffer, disabled: boolean): Rewrite
 | 目标键不存在 / 正文与结尾分隔符之后 | 追加为 frontmatter 块内**最后一个顶层键之后**的新行（行尾跟随块内风格）；正文与结尾分隔符之后完全不变（`match[2]` 的原字节切片） |
 | 幂等 / 无 frontmatter | `f(f(x,true),true) === f(x,true)`（`changed === false`）；无 frontmatter 时抛 `NO_FRONTMATTER`（路由映射成 409 `E_NOT_WRITABLE`，绝不新建块） |
 
-**读侧契约（`parseFrontmatter` / `stripFrontmatter`）**——写入器与解析器解耦：写入器只替换
-`disable-model-invocation` 那一行，本节的解析规则只影响**读出什么值**，不影响写回什么字节。
-
+**读侧契约（`parseFrontmatter` / `stripFrontmatter`）**——写入器与解析器解耦：写入器只替换 `disable-model-invocation` 那一行，本节的解析规则只影响**读出什么值**，不影响写回什么字节。
 ```js
 /** @returns {{name?: string, description?: string, displayName?: string, disableModelInvocation: boolean, present: boolean}} */
 parseFrontmatter(text: string): Frontmatter
@@ -284,8 +282,7 @@ parseFrontmatter(text: string): Frontmatter
 | 标量边界 | 正文遇到**非空且不缩进**的行即结束（同级键或闭合 `---`）；指示符后允许行尾 `# 注释` 与可选缩进数字 |
 | 空正文（`description: >` 紧跟同级键） / 布尔字段 | 值 `''`（扫描层当作「没有 description」跳过，与宿主 `stringField` 的 `length > 0` 一致）；布尔字段的块标量形式同样接受，值按 `true/false/yes/no/on/off/1/0` 判定 |
 
-真机样本：`~/.dsh/skills/clawhub-wpank--ui-design/SKILL.md` 的 `description: >` +
-三行缩进正文 → 三句以空格连接、末尾一个 `\n`；修复前该行被读成一个 `>`（QA 报告 KI-2）。
+真机样本：`~/.dsh/skills/clawhub-wpank--ui-design/SKILL.md` 的 `description: >` + 三行缩进正文 → 三句以空格连接、末尾一个 `\n`；修复前该行被读成一个 `>`（QA 报告 KI-2）。
 
 #### 3.2.5 `src/client/model.js` / `header-scroll.js`
 
@@ -299,14 +296,16 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
 
 ```js
 expandHome(value: string): string|null     // '~' 与 '~/…' 按 homedir() 展开；展开后非绝对 / 含 NUL / 超 MAX_PATH_CHARS（1024）⇒ null
-skillNameOf(declaredName: string, dirName: string): string|null   // 声明名 trim 优先，空则退回目录名；两者都过 isSkillName 才返回值（不改名、不用别的名字顶替）
+skillNameOf(declaredName: string, dirName: string): string|null   // 声明名 trim 优先，空则退回目录名；两者都过 isSkillName 才返回值（不改名、不用别的名字顶替）；git 形态的「目录名兜底」取**源目录名**（`skills/foo` 的 `foo`），不是仓库名
 shadowOf(summaries: RegistrySummary[], name: string): {rank: int, provider: string}|null   // 同名摘要里最小 rank 且 < rankOf('user-dsh') 的那条；否则 null
 LOCAL_LIMITS = {maxEntries: 2000, maxFileBytes: 8 MiB, maxTotalBytes: 64 MiB}   // S9 的源目录上限；超限 ⇔ E_PACKAGE_INVALID
-isSkippedEntry(name: string): boolean      // 'node_modules' 与点开头：跳过不复制，不算失败
+isSkippedEntry(name: string): boolean      // 'node_modules' 与点开头：跳过不复制，不算失败（`.git` 因此也不会进副本）
 checkPlan(entries: {path: string, size: int, symlink: boolean}[]): {ok: boolean, code?: string}   // 纯判据：含软链 / 超条目 / 超单文件 / 超总量 ⇒ ok:false
+classifyAddSpec(spec: string): {kind:'path', path} | {kind:'github', owner, repo, ref:string|null, subdir:string|null, spec:string}   // 顺序固定：trim → 空 ⇒ `E_BAD_REQUEST`；`/` 或 `~` 开头 ⇒ path（`~` 的展开仍在 S1，这里不展开，保持纯）→ `github:o/r` 或 `https?://` 且折 host 为 `github.com`/`*.github.com` ⇒ github；其余 ⇒ `E_GIT_SPEC_INVALID`。「形态对但不在支持面」（非 github.com、SSH、tarball、URL 带凭据）⇒ `E_GIT_NOT_SUPPORTED`。段规则：repo 去尾部 `.git`、尾斜杠归一、去空段后 ≥2 段、第 3 段只允许 `tree`；`tree` 后**第一段**是 ref（含 `/` 的分支名不支持）、其余拼 subdir；`#path:` 与 tree 的 subdir 只许出现一处。subdir 的**形状**（相对 / 非空 / 无 NUL / 段不为 `.`·`..` / 不以 `/` 开头）在这里判，**是否越界由 locateSkillDir 判**（要文件系统事实）。超 2048 字符 / 40 位 sha / 两处 subdir 冲突 都归 `E_GIT_SPEC_INVALID`
+locateSkillDir(root: string, subdir: string|null): {dir: string}   // ① 给了 subdir ⇒ 只认 `<root>/<subdir>/SKILL.md`，**不再往下探测**（0 个 / 不合用 ⇒ `E_ADD_NOT_SKILL_DIR`）② 没给且 `<root>/SKILL.md` 存在 ⇒ 源目录 = root ③ 都没有 ⇒ 探测：深度 ≤4（根为第 1 层）、跳过 `.git`/`node_modules`/点开头、不跟随软链；恰好 1 个 ⇒ 它的所在目录（**不提示**）；0 个 ⇒ `E_ADD_NOT_SKILL_DIR`；≥2 个 ⇒ `E_ADD_AMBIGUOUS_SKILL`，`data:{candidates: 目录相对路径[]（去重、按字符串排序、≤10 条）, candidateTotal}`
 ```
 
-与 `src/client/model.js` 的 `deletable(row)`（`partition !== 'builtin'` ∧ `symlink !== true` ∧ `path !== null` ∧ `readonlyReason === null`）同属纯判据族：无 I/O、无时钟、node 可直测。`shadowOf` 只读 `rankOf` 的那张表（**不改 `classifySkill` 的九级阶梯**），判据理由见 `docs/contracts/decisions.md` 附录 S-6。同族的编排入口 `createLocalSkills({skillsRoot, dshHome, store, withWriteLock, rescan, copy?})` 里 **`copy` 是可选依赖**（注入点 `planCopy` / `copyPlan` / `landSkill` / `tempDirOf`，缺省走 `lib/local/copy.js`）：它只用来把 S10 / S11 的失败点变成 node 里造得出来的输入，**注入不得改变守卫顺序（S0–S12）与错误码**，也不得绕过 `.skc-install-*` 的清理。
+与 `src/client/model.js` 的 `deletable(row)`（`partition !== 'builtin'` ∧ `symlink !== true` ∧ `path !== null` ∧ `readonlyReason === null`）同属判据族，**无时钟、无网络、不写盘**：`classifyAddSpec` 连 I/O 都没有（纯，同步）；**`locateSkillDir` 是 `async` 且会读盘**（`lstat`/`readdir` 探测），「纯」在这里指**只读、不写、无时钟、无网络**，node 里用真目录或注入的假目录直测（见 `docs/contracts/decisions.md` 附录 T-13）。`shadowOf` 只读 `rankOf` 的那张表（**不改 `classifySkill` 的九级阶梯**），判据理由见 `docs/contracts/decisions.md` 附录 S-6。同族的编排入口 `createLocalSkills({skillsRoot, dshHome, store, withWriteLock, rescan, copy?})` 里 **`copy` 是可选依赖**（注入点 `planCopy` / `copyPlan` / `landSkill` / `tempDirOf`，缺省走 `lib/local/copy.js`）：它只用来把 S10 / S11 的失败点变成 node 里造得出来的输入，**注入不得改变守卫顺序（S0–S12）与错误码**，也不得绕过 `.skc-install-*` 的清理。
 
 ---
 

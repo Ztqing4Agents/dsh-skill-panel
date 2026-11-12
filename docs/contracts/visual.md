@@ -119,21 +119,21 @@
 .skc_status[data-tone="error"]{ color: var(--dsw-alias-state-error-primary) }
 
 /* 按钮尺寸：宿主 .addButton / .addPrimary / .addMore 共用 */
-.skc_addButton, .skc_addPrimary, .skc_addMore{
-  border-radius: var(--dsw-radius-md); height: 32px; padding: 0 12px; font-size: 13px; line-height: 20px;
-}
+.skc_addButton, .skc_addPrimary, .skc_addMore{ border-radius: var(--dsw-radius-md); height: 32px; padding: 0 12px; font-size: 13px; line-height: 20px }
 
 /* 「＋ 添加技能 ⌄」分裂按钮（P0 禁用态，队长决策 3） */
 .skc_addGroup{ flex: none; align-items: stretch; display: inline-flex }
 .skc_addPrimary{ border-top-right-radius: 0; border-bottom-right-radius: 0 }
-.skc_addMore{
-  border-left: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary-foreground) 30%, transparent);
-  border-top-left-radius: 0; border-bottom-left-radius: 0; width: 32px; padding: 0;
-}
+.skc_addMore{ border-left: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary-foreground) 30%, transparent); border-top-left-radius: 0; border-bottom-left-radius: 0; width: 32px; padding: 0 }
+
+/* 添加菜单（U22，逐字取宿主 `.addMenu` / `.addMenu [role=menuitem]` / `.addMenuItem` / `.addMenuDescription`；数值见 A.9） */
+.skc_addMenu{ width: 320px; max-width: calc(100vw - 48px) }
+.skc_addMenu [role='menuitem']{ height: 72px; box-sizing: border-box; gap: 10px; padding: 6px 12px }
+.skc_addMenuItem{ display: flex; flex-direction: column; gap: 2px; white-space: normal }
+.skc_addMenuDescription{ display: -webkit-box; max-height: 36px; overflow: hidden; overflow-wrap: anywhere; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); -webkit-box-orient: vertical; -webkit-line-clamp: 2 }
 
 /* 页签容器 */
-.skc_pageTabs{ flex: 100%; order: 3; display: flex }
-.skc_pageTabList{ width: fit-content; min-width: 240px }
+.skc_pageTabs{ flex: 100%; order: 3; display: flex } .skc_pageTabList{ width: fit-content; min-width: 240px }
 ```
 
 ## A.4 分区
@@ -354,14 +354,10 @@ font-size: 13px; line-height: 20px; display: inline-flex;
 
 /* 容器查询：< 600px —— 页签与图标操作共用一行，标签退化，按钮收成 32px 方图标 */
 @container skc-page-bar (width < 600px){
-  .skc_pageBarWithTabs .skc_pageHead{ align-items: center }
-  .skc_pageBarWithTabs .skc_pageHeading{ flex-basis: 100% }
-  .skc_pageBarWithTabs .skc_pageTabs{ flex: none; order: 2 }
-  .skc_pageBarWithTabs .skc_toolbar{ order: 3 }
+  .skc_pageBarWithTabs .skc_pageHead{ align-items: center } .skc_pageBarWithTabs .skc_pageHeading{ flex-basis: 100% }
+  .skc_pageBarWithTabs .skc_pageTabs{ flex: none; order: 2 } .skc_pageBarWithTabs .skc_toolbar{ order: 3 }
   .skc_toolbarLabel{ display: none }
-  .skc_pageHead .skc_addButton, .skc_pageHead .skc_addPrimary{
-    width: 32px; min-width: 32px; padding-inline: 0;
-  }
+  .skc_pageHead .skc_addButton, .skc_pageHead .skc_addPrimary{ width: 32px; min-width: 32px; padding-inline: 0 }
   .skc_toolbar{ flex-shrink: 0; max-width: 100% }
 }
 @container skc-page-bar (width < 372px){ .skc_pageTabList{ min-width: 0 } }
@@ -379,7 +375,7 @@ font-size: 13px; line-height: 20px; display: inline-flex;
 | ⓘ | 20×20 盒，图标 11px，与副标题 gap 4px | `.skc_infoButton` |
 | 状态文案 | **12px / 18px** / `label-tertiary`；有更新 `business-primary`、失败 `error-primary` | `.skc_status[data-tone]`（= 宿主 `.updatesNote`，页头只有这一句） |
 | 刷新按钮 | 高 32px，padding 0 12px，13px/20px，`radius-md`；**只在「已安装」页签出现**（页头工具条整行 `hidden={!onInstalled}`，市场页签没有这一行） | `.skc_addButton` |
-| 添加组菜单 | `align="end"`：菜单右缘 = `.skc_addGroup` 右缘（实测**差 0px**，验收判据 \|差\| ≤ 1px）；**向左生长**（左缘比添加组左缘多出 **16px**）；菜单 `top` − 添加组 `bottom` = **+4px**；菜单项恰好**一项** | `Menu align="end"`——**宿主同款**：右缘对齐添加组右缘、向左生长，不居中对齐也不向右溢出；真机量于 2026-11-12（K136） |
+| 添加组菜单 | 宽 **320px**（`max-width: calc(100vw - 48px)`）；菜单项**高 72px**（`box-sizing:border-box`、`gap:10px`、`padding:6px 12px`）；项内文字块竖排 `gap:2px`、副行 **12/18** `label-secondary`、**两行截断**（`max-height:36px` + `-webkit-line-clamp:2` + `overflow-wrap:anywhere`）；chevron 图标 **12px**；`align="end"` ⇒ 菜单右缘 = `.skc_addGroup` 右缘（实测**差 0px**，判据 \|差\| ≤ 1px）、**向左生长**（左缘比添加组左缘多出 **16px**）、菜单 `top` − 添加组 `bottom` = **+4px**；菜单项恰好**两项** | `.skc_addMenu` / `.skc_addMenu [role='menuitem']` / `.skc_addMenuItem` / `.skc_addMenuDescription`——**逐字取宿主**的 `.addMenu` / `.addMenuItem` / `.addMenuDescription`（`PluginManagerPage.module.css`）；`align="end"` 那组数真机量于 2026-11-12（K136），菜单两项与几何形态见 K148 |
 | 页签总高 | **34px** = 30px tab + 2px×2（`SegmentedTabs size="sm"`） | `SHELL` `._tabs_1lga9_1[data-size=sm]` |
 | 页签文字 | 14px / 20px，选中 500（sm 档） | `._tab_1lga9_1` |
 | 区标题 | 14px / 22px / 500 | `.skc_groupTitle` |

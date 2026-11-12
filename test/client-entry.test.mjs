@@ -73,7 +73,8 @@ test('全局页用同一个 key 注册，并注入 store 与 api', () => {
   assert.equal(page.registration.key, 'dsh-skill-center', 'main 槽的 key 与侧栏行 id 相同');
   assert.equal(page.registration.locale, 'dsh-skill-center', '全局页声明命名空间（于是组件拿到 t）');
   const props = page.registration.inject();
-  assert.deepEqual(Object.keys(props).sort(), ['api', 'store'], '注入的只有 store 与 api');
+  assert.deepEqual(Object.keys(props).sort(), ['agent', 'api', 'store'],
+    '注入 store / api 与「让 Agent 创建技能」那个座位（agent）');
   assert.equal(typeof props.store.getSnapshot, 'function', 'store 暴露 getSnapshot');
   assert.equal(typeof props.store.subscribe, 'function', 'store 暴露 subscribe');
   assert.equal(typeof props.api.list, 'function', 'api 有 list');
@@ -147,7 +148,8 @@ async function loadCommittedBundle() {
 test('client.js 导出 inject，且只声明真正用到的服务', async () => {
   const { module } = await loadCommittedBundle();
   assert.equal(Array.isArray(module.inject), true, 'module.exports.inject 是数组（cordis 靠它放行服务读取）');
-  assert.deepEqual([...module.inject].sort(), ['locale', 'slots'], '声明 locale 与 slots，effect 是核心能力不需要声明');
+  assert.deepEqual([...module.inject].sort(), ['locale', 'slots', 'uiWorkspace'],
+    '声明 locale / slots / uiWorkspace，effect 是核心能力不需要声明');
 });
 
 test('严格 ctx（未声明的服务一律抛错）下 apply 不抛错，并注册三个座位', async () => {

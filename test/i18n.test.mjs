@@ -142,7 +142,10 @@ test('设计 §8.3 键表要求的每一个键都在（按名字断言，不按�
     'row.enable', 'row.disable', 'row.applying', 'row.symlinkReadonly', 'row.symlinkTitle',
     // 已安装页签的两条写路由（U20）：添加弹窗的十一键、删除确认弹窗的三键。
     'add.label', 'add.chooseMethod', 'add.fromPath', 'add.title', 'add.description',
-    'add.pathLabel', 'add.pathPlaceholder', 'add.safety', 'add.run', 'add.busy', 'add.done', 'add.close',
+    'add.pathLabel', 'add.pathPlaceholder', 'add.safety', 'add.run', 'add.busy', 'add.fetching',
+    'add.done', 'add.doneFrom', 'add.close',
+    // U22：添加菜单改成宿主那套两项之后新增的三键（`add.fromPath` 同时改了值）。
+    'add.fromPathHint', 'add.createWithAgent', 'add.createWithAgentHint', 'add.createWithAgentOff',
     'delete.title', 'delete.body', 'delete.confirm',
     // U20 验收后：删除确认的事实标签不再复用 market.factInstallTo（见 K135）。
     'delete.factDir',

@@ -168,9 +168,11 @@ for (const half of HALVES) {
   });
 }
 
-test('client 半部的 inject 正好是 slots + locale', () => {
+test('client 半部的 inject 正好是 slots + locale + uiWorkspace', () => {
   const declared = declaredInject(textOf(join(ROOT, 'src', 'client', 'index.jsx')));
-  assert.deepEqual([...declared].sort(), ['locale', 'slots'], '声明 slots 与 locale');
+  // `uiWorkspace` 只为添加菜单的第二项（让 Agent 创建技能）存在：读 ctx.uiWorkspace 之前
+  // 必须在 inject 里，否则整页 web boot 失败（AGENTS.md 硬约束 11）。
+  assert.deepEqual([...declared].sort(), ['locale', 'slots', 'uiWorkspace'], '声明 slots / locale / uiWorkspace');
 });
 
 test('host 半部的 inject 正好是 webServer + skills + sessions', () => {
@@ -183,5 +185,9 @@ test('提交的 client.js 里 inject 与源码一致（构建没有落后于源�
   const artifact = await readFile(join(ROOT, 'client.js'), 'utf8');
   // The bundle keeps the export verbatim (`inject` is a plain const); assert the exact
   // array text so a stale build that still ships the old declaration fails here.
-  assert.match(artifact, /inject\s*=\s*\["slots",\s*"locale"\]|inject\s*=\s*\['slots',\s*'locale'\]/, 'client.js 里的 inject 是 slots + locale');
+  assert.match(
+    artifact,
+    /inject\s*=\s*\[\s*["']slots["'],\s*["']locale["'],\s*["']uiWorkspace["']\s*\]/,
+    'client.js 里的 inject 是 slots + locale + uiWorkspace',
+  );
 });

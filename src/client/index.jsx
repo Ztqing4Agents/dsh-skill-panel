@@ -38,8 +38,44 @@ export const PANEL_ORDER = 40;
  * inject declaration and throws `cannot get property "<name>" without inject` on any
  * undeclared read, so a missing entry here fails the whole web boot instead of one
  * panel. `effect` is a core capability and must not be listed.
+ *
+ * `uiWorkspace` is the shell's session seat: the add menu's second row starts a Creator
+ * draft with it (`startSession`), the same call the host's own plugin menu makes.
  */
-export const inject = ['slots', 'locale'];
+export const inject = ['slots', 'locale', 'uiWorkspace'];
+
+/**
+ * Wrap the shell's session seat into the one call the add menu makes.
+ *
+ * The menu has to know, before it opens, whether the row can work, so availability is
+ * decided once here instead of per click. A shell without the seat - or a `startSession`
+ * that throws - leaves `ready` false; the row then renders disabled with its own hint and
+ * nothing bubbles up to the page (a menu row must never take the panel down).
+ * @param {object} ctx - client root context (declares `uiWorkspace`).
+ * @returns {{ready: boolean, start: Function}} the seat, reduced to what the menu needs.
+ */
+function agentCreatorOf(ctx) {
+  let workspace = null;
+  try {
+    workspace = ctx.uiWorkspace ?? null;
+  } catch {
+    workspace = null;
+  }
+  const ready = typeof workspace?.startSession === 'function';
+  return {
+    ready,
+    start: () => {
+      if (!ready) return false;
+      try {
+        // The host's own Creator draft: no draft replacement, the Cordis preset.
+        workspace.startSession(undefined, { clearPreviousDraft: false, agentPreset: 'cordis' });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
+}
 
 /**
  * The sidebar glyph, at whatever size the shell asks for.
@@ -57,11 +93,12 @@ function SkillsPanelIcon({ size }) {
  * each registration is wrapped in `slots.inject`: the callback runs only once the
  * owning entry declares the seat, and a shell that never declares it leaves the panel
  * merely absent instead of breaking the boot.
- * @param {object} ctx - client root context (slots, locale).
- * @param {{store: object, api: object, t: Function}} shared - store, API client, and the bound translate.
+ * @param {object} ctx - client root context (slots, locale, uiWorkspace).
+ * @param {{store: object, api: object, t: Function, agent: object}} shared - store, API client,
+ *   the bound translate, and the Creator seat the add menu may use.
  * @returns {Function[]} disposers releasing both registrations.
  */
-function registerPanel(ctx, { store, api, t }) {
+function registerPanel(ctx, { store, api, t, agent }) {
   return [
     ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
       name: 'sidebar.panellist',
@@ -74,7 +111,7 @@ function registerPanel(ctx, { store, api, t }) {
       name: 'main',
       key: PANEL_ID,
       locale: NS,
-      inject: () => ({ store, api }),
+      inject: () => ({ store, api, agent }),
     }, SkillsPage)),
   ];
 }
@@ -127,7 +164,7 @@ export function apply(ctx) {
   const t = ctx.locale.bind(NS);
   const api = new SkillCenterApi();
   const disposers = [];
-  disposers.push(...registerPanel(ctx, { store, api, t }));
+  disposers.push(...registerPanel(ctx, { store, api, t, agent: agentCreatorOf(ctx) }));
   disposers.push(...registerToast(ctx, { store }));
   ctx.effect(() => () => {
     for (const dispose of disposers.splice(0)) dispose();

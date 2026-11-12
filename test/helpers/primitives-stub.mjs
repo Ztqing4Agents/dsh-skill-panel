@@ -18,6 +18,8 @@
  *   Pill            span when inert, button[type=button][data-active] when clickable
  *   Input           span wrapping an optional icon slot plus a real `input`
  *   Menu            span wrapping the anchor, plus a [role=menu] list when open
+ *                   (`items` rows and/or `children` component rows, `listClassName` on the card)
+ *   MenuItemButton  div.itemWrap > button[role=menuitem][disabled] > span(icon) + span(label)
  *   Modal           div[role=dialog][aria-modal][aria-label] with title/body/footer
  *   MarkdownText    div carrying the raw text (no markdown pipeline in node)
  *   fileSizeText    the host's byte-count formatter, transcribed verbatim
@@ -176,8 +178,13 @@ export function Input({ icon, className, ...rest }) {
  *   onSelect?: Function, onClose?: Function, className?: string}} props - menu props.
  * @returns {import('react').ReactElement} the menu root.
  */
-export function Menu({ open, anchor, items = [], selectedId, onSelect, className }) {
+export function Menu({
+  open, anchor, items = [], children, selectedId, onSelect, className, listClassName,
+}) {
   const rows = items.filter((item) => typeof item?.id === 'string' && item?.label !== undefined);
+  // The host renders its `items` data rows and its `children` component rows into the same
+  // list; `listClassName` is the only hook that reaches a portaled card, so a page that
+  // styles the dropdown has to pass it here.
   return jsxs('span', {
     className,
     children: [
@@ -185,17 +192,54 @@ export function Menu({ open, anchor, items = [], selectedId, onSelect, className
       open === true
         ? jsx('div', {
           role: 'menu',
-          className: 'stub_menu',
-          children: rows.map((item) => jsx('button', {
-            type: 'button',
-            role: 'menuitem',
-            'data-menu-id': item.id,
-            'aria-current': item.id === selectedId ? 'true' : undefined,
-            onClick: () => onSelect?.(item.id),
-            children: item.label,
-          }, item.id)),
+          className: listClassName === undefined ? 'stub_menu' : `stub_menu ${listClassName}`,
+          children: [
+            ...rows.map((item) => jsx('button', {
+              type: 'button',
+              role: 'menuitem',
+              'data-menu-id': item.id,
+              'aria-current': item.id === selectedId ? 'true' : undefined,
+              onClick: () => onSelect?.(item.id),
+              children: item.label,
+            }, item.id)),
+            children ?? null,
+          ],
         })
         : null,
+    ],
+  });
+}
+
+/**
+ * Render one host-shaped `role="menuitem"` row (the component-row flavour of `Menu`).
+ *
+ * Transcribed from the host's `MenuItemButton`: the row is a `button[role=menuitem]`
+ * wrapped in a `div`, the icon gets its own span, and `onSelect` is the row's own click -
+ * closing the menu stays the owner's decision.
+ * @param {{children?: unknown, shortcut?: object, icon?: unknown, disabled?: boolean,
+ *   danger?: boolean, separatorBefore?: boolean, onSelect?: Function}} props - row props.
+ * @returns {import('react').ReactElement} the row.
+ */
+export function MenuItemButton({
+  children, shortcut, icon, disabled = false, danger = false, separatorBefore = false, onSelect,
+}) {
+  return jsxs('div', {
+    className: 'stub_menuItemWrap',
+    children: [
+      separatorBefore ? jsx('div', { role: 'separator' }) : null,
+      jsxs('button', {
+        type: 'button',
+        role: 'menuitem',
+        className: danger ? 'stub_menuItem stub_danger' : 'stub_menuItem',
+        disabled,
+        'aria-keyshortcuts': shortcut?.aria,
+        onClick: onSelect,
+        children: [
+          icon === undefined || icon === null ? null : jsx('span', { className: 'stub_menuItemIcon', children: icon }),
+          jsx('span', { className: 'stub_menuItemLabel', children }),
+          shortcut === undefined ? null : jsx('span', { 'aria-hidden': 'true', className: 'stub_shortcut' }),
+        ],
+      }),
     ],
   });
 }
@@ -281,4 +325,6 @@ export const IconSearchOutlineRegular = iconOf('search');
 export const IconCloseOutlineRegular = iconOf('close');
 export const IconTrashOutlineRegular = iconOf('trash');
 export const IconCopyOutlineRegular = iconOf('copy');
+export const IconDownloadOutlineRegular = iconOf('download');
+export const IconAgentPresetOutlineRegular = iconOf('agent-preset');
 export const IconCheckOutlineRegular = iconOf('check');

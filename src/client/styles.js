@@ -122,6 +122,14 @@ border-radius: var(--dsw-radius-md); height: 32px; padding: 0 12px; font-size: 1
 border-left: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary-foreground) 30%, transparent);
 border-top-left-radius: 0; border-bottom-left-radius: 0; width: 32px; padding: 0;
 }
+.skc_addMenu{ width: 320px; max-width: calc(100vw - 48px) }
+.skc_addMenu [role='menuitem']{ height: 72px; box-sizing: border-box; gap: 10px; padding: 6px 12px }
+.skc_addMenuItem{ display: flex; flex-direction: column; gap: 2px; white-space: normal }
+.skc_addMenuDescription{
+display: -webkit-box; max-height: 36px; overflow: hidden; overflow-wrap: anywhere;
+font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary);
+-webkit-box-orient: vertical; -webkit-line-clamp: 2;
+}
 .skc_pageTabs{ flex: 100%; order: 3; display: flex }
 .skc_pageTabList{ width: fit-content; min-width: 240px }
 

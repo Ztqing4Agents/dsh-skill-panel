@@ -210,7 +210,7 @@ function failingStore(real, method) {
 
 /* ---------------------------------------------------------------- K127 · S0–S5 */
 
-test('K127 S0 请求形状：body 非对象 / path 不是非空字符串 ⇒ 400 E_BAD_REQUEST', async () => {
+test('K127 S0 请求形状：body 非对象 / spec 不是非空字符串 / 带别的键 ⇒ 400 E_BAD_REQUEST', async () => {
   const mounted = await mount();
   try {
     for (const [label, body] of [
@@ -218,13 +218,17 @@ test('K127 S0 请求形状：body 非对象 / path 不是非空字符串 ⇒ 400
       ['JSON 字符串', '"a"'],
       ['不是 JSON', 'not json'],
       ['空 body', ''],
-      ['path 是数字', '{"path":42}'],
-      ['path 是对象', '{"path":{"a":1}}'],
-      ['没有 path 字段', '{}'],
+      ['spec 是数字', '{"spec":42}'],
+      ['spec 是对象', '{"spec":{"a":1}}'],
+      ['没有 spec 字段', '{}'],
+      // U21：body 只认 `spec` 一个字段——旧字段 `path` 现在是「多带了别的键」。
+      ['旧字段 path（U21 前的身形）', '{"path":"/tmp/some-skill"}'],
+      ['spec 与 path 一起给', '{"spec":"/tmp/some-skill","path":"/tmp/some-skill"}'],
+      ['多一个任意的键', '{"spec":"/tmp/some-skill","name":"x"}'],
     ]) {
       const response = await mounted.call('add', body);
       assert.equal(response.status, 400, `${label} ⇒ 400`);
-      assert.equal(response.json.code, 'E_BAD_REQUEST', `${label} ⇒ E_BAD_REQUEST（S0）`);
+      assert.equal(response.json.code, 'E_BAD_REQUEST', `${label} ⇒ E_BAD_REQUEST（S0 + 单字段）`);
       assert.deepEqual(await entriesOf(mounted.tree.skillsRoot), [], `${label} 一个字节都没写`);
     }
   } finally {
@@ -232,40 +236,54 @@ test('K127 S0 请求形状：body 非对象 / path 不是非空字符串 ⇒ 400
   }
 });
 
-test('K127 S1 坏路径 ⇒ 400 E_BAD_PATH（相对 / 点开头 / URL / NUL / 超 1024），~ 前缀不走这个码', async () => {
+test('K127 S1 认不出的输入：相对/点开头 ⇒ E_GIT_SPEC_INVALID；非 github / file: ⇒ E_GIT_NOT_SUPPORTED；NUL/超长仍是 E_BAD_PATH', async () => {
   const mounted = await mount();
   try {
-    for (const [label, path] of [
+    // U21 起输入先被分类：既不是 `/`、`~` 开头，也读不成 GitHub 引用的，归 G 面的
+    // `E_GIT_SPEC_INVALID`（不再是 S1 的 E_BAD_PATH）。
+    for (const [label, spec] of [
       ['相对路径', 'my-skill'],
       ['点开头的相对路径', './my-skill'],
       ['上跳一层', '../my-skill'],
-      ['URL', 'https://example.com/skill'],
+    ]) {
+      const response = await mounted.call('add', { spec });
+      assert.equal(response.status, 400, `${label} ⇒ 400`);
+      assert.equal(response.json.code, 'E_GIT_SPEC_INVALID', `${label} ⇒ E_GIT_SPEC_INVALID（认不出是什么）`);
+      assert.equal(response.json.data, null, `${label} 的失败信封 data 为 null`);
+    }
+    // 认得出但这一面不说的传输/主机：自己的句子，不是「看不懂」。
+    for (const [label, spec] of [
+      ['非 github 的 https 链接', 'https://example.com/skill'],
       ['file: URL', 'file:///tmp/skill'],
+    ]) {
+      const response = await mounted.call('add', { spec });
+      assert.equal(response.status, 400, `${label} ⇒ 400`);
+      assert.equal(response.json.code, 'E_GIT_NOT_SUPPORTED', `${label} ⇒ E_GIT_NOT_SUPPORTED`);
+    }
+    // 真的走了 path 那一支、但展开不出可用绝对路径的，仍是 S1 的 E_BAD_PATH。
+    for (const [label, spec] of [
       ['含 NUL', '/tmp/has\u0000nul'],
       ['超 1024 字符', `/${'a'.repeat(1024)}`],
     ]) {
-      const response = await mounted.call('add', { path });
+      const response = await mounted.call('add', { spec });
       assert.equal(response.status, 400, `${label} ⇒ 400`);
-      assert.equal(response.json.code, 'E_BAD_PATH', `${label} ⇒ E_BAD_PATH（S1）`);
+      assert.equal(response.json.code, 'E_BAD_PATH', `${label} ⇒ E_BAD_PATH（S1 没变）`);
       assert.equal(response.json.data, null, `${label} 的失败信封 data 为 null`);
     }
 
-    // 空串 / 全空白落在 S0（"path 是非空字符串"，E_BAD_REQUEST），不是 S1。
-    // 契约两处措辞不一致：routes.md §3.3.4 S0 说 E_BAD_REQUEST，acceptance.md K127 把
-    // 「空串」并进了 E_BAD_PATH。**状态码两处都是 400**，这里钉守则表（S0）那一条，
-    // 差异见交付说明的 Known Issue（文档侧，归架构师）。
-    for (const [label, path] of [['空串', ''], ['全空白', '   ']]) {
-      const response = await mounted.call('add', { path });
+    // 空串 / 全空白落在 S0（"spec 是非空字符串"，`E_BAD_REQUEST`），不是 S1。
+    for (const [label, spec] of [['空串', ''], ['全空白', '   ']]) {
+      const response = await mounted.call('add', { spec });
       assert.equal(response.status, 400, `${label} ⇒ 400`);
       assert.equal(response.json.code, 'E_BAD_REQUEST', `${label} 在 S0 就被拒（非空字符串那条）`);
     }
 
-    // `~` / `~/…` 是合法输入：它们不会落 E_BAD_PATH，而是展开后继续走 S2 之后的守卫。
-    const shorthand = await mounted.call('add', { path: '~/skc-qa-does-not-exist-xyz' });
+    // `~` / `~/…` 是合法输入：它们被分类成 path 形态，展开后继续走 S2 之后的守卫。
+    const shorthand = await mounted.call('add', { spec: '~/skc-qa-does-not-exist-xyz' });
     assert.equal(shorthand.status, 404, '不存在的 `~/…` ⇒ 404（证明它过了 S1）');
     assert.equal(shorthand.json.code, 'E_ADD_NOT_FOUND', '停在 S2（lstat 不成功）');
     // 裸 `~` 指向家目录本身：它存在、是目录、但没有 SKILL.md ⇒ S4 的那一支。
-    const home = await mounted.call('add', { path: '~' });
+    const home = await mounted.call('add', { spec: '~' });
     assert.equal(home.status, 422, '裸 `~` ⇒ 422（家目录不是技能目录）');
     assert.equal(home.json.code, 'E_ADD_NOT_SKILL_DIR', '同样证明 `~` 过了 S1');
   } finally {
@@ -276,7 +294,7 @@ test('K127 S1 坏路径 ⇒ 400 E_BAD_PATH（相对 / 点开头 / URL / NUL / �
 test('K127 S2–S4：源不存在 ⇒ 404；普通文件 / 空目录 / SKILL.md 是软链 ⇒ 422 E_ADD_NOT_SKILL_DIR', async () => {
   const mounted = await mount();
   try {
-    const missing = await mounted.call('add', { path: join(mounted.tree.dshHome, 'no-such-dir') });
+    const missing = await mounted.call('add', { spec: join(mounted.tree.dshHome, 'no-such-dir') });
     assert.equal(missing.status, 404, '不存在的路径 ⇒ 404');
     assert.equal(missing.json.code, 'E_ADD_NOT_FOUND', '码是 E_ADD_NOT_FOUND（不是 E_NOT_FOUND）');
     assert.equal(missing.json.data, null, '失败信封 data 为 null');
@@ -284,14 +302,14 @@ test('K127 S2–S4：源不存在 ⇒ 404；普通文件 / 空目录 / SKILL.md 
     // 普通文件
     const plainFile = join(mounted.tree.dshHome, 'plain.md');
     await writeFile(plainFile, '# not a skill\n');
-    const fileResponse = await mounted.call('add', { path: plainFile });
+    const fileResponse = await mounted.call('add', { spec: plainFile });
     assert.equal(fileResponse.status, 422, '普通文件 ⇒ 422');
     assert.equal(fileResponse.json.code, 'E_ADD_NOT_SKILL_DIR', '普通文件不是技能目录');
 
     // 空目录（没有 SKILL.md）
     const emptyDir = join(mounted.tree.dshHome, 'empty-dir');
     await mkdir(emptyDir, { recursive: true });
-    const emptyResponse = await mounted.call('add', { path: emptyDir });
+    const emptyResponse = await mounted.call('add', { spec: emptyDir });
     assert.equal(emptyResponse.status, 422, '空目录 ⇒ 422');
     assert.equal(emptyResponse.json.code, 'E_ADD_NOT_SKILL_DIR', '没有 SKILL.md 不是技能目录');
 
@@ -302,7 +320,7 @@ test('K127 S2–S4：源不存在 ⇒ 404；普通文件 / 空目录 / SKILL.md 
     await mkdir(target, { recursive: true });
     await writeFile(join(target, 'SKILL.md'), skillFile({ name: 'linked-skill-md' }));
     await symlink(join(target, 'SKILL.md'), join(linked, 'SKILL.md'));
-    const symlinkResponse = await mounted.call('add', { path: linked });
+    const symlinkResponse = await mounted.call('add', { spec: linked });
     assert.equal(symlinkResponse.status, 422, 'SKILL.md 是软链 ⇒ 422');
     assert.equal(symlinkResponse.json.code, 'E_ADD_NOT_SKILL_DIR', 'SKILL.md 必须是普通文件（不跟随软链）');
 
@@ -317,7 +335,7 @@ test('K127 S5 声明名不合规 ⇒ 422 E_SKILL_NAME_INVALID + data.declaredNam
   const mounted = await mount();
   try {
     const src = await sourceDir(mounted.tree.dshHome, 'Bad', { declared: 'Design' });
-    const response = await mounted.call('add', { path: src });
+    const response = await mounted.call('add', { spec: src });
     assert.equal(response.status, 422, '名字不合规 ⇒ 422');
     assert.equal(response.json.code, 'E_SKILL_NAME_INVALID', '复用市场面的那个码');
     assert.equal(response.json.data.declaredName, 'Design', 'data 回显声明名（界面要显示它）');
@@ -325,7 +343,7 @@ test('K127 S5 声明名不合规 ⇒ 422 E_SKILL_NAME_INVALID + data.declaredNam
 
     // 声明名缺失 ⇒ 回落目录名；目录名也不合规 ⇒ 同一个码、declaredName 是空串。
     const fallback = await sourceDir(mounted.tree.dshHome, 'Bad_Dir', { declared: null });
-    const fallbackResponse = await mounted.call('add', { path: fallback });
+    const fallbackResponse = await mounted.call('add', { spec: fallback });
     assert.equal(fallbackResponse.json.code, 'E_SKILL_NAME_INVALID', '目录名不合规同样拒');
     assert.equal(fallbackResponse.json.data.declaredName, '', '声明名缺失时回显空串（不是 null）');
   } finally {
@@ -337,13 +355,13 @@ test('K127 围栏：非 loopback ⇒ 403 且零磁盘改动；GET ⇒ 405', asyn
   const mounted = await mount();
   try {
     const src = await sourceDir(mounted.tree.dshHome, 'qa-locked', {});
-    const forbidden = await mounted.call('add', { path: src }, { remoteAddress: '10.1.2.3' });
+    const forbidden = await mounted.call('add', { spec: src }, { remoteAddress: '10.1.2.3' });
     assert.equal(forbidden.status, 403, '非 loopback ⇒ 403');
     assert.equal(forbidden.json.code, 'E_FORBIDDEN', '码是 E_FORBIDDEN');
     assert.deepEqual(await entriesOf(mounted.tree.skillsRoot), [], '403 一个字节都没写');
     assert.equal(await ledgerBytes(mounted.tree.dshHome), null, '403 连台账都没建');
 
-    const wrongMethod = await mounted.call('add', { path: src }, { method: 'GET' });
+    const wrongMethod = await mounted.call('add', { spec: src }, { method: 'GET' });
     assert.equal(wrongMethod.status, 405, 'GET ⇒ 405');
     assert.equal(wrongMethod.json.code, 'E_METHOD', '码是 E_METHOD');
     assert.deepEqual(await entriesOf(mounted.tree.skillsRoot), [], '405 也没写盘');
@@ -369,7 +387,7 @@ test('K128 S6 目标被占：目录 / 普通文件 / 软链一视同仁 ⇒ 409 
     ]) {
       await rm(target, { recursive: true, force: true });
       await occupy();
-      const response = await mounted.call('add', { path: src });
+      const response = await mounted.call('add', { spec: src });
       assert.equal(response.status, 409, `${label} ⇒ 409`);
       assert.equal(response.json.code, 'E_ALREADY_INSTALLED', `${label} ⇒ E_ALREADY_INSTALLED`);
       assert.equal(response.json.data.path, target, `${label} 的 data.path 就是那个占位`);
@@ -384,7 +402,7 @@ test('K128 S6 目标被占：目录 / 普通文件 / 软链一视同仁 ⇒ 409 
       source: 'local', owner: '', slug: '', name: 'probe', dirName: 'probe', fromPath: src,
     });
     assert.deepEqual(await entriesOf(mounted.tree.skillsRoot), [], '目录确实不在（只有台账残留）');
-    const allowed = await mounted.call('add', { path: src });
+    const allowed = await mounted.call('add', { spec: src });
     assert.equal(allowed.status, 200, '台账有记录、目录不在 ⇒ 照装');
     assert.equal((await lstat(target)).isDirectory(), true, '目录这次真的落位了');
   } finally {
@@ -403,7 +421,7 @@ test('K128 S7 影子：rank 250 / 300 的同名注册表行 ⇒ 409 + data.provi
     const mounted = await mount({ registry: registryOf([summary]) });
     try {
       const src = await sourceDir(mounted.tree.dshHome, 'probe', {});
-      const response = await mounted.call('add', { path: src });
+      const response = await mounted.call('add', { spec: src });
       assert.equal(response.status, 409, `${label} ⇒ 409`);
       assert.equal(response.json.code, 'E_ADD_SHADOWED', `${label} ⇒ E_ADD_SHADOWED`);
       assert.equal(response.json.data.provider, provider, `${label} 的 data.provider 是那条注册表行的 provider`);
@@ -425,7 +443,7 @@ test('K128 S7 影子：rank 250 / 300 的同名注册表行 ⇒ 409 + data.provi
     const mounted = await mount({ registry: registryOf([summary]) });
     try {
       const src = await sourceDir(mounted.tree.dshHome, 'probe', {});
-      const response = await mounted.call('add', { path: src });
+      const response = await mounted.call('add', { spec: src });
       assert.equal(response.status, 200, `${label} 放行（扫描行在同名裁决里不输）`);
       assert.equal(response.json.code, 'OK', `${label} 成功`);
     } finally {
@@ -443,7 +461,7 @@ test('K129 成功落盘：目录 + 台账一条 + R5 + 没有临时目录', asyn
       declared: 'qa-probe',
       files: { 'docs/guide.md': '# guide\n', 'node_modules/x/index.js': 'nope\n', '.gitignore': 'dist\n' },
     });
-    const response = await mounted.call('add', { path: src });
+    const response = await mounted.call('add', { spec: src });
     assert.equal(response.status, 200, '成功 ⇒ 200');
     assert.equal(response.json.code, 'OK', '信封 code 是 OK');
     const data = response.json.data;
@@ -490,10 +508,10 @@ test('K129 不变式：每条失败路径之后 ∄ 目录 ∧ ∄ .skc-install-
     const before = await ledgerBytes(mounted.tree.dshHome);
 
     const cases = [
-      ['S4 源不是技能目录', { path: join(mounted.tree.dshHome, 'not-a-skill') }, 'E_ADD_NOT_SKILL_DIR'],
-      ['S5 声明名不合规', { path: await sourceDir(mounted.tree.dshHome, 'Bad2', { declared: 'Design' }) }, 'E_SKILL_NAME_INVALID'],
-      ['S9 源内有软链', { path: await sourceDir(mounted.tree.dshHome, 'probe-link', { files: {} }) }, 'E_PACKAGE_INVALID'],
-      ['S1 坏路径', { path: 'relative/path' }, 'E_BAD_PATH'],
+      ['S4 源不是技能目录', { spec: join(mounted.tree.dshHome, 'not-a-skill') }, 'E_ADD_NOT_SKILL_DIR'],
+      ['S5 声明名不合规', { spec: await sourceDir(mounted.tree.dshHome, 'Bad2', { declared: 'Design' }) }, 'E_SKILL_NAME_INVALID'],
+      ['S9 源内有软链', { spec: await sourceDir(mounted.tree.dshHome, 'probe-link', { files: {} }) }, 'E_PACKAGE_INVALID'],
+      ['认不出的输入（原 S1 相对路径）', { spec: 'relative/path' }, 'E_GIT_SPEC_INVALID'],
     ];
     // 给 S9 那条造一个内部软链。
     const linked = join(mounted.tree.dshHome, 'sources', 'probe-link');
@@ -510,7 +528,7 @@ test('K129 不变式：每条失败路径之后 ∄ 目录 ∧ ∄ .skc-install-
 
     // S6 与 S7 各再造一次（这两条在 K128 里已逐项验过，这里只要不变式）。
     await mkdir(join(mounted.tree.skillsRoot, 'probe'), { recursive: true });
-    const occupied = await mounted.call('add', { path: await sourceDir(mounted.tree.dshHome, 'probe', {}) });
+    const occupied = await mounted.call('add', { spec: await sourceDir(mounted.tree.dshHome, 'probe', {}) });
     assert.equal(occupied.json.code, 'E_ALREADY_INSTALLED', 'S6 的码');
     assert.deepEqual(await leftovers(mounted.tree.skillsRoot), [], 'S6 之后没有临时目录');
     assert.deepEqual(await ledgerBytes(mounted.tree.dshHome), before, 'S6 之后台账逐字节未变');
@@ -525,7 +543,7 @@ test('K129 台账写失败 ⇒ 500 E_INSTALL_IO，但目录保留（唯一允许
   const mounted = await mount({ tree, market: { ...base, store: failingStore(base.store, 'append') } });
   try {
     const src = await sourceDir(mounted.tree.dshHome, 'probe', {});
-    const response = await mounted.call('add', { path: src });
+    const response = await mounted.call('add', { spec: src });
     assert.equal(response.status, 500, '台账写失败 ⇒ 500');
     assert.equal(response.json.code, 'E_INSTALL_IO', '码是 E_INSTALL_IO（§3.7.4 S13 的同一处例外）');
     assert.equal((await lstat(join(mounted.tree.skillsRoot, 'probe', 'SKILL.md'))).isFile(), true,
@@ -542,8 +560,8 @@ test('K129 并发同名两次 ⇒ 一次 200、一次 429 E_INSTALL_BUSY（只�
   try {
     const src = await sourceDir(mounted.tree.dshHome, 'probe', {});
     const [first, second] = await Promise.all([
-      mounted.call('add', { path: src }),
-      mounted.call('add', { path: src }),
+      mounted.call('add', { spec: src }),
+      mounted.call('add', { spec: src }),
     ]);
     const statuses = [first.status, second.status].sort((left, right) => left - right);
     assert.deepEqual(statuses, [200, 429], '一次成功、一次被锁挡（实测两侧顺序会变，所以比多重集）');
@@ -566,13 +584,13 @@ test('K129 S8 共用一把锁：锁被占时 add / remove 都回 429，别的名
     // 让锁真的进了表（一次性微任务即可）。
     await new Promise((resolve) => setImmediate(resolve));
 
-    const blocked = await mounted.call('add', { path: src });
+    const blocked = await mounted.call('add', { spec: src });
     assert.equal(blocked.status, 429, '锁被占时 add ⇒ 429');
     assert.equal(blocked.json.code, 'E_INSTALL_BUSY', '码是 E_INSTALL_BUSY（与市场安装共用同一张表）');
 
     // 换个名字不受影响：锁的键是 `local:<name>`，不是全局一把。
     const other = await sourceDir(mounted.tree.dshHome, 'probe-two', { declared: 'probe-two' });
-    const allowed = await mounted.call('add', { path: other });
+    const allowed = await mounted.call('add', { spec: other });
     assert.equal(allowed.status, 200, '别的名字照常写');
 
     // remove 走同一把锁：先放一个 probe 目录，再占锁，删除同样被挡。
@@ -590,7 +608,7 @@ test('K129 S8 共用一把锁：锁被占时 add / remove 都回 429，别的名
     await held;
     // 锁放掉之后同一个名字可以写（`local:probe` 已经从表里摘掉）。
     const third = await sourceDir(mounted.tree.dshHome, 'probe-three', { declared: 'probe-again' });
-    const afterRelease = await mounted.call('add', { path: third });
+    const afterRelease = await mounted.call('add', { spec: third });
     assert.equal(afterRelease.status, 200, '锁放掉之后可以写');
   } finally {
     await mounted.close();
@@ -609,7 +627,7 @@ test('K130 包闸：2001 条目 / 单文件 9 MiB / 总量超 64 MiB ⇒ 422 E_P
         writeFile(join(many, `f${start + offset}.txt`), 'x')
       )));
     }
-    const manyResponse = await mounted.call('add', { path: many });
+    const manyResponse = await mounted.call('add', { spec: many });
     assert.equal(manyResponse.status, 422, '2001 条目 ⇒ 422');
     assert.equal(manyResponse.json.code, 'E_PACKAGE_INVALID', '码是 E_PACKAGE_INVALID');
     assert.equal((await entriesOf(mounted.tree.skillsRoot)).includes('many-entries'), false, '没有落盘');
@@ -618,7 +636,7 @@ test('K130 包闸：2001 条目 / 单文件 9 MiB / 总量超 64 MiB ⇒ 422 E_P
     // 单文件 9 MiB（稀疏文件：大小真实、不占盘）。
     const big = await sourceDir(mounted.tree.dshHome, 'big-file', {});
     await truncate(await touch(join(big, 'big.bin')), 9 * 1024 * 1024);
-    const bigResponse = await mounted.call('add', { path: big });
+    const bigResponse = await mounted.call('add', { spec: big });
     assert.equal(bigResponse.status, 422, '单文件 9 MiB ⇒ 422');
     assert.equal(bigResponse.json.code, 'E_PACKAGE_INVALID', '同一个码');
 
@@ -630,7 +648,7 @@ test('K130 包闸：2001 条目 / 单文件 9 MiB / 总量超 64 MiB ⇒ 422 E_P
       await truncate(await touch(join(exact, `blob${index}.bin`)), 8 * 1024 * 1024);
     }
     await truncate(await touch(join(exact, 'last.bin')), 8 * 1024 * 1024 - skillBytes);
-    const exactResponse = await mounted.call('add', { path: exact });
+    const exactResponse = await mounted.call('add', { spec: exact });
     assert.equal(exactResponse.status, 200, '总量恰好 64 MiB 放行（上限是「≤」）');
 
     const over = await sourceDir(mounted.tree.dshHome, 'over-total', {});
@@ -638,7 +656,7 @@ test('K130 包闸：2001 条目 / 单文件 9 MiB / 总量超 64 MiB ⇒ 422 E_P
       await truncate(await touch(join(over, `blob${index}.bin`)), 8 * 1024 * 1024);
     }
     await truncate(await touch(join(over, 'one-more.bin')), 1);
-    const overResponse = await mounted.call('add', { path: over });
+    const overResponse = await mounted.call('add', { spec: over });
     assert.equal(overResponse.status, 422, '总量 64 MiB + 1 字节 ⇒ 422');
     assert.equal(overResponse.json.code, 'E_PACKAGE_INVALID', '同一个码');
     assert.equal((await entriesOf(mounted.tree.skillsRoot)).includes('over-total'), false, '超限的那份没有落盘');
@@ -653,7 +671,7 @@ test('K130 源目录内部软链（文件或目录）⇒ 整次拒绝且不静�
     // 文件软链
     const fileLink = await sourceDir(mounted.tree.dshHome, 'link-file', {});
     await symlink(join(fileLink, 'SKILL.md'), join(fileLink, 'mirror.md'));
-    const fileResponse = await mounted.call('add', { path: fileLink });
+    const fileResponse = await mounted.call('add', { spec: fileLink });
     assert.equal(fileResponse.status, 422, '文件软链 ⇒ 422');
     assert.equal(fileResponse.json.code, 'E_PACKAGE_INVALID', '码是 E_PACKAGE_INVALID（不是「跳过」）');
 
@@ -663,7 +681,7 @@ test('K130 源目录内部软链（文件或目录）⇒ 整次拒绝且不静�
     await mkdir(outside, { recursive: true });
     await writeFile(join(outside, 'secret.md'), 'not yours\n');
     await symlink(outside, join(dirLink, 'docs'));
-    const dirResponse = await mounted.call('add', { path: dirLink });
+    const dirResponse = await mounted.call('add', { spec: dirLink });
     assert.equal(dirResponse.status, 422, '目录软链 ⇒ 422');
     assert.equal(dirResponse.json.code, 'E_PACKAGE_INVALID', '同一个码');
 
@@ -680,7 +698,7 @@ test('K130 源目录顶层是软链 ⇒ 照装，落位的是真实目录', asyn
     const real = await sourceDir(mounted.tree.dshHome, 'linked-top', {});
     const link = join(mounted.tree.dshHome, 'sources', 'linked-top-link');
     await symlink(real, link, 'dir');
-    const response = await mounted.call('add', { path: link });
+    const response = await mounted.call('add', { spec: link });
     assert.equal(response.status, 200, '顶层软链指向真目录 ⇒ 照装（S3 允许）');
     const landed = join(mounted.tree.skillsRoot, 'linked-top');
     assert.equal((await lstat(landed)).isSymbolicLink(), false, '落位的是真目录，不是把软链搬过去');
@@ -806,7 +824,7 @@ test('K132 成功：目录整体消失、data.dir 对、台账 cleared、再装�
   const mounted = await mount();
   try {
     const src = await sourceDir(mounted.tree.dshHome, 'probe', { declared: 'qa-probe' });
-    const added = await mounted.call('add', { path: src });
+    const added = await mounted.call('add', { spec: src });
     assert.equal(added.status, 200, '先加一个');
     const dir = added.json.data.path;
     assert.equal((await lstat(dir)).isDirectory(), true, '加完目录在');
@@ -822,7 +840,7 @@ test('K132 成功：目录整体消失、data.dir 对、台账 cleared、再装�
     assert.deepEqual(await leftovers(mounted.tree.skillsRoot), [], '没有临时目录');
 
     // 删完之后同名再装 ⇒ 成功（残留不拦）。
-    const again = await mounted.call('add', { path: src });
+    const again = await mounted.call('add', { spec: src });
     assert.equal(again.status, 200, '同名再装成功');
   } finally {
     await mounted.close();
@@ -888,7 +906,7 @@ test('K129 S10 落位抛错 ⇒ 500 E_INSTALL_IO，且 <name> 未落位、无临
     const root = mounted.tree.skillsRoot;
     const before = await ledgerBytes(mounted.tree.dshHome);
 
-    await assert.rejects(mounted.face.add({ path: src }), (error) => {
+    await assert.rejects(mounted.face.add({ spec: src }), (error) => {
       const failure = asLocalError(error);
       assert.deepEqual(
         { code: failure.code, status: failure.status },
@@ -923,7 +941,7 @@ test('K129 S11 回读名不一致 ⇒ 500 E_INSTALL_IO，且刚落位的目录�
     const root = mounted.tree.skillsRoot;
     const before = await ledgerBytes(mounted.tree.dshHome);
 
-    await assert.rejects(mounted.face.add({ path: src }), (error) => {
+    await assert.rejects(mounted.face.add({ spec: src }), (error) => {
       const failure = asLocalError(error);
       assert.deepEqual(
         { code: failure.code, status: failure.status },
@@ -957,7 +975,7 @@ test('K129 S11 回读抛错（SKILL.md 读不出来）⇒ 同样删掉刚落位�
     const root = mounted.tree.skillsRoot;
     const before = await ledgerBytes(mounted.tree.dshHome);
 
-    await assert.rejects(mounted.face.add({ path: src }), (error) => {
+    await assert.rejects(mounted.face.add({ spec: src }), (error) => {
       const failure = asLocalError(error);
       assert.deepEqual({ code: failure.code, status: failure.status }, { code: 'E_INSTALL_IO', status: 500 }, '码与状态');
       assert.match(failure.message, /read back/, '消息点明是回读这一步');
@@ -983,7 +1001,7 @@ test('K129 反证：注入缝不改变成功路径——真实 copy（不传）�
     });
     const root = mounted.tree.skillsRoot;
 
-    const added = await mounted.call('add', { path: src });
+    const added = await mounted.call('add', { spec: src });
     assert.equal(added.status, 200, '真实 copy 仍然落位（缝不传就等于原样）');
     assert.equal(added.json.data.name, 'qa-probe', '名字取声明名');
     assert.deepEqual(await entriesOf(join(root, 'qa-probe')), ['SKILL.md', 'docs'], '文件照旧按清单复制');
@@ -1025,7 +1043,7 @@ test('K129 tempDirOf 注入：前缀仍是 .skc-install-，失败后照样清干
     const root = mounted.tree.skillsRoot;
     const before = await ledgerBytes(mounted.tree.dshHome);
 
-    await assert.rejects(mounted.face.add({ path: src }), (error) => {
+    await assert.rejects(mounted.face.add({ spec: src }), (error) => {
       assert.equal(asLocalError(error).code, 'E_INSTALL_IO', '码仍是 E_INSTALL_IO');
       return true;
     });

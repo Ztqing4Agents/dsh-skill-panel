@@ -265,18 +265,19 @@ export class SkillCenterApi {
   }
 
   /**
-   * Copy one local directory into the skills root as a new skill.
+   * Add one skill from a spec: a local directory, or a GitHub repository link.
    *
-   * The body carries the path and nothing else: the name, the file list and the target
-   * directory are the host's business, and the route re-derives all three.
-   * @param {{path: string}} ref - the directory the reader typed.
-   * @returns {Promise<object>} `{name, path, files, bytes}`.
+   * The body carries the spec and nothing else. One field, one classifier on the host: the
+   * name, the file list, the target directory and the cloned commit are all its business,
+   * and it re-derives them from the same string the reader typed.
+   * @param {{spec: string}} ref - what the reader typed.
+   * @returns {Promise<object>} `{name, path, files, bytes, source, repo, ref, commit}`.
    */
   async addSkill(ref) {
     return this.request('add', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ path: ref?.path ?? '' }),
+      body: JSON.stringify({ spec: ref?.spec ?? '' }),
     });
   }
 

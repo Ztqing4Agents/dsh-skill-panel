@@ -286,15 +286,13 @@ sequenceDiagram
 
     Note over PG: 进「已安装」页签 / 打开详情 / 点刷新 / 点「重新检查」<br/>目标 = upstream 非空 ∧ 非软链 ∧ version 非空
     loop 按 identity 串行（2s/行、8s/轮）
-        PG->>API: marketVersions({source, owner, slug})
-        API->>DV: GET market/versions
+        PG->>API: marketVersions({source, owner, slug}) → DV: GET market/versions
         DV-->>API: {namespace, latest, versions[], total}
         API-->>PG: 答案（按 identity 落 checks，失败只影响这一行）
     end
     PG-->>U: 页头一句更新提示（「N 个技能可更新」，宿主 .updatesNote 同形）+ 版本区块五态
     U->>PG: 点「更新」→ 确认弹窗 → 确认
-    PG->>API: marketUpdate({source, owner, slug, version, name, path})
-    API->>MV: POST market/update
+    PG->>API: marketUpdate({source, owner, slug, version, name, path}) → MV: POST market/update
     MV->>MV: P0–P7 前置校验（重新扫描 / 软链 / path / 身份三件套 / 同版本 / 加锁）
     MV->>IN: update(ref, target)
     IN->>T: 暂存全量文件 + 新 _meta.json + 搬运启用状态 + 交换前回读
@@ -323,12 +321,15 @@ sequenceDiagram
     participant T as skillsRoot/.skc-install-*
     participant L as market/store.js
 
-    U->>PG: 点「＋ 添加技能」或 chevron 的「从本地目录添加」→ 填路径 → 回车
-    PG->>API: addSkill({path})
-    API->>RT: POST add（≤ 64 KiB，只有 path）
-    RT->>RT: guard → S0/S1（body、`~` 展开后绝对、无 NUL、≤1024）
-    RT->>LS: add({path})
-    LS->>LS: S2–S4 lstat：存在 / 是目录 / SKILL.md 是普通文件
+    U->>PG: 点「＋ 添加技能」或 chevron 菜单第一项「安装第三方技能」→ 填路径/链接 → 回车（第二项「让 Agent 创建技能」走 Creator 草稿，不属于这条流程）
+    PG->>API: addSkill({spec}) → RT: POST add（≤ 64 KiB，只有 spec）
+    RT->>RT: guard → G0 body/spec 形状 → 分类：path ⇒ 转 S1（`~` 展开后绝对、无 NUL、≤1024）
+    RT->>LS: add({spec})
+    alt spec 是 GitHub 链接（G1 分类器判出 path 以外的形态）
+        LS->>LS: G1 分类 → G2 仓库级锁 github:<owner>/<repo> → G3 浅克隆（`--no-recurse-submodules`，env 自建 11–12 键不含父环境，60s / SIGKILL）→ G4 定位（多候选 ⇒ 422 + candidates）→ G5 lstat SKILL.md
+        Note over LS,T: 之后就是下面的 S5–S12（清点对象＝要复制的那个子目录）；finally 删 <skillsRoot>/.skc-clone-* 与 .skc-install-*
+    end
+    LS->>LS: S2–S4 lstat：存在 / 是目录 / SKILL.md 是普通文件（**仅 path 形态**；git 形态由 G4/G5 顶替）
     LS->>LS: S5 声明名 trim（空则目录名）→ isSkillName
     LS->>LS: S6 lstat(skillsRoot/<name>) 存在即拒
     LS->>RT: S7 rescan() 取同一次新扫描 + 注册表快照 → shadowOf(rank < 400) 命中即拒

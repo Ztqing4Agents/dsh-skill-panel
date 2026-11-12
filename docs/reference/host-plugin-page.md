@@ -8,6 +8,7 @@
 > 采集日期：2026-11-08
 > 二次采集：§7「插件详情页」于 2026-11-10 用 node 读 asar 补采（同日二核，见 `docs/contracts/decisions.md` 附录 Q）
 > 三次采集：§8「添加插件与卸载两条流程」于 2026-11-12 用 node 读 asar 采集、并逐条验签行号（同源 `0.2.2-rc.1`；宿主升级后与 §7 一起整份重采）
+> 四次采集：§8.1「添加插件菜单」于 2026-11-13 复采（**同一版宿主** `0.2.2-rc.1`；这一版装了 `dsh-client-ui-agent-preset`，菜单从一项变两项——旧值不适用，按复采结果整条重写）
 > 来源版本：DeepSeek Harness `0.2.2-rc.1`（`/Applications/DeepSeek Harness.app/Contents/Resources/app.asar`）
 
 只描述**宿主长什么样**，不写「我们应该怎么用」——复刻口径在 `docs/contracts/visual.md`。
@@ -191,7 +192,7 @@ locale 键值（逐字，来自该包的 zh 表）：
 3. 宿主类名是构建哈希（`w6M7KW_*`），只能按 `[class*="crumb"]` / `[class*="detailTitle"]` 这类语义片段定位。
 4. 在 `<html>` 上模拟 `data-platform=darwin` 会让整轮静默挂死（宿主外壳也读它）；要验 darwin 分支只在 `.skc_page` 上打属性。
 
-## 8 添加插件与卸载两条流程（采集 2026-11-12；本节整份重采）
+## 8 添加插件与卸载两条流程（采集 2026-11-12，**§8.1 于 2026-11-13 复采**；本节整份重采）
 
 > 采集方法：**node 逐字节读 asar**（§1 那条「`grep` 搜中文会静默漏检」的警告在这儿一样成立）。三个来源文件都在包里、且都是 TS 源码：`PluginManagerPage.tsx`（94 051 B）、`manager-store.ts`（78 429 B）、`locales.ts`（173 664 B）；服务端拒绝码在**另一个包**的 `dsh-plugin-manager/lib/types/index.js`（96 905 B）与 `failure.js`（990 B）。本节行号都是当轮对着产物验签过的；`file:line` 形态一律不写（`check-docs` 的 R9 禁止），坐标读作「该文件内的绝对行号」。
 
@@ -200,7 +201,14 @@ locale 键值（逐字，来自该包的 zh 表）：
 - 工具条顺序：状态位 `updatesNote` → 刷新（`variant="outline"`，进行中换 `StateDot state="ongoing" size={13}`）→ **`AddPluginMenu`**（`PluginManagerPage.tsx` `:1712-1722`）。
 - **「添加」与「看进度」共用一个位置**：`state.install.requestId === undefined` 时渲染 `AddPluginMenu`，否则换成一枚 `variant="primary"` 的「查看安装任务」（`:1720-1722`）。
 - `AddPluginMenu` 是**主按钮 + chevron** 两枚（`:60-97`）：主按钮 `variant="primary" size="sm"` + `IconPlusOutlineRegular size={13}` + `aria-label={t('addPlugin')}`，**点击直接开弹窗**（`:70-73`）；chevron 带 `aria-haspopup="menu"` + `aria-expanded`，点它或按 `ArrowDown` 开菜单（`:78-85`）。
-- 菜单 `align="end" portal autoFocus`，**只有一项**：`installExisting`（zh「安装第三方插件」）+ 描述 `installExistingDescription`（zh「支持 npm 包、Git 仓库和本地目录」），选中即开弹窗；菜单尾部跟 `renderSlot('plugins.add.actions')`，供别的插件追加添加方式（`:75-94`）。键位见 `locales.ts` `:22-25`。
+- 菜单是 **children 模式**（不是 `items` 数组）：`Menu open/onClose align="end" portal autoFocus listClassName={css.addMenu} anchor={chevron}`（`:75-96`），子节点是 primitives 的 **`MenuItemButton`**（`icon` + `onSelect` + 可选 `disabled`）。这一版渲染**两项**：
+  1. `installExisting`「安装第三方插件」+ 副行 `installExistingDescription`「支持 npm 包、Git 仓库和本地目录」，`icon={<IconDownloadOutlineRegular size={14} />}`，`onSelect` = 关菜单 + 开安装弹窗；
+  2. **由 `dsh-client-ui-agent-preset` 的 `CreatePluginMenuItem` 注入同一个插槽**：「让 Agent 创建插件」(`createPlugin`) + 副行「进入创造模式，制作属于你的 DSH 插件」(`createPluginDescription`)，`icon={<IconAgentPresetOutlineRegular size={14} />}`；`disabled` 由 **agent preset roster** 决定（`status==='ready'` ∧ 有 `id==='cordis'` 才可用），副行按 roster 四态换 `createPluginChecking` / `createPluginUnavailable` / `createPluginMissing`；`onSelect` = 关菜单 + `startCreatorDraft()`，其末尾是 **`scope.uiWorkspace.startSession(undefined, { clearPreviousDraft: false, agentPreset: 'cordis' })`**（`dsh-client-ui-agent-preset/src/client/index.ts` `:216-222`）。
+- **DOM 三层**（量几何、写断言都按这个层次看）：`MenuItemButton`（primitives 渲染成 `role="menuitem"` 的按钮，带图标位）→ `.addMenuItem`（`flex column` + `gap:2`）→ 两行文字，第二行 `.addMenuDescription`。
+- **四条刻度**（`PluginManagerPage.module.css` `:225-254`，逐字）：`.addMenu{width:320px; max-width:calc(100vw - 48px)}`；`.addMenu [role='menuitem']{height:72px; box-sizing:border-box; gap:10px; padding:6px 12px}`；`.addMenuItem{display:flex; flex-direction:column; gap:2px; white-space:normal}`；`.addMenuDescription{display:-webkit-box; max-height:36px; overflow:hidden; overflow-wrap:anywhere; font-size:12px; line-height:18px; color:var(--dsw-alias-label-secondary); -webkit-box-orient:vertical; -webkit-line-clamp:2}`（**两行截断**）。
+- chevron 是菜单的 **anchor**，图标 **`IconChevronDownOutlineRegular size={12}`**（不是 13），`aria-label={t('chooseAddMethod')}`「选择添加插件方式」+ `aria-haspopup="menu"` + `aria-expanded`，点它或按 **`ArrowDown`** 开菜单（`:78-85`）。
+- ⚠️ **采集坑（2026-11-13 QA 踩到）**：宿主页上 `button[aria-haspopup="menu"]` **有 4 枚**——侧栏「更多」、工作区操作、账号菜单、添加插件。**必须按 `aria-label="选择添加插件方式"` 定位**；用 `[0]` 或 nth 索引会量到别的菜单，量出 288 / 34 / `6px 8px` / 13·20 那一组假值（与本节四个刻度全不一致，看到这组数就是选错了元素）。
+- 键位：第一项在 `locales.ts` `:22-25`（`addPlugin` / `chooseAddMethod` / `installExisting` / `installExistingDescription`）；第二项的键在 `dsh-client-ui-agent-preset` 的 `settings.agentPreset` 命名空间（`createPlugin` / `createPluginDescription` / `createPluginChecking` / `createPluginUnavailable` / `createPluginMissing`）。
 
 ### 8.2 弹窗形状（`InstallDialog`）
 

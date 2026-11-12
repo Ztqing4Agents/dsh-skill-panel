@@ -9,10 +9,13 @@ import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useSt
 import {
   Button,
   Menu,
+  MenuItemButton,
   SegmentedTabs,
   StateDot,
   Tooltip,
+  IconAgentPresetOutlineRegular,
   IconChevronDownOutlineRegular,
+  IconDownloadOutlineRegular,
   IconInfoOutlineRegular,
   IconPlusOutlineRegular,
   IconRefreshOutlineRegular,
@@ -59,6 +62,18 @@ const CAN_PORTAL = typeof document !== 'undefined';
 
 /** The round token `headerUpdateNote` needs to read the cached verdicts as an answer set. */
 const NOTE_DONE_RUN = { id: 0, status: 'done' };
+
+/** The add dialog at rest: one shape for opening it and for closing it again. */
+const idleAdd = (open) => ({
+  open,
+  value: '',
+  status: 'idle',
+  code: null,
+  params: null,
+  result: null,
+  slow: false,
+  data: null,
+});
 
 /** Writes land before the frame paints; a string render has no DOM to write to. */
 const usePaintEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
@@ -115,10 +130,11 @@ async function askVersions(api, target) {
 
 /**
  * Render the skill center page.
- * @param {{t?: Function, store: object, api: object}} props - locale seat, page store, and API client.
+ * @param {{t?: Function, store: object, api: object, agent?: object|null}} props - locale seat,
+ *   page store, API client, and the Creator seat the add menu's second row drives.
  * @returns {import('react').ReactElement} the page.
  */
-export function SkillsPage({ t = identityTranslate, store, api }) {
+export function SkillsPage({ t = identityTranslate, store, api, agent = null }) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const tabsId = useId();
   const [refreshing, setRefreshing] = useState(false);
@@ -391,10 +407,22 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
     code: null,
     params: null,
     result: null,
+    /** The request has outlived the fast path: the busy label moves on to the clone. */
+    slow: false,
+    /** Subdirectories a repository offered when it held more than one SKILL.md. */
+    candidates: [],
+    candidateTotal: 0,
+    /** The repository those candidates came from, for rewriting the spec on a pick. */
+    owner: '',
+    repo: '',
   });
+  /** The 800 ms timer that moves the busy label; cleared whenever the request settles. */
+  const addSlowTimer = useRef(null);
   /** The add toolbar's chevron menu, and the list offset it must put back when it closes. */
   const [addMenu, setAddMenu] = useState(false);
   const addMenuTop = useRef(0);
+  /** The Creator seat failed once: its row stays visible but disabled, with its own hint. */
+  const [agentBroken, setAgentBroken] = useState(false);
   /** The delete confirmation, and the identity whose delete is in flight. */
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletingKey, setDeletingKey] = useState(null);
@@ -470,48 +498,71 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
 
   /** Open the add dialog on a blank form: a finished add is not a template for the next one. */
   const openAdd = useCallback(() => {
-    setAdd({ open: true, value: '', status: 'idle', code: null, params: null, result: null });
+    setAdd(idleAdd(true));
   }, []);
 
   /** Close it. A request still running is not cancelled - it is no longer tracked. */
   const closeAdd = useCallback(() => {
-    setAdd({ open: false, value: '', status: 'idle', code: null, params: null, result: null });
+    if (addSlowTimer.current !== null) clearTimeout(addSlowTimer.current);
+    addSlowTimer.current = null;
+    setAdd(idleAdd(false));
   }, []);
 
   /**
-   * Copy one local directory into the skills root and fold the three outcomes back.
+   * Add one skill from the typed spec and fold the three outcomes back.
    *
    * Success keeps the page where it is: the dialog turns into its outcome screen, one toast
    * says where the skill landed, and the list re-reads itself once. A failure puts the form
-   * back with the path still typed and the route's code under the field - the reader fixes
-   * the path instead of starting over.
+   * back with the spec still typed and the route's code under the field - the reader fixes
+   * it instead of starting over, and a repository with several skills comes back as a list
+   * of subdirectories to pick from.
    * @returns {Promise<void>} resolves when the outcome has been drawn.
    */
   const runAdd = useCallback(async () => {
-    const path = add.value.trim();
-    if (path === '' || add.status !== 'idle') return;
-    setAdd((current) => ({ ...current, status: 'busy', code: null, params: null }));
+    const spec = add.value.trim();
+    if (spec === '' || add.status !== 'idle') return;
+    setAdd((current) => ({
+      ...current,
+      status: 'busy',
+      code: null,
+      params: null,
+      slow: false,
+      data: null,
+    }));
+    // A clone answers in seconds, not milliseconds: the one busy label would read as a hang.
+    // The dialog only picks the word; the clock belongs to whoever owns the request.
+    addSlowTimer.current = setTimeout(() => {
+      addSlowTimer.current = null;
+      setAdd((current) => (current.open && current.status === 'busy' ? { ...current, slow: true } : current));
+    }, 800);
     try {
-      const result = await api.addSkill({ path });
+      const result = await api.addSkill({ spec });
+      if (addSlowTimer.current !== null) clearTimeout(addSlowTimer.current);
+      addSlowTimer.current = null;
       store.actions.addApplied({ name: result?.name ?? '', path: result?.path ?? '' });
-      // A dialog closed while the request ran stays closed: the directory is on disk either
+      // A dialog closed while the request ran stays closed: the skill is on disk either
       // way, and reopening a window the user dismissed is worse than saying nothing.
       setAdd((current) => (current.open
-        ? { ...current, status: 'done', code: null, params: null, result: result ?? null }
+        ? { ...current, status: 'done', code: null, params: null, result: result ?? null, slow: false }
         : current));
       void load('refresh');
     } catch (error) {
+      if (addSlowTimer.current !== null) clearTimeout(addSlowTimer.current);
+      addSlowTimer.current = null;
       const data = error?.data ?? {};
       setAdd((current) => (current.open
         ? {
           ...current,
           status: 'idle',
+          slow: false,
           code: typeof error?.code === 'string' ? error.code : 'E_UNKNOWN',
           params: {
             name: data.declaredName ?? data.name ?? '',
             path: data.path ?? '',
             reason: error?.message ?? '',
+            count: Number.isInteger(data.candidateTotal) ? data.candidateTotal : 0,
           },
+          data,
         }
         : current));
     }
@@ -564,6 +615,21 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
     if (!addMenu) addMenuTop.current = bodyRef.current === null ? 0 : bodyRef.current.scrollTop;
     setAddMenu(!addMenu);
   }, [addMenu]);
+
+  /** The chevron's two rows: install a third-party skill, or have an Agent build one. */
+  const agentReady = agent?.ready === true && !agentBroken;
+  const startAgent = useCallback(() => {
+    setAddMenu(false);
+    // A seat that refuses - or throws - must not take the panel with it: the row disables
+    // itself and says why, and nothing reaches the shell's error overlay.
+    let started = false;
+    try {
+      started = agent?.start?.() === true;
+    } catch {
+      started = false;
+    }
+    if (!started) setAgentBroken(true);
+  }, [agent]);
 
   // The host `Menu` hands focus back to its anchor when it closes, and focusing a control in
   // the sticky page bar scrolls the body to the top - measured 300 -> 0, ~12ms after the
@@ -909,11 +975,7 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
                         align="end"
                         portal={CAN_PORTAL}
                         autoFocus
-                        items={[{ id: 'from-path', label: t('add.fromPath') }]}
-                        onSelect={() => {
-                          setAddMenu(false);
-                          openAdd();
-                        }}
+                        listClassName={cn('addMenu')}
                         anchor={(
                           <Button
                             variant="primary"
@@ -924,11 +986,48 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
                             aria-label={t('add.chooseMethod')}
                             disabled={state.payload === null || addBusy}
                             onClick={toggleAddMenu}
+                            onKeyDown={(event) => {
+                              // The host's chevron opens on ArrowDown as well as on click, and the
+                              // menu's own keys only work once it is open - opening it is the
+                              // owner's job. Same path as the click, so the scroll compensation
+                              // still records where the list was before the menu takes focus.
+                              if (addMenu || event.key !== 'ArrowDown') return;
+                              event.preventDefault();
+                              toggleAddMenu();
+                            }}
                           >
-                            <IconChevronDownOutlineRegular size={13} aria-hidden="true" />
+                            <IconChevronDownOutlineRegular size={12} aria-hidden="true" />
                           </Button>
                         )}
-                      />
+                      >
+                        {/* The host's own two-row menu, one row per way to get a skill: it is
+                            installed, or it is created here. The rows carry the title and a
+                            one-line hint each; the pick closes the menu first. */}
+                        <MenuItemButton
+                          icon={<IconDownloadOutlineRegular size={14} />}
+                          onSelect={() => {
+                            setAddMenu(false);
+                            openAdd();
+                          }}
+                        >
+                          <span className={cn('addMenuItem')}>
+                            <span>{t('add.fromPath')}</span>
+                            <span className={cn('addMenuDescription')}>{t('add.fromPathHint')}</span>
+                          </span>
+                        </MenuItemButton>
+                        <MenuItemButton
+                          icon={<IconAgentPresetOutlineRegular size={14} />}
+                          disabled={!agentReady}
+                          onSelect={startAgent}
+                        >
+                          <span className={cn('addMenuItem')}>
+                            <span>{t('add.createWithAgent')}</span>
+                            <span className={cn('addMenuDescription')}>
+                              {t(agentReady ? 'add.createWithAgentHint' : 'add.createWithAgentOff')}
+                            </span>
+                          </span>
+                        </MenuItemButton>
+                      </Menu>
                     </span>
                   </div>
                 ) : null}
@@ -988,7 +1087,17 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
                     code={add.code}
                     params={add.params}
                     result={add.result}
-                    onChange={(text) => setAdd((current) => ({ ...current, value: text }))}
+                    slow={add.slow}
+                    data={add.data}
+                    onChange={(text) => setAdd((current) => ({
+                      ...current,
+                      value: text,
+                      // A rewritten spec or a retyped one is a new attempt: the refusal and
+                      // the candidate list described the old one.
+                      code: null,
+                      params: null,
+                      data: null,
+                    }))}
                     onSubmit={() => void runAdd()}
                     onClose={closeAdd}
                   />

@@ -17,7 +17,7 @@ ClientPlugin.apply(ctx)
   ├─ ctx.effect(() => ctx.locale.register(NS, { zh, en }))          // 字典来自 locale/*.json（构建期内联）
   ├─ injectStyles()                                                // <style data-plugin-css="dsh-skill-center/client.css">
   ├─ slots.inject('sidebar.panellist', …)  → SkillsPanelIcon
-  ├─ slots.inject('main', …)               → SkillsPage（inject: {store, api}）
+  ├─ slots.inject('main', …)               → SkillsPage（inject: {store, api, uiWorkspace}——U22 起用它的 `startSession` 开**创造模式草稿**，见 §3.9.7）
   └─ slots.inject('shell.overlay', …)      → ToastHost（inject: {store}）  // 离开页面仍可见（P0-12）
 ```
 
@@ -119,7 +119,7 @@ market = {
 
 ```text
 SkillsPage (page.jsx：页头 + 两个页签)
-├─ toolbar：**整行只在「已安装」页签渲染**（宿主那一行是 `hidden={!onInstalled}`，整行不带条件、不按按钮分叉）＝状态位（宿主 `.updatesNote` 同位，一句更新提示）｜刷新（详情打开时 = 关详情 + 重拉）｜`＋ 添加技能 ⌄`（U20 起可用：主按钮直接开弹窗，chevron 开 `Menu` 单菜单项「从本地目录添加」——**菜单是浮层，不属于「整区可点」**，与刷新/面包屑同级）。「技能市场」页签**没有这一行**：它自己的工具栏是搜索 / 范围 / 排序 / 分类，重取由面板自己的 effect 与整页错误态的「重试」驱动
+├─ toolbar：**整行只在「已安装」页签渲染**（宿主那一行是 `hidden={!onInstalled}`，整行不带条件、不按按钮分叉）＝状态位（宿主 `.updatesNote` 同位，一句更新提示）｜刷新（详情打开时 = 关详情 + 重拉）｜`＋ 添加技能 ⌄`（U20 起可用：主按钮直接开弹窗，chevron 开两项菜单「安装第三方技能」/「让 Agent 创建技能」（见 §3.9.7）——**菜单是浮层，不属于「整区可点」**，与刷新/面包屑同级）。「技能市场」页签**没有这一行**：它自己的工具栏是搜索 / 范围 / 排序 / 分类，重取由面板自己的 effect 与整页错误态的「重试」驱动
 ├─ tabPanel(installed)：**内置分区每个插件包折成一个块**（标题写包名，provider id 只做开关身份；**离开本页签再回来会复位**：详情/插件页/两个滚动偏移全清，页签内部返回仍还原偏移） PluginBlock (row.jsx，`data-skc-plugin=<provider>`，无开关) → 点块进 PluginDetail (plugin-detail.jsx：面包屑 + provider 头 + 包含的技能（每行 SkillRow 带开关）+ 来源=内置)；其余分区仍是 SkillRow；技能详情 InstalledDetail (installed-detail.jsx)：面包屑 + 头 + 标题组 + 正文盒 + 调用名 + 版本 + 来源 + 仓库
 └─ tabPanel(market) → MarketPanel (market-panel.jsx)
     ├─ MarketFilters (market-filters.jsx)：Input(250ms 防抖，× 在框内) / Menu(来源 = 所有来源｜SkillHub｜ClawHub) / Menu(排序) —— **工具栏恒三个子元素** / Pill(分类 chips + 数量)
@@ -190,7 +190,7 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 | `marketInstalled()` | `GET market/installed` | 形状 `{items, readable}` |
 | `marketInstall({source,owner,slug,version})` | `POST market/install` | body 只有身份，**没有 path/files** |
 | `marketIcons({items})` | `POST market/icons` | `items` 是 **`{source,owner,slug}`** 数组（每源 ≤12、合计 **≤24**，一批可混两源）；出参 `{icons:{[key]: url|null}}`；失败静默 |
-| `addSkill({path})` / `removeSkill({name,path})` | `POST add` / `POST remove` | U20：前者 body **只有 `path`**（一个本机目录），出参 `{name,path,files,bytes}`；后者 body 是 `{name, path}`（`path` = 这一行的 `SKILL.md`，硬约束 6），出参 `{name,dir,ledger}`。失败按 `E_ADD_*` / `E_DELETE_IO` / 复用的 §8.6 码取文案（`reasonKeyOf`） |
+| `addSkill({spec})` / `removeSkill({name,path})` | `POST add` / `POST remove` | U20：前者 body **只有 `spec`**（U21 起一个字段吃两种形态：本机目录路径或 GitHub 链接，分类在 Host 侧），出参 `{name,path,files,bytes,source,repo,ref,commit}`（非 git 形态后三个是 `null`）；后者 body 是 `{name, path}`（`path` = 这一行的 `SKILL.md`，硬约束 6），出参 `{name,dir,ledger}`。失败按 `E_ADD_*` / `E_DELETE_IO` / 复用的 §8.6 码取文案（`reasonKeyOf`） |
 | `marketVersions({source,owner,slug})` / `marketUpdate({source,owner,slug,version,name,path})` | `GET market/versions` / `POST market/update` | 前者出参 `{namespace, latest, versions, total}`（新的在前、≤50 条）；后者 body 带 `path`（硬约束 6 的「先认路径再写」），出参 `from` 是更新前版本，失败按 `422/502/503/504` 与 `E_UPDATE_RESTORED`/`E_UPDATE_LOST`/`E_UPDATE_UNCONFIRMED` 分三种落点（`docs/contracts/installed-detail.md`） |
 
 全部走既有 `request()`：文档相对 URL + 信封解包 + `ApiError{code, message, data}`（`data` 是信封里的 `data`，安装失败时用来取冲突路径与声明名）。安装永不自动重试。
@@ -228,7 +228,10 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 ### 3.9.7 添加技能弹窗与卸载确认（U20）
 
 - **添加入口**：`＋ 添加技能` 主按钮与 chevron 的菜单项都打开 `AddSkillDialog`；`state.payload === null`（还没读到列表）时两枚都禁用，添加请求在飞时两枚都禁用、主按钮文案转 `add.busy`。宿主同位是 `addGroup`（主按钮 + chevron），菜单项**不带描述副行**（宿主那条描述是为了区分 npm/Git/本地三种形态，我们只有一种）。
-- **添加弹窗**：`Modal` + 一条路径输入 + `role="note"` 的安全提示 + 一枚主按钮。三态：`idle`（可编辑 + `add.run`）→ `busy`（输入 `readOnly`、按钮 `add.busy` + `StateDot`、不可取消但**关闭即放弃追踪**，请求继续跑完）→ `done`（结局块 `add.done` + 副行 `market.installOkHint` + `add.close`）。失败回 `idle`，字段下一行 `role="alert"` 显示 `error.E_*`，**输入内容保留**；空串时主按钮 disabled（形状校验交给路由，客户端只判空）；回车提交并做 IME 组字保护。
+- **添加弹窗**：`Modal` + **一条输入**（`spec`，U21 起一个字段吃两种形态：本机目录路径或 GitHub 链接；`input` 元素**恰好 1 个**）+ `role="note"` 的安全提示 + 一枚主按钮。三态：`idle`（可编辑 + `add.run`）→ `busy`（输入 `readOnly`、按钮 `StateDot` + **前 800 ms `add.busy`、之后仍在飞则切 `add.fetching`**「正在从 GitHub 取仓库…」；不可取消但**关闭即放弃追踪**，请求继续跑完）→ `done`（结局块 `add.done` + **git 形态多一行 `add.doneFrom`「来自 github.com/o/r@main」**（path 形态不渲染；**不显示 commit**）+ 副行 `market.installOkHint` + `add.close`）。失败回 `idle`，字段下一行 `role="alert"` 显示 `error.E_*`，**输入内容保留**；空串时主按钮 disabled（形状校验交给路由，客户端只判空）；回车提交并做 IME 组字保护。
+- **chevron 菜单：两项**（U22 靠齐宿主 `AddPluginMenu`）：`Menu` 走 **children 模式 + `listClassName`**（不是 `items` 数组），`align="end" portal autoFocus`，chevron 就是它的 anchor（`aria-haspopup="menu"` + `aria-expanded`，`ArrowDown` 也开，图标 **12px**）；条目只用 primitives 的 **`MenuItemButton`**（`icon` + `onSelect` + 可选 `disabled`），**不许拿 `Button` 自己拼菜单项**。① `IconDownloadOutlineRegular size={14}` + `add.fromPath`「安装第三方技能」/ 副行 `add.fromPathHint`「支持本机目录和 GitHub 仓库」⇒ 关菜单 + 开现有 `AddSkillDialog`；② `IconAgentPresetOutlineRegular size={14}` + `add.createWithAgent`「让 Agent 创建技能」/ 副行 `add.createWithAgentHint`「进入创造模式，用 Agent 制作」⇒ 关菜单 + **`uiWorkspace.startSession(undefined, { clearPreviousDraft: false, agentPreset: 'cordis' })`**（与宿主同一个**创造模式草稿**，理由见 `docs/contracts/decisions.md` 附录 U-1）。
+- **第二项的降级（两层，都在菜单打开前判一次）**：`ready = typeof uiWorkspace?.startSession === 'function'`，`ready` 为假 ⇒ 该行 `disabled`，副行切成 **`add.createWithAgentOff`「当前部署没有创造模式」**（而不再是 `add.createWithAgentHint`）；① 读 `ctx.uiWorkspace` 本身抛错 ⇒ 当作没有（`ready=false`）；② 点击时 `startSession` 抛错 ⇒ **吞掉并返回 false**，不冒泡、不转错误态、第一项照常可用——**菜单行永远不许把整页带下来**。宿主那套 4 态副行（`createPluginChecking` / `Unavailable` / `Missing`）不做，登记为有意简化（附录 U-2）。
+- **多候选（`E_ADD_AMBIGUOUS_SKILL`）**：那一句 `role="alert"` 之下追加一个 `role="group"` 纵向列表，每条一枚 `Button variant="ghost" size="sm"`（`aria-label` = `add.chooseCandidate`{path}，文字是该子目录的等宽路径），超 10 条补一行 `add.moreCandidates`{count}；**点一条 = 把输入改写成 `github:<owner>/<repo>#path:<sub>` 并清掉错误，不自动提交**（提交权在用户手上）。零新增样式类。
 - **添加成功**：`store.actions.addApplied({name, path})`（→ `notice{kind:'install-ok'}`）+ 一次 `load('refresh')`；不自动切页签、不自动开详情。
 - **卸载入口与可见性**：只有详情页头 `.skc_detailActions` 的第 2 位（更新 → 卸载 → 开关）；`deletable(row)`（`src/client/model.js`，纯函数）= `partition !== 'builtin'` ∧ `symlink !== true` ∧ `path !== null` ∧ `readonlyReason === null`，为 false 时**整枚不渲染**（软链行该位仍是 `ReadonlyTag`；内置行本来没有开关也没有卸载位）。
 - **卸载确认**：`Modal`（`DeleteConfirm`）：标题 `delete.title`（「卸载「{name}」？」）、正文 `delete.body`（「卸载后这个技能的文件会被永久移除，本机不再加载它。」）、一行路径事实（`delete.factDir`「目录」 + 该技能的**目录**，等于来源信息里 `codeSource` 的同一次 `dirname` 推导；**不复用** `market.factInstallTo`——卸载语境里「安装到」是错的）、`market.confirmCancel` + `delete.confirm`（危险红，`.skc_detailDanger` 同族）。**没有勾选框、没有信任提示**；点卸载时**先关弹窗再发请求**（对齐宿主 `confirm()`），取消零请求。
@@ -244,7 +247,7 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 - `src/client/model.js` 的 `headerUpdateNote` 语义**不变**（仍是「按当前 `checks` 与 `checkRun` 算一句话」）；「保留上一轮」是页面持有的**上一轮结论快照**，属于行为口径，不是那个纯函数的职责。四态表见 `docs/contracts/installed-detail.md` 的「页头四态」。
 
 ## 3.10 已安装详情页
-组件树、`detail` 三态、返回与失败口径、五个更新结局与 35 个文案键见 `docs/contracts/installed-detail.md`（本节只留指针：§3.9 已到 400 行档位）。「已安装」页签的**自动检测**（进页签串行查一轮、单行 2s / 整轮 8s、按 `source:owner:slug` 去重、会话内 10 分钟缓存、失败只影响那一行）与**页头更新提示四态**（可更新 `info` / 部分失败 `error` / 全部最新无色 / 检查中与无检测对象不渲染；宿主同位只有这一句、没有计数，所以 `.skc_status` 里就是一个 `<span>`、`data-tone` 只做 info/error 换色）的规范句同在 `docs/contracts/installed-detail.md` §「更新检测与页头」；键数见 §8.3（182）。
+组件树、`detail` 三态、返回与失败口径、五个更新结局与 35 个文案键见 `docs/contracts/installed-detail.md`（本节只留指针：§3.9 已到 400 行档位）。「已安装」页签的**自动检测**（进页签串行查一轮、单行 2s / 整轮 8s、按 `source:owner:slug` 去重、会话内 10 分钟缓存、失败只影响那一行）与**页头更新提示四态**（可更新 `info` / 部分失败 `error` / 全部最新无色 / 检查中与无检测对象不渲染；宿主同位只有这一句、没有计数，所以 `.skc_status` 里就是一个 `<span>`、`data-tone` 只做 info/error 换色）的规范句同在 `docs/contracts/installed-detail.md` §「更新检测与页头」；键数见 §8.3（197）。
 
 ## 8.2 命名约定
 
@@ -278,7 +281,7 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 - `client/src/**` 与 `lib/**` **不得出现 CJK 字面量**（`check:i18n` 强制）；界面文案一律 `t('key')`。
 - 占位符用 `{name}`（宿主同款：`t('partToggle', { name: title })`）。
 - 入口标题**只允许**通过 `panel.label` 表达：改名 = 改 `locale/*.json` 的 `panel.label` + `meta.title`，代码零改动（这是「不硬编码中文」的可验收形态）。两处都要改的理由：`meta.title` 是插件列表里的显示名（`PROF/*/locale/zh.json` 四家都是 `{meta:{title,description}}`），`panel.label` 是侧栏行标题。`check-i18n` 会校验两者都存在。
-- 市场面沿用两族键：`market.*`（61 个 → **65 个**）与 `error.E_*`（11 个 → **13 个**）；已安装详情页再加 35 个 `detail.*`（键表见 `docs/contracts/installed-detail.md` 的「文案」一节），外加 6 个 `markdown.*`（宿主 `MarkdownText` 的代码围栏与脚注 chrome，缺了它就整段回落成纯文本），全字典 111 → 117 → 136 → 142 → 144 → 156 → 148 → 149 → 150 → 151 → 153 → 151 → 154 → 151 → 167 → 165 → **182**（U20 添加/卸载：新增 19 键〔`add.*` 11 + `delete.*` 4 + `error.E_ADD_NOT_FOUND`/`E_ADD_NOT_SKILL_DIR`/`E_ADD_SHADOWED`/`E_DELETE_IO` 4〕、退役 2 键〔`add.comingSoon`、`detail.uninstallSoon`〕、改文案不改键 3 个〔`detail.uninstall`「卸载」、`error.E_INSTALL_BUSY`「正在被处理」、`error.E_BAD_PATH` 补「以 / 或 ~ 开头」〕；`check-i18n` 口径 = 180 个扁平键 + `meta` 两项）（U19 更新检测：新增 18 键、退役 2 键〔`detail.checkUnavailable`/`detail.checkIdle`〕、改文案不改键 2 个〔`detail.newerVersion`/`detail.checkFailed`〕；页头计数退场再退役 2 键〔`status.count`/`status.offSuffix`〕——宿主同位只有一句更新提示；逐条见 `docs/contracts/installed-detail.md` 的「文案」一节）（复制入口全部去掉，连带删掉 `detail.copy` / `detail.copied` / `plugin.copyCommand` 三个键；插件页剩 `plugin.countRunning`（「共 N 个 · M 运行中」，贴着区块标题）与 `plugin.running` / `plugin.stopped`（行尾状态），`plugin.skillsCount` 仍给列表块用）；**`market.placeholder` 已删除**（市场页签不再是占位文案）。下表有几行把同族的新键合并成一行，这是为了守住 400 行上限（`check-docs` 的 R11），键与值逐条列出、语义不变。
+- 市场面沿用两族键：`market.*`（61 个 → **65 个**）与 `error.E_*`（11 个 → **13 个**）；已安装详情页再加 35 个 `detail.*`（键表见 `docs/contracts/installed-detail.md` 的「文案」一节），外加 6 个 `markdown.*`（宿主 `MarkdownText` 的代码围栏与脚注 chrome，缺了它就整段回落成纯文本），全字典 111 → 117 → 136 → 142 → 144 → 156 → 148 → 149 → 150 → 151 → 153 → 151 → 154 → 151 → 167 → 165 → **197**（U22 菜单**新增 4 键**〔`add.fromPathHint` / `add.createWithAgent` / `add.createWithAgentHint` + `add.fromPath` 改值〕；U20 添加/卸载新增 19 键、U21 GitHub 形态**新增 11 键**〔`add.fetching` / `add.moreCandidates` / `add.chooseCandidate` / `add.doneFrom` + 7 个 git 码文案〕；U20 明细：〔`add.*` 11 + `delete.*` 4 + `error.E_ADD_NOT_FOUND`/`E_ADD_NOT_SKILL_DIR`/`E_ADD_SHADOWED`/`E_DELETE_IO` 4〕、退役 2 键〔`add.comingSoon`、`detail.uninstallSoon`〕、改文案不改键 3 个〔`detail.uninstall`「卸载」、`error.E_INSTALL_BUSY`「正在被处理」、`error.E_BAD_PATH` 补「以 / 或 ~ 开头」〕；`check-i18n` 口径 = 195 个扁平键 + `meta` 两项）（U19 更新检测：新增 18 键、退役 2 键〔`detail.checkUnavailable`/`detail.checkIdle`〕、改文案不改键 2 个〔`detail.newerVersion`/`detail.checkFailed`〕；页头计数退场再退役 2 键〔`status.count`/`status.offSuffix`〕——宿主同位只有一句更新提示；逐条见 `docs/contracts/installed-detail.md` 的「文案」一节）（复制入口全部去掉，连带删掉 `detail.copy` / `detail.copied` / `plugin.copyCommand` 三个键；插件页剩 `plugin.countRunning`（「共 N 个 · M 运行中」，贴着区块标题）与 `plugin.running` / `plugin.stopped`（行尾状态），`plugin.skillsCount` 仍给列表块用）；**`market.placeholder` 已删除**（市场页签不再是占位文案）。下表有几行把同族的新键合并成一行，这是为了守住 400 行上限（`check-docs` 的 R11），键与值逐条列出、语义不变。
 - 键表（P0 全集 + 市场轮；`zh` 值逐字来自 `PRD` §3.3.5 与本设计）：
 
 | key | zh |
@@ -341,38 +344,35 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 | `market.installOk` | 已安装 {name} · 新会话生效 |
 | `market.installOkHint` | 安装到 {path} |
 | `market.nameInvalidNote` | 这个技能的包声明了不合规的名字，不能安装 |
-| `row.enable` / `row.disable` | 启用 {name} ／ 停用 {name} |
-| `row.applying` | 正在应用 {name} 的更改 |
+| `row.enable` / `row.disable` / `row.applying` | 启用 {name} ／ 停用 {name} ／ 正在应用 {name} 的更改 |
 | `row.symlinkReadonly` | 软链·只读 |
 | `row.symlinkTitle` | 这是一个软链（指向 {path}），本面板不会修改它 |
-| `add.label` / `add.chooseMethod` / `add.fromPath` | 添加技能 ／ 选择添加技能方式 ／ 从本地目录添加 |
-| `add.title` / `add.description` / `add.pathLabel` | 添加技能 ／ 输入一个技能目录在本机的完整路径。目录里必须有 SKILL.md，添加后会复制进 ~/.dsh/skills/。 ／ 技能目录路径 |
-| `add.pathPlaceholder` / `add.safety` | 例如 /Users/name/my-skill ／ 请确认这个目录里的技能来源可信。添加后它在本机以你的权限运行，来源不明的技能可能读取和泄露你的数据。 |
-| `add.run` / `add.busy` / `add.done` / `add.close` | 添加 ／ 正在添加… ／ 已添加 ／ 完成 |
+| `add.label` / `add.chooseMethod` / `add.fromPath` / `add.fromPathHint` / `add.createWithAgent` / `add.createWithAgentHint` / `add.createWithAgentOff` | 添加技能 ／ 选择添加技能方式 ／ **安装第三方技能** ／ **支持本机目录和 GitHub 仓库** ／ **让 Agent 创建技能** ／ **进入创造模式，用 Agent 制作** ／ **当前部署没有创造模式**（`add.createWithAgentOff`：不可用时的副行，见 §3.9.7） |
+| `add.title` / `add.description` / `add.pathLabel` | 添加技能 ／ **输入一个技能目录在本机的完整路径，或 GitHub 仓库链接。**目录里必须有 SKILL.md，添加后会复制进 ~/.dsh/skills/。 ／ **技能目录路径或 GitHub 链接** |
+| `add.pathPlaceholder` / `add.safety` | 例如 /Users/name/my-skill ／ 请确认**这个技能**的来源可信。添加后它在本机以你的权限运行，来源不明的技能可能读取和泄露你的数据。 |
+| `add.run` / `add.busy` / `add.fetching` / `add.done` / `add.doneFrom` / `add.close` / `add.moreCandidates` / `add.chooseCandidate` | 添加 ／ 正在添加… ／ 正在从 GitHub 取仓库… ／ 已添加 ／ 来自 {repo} ／ 完成 ／ 另有 {count} 个未列出 ／ 用 {path} 这个子目录 |
 | `delete.title` / `delete.body` / `delete.confirm` / `delete.factDir` | 卸载「{name}」？ ／ 卸载后这个技能的文件会被永久移除，本机不再加载它。 ／ 卸载 ／ 目录 |
-| `error.E_NOT_FOUND` | 这个技能已不存在，请刷新 |
-| `error.E_BAD_NAME` | 技能名不合规范，未做任何修改 |
+| `error.E_NOT_FOUND` / `error.E_BAD_NAME` | 这个技能已不存在，请刷新 ／ 技能名不合规范，未做任何修改 |
 | `error.E_BAD_PATH` | 路径不合规范（需要以 / 或 ~ 开头的完整路径），未做任何修改 |
 | `error.E_STALE_PATH` | 技能文件位置已变化，请刷新后重试 |
 | `error.E_SYMLINK_READONLY` | 软链技能只读，未做任何修改 |
 | `error.E_FILE_CHANGED` | 技能文件在你操作期间被修改，请刷新后重试 |
 | `error.E_NOT_WRITABLE` | 这个技能没有可写的本地文件 |
-| `error.E_WRITE_FAILED` | 写入技能文件失败：{reason} |
-| `error.E_VERIFY_FAILED` | 写入后回读不一致，已回滚 |
+| `error.E_WRITE_FAILED` / `error.E_VERIFY_FAILED` | 写入技能文件失败：{reason} ／ 写入后回读不一致，已回滚 |
 | `error.E_FORBIDDEN` | 请求被拒绝（仅限本机访问） |
 | `error.E_UNKNOWN` | 操作失败：{reason} |
-| `error.E_SOURCE_UNKNOWN` / `error.E_SOURCE_UNAVAILABLE` | 不认识这个来源 ／ {source} 暂时连不上 |
-| `error.E_SOURCE_TIMEOUT` / `error.E_SOURCE_BAD_RESPONSE` | {source} 响应超时 ／ {source} 返回了无法识别的数据 |
+| `error.E_SOURCE_UNKNOWN` / `error.E_SOURCE_UNAVAILABLE` / `error.E_SOURCE_TIMEOUT` / `error.E_SOURCE_BAD_RESPONSE` | 不认识这个来源 ／ {source} 暂时连不上 ／ {source} 响应超时 ／ {source} 返回了无法识别的数据 |
 | `error.E_BAD_QUERY` | 请求参数不合规 |
 | `error.E_SKILL_NAME_INVALID` | 这个技能的包声明了不合规的名字：{name} |
 | `error.E_ALREADY_INSTALLED` | 本机已有同名技能：{path} |
-| `error.E_PACKAGE_INVALID` | 这个技能的包不完整或校验不通过 |
+| `error.E_PACKAGE_INVALID` | 这个技能的包不完整、超过体积上限，或含软链 |
 | `error.E_DOWNLOAD_FAILED` | 下载技能包失败：{reason} |
 | `error.E_INSTALL_IO` | 写入技能目录失败：{reason} |
 | `error.E_INSTALL_BUSY` | 这个技能正在被处理，请稍候 |
 | `error.E_ADD_NOT_FOUND` / `error.E_ADD_NOT_SKILL_DIR` | 这个路径不存在 ／ 这不是一个技能目录：需要含 SKILL.md 的目录 |
 | `error.E_ADD_SHADOWED` / `error.E_DELETE_IO` | 已有同名技能随 DSH 或预设提供，添加后不会显示 ／ 卸载技能目录失败：{reason} |
 | `error.E_FAVORITE_FULL` / `error.E_FAVORITE_IO` | 收藏数量已达上限，请先取消一些 ／ 写入收藏失败：{reason} |
+| `error.E_GIT_SPEC_INVALID` / `error.E_GIT_NOT_SUPPORTED` / `error.E_GIT_REPO_NOT_FOUND` / `error.E_GIT_UNREACHABLE` / `error.E_GIT_TIMEOUT` / `error.E_GIT_MISSING` / `error.E_ADD_AMBIGUOUS_SKILL`（U21 七码，按序；**值按 `locale/zh.json` 实测**——为守住产物体积上限已压短，见 `docs/contracts/decisions.md` 附录 T-14） | 认不出这个输入：请填本机目录或 GitHub 链接 ／ 只支持 github.com 公开仓库，不接受 SSH 地址 ／ 找不到这个仓库、分支或标签，或它需要登录 ／ 取不到这个仓库：请检查网络或稍后重试 ／ 取仓库超时，请稍后重试 ／ 本机没有 git：请先安装 git，或填本机目录路径 ／ 仓库里有 {count} 个 SKILL.md：请在链接后加 #path: 选一个 |
 
 ---
 
