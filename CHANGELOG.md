@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 新增两条 Host 路由：`market/versions`（一个技能的版本列表，新的在前、最多 50 条）与 `market/update`（覆盖安装，请求要带 `name` 与 `path`，服务端重新扫描确认是同一份文件才写）。
 - 「已安装」工具条的「＋ 添加技能」可用：输入本机一个技能目录的路径（可以 `~` 开头），校验它带 `SKILL.md`、`name` 合 kebab-case 后整份复制到 `~/.dsh/skills/<name>`（目录名取自声明的 `name`），并登记到插件自己的安装台账；同名已存在、名字不合规、源目录里有软链、条目数超过 2000、单文件超过 8 MiB 或合计超过 64 MiB 一律拒绝，且不留半成品目录。成功后弹窗转「已添加」并给一次 toast，与市场安装同一枚。
 - 已安装详情页头那枚禁用的「卸载」占位变成可用按钮（红色描边，与宿主同色同词）：先弹确认（标题 + 正文 + 要删的那个目录），确认后关弹窗再发请求，成功就回到列表并重扫；删的是用户技能根下的真目录，并顺带清掉台账里那条记录（台账清理失败也照成功报，残留会在下次同名操作时被清掉）。
-- 新增两条 Host 路由：`add`（`{path}`，本地目录复制进技能根）与 `remove`（`{name, path}`，`path` 必须是这次重扫出来的那份 `SKILL.md`，否则 `409 E_STALE_PATH`）；四个新错误码 `E_ADD_NOT_FOUND` / `E_ADD_NOT_SKILL_DIR` / `E_ADD_SHADOWED` / `E_DELETE_IO`。
+- 新增两条 Host 路由：`add`（`{path}`，本地目录复制进技能根；入参随后改为 `{spec}`，见本节 GitHub 条目）与 `remove`（`{name, path}`，`path` 必须是这次重扫出来的那份 `SKILL.md`，否则 `409 E_STALE_PATH`）；四个新错误码 `E_ADD_NOT_FOUND` / `E_ADD_NOT_SKILL_DIR` / `E_ADD_SHADOWED` / `E_DELETE_IO`。
 - 「＋ 添加技能」旁的 **⌄** 改成宿主「插件」页那张两项菜单（图标 + 标题 + 一行说明，菜单宽 320、菜单项高 72、副行 12/18 两行截断，数值逐字取宿主）：「**安装第三方技能**」（说明「支持本机目录和 GitHub 仓库」）打开添加弹窗；「**让 Agent 创建技能**」（说明「进入创造模式，用 Agent 制作」）直接进创造模式——走的是宿主同一个 Creator 草稿（`agentPreset: cordis`），不另造创建流程。部署里没有创造模式时这一项置灰并在说明里写明，不会把页面带垮。
 - 顶栏那枚 ⌄ 图标与宿主的 12px 对齐（原来 13px）。
 - 「＋ 添加技能」也能填 **GitHub 仓库链接**：`github:owner/repo` 或 `https://github.com/owner/repo`（可带 `.git`、尾斜杠、`/tree/<分支>/<子目录>`，也认 `#path:<子目录>` 片段）。宿主那一格只收三段仓库地址——**带 `/tree/` 的链接它自己会拒**——我们按浏览器里复制粘贴的习惯放宽（`docs/contracts/decisions.md` 附录 T）。
@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 克隆目录只在过程中存在，成功与失败都不留（`.skc-clone-*`）；装进来的副本**不含 `.git`**、不跟随 submodule、不执行仓库里的任何脚本；来源只记在插件自己的台账里（`repo` / `ref` / `commit`），仓库自带的 `_meta.json` 原样保留。
 - 只支持 **github.com 的公开仓库**：不做 SSH 地址、私有仓库 token、GitLab/Bitbucket、`tar.gz` 直链。
 - `add` 路由的入参从 `{path}` 改成 **`{spec}`**（一个字段一个分类器，与宿主 `inspect(spec)` 同构，出现别的字段直接 `400`）。
+- 七个 GitHub 形态的错误码，界面各有一句中文（不出现英文系统信息）：认不出输入 `E_GIT_SPEC_INVALID`（400）、不在支持面 `E_GIT_NOT_SUPPORTED`（400）、仓库/分支/标签不存在或需登录 `E_GIT_REPO_NOT_FOUND`（404）、连不上 `E_GIT_UNREACHABLE`（502）、克隆超时 `E_GIT_TIMEOUT`（504）、本机没有 git `E_GIT_MISSING`（500）、仓库里有多个 `SKILL.md` `E_ADD_AMBIGUOUS_SKILL`（422，带候选清单）。相对路径与裸 `owner/repo` 归第一个码，不再算「路径不合规」（`E_BAD_PATH` 只覆盖「以 `/` 或 `~` 开头却不合法」）。
 
 ### Changed
 
