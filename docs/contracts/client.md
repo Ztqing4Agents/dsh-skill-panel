@@ -28,6 +28,8 @@ ClientPlugin.apply(ctx)
 页签状态放**模块级 store**（不是 `localStorage`）：满足 P0-3「离开页面再回来保持所选页签」，且与宿主一致（宿主用 `main` 注册的 `store` 选项保存视图状态，页面卸载后重建仍能恢复）。
 `market` 子状态同理（见 §3.9.1）：它和 `tab` 一样跨页签存活，**离开市场页签不会销毁已加载的页、筛选与滚动位置**。
 
+**滚动偏移的不变式（两种，别当成一回事）**：**进详情再返回**⇒恢复原偏移（打开详情时记 `scrollTop`，返回逐项还原且不重拉，见 §3.9.1 与 §3.9.5）；**切页签不恢复**⇒离开「已安装」页签再回来会复位（列表页、插件页与两个滚动偏移全清，从列表顶重新开始），这是刻意的「一次页签访问＝一次独立读取」。两条都是既有行为，不是待办，也不许为「看起来更连贯」而对齐成一种。
+
 ---
 
 ## 3.6 视觉契约
@@ -95,7 +97,7 @@ market = {
 | `bootstrap` 成功 | `boot=ready` | 填 `sources/categories`；`categoriesOk=false` 时分类行换成一句说明 |
 | `bootstrap` 失败 | `boot=ready`（**不是 error**） | `sources` 回落内置三 scope，列表照打，分类行换成一句说明 |
 | 关键词变化 | 250ms 防抖后提交；**IME 组字期间先攒着，组字结束才提交**（否则中文用户会被半成品过滤） | 请求中**保留旧 items**（`aria-busy`），不换骨架；工具栏不动；尾部也不插占位卡（`pages` 已归零，那是首屏重取不是追加）；**提交那一刻 `scrollTop` 写 0**（见下条落点） |
-| 页头「刷新」（市场页签） | `marketReload`：清 `pages/cursors/exhausted`、关详情；**`items` 与 `icons`/`iconsTried`/`names` 都保留** | 重取期间旧列表直出（`aria-busy`），不换骨架、不滚回顶部、头像不回退成字母；`pages=0` 让尾部也不插占位卡 |
+| ~~页头「刷新」（市场页签）~~ **已删除** | 市场页签不渲染页头工具条（见 §3.5 的组件树），且 `marketReload()` 这个 action 已按用户裁决**一并删除**（零调用方不留，见 `docs/contracts/decisions.md` 附录 S-16）：**市场重取只由面板自身的 effect（切回页签 / 搜索 / 筛选变化）与整页错误态的「重试」驱动**；相邻几行「保留 `items` 与图标、只清分页与详情」的口径与 `clearedPaging`/`pages=0` 语义不变，只是现在挂在这些 driver 上。**市场重取只有四条路**：①切回页签的面板 effect ②搜索落定（`marketCommitKeyword`）③筛选变化（`marketSetFilter`）④整页错误态的「重试」——没有第五条，也没有页头刷新 | —— |
 | 回车（非组字）/ 点 × / 清空输入 | 立刻提交，不经防抖（× 与回车都取消在飞的防抖） | × 在**框内**（`.skc_marketSearchField` 里绝对定位），同时清 `input` 与 `keyword` 并把焦点送回输入框；不动 scope 与分类 |
 | 切 scope / 分类 / 排序 | 清 `pages/cursors/exhausted`、关详情；**`items` 保留**（旧卡直出，`clearedPaging` 按「有 items 就 ready」给 `listStatus`）；`bootScope !== filters.source` 时补一次 `bootstrap?source=`（带 token 守卫，旧响应不覆盖新数字） | 值没变时不重拉；重取期间不换骨架，答案落地时整表替换（`loadFirst` 不带 `existing`，旧卡不会串进新查询）；切 scope 时 chips 行留着旧数字就地换新，**只有还没有 chips 行时才画 chips 骨架**；落点见下一条 |
 | 落点：`source`/`category`/`sort`/`keyword` 任一真的变化 | —— | 面板的 paint effect（`useLayoutEffect`；字符串渲染时降级成 `useEffect`）瞬时把**面板自己那个滚动容器**的 `scrollTop` 写 **0**，不做平滑滚动、不等浏览器夹取：跳变是那一帧的初始状态，不是动画。三条筛选与搜索的落点因此由我们决定、与答案长短无关（真机四条路径都落在 0，且换表那一帧 `scrollTop` 就已经是 0）。刷新**不在**这条里（U13：保留原位置）；翻页、加载态、详情往返也不在（键没变）。落地后首卡在吸顶页头之下 150px，不会被压住 |
@@ -117,7 +119,7 @@ market = {
 
 ```text
 SkillsPage (page.jsx：页头 + 两个页签)
-├─ toolbar：刷新（恒在，行为跟随当前页签；详情打开时 = 关详情 + 重拉）｜计数 + ＋添加技能（仅「已安装」页签渲染）
+├─ toolbar：**整行只在「已安装」页签渲染**（宿主那一行是 `hidden={!onInstalled}`，整行不带条件、不按按钮分叉）＝状态位（宿主 `.updatesNote` 同位，一句更新提示）｜刷新（详情打开时 = 关详情 + 重拉）｜`＋ 添加技能 ⌄`（U20 起可用：主按钮直接开弹窗，chevron 开 `Menu` 单菜单项「从本地目录添加」——**菜单是浮层，不属于「整区可点」**，与刷新/面包屑同级）。「技能市场」页签**没有这一行**：它自己的工具栏是搜索 / 范围 / 排序 / 分类，重取由面板自己的 effect 与整页错误态的「重试」驱动
 ├─ tabPanel(installed)：**内置分区每个插件包折成一个块**（标题写包名，provider id 只做开关身份；**离开本页签再回来会复位**：详情/插件页/两个滚动偏移全清，页签内部返回仍还原偏移） PluginBlock (row.jsx，`data-skc-plugin=<provider>`，无开关) → 点块进 PluginDetail (plugin-detail.jsx：面包屑 + provider 头 + 包含的技能（每行 SkillRow 带开关）+ 来源=内置)；其余分区仍是 SkillRow；技能详情 InstalledDetail (installed-detail.jsx)：面包屑 + 头 + 标题组 + 正文盒 + 调用名 + 版本 + 来源 + 仓库
 └─ tabPanel(market) → MarketPanel (market-panel.jsx)
     ├─ MarketFilters (market-filters.jsx)：Input(250ms 防抖，× 在框内) / Menu(来源 = 所有来源｜SkillHub｜ClawHub) / Menu(排序) —— **工具栏恒三个子元素** / Pill(分类 chips + 数量)
@@ -126,6 +128,7 @@ SkillsPage (page.jsx：页头 + 两个页签)
     ├─ ul 之后：加载更多一行（`skc_marketLoadMore` = 圆点 + `market.loadingMore`，**视觉件 `aria-hidden`**，只在「已有卡片 + 正在追加」时出现；播报仍由上面那条 sr-only `role="status"` 负责）
     ├─ MarketDetail (market-detail.jsx)：面包屑 + 头 + 事实表 + 概览 + 文件
     └─ MarketConfirm (market-confirm.jsx)：Modal（width:min(480px,100vw - 32px)）
+SkillDialogs (skill-dialogs.jsx)：`AddSkillDialog`（已安装页签工具栏打开的输入弹窗，三态见 §3.9.7）/ `DeleteConfirm`（详情页头的卸载确认，一行路径事实 + 取消/卸载）
 MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 icon-tile.jsx：IconTile / tileElement / useIconState（共用视觉单元）；plugin-detail.jsx：PluginDetail（内置 provider 页，第二级详情）
 markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情共用同一段正文渲染与同一条兜底）
@@ -152,7 +155,6 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 | `marketSetInput(text)` | string | 只改 `input` |
 | `marketCommitKeyword(text)` | string | `keyword=input=text`，清分页；**保留 items** |
 | `marketSetFilter({source?,category?,sort?})` | 部分 filters | 合并 + 清分页 + 关详情；**`items` 保留**（重取期间卡片留在屏上，`clearedPaging` 给出 `listStatus`）；切 scope 时 `categoriesLoading=true`；值没变就什么都不做 |
-| `marketReload()` | —— | 页头「刷新」在市场页签的行为：清已加载页，由面板 effect 重拉第一页；**只清分页与详情**（`items` 与图标/标题缓存保留，`clearedPaging` 按「有 items 就 ready」给出 `listStatus`） |
 | `marketListLoading()` / `marketListFailed({code,message})` | —— / 错误 | 整页态 |
 | `marketPageStart()` | —— | `page.status='loading'`（追加用，不清 items） |
 | `marketPageAppended({pages,merged})` | `pages:[{sourceId,page,items}]`、合并结果 | 写该源 cursor/exhausted、`items=merged`、`pages+1`、尾部进 `more` 或 `done` |
@@ -171,8 +173,10 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 | `marketIconsAttempted(ids)` | `string[]` | 批次整体失败：只记 `iconsTried`、不写 `icons`，静默保持字母 |
 | `marketFavoritesLoaded(list,ok)` | 数组 + 布尔 | 只在 `bootstrap` 写一次：数组转 `{[id]:true}`，`ok` 进 `favoritesOk`；**U5 起是纯读侧**（写侧三个 action 已撤，见 `docs/contracts/decisions.md` 附录 L） |
 | `marketSetScroll(top)` / `marketClearInstalledDirty()` | number / —— | 记滚动位置 / 清脏 |
+| `marketInstalledStale()` | —— | `installedReady=false`（**不动 `installed` 那份映射**）：下次进市场页签重读 `market/installed`。U20 的卸载成功用这一条，而不是 `installedDirty`——后者只触发 `list` 重扫，映射读不到更新 |
+| `addApplied({name, path})` | 路由 #17 的出参 | 只推 `notice{kind:'install-ok', name, path, seq}`：添加不写 `market.installs`（那不是市场条目），列表重扫由页面显式做一次 |
 
-`notice` 复用既有字段，`kind` 现有**三种**：`refresh-failed`（刷新失败，带 `code`/`message`）、`install-ok`（副行给安装路径）、`update-ok`（U19 新增：更新成功的结局文案，副行给 `{from} → {to}` 与路径）；由 `toast.jsx` 按 `kind` 选文案与图标，5 秒后 `dismissNotice(seq)`。收藏写侧仍没有入口（`docs/contracts/decisions.md` 附录 L），所以**没有**第四种 `kind`。
+`notice` 复用既有字段，`kind` 现有**三种**：`refresh-failed`（刷新失败，带 `code`/`message`）、`install-ok`（副行给安装路径；U20 的添加成功**复用它**，不新增 kind）、`update-ok`（U19 新增：更新成功的结局文案，副行给 `{from} → {to}` 与路径）；由 `toast.jsx` 按 `kind` 选文案与图标，5 秒后 `dismissNotice(seq)`。收藏写侧仍没有入口（`docs/contracts/decisions.md` 附录 L），所以**没有**第四种 `kind`。
 
 `marketPageAppended` 的入参仍是**数组**（设计文档写的是单源形状）：现在是「一源一项」，留着数组是为了将来真要同屏多源时不必改签名；语义（写游标、合并、翻页计数）不变。
 
@@ -186,6 +190,7 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 | `marketInstalled()` | `GET market/installed` | 形状 `{items, readable}` |
 | `marketInstall({source,owner,slug,version})` | `POST market/install` | body 只有身份，**没有 path/files** |
 | `marketIcons({items})` | `POST market/icons` | `items` 是 **`{source,owner,slug}`** 数组（每源 ≤12、合计 **≤24**，一批可混两源）；出参 `{icons:{[key]: url|null}}`；失败静默 |
+| `addSkill({path})` / `removeSkill({name,path})` | `POST add` / `POST remove` | U20：前者 body **只有 `path`**（一个本机目录），出参 `{name,path,files,bytes}`；后者 body 是 `{name, path}`（`path` = 这一行的 `SKILL.md`，硬约束 6），出参 `{name,dir,ledger}`。失败按 `E_ADD_*` / `E_DELETE_IO` / 复用的 §8.6 码取文案（`reasonKeyOf`） |
 | `marketVersions({source,owner,slug})` / `marketUpdate({source,owner,slug,version,name,path})` | `GET market/versions` / `POST market/update` | 前者出参 `{namespace, latest, versions, total}`（新的在前、≤50 条）；后者 body 带 `path`（硬约束 6 的「先认路径再写」），出参 `from` 是更新前版本，失败按 `422/502/503/504` 与 `E_UPDATE_RESTORED`/`E_UPDATE_LOST`/`E_UPDATE_UNCONFIRMED` 分三种落点（`docs/contracts/installed-detail.md`） |
 
 全部走既有 `request()`：文档相对 URL + 信封解包 + `ApiError{code, message, data}`（`data` 是信封里的 `data`，安装失败时用来取冲突路径与声明名）。安装永不自动重试。
@@ -214,14 +219,32 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 | 视觉单元 | `icon-tile.jsx`：`tileElement()`（无 hook，返回瓦片元素）+ `useIconState()`（按 URL 记 loaded/failed，未 loaded 时返回探测图 URL）；`IconTile` 是组件形态，`MarketIcon` 解析 URL 后调同一对函数。`.skc_cardIcon` 与 `.skc_marketIconImg` 声明零改动 |
 | 失败 | 单条 → `null`；整批失败 → `marketIconsAttempted` 记 tried，不重试、不弹 toast、不写行内原因 |
 | 标题优先级 | `rowTitleOf(row, market)`：`names[marketKeyOf(row.upstream)]` → `row.displayName`（本地 `metadata.displayName`）→ `row.name`。**kebab 名退到 tooltip**（`title` 属性仍是 `row.name`），因为它是模型调用技能时用的那个字符串，换了可见标题后仍要随手可查 |
-| 失效 | 切页签不动 · 已安装页签刷新不动 · `marketReload()` 清空（`icons`/`iconsTried`/`names` 一起，一次性、下一批自愈）· 安装成功后不动（新技能与市场条目同键）· 新会话清空（不落盘） |
+| 失效 | 切页签不动 · 已安装页签刷新不动 · 切来源 / 搜索 / 筛选（`marketSetFilter` / `marketCommitKeyword`）清空（`icons`/`iconsTried`/`names` 一起，一次性、下一批自愈）· 安装成功后不动（新技能与市场条目同键）· 新会话清空（不落盘） |
 
 收藏的持久化在 `docs/contracts/market.md` §7.7；本页只负责「画对不对」：卡片上的「收藏 N」是上游 `saves`，与本地书签不同源、不互相修正（U5 起卡片上没有书签控件，集合与写路由仍在）。
 
 ---
 
+### 3.9.7 添加技能弹窗与卸载确认（U20）
+
+- **添加入口**：`＋ 添加技能` 主按钮与 chevron 的菜单项都打开 `AddSkillDialog`；`state.payload === null`（还没读到列表）时两枚都禁用，添加请求在飞时两枚都禁用、主按钮文案转 `add.busy`。宿主同位是 `addGroup`（主按钮 + chevron），菜单项**不带描述副行**（宿主那条描述是为了区分 npm/Git/本地三种形态，我们只有一种）。
+- **添加弹窗**：`Modal` + 一条路径输入 + `role="note"` 的安全提示 + 一枚主按钮。三态：`idle`（可编辑 + `add.run`）→ `busy`（输入 `readOnly`、按钮 `add.busy` + `StateDot`、不可取消但**关闭即放弃追踪**，请求继续跑完）→ `done`（结局块 `add.done` + 副行 `market.installOkHint` + `add.close`）。失败回 `idle`，字段下一行 `role="alert"` 显示 `error.E_*`，**输入内容保留**；空串时主按钮 disabled（形状校验交给路由，客户端只判空）；回车提交并做 IME 组字保护。
+- **添加成功**：`store.actions.addApplied({name, path})`（→ `notice{kind:'install-ok'}`）+ 一次 `load('refresh')`；不自动切页签、不自动开详情。
+- **卸载入口与可见性**：只有详情页头 `.skc_detailActions` 的第 2 位（更新 → 卸载 → 开关）；`deletable(row)`（`src/client/model.js`，纯函数）= `partition !== 'builtin'` ∧ `symlink !== true` ∧ `path !== null` ∧ `readonlyReason === null`，为 false 时**整枚不渲染**（软链行该位仍是 `ReadonlyTag`；内置行本来没有开关也没有卸载位）。
+- **卸载确认**：`Modal`（`DeleteConfirm`）：标题 `delete.title`（「卸载「{name}」？」）、正文 `delete.body`（「卸载后这个技能的文件会被永久移除，本机不再加载它。」）、一行路径事实（`delete.factDir`「目录」 + 该技能的**目录**，等于来源信息里 `codeSource` 的同一次 `dirname` 推导；**不复用** `market.factInstallTo`——卸载语境里「安装到」是错的）、`market.confirmCancel` + `delete.confirm`（危险红，`.skc_detailDanger` 同族）。**没有勾选框、没有信任提示**；点卸载时**先关弹窗再发请求**（对齐宿主 `confirm()`），取消零请求。
+- **卸载进行中与结局**：详情页留在原地（不转骨架、不跳页），动作组三枚一起 disabled、文案不变、不加 spinner（`deleting` 是页面局部 `useState`，与 `updatingKey` 同级，**不进 store**）。成功 ⇒ `closeDetail()` + `load('refresh')` + `marketInstalledStale()`，**没有成功 toast**（宿主成功静默）；被拒 / 失败 ⇒ 留在详情 + `.skc_reason` 一行（`store.actions.fail(key, reasonKeyOf(code))`），`E_NOT_FOUND` / `E_STALE_PATH` 同时触发一次重扫。
+
+### 3.9.8 页头状态位：首轮 vs 后续轮（U20 验收后修订）
+
+`.skc_status` 那一句的规则只有下面几条，**不许出现「进行中闪成空白」这种额外状态**：
+
+- **首轮**（还没跑完任何一轮）：不渲染——没有结论就什么都不说。
+- **后续轮进行中**（已有上一轮 `done` 的结论）：**沿用上一轮那句文案与 `data-tone`**，一轮结束就地替换成新结论；新结论确实为空（无检测对象）时按「无对象」消失。刷新与「重新检查」都走这条。
+- **刷新按钮的 `aria-busy` 仍只跟列表重扫**：状态位「保持上一轮」不延长刷新按钮的忙态——两者恢复点不同步是刻意的，理由是「状态位空一块」会被读成卡住（`docs/contracts/decisions.md` 附录 S-13）。
+- `src/client/model.js` 的 `headerUpdateNote` 语义**不变**（仍是「按当前 `checks` 与 `checkRun` 算一句话」）；「保留上一轮」是页面持有的**上一轮结论快照**，属于行为口径，不是那个纯函数的职责。四态表见 `docs/contracts/installed-detail.md` 的「页头四态」。
+
 ## 3.10 已安装详情页
-组件树、`detail` 三态、返回与失败口径、五个更新结局与 36 个文案键见 `docs/contracts/installed-detail.md`（本节只留指针：§3.9 已到 400 行档位）。「已安装」页签的**自动检测**（进页签串行查一轮、单行 2s / 整轮 8s、按 `source:owner:slug` 去重、会话内 10 分钟缓存、失败只影响那一行）与**页头更新提示四态**（可更新 `info` / 部分失败 `error` / 全部最新无色 / 检查中与无检测对象不渲染；宿主同位只有这一句、没有计数，所以 `.skc_status` 里就是一个 `<span>`、`data-tone` 只做 info/error 换色）的规范句同在 `docs/contracts/installed-detail.md` §「更新检测与页头」；键数见 §8.3（165）。
+组件树、`detail` 三态、返回与失败口径、五个更新结局与 35 个文案键见 `docs/contracts/installed-detail.md`（本节只留指针：§3.9 已到 400 行档位）。「已安装」页签的**自动检测**（进页签串行查一轮、单行 2s / 整轮 8s、按 `source:owner:slug` 去重、会话内 10 分钟缓存、失败只影响那一行）与**页头更新提示四态**（可更新 `info` / 部分失败 `error` / 全部最新无色 / 检查中与无检测对象不渲染；宿主同位只有这一句、没有计数，所以 `.skc_status` 里就是一个 `<span>`、`data-tone` 只做 info/error 换色）的规范句同在 `docs/contracts/installed-detail.md` §「更新检测与页头」；键数见 §8.3（182）。
 
 ## 8.2 命名约定
 
@@ -255,7 +278,7 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 - `client/src/**` 与 `lib/**` **不得出现 CJK 字面量**（`check:i18n` 强制）；界面文案一律 `t('key')`。
 - 占位符用 `{name}`（宿主同款：`t('partToggle', { name: title })`）。
 - 入口标题**只允许**通过 `panel.label` 表达：改名 = 改 `locale/*.json` 的 `panel.label` + `meta.title`，代码零改动（这是「不硬编码中文」的可验收形态）。两处都要改的理由：`meta.title` 是插件列表里的显示名（`PROF/*/locale/zh.json` 四家都是 `{meta:{title,description}}`），`panel.label` 是侧栏行标题。`check-i18n` 会校验两者都存在。
-- 市场面沿用两族键：`market.*`（61 个 → **65 个**）与 `error.E_*`（11 个 → **13 个**）；已安装详情页再加 36 个 `detail.*`（键表见 `docs/contracts/installed-detail.md` 的「文案」一节），外加 6 个 `markdown.*`（宿主 `MarkdownText` 的代码围栏与脚注 chrome，缺了它就整段回落成纯文本），全字典 111 → 117 → 136 → 142 → 144 → 156 → 148 → 149 → 150 → 151 → 153 → 151 → 154 → 151 → 167 → **165**（U19 更新检测：新增 18 键、退役 2 键〔`detail.checkUnavailable`/`detail.checkIdle`〕、改文案不改键 2 个〔`detail.newerVersion`/`detail.checkFailed`〕；页头计数退场再退役 2 键〔`status.count`/`status.offSuffix`〕——宿主同位只有一句更新提示；逐条见 `docs/contracts/installed-detail.md` 的「文案」一节）（复制入口全部去掉，连带删掉 `detail.copy` / `detail.copied` / `plugin.copyCommand` 三个键；插件页剩 `plugin.countRunning`（「共 N 个 · M 运行中」，贴着区块标题）与 `plugin.running` / `plugin.stopped`（行尾状态），`plugin.skillsCount` 仍给列表块用）；**`market.placeholder` 已删除**（市场页签不再是占位文案）。下表有几行把同族的新键合并成一行，这是为了守住 400 行上限（`check-docs` 的 R11），键与值逐条列出、语义不变。
+- 市场面沿用两族键：`market.*`（61 个 → **65 个**）与 `error.E_*`（11 个 → **13 个**）；已安装详情页再加 35 个 `detail.*`（键表见 `docs/contracts/installed-detail.md` 的「文案」一节），外加 6 个 `markdown.*`（宿主 `MarkdownText` 的代码围栏与脚注 chrome，缺了它就整段回落成纯文本），全字典 111 → 117 → 136 → 142 → 144 → 156 → 148 → 149 → 150 → 151 → 153 → 151 → 154 → 151 → 167 → 165 → **182**（U20 添加/卸载：新增 19 键〔`add.*` 11 + `delete.*` 4 + `error.E_ADD_NOT_FOUND`/`E_ADD_NOT_SKILL_DIR`/`E_ADD_SHADOWED`/`E_DELETE_IO` 4〕、退役 2 键〔`add.comingSoon`、`detail.uninstallSoon`〕、改文案不改键 3 个〔`detail.uninstall`「卸载」、`error.E_INSTALL_BUSY`「正在被处理」、`error.E_BAD_PATH` 补「以 / 或 ~ 开头」〕；`check-i18n` 口径 = 180 个扁平键 + `meta` 两项）（U19 更新检测：新增 18 键、退役 2 键〔`detail.checkUnavailable`/`detail.checkIdle`〕、改文案不改键 2 个〔`detail.newerVersion`/`detail.checkFailed`〕；页头计数退场再退役 2 键〔`status.count`/`status.offSuffix`〕——宿主同位只有一句更新提示；逐条见 `docs/contracts/installed-detail.md` 的「文案」一节）（复制入口全部去掉，连带删掉 `detail.copy` / `detail.copied` / `plugin.copyCommand` 三个键；插件页剩 `plugin.countRunning`（「共 N 个 · M 运行中」，贴着区块标题）与 `plugin.running` / `plugin.stopped`（行尾状态），`plugin.skillsCount` 仍给列表块用）；**`market.placeholder` 已删除**（市场页签不再是占位文案）。下表有几行把同族的新键合并成一行，这是为了守住 400 行上限（`check-docs` 的 R11），键与值逐条列出、语义不变。
 - 键表（P0 全集 + 市场轮；`zh` 值逐字来自 `PRD` §3.3.5 与本设计）：
 
 | key | zh |
@@ -263,24 +286,16 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 | `meta.title` | 技能 |
 | `meta.description` | 一眼分清内置、本地与市场安装的技能，逐行启用或停用。 |
 | `panel.label` | 技能 |
-| `page.title` | 技能 |
-| `page.intro` | 启用、停用和查看技能来源 |
-| `page.infoLabel` | 关于技能 |
-| `page.infoDescription` | 在这里启用或停用技能。内置技能、本地技能和从市场安装的技能分三组展示。 |
+| `page.title` / `page.intro` | 技能 ／ 启用、停用和查看技能来源 |
+| `page.infoLabel` / `page.infoDescription` | 关于技能 ／ 在这里启用或停用技能。内置技能、本地技能和从市场安装的技能分三组展示。 |
 | `page.refresh` | 刷新 |
 | `page.loading` | 正在读取技能… |
 | `page.error` | 可能由于网络问题，无法读取全部技能 |
 | `page.retry` | 重试 |
 | `page.refreshError` | 刷新失败，请重试 |
-| `tabs.label` | 技能分区 |
-| `tabs.installed` | 已安装 |
-| `tabs.market` | 技能市场 |
-| `group.builtin` | 内置技能配置 |
-| `group.local` | 本地技能 |
-| `group.installed` | 已安装技能 |
-| `group.builtinEmpty` | 这个部署没有内置技能。 |
-| `group.localEmpty` | 还没有本地技能。把技能目录放进 ~/.dsh/skills/ 就会出现。 |
-| `group.installedEmpty` | 还没有从市场安装技能。 |
+| `tabs.label` / `tabs.installed` / `tabs.market` | 技能分区 ／ 已安装 ／ 技能市场 |
+| `group.builtin` / `group.local` / `group.installed` | 内置技能配置 ／ 本地技能 ／ 已安装技能 |
+| `group.builtinEmpty` / `group.localEmpty` / `group.installedEmpty` | 这个部署没有内置技能。 ／ 还没有本地技能。把技能目录放进 ~/.dsh/skills/ 就会出现。 ／ 还没有从市场安装技能。 |
 | `footer.excluded` | 另有 {count} 个技能位于项目级或其他目录，首版不展示 |
 | `status.updatesAvailable` / `status.updatesPartial` / `status.updatesNone` | {count} 个技能可更新 ／ 部分技能检查更新失败 ／ 所有技能均为最新版本 |
 | `market.sectionLabel` | 技能市场 |
@@ -288,25 +303,17 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 | `market.searchPlaceholder` | 搜索技能… |
 | `market.clearSearch` | 清除搜索 |
 | `market.sourceLabel` | 来源 |
-| `market.source.all` | 所有来源 |
-| `market.source.skillhub` | SkillHub |
-| `market.source.clawhub` | ClawHub |
+| `market.source.all` / `market.source.skillhub` / `market.source.clawhub` | 所有来源 ／ SkillHub ／ ClawHub |
 | `market.sortLabel` | 排序 |
-| `market.sort.recommended` | 默认排序 |
-| `market.sort.updated` | 最近更新 |
-| `market.sort.downloads` | 下载量 |
-| `market.sort.stars` | 收藏量 |
+| `market.sort.recommended` / `market.sort.updated` / `market.sort.downloads` / `market.sort.stars` | 默认排序 ／ 最近更新 ／ 下载量 ／ 收藏量 |
 | `market.categoriesLabel` | 分类 |
 | `market.category.all` | 全部 |
 | `market.loading` | 正在读取技能市场… |
 | `market.loadingMore` | 正在加载更多 |
 | `market.endOfList` | 没有更多了 |
 | `market.moreFailed` | 加载失败，点此重试 |
-| `market.emptyTitle` | 这个来源暂时没有技能 |
-| `market.emptySearchTitle` | 没有找到与「{keyword}」匹配的技能 |
-| `market.emptySearchHint` | 换个词试试，或看看全部分类 |
-| `market.emptyCategoryTitle` | 这个分类下暂时没有技能 |
-| `market.emptyCategoryAction` | 看全部分类 |
+| `market.emptyTitle` / `market.emptyCategoryTitle` / `market.emptyCategoryAction` | 这个来源暂时没有技能 ／ 这个分类下暂时没有技能 ／ 看全部分类 |
+| `market.emptySearchTitle` / `market.emptySearchHint` | 没有找到与「{keyword}」匹配的技能 ／ 换个词试试，或看看全部分类 |
 | `market.errorTitle` | 无法连接技能市场 |
 | `market.errorHint` | 检查网络后重试 |
 | `market.retry` | 重试 |
@@ -324,21 +331,12 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 | `market.detailBack` | 返回市场 |
 | `market.detailLoading` | 正在读取详情… |
 | `market.detailError` | 读不到这个技能的详情 |
-| `market.detailOverview` | 概览 |
-| `market.detailFiles` | 文件 |
-| `market.detailNoOverview` | 这个技能没有单独的说明 |
-| `market.detailFilesEmpty` | 这个技能的包里没有可列出的文件 |
-| `market.factSource` | 来源 |
-| `market.factAuthor` | 作者 |
-| `market.factVersion` | 版本 |
-| `market.factDownloads` | 下载量 |
-| `market.factCategory` | 分类 |
-| `market.factInstallTo` | 安装到 |
-| `market.factUnknown` | 未知 |
-| `market.confirmTitle` | 安装 {name} |
+| `market.detailOverview` / `market.detailFiles` | 概览 ／ 文件 |
+| `market.detailNoOverview` / `market.detailFilesEmpty` | 这个技能没有单独的说明 ／ 这个技能的包里没有可列出的文件 |
+| `market.factSource` / `market.factAuthor` / `market.factVersion` / `market.factDownloads` / `market.factCategory` | 来源 ／ 作者 ／ 版本 ／ 下载量 ／ 分类 |
+| `market.factInstallTo` / `market.factUnknown` | 安装到 ／ 未知 |
+| `market.confirmTitle` / `market.confirmCancel` / `market.confirmInstall` | 安装 {name} ／ 取消 ／ 安装 |
 | `market.confirmTrust` | 技能来自第三方，安装前请确认可信。装好后在新建的会话里生效，当前会话仍用它已加载的技能清单。 |
-| `market.confirmCancel` | 取消 |
-| `market.confirmInstall` | 安装 |
 | `market.installStarted` | 正在安装 {name} |
 | `market.installOk` | 已安装 {name} · 新会话生效 |
 | `market.installOkHint` | 安装到 {path} |
@@ -347,10 +345,14 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 | `row.applying` | 正在应用 {name} 的更改 |
 | `row.symlinkReadonly` | 软链·只读 |
 | `row.symlinkTitle` | 这是一个软链（指向 {path}），本面板不会修改它 |
-| `add.label` / `add.comingSoon` | 添加技能 ／ 即将支持 |
+| `add.label` / `add.chooseMethod` / `add.fromPath` | 添加技能 ／ 选择添加技能方式 ／ 从本地目录添加 |
+| `add.title` / `add.description` / `add.pathLabel` | 添加技能 ／ 输入一个技能目录在本机的完整路径。目录里必须有 SKILL.md，添加后会复制进 ~/.dsh/skills/。 ／ 技能目录路径 |
+| `add.pathPlaceholder` / `add.safety` | 例如 /Users/name/my-skill ／ 请确认这个目录里的技能来源可信。添加后它在本机以你的权限运行，来源不明的技能可能读取和泄露你的数据。 |
+| `add.run` / `add.busy` / `add.done` / `add.close` | 添加 ／ 正在添加… ／ 已添加 ／ 完成 |
+| `delete.title` / `delete.body` / `delete.confirm` / `delete.factDir` | 卸载「{name}」？ ／ 卸载后这个技能的文件会被永久移除，本机不再加载它。 ／ 卸载 ／ 目录 |
 | `error.E_NOT_FOUND` | 这个技能已不存在，请刷新 |
 | `error.E_BAD_NAME` | 技能名不合规范，未做任何修改 |
-| `error.E_BAD_PATH` | 技能文件路径不合规范，未做任何修改 |
+| `error.E_BAD_PATH` | 路径不合规范（需要以 / 或 ~ 开头的完整路径），未做任何修改 |
 | `error.E_STALE_PATH` | 技能文件位置已变化，请刷新后重试 |
 | `error.E_SYMLINK_READONLY` | 软链技能只读，未做任何修改 |
 | `error.E_FILE_CHANGED` | 技能文件在你操作期间被修改，请刷新后重试 |
@@ -359,17 +361,17 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 | `error.E_VERIFY_FAILED` | 写入后回读不一致，已回滚 |
 | `error.E_FORBIDDEN` | 请求被拒绝（仅限本机访问） |
 | `error.E_UNKNOWN` | 操作失败：{reason} |
-| `error.E_SOURCE_UNKNOWN` | 不认识这个来源 |
-| `error.E_SOURCE_UNAVAILABLE` | {source} 暂时连不上 |
-| `error.E_SOURCE_TIMEOUT` | {source} 响应超时 |
-| `error.E_SOURCE_BAD_RESPONSE` | {source} 返回了无法识别的数据 |
+| `error.E_SOURCE_UNKNOWN` / `error.E_SOURCE_UNAVAILABLE` | 不认识这个来源 ／ {source} 暂时连不上 |
+| `error.E_SOURCE_TIMEOUT` / `error.E_SOURCE_BAD_RESPONSE` | {source} 响应超时 ／ {source} 返回了无法识别的数据 |
 | `error.E_BAD_QUERY` | 请求参数不合规 |
 | `error.E_SKILL_NAME_INVALID` | 这个技能的包声明了不合规的名字：{name} |
 | `error.E_ALREADY_INSTALLED` | 本机已有同名技能：{path} |
 | `error.E_PACKAGE_INVALID` | 这个技能的包不完整或校验不通过 |
 | `error.E_DOWNLOAD_FAILED` | 下载技能包失败：{reason} |
 | `error.E_INSTALL_IO` | 写入技能目录失败：{reason} |
-| `error.E_INSTALL_BUSY` | 这个技能正在安装，请稍候 |
+| `error.E_INSTALL_BUSY` | 这个技能正在被处理，请稍候 |
+| `error.E_ADD_NOT_FOUND` / `error.E_ADD_NOT_SKILL_DIR` | 这个路径不存在 ／ 这不是一个技能目录：需要含 SKILL.md 的目录 |
+| `error.E_ADD_SHADOWED` / `error.E_DELETE_IO` | 已有同名技能随 DSH 或预设提供，添加后不会显示 ／ 卸载技能目录失败：{reason} |
 | `error.E_FAVORITE_FULL` / `error.E_FAVORITE_IO` | 收藏数量已达上限，请先取消一些 ／ 写入收藏失败：{reason} |
 
 ---

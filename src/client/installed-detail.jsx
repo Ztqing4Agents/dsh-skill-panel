@@ -31,10 +31,12 @@ import {
 import { IconTile } from './icon-tile.jsx';
 import { MarkdownBlock } from './markdown.jsx';
 import { UpdateConfirm } from './market-confirm.jsx';
+import { DeleteConfirm } from './skill-dialogs.jsx';
 import { cn } from './styles.js';
 import {
   clockText,
   dateText,
+  deletable,
   identityOf,
   isPending,
   newerVersions,
@@ -67,20 +69,21 @@ export function DetailCrumb({ t, onBack }) {
  * open, is the update dialog up) are props the page owns. Neither belongs in the store:
  * both are sub-states of "an update is available", and a store field could contradict it.
  * @param {{detail: object|null, row: object|null, rows: Map<string, object>, t: Function,
- *   status: string, check?: object|null, updating?: boolean, iconUrl?: string|null,
- *   title?: string, expanded?: boolean, updateTarget?: string|null, onBack: Function,
- *   onRetry: Function, onToggle: Function, onCheck?: Function, onUpdate?: Function,
- *   onExpand?: Function, onUpdatePrompt?: Function}} props - the detail state, the row the
+ *   status: string, check?: object|null, updating?: boolean, deleting?: boolean,
+ *   iconUrl?: string|null, title?: string, expanded?: boolean, updateTarget?: string|null,
+ *   deleteOpen?: boolean, onBack: Function, onRetry: Function, onToggle: Function,
+ *   onCheck?: Function, onUpdate?: Function, onExpand?: Function, onUpdatePrompt?: Function,
+ *   onDeletePrompt?: Function, onDelete?: Function}} props - the detail state, the row the
  *   list still carries (null once it is gone), per-row write state, translate, the detail
- *   status, this identity's cached verdict, whether an update of it is in flight, the row's
- *   icon and visible title, the two view flags, and the back / retry / switch / check /
- *   update / expand / dialog handlers.
+ *   status, this identity's cached verdict, whether an update or a delete of it is in
+ *   flight, the row's icon and visible title, the three view flags, and the back / retry /
+ *   switch / check / update / expand / update-dialog / delete-dialog handlers.
  * @returns {import('react').ReactElement} the detail view.
  */
 export function InstalledDetail({
-  detail, row, rows, t, status, check = null, updating = false, iconUrl = null, title,
-  expanded = false, updateTarget = null, onBack, onRetry, onToggle, onCheck, onUpdate,
-  onExpand, onUpdatePrompt,
+  detail, row, rows, t, status, check = null, updating = false, deleting = false, iconUrl = null,
+  title, expanded = false, updateTarget = null, deleteOpen = false, onBack, onRetry, onToggle,
+  onCheck, onUpdate, onExpand, onUpdatePrompt, onDeletePrompt, onDelete,
 }) {
   const crumb = <DetailCrumb t={t} onBack={onBack} />;
   // The row can disappear under the page (someone deleted the directory); the way back is
@@ -181,7 +184,7 @@ export function InstalledDetail({
             <Button
               variant="outline"
               size="sm"
-              disabled={updating || busy}
+              disabled={updating || busy || deleting}
               onClick={() => onUpdatePrompt?.(candidate)}
               icon={updating
                 ? <StateDot state="ongoing" size={13} />
@@ -190,26 +193,29 @@ export function InstalledDetail({
               {t(updating ? 'detail.updating' : 'detail.update')}
             </Button>
           ) : null}
-          {/* Uninstall is a placeholder: visible and disabled, with no handler, because the real
-              one is a write route this version does not have (board M6). Disabled rather than
-              absent is the same call the add-skill button makes (decisions C-3). */}
-          <Button
-            variant="outline"
-            size="sm"
-            className={cn('detailDanger')}
-            disabled
-            title={t('detail.uninstallSoon')}
-            icon={<IconTrashOutlineRegular size={13} />}
-          >
-            {t('detail.uninstall')}
-          </Button>
+          {/* Delete sits between update and the switch, which is the host's own order. The
+              key is still `detail.uninstall`: only its value changed, so the copy is a
+              dictionary edit. Rendered only where there is something this panel may remove
+              (`deletable`) - a control that exists and refuses is worse than no control. */}
+          {deletable(row) ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className={cn('detailDanger')}
+              disabled={deleting || updating || busy}
+              onClick={() => onDeletePrompt?.(true)}
+              icon={<IconTrashOutlineRegular size={13} />}
+            >
+              {t('detail.uninstall')}
+            </Button>
+          ) : null}
           {mode === null
             ? (row.readonlyReason === 'symlink' ? <ReadonlyTag row={row} t={t} /> : null)
             : (
               <EnableSwitch
                 row={row}
                 t={t}
-                pending={isPending(rows, key) || updating}
+                pending={isPending(rows, key) || updating || deleting}
                 onToggle={onToggle}
               />
             )}
@@ -327,6 +333,15 @@ export function InstalledDetail({
           <IconLinkOutlineRegular size={12} aria-hidden="true" />
         </a>
       )}
+      {deleteOpen && deletable(row) ? (
+        <DeleteConfirm
+          name={title ?? row.name}
+          target={dir ?? ''}
+          t={t}
+          onCancel={() => onDeletePrompt?.(false)}
+          onConfirm={() => onDelete?.(row)}
+        />
+      ) : null}
       {updateTarget === null ? null : (
         <UpdateConfirm
           name={title ?? row.name}

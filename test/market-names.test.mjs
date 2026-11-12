@@ -140,17 +140,20 @@ test('K72 marketNamesReady：批次回来的标题可覆盖种子，null 不拖�
   assert.equal(store.getSnapshot().market, before, '空批次不改状态对象');
 });
 
-test('K72 marketReload 保留标题与图标缓存（按身份键的答案，只清分页）', () => {
+test('K72 切来源 / 搜索重取保留标题与图标缓存（按身份键的答案，只清分页）', () => {
   const store = createStore();
   store.actions.marketNamesSeeded({ [KEY]: '播种名' });
   store.actions.marketIconsReady({ [KEY]: 'https://cdn.example.com/x.png' });
-  assert.equal(store.getSnapshot().market.names[KEY], '播种名', '刷新前有标题');
-  store.actions.marketReload();
+  assert.equal(store.getSnapshot().market.names[KEY], '播种名', '重取前有标题');
+  // 页头刷新与 `marketReload()` 都已撤除（U20 收尾）：现在唯一的重取入口是切来源 / 搜索落定 /
+  // 面板 effect / 错误态「重试」，它们全走 `clearedPaging`——同一套「只清分页」的语义。
+  store.actions.marketSetFilter({ source: 'clawhub' });
   const after = store.getSnapshot().market;
-  // U13：页头刷新不再让标题与头像退回原样（那会让卡片一行字/一个头像跳一次）。
-  assert.deepEqual(after.names, { [KEY]: '播种名' }, '刷新后标题留着');
+  // U13：重取不再让标题与头像退回原样（那会让卡片一行字/一个头像跳一次）。
+  assert.deepEqual(after.names, { [KEY]: '播种名' }, '重取后标题留着');
   assert.deepEqual(after.icons, { [KEY]: 'https://cdn.example.com/x.png' }, '图标也留着');
   assert.equal(after.pages, 0, '只有分页被清空');
+  assert.equal(after.filters.source, 'clawhub', '来源确实切了（前置条件，否则这条什么都没测）');
   assert.equal(rowTitleOf(row(), after), '播种名', '缓存还在 ⇒ 行标题不回落 kebab 名');
   assert.equal(marketKeyOf(UPSTREAM), KEY, '键的形状：source:owner:slug');
 });

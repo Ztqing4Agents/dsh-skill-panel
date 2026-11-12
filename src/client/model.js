@@ -23,6 +23,9 @@ const ROW_ERRORS = new Set([
   'E_NOT_WRITABLE',
   'E_WRITE_FAILED',
   'E_VERIFY_FAILED',
+  // The delete route's own failure: it removes a directory the panel owns, so it belongs to
+  // the row-write family (this set) rather than to the market's codes.
+  'E_DELETE_IO',
 ]);
 
 /** Partition keys in the order the page renders them, whatever the payload says. */
@@ -137,6 +140,25 @@ export function rowViewState(row, rows) {
  */
 export function isPending(rows, key) {
   return rows?.get?.(key)?.pending === true;
+}
+
+/**
+ * Whether one row's detail head may offer the delete control.
+ *
+ * Four independent facts, each one enough to refuse on its own: a builtin skill has no
+ * directory this panel owns, a symlink belongs to another tool (hard constraint 5), a row
+ * with no path has nothing to remove, and a row that already explains why it is read-only
+ * must not be offered the write it just refused. Absent beats disabled, which is the host's
+ * own shape - there the button does not render either.
+ * @param {object} row - a row from the payload.
+ * @returns {boolean} true when the delete button may render.
+ */
+export function deletable(row) {
+  if (row === null || row === undefined) return false;
+  return row.partition !== 'builtin'
+    && row.symlink !== true
+    && row.path !== null
+    && row.readonlyReason === null;
 }
 
 /**

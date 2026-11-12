@@ -7,6 +7,7 @@
 > 规模上限：600
 > 采集日期：2026-11-08
 > 二次采集：§7「插件详情页」于 2026-11-10 用 node 读 asar 补采（同日二核，见 `docs/contracts/decisions.md` 附录 Q）
+> 三次采集：§8「添加插件与卸载两条流程」于 2026-11-12 用 node 读 asar 采集、并逐条验签行号（同源 `0.2.2-rc.1`；宿主升级后与 §7 一起整份重采）
 > 来源版本：DeepSeek Harness `0.2.2-rc.1`（`/Applications/DeepSeek Harness.app/Contents/Resources/app.asar`）
 
 只描述**宿主长什么样**，不写「我们应该怎么用」——复刻口径在 `docs/contracts/visual.md`。
@@ -189,3 +190,70 @@ locale 键值（逐字，来自该包的 zh 表）：
 2. 该组的卡片常在首屏外（1440×920 下 y≈883），要先滚到底再点。
 3. 宿主类名是构建哈希（`w6M7KW_*`），只能按 `[class*="crumb"]` / `[class*="detailTitle"]` 这类语义片段定位。
 4. 在 `<html>` 上模拟 `data-platform=darwin` 会让整轮静默挂死（宿主外壳也读它）；要验 darwin 分支只在 `.skc_page` 上打属性。
+
+## 8 添加插件与卸载两条流程（采集 2026-11-12；本节整份重采）
+
+> 采集方法：**node 逐字节读 asar**（§1 那条「`grep` 搜中文会静默漏检」的警告在这儿一样成立）。三个来源文件都在包里、且都是 TS 源码：`PluginManagerPage.tsx`（94 051 B）、`manager-store.ts`（78 429 B）、`locales.ts`（173 664 B）；服务端拒绝码在**另一个包**的 `dsh-plugin-manager/lib/types/index.js`（96 905 B）与 `failure.js`（990 B）。本节行号都是当轮对着产物验签过的；`file:line` 形态一律不写（`check-docs` 的 R9 禁止），坐标读作「该文件内的绝对行号」。
+
+### 8.1 添加入口：工具条第三位的 `AddPluginMenu`
+
+- 工具条顺序：状态位 `updatesNote` → 刷新（`variant="outline"`，进行中换 `StateDot state="ongoing" size={13}`）→ **`AddPluginMenu`**（`PluginManagerPage.tsx` `:1712-1722`）。
+- **「添加」与「看进度」共用一个位置**：`state.install.requestId === undefined` 时渲染 `AddPluginMenu`，否则换成一枚 `variant="primary"` 的「查看安装任务」（`:1720-1722`）。
+- `AddPluginMenu` 是**主按钮 + chevron** 两枚（`:60-97`）：主按钮 `variant="primary" size="sm"` + `IconPlusOutlineRegular size={13}` + `aria-label={t('addPlugin')}`，**点击直接开弹窗**（`:70-73`）；chevron 带 `aria-haspopup="menu"` + `aria-expanded`，点它或按 `ArrowDown` 开菜单（`:78-85`）。
+- 菜单 `align="end" portal autoFocus`，**只有一项**：`installExisting`（zh「安装第三方插件」）+ 描述 `installExistingDescription`（zh「支持 npm 包、Git 仓库和本地目录」），选中即开弹窗；菜单尾部跟 `renderSlot('plugins.add.actions')`，供别的插件追加添加方式（`:75-94`）。键位见 `locales.ts` `:22-25`。
+
+### 8.2 弹窗形状（`InstallDialog`）
+
+- 外壳是 `Modal`：`title={t('installTitle')}`、`description={t('installDescription')}`、`closeLabel={t('close')}`（`:1159-1163`；`mirrorRecovery` 态不传 description）。
+- **只有一个输入框**：`type="text"`、`placeholder={t('installSpecPlaceholder')}`、`aria-label` 取 `installSpecLabel`（镜像恢复态取 `installPackageLabel`）、`aria-invalid` + `aria-describedby` 指向字段下面那一行、回车提交、**IME 组字期间回车不提交**（Safari 的 10 ms 后置窗口也处理了）（`:1185-1203`，组字 `:1017-1027`）。
+- 字段下面那一行是**就地报因**（`INPUT_PROBLEM_KEYS` `:869-878`），不是 toast；底部 `footer` 是安全提示 `installGuideSafety`；按钮文案两态切换：`installRun` / `installChecking`。
+- 结局屏标题由一张表决定（`SCREEN_TITLE_KEYS` `:911-920`，含 `installingTitle` / `installedTitle` / `installFailedTitle` / `installUnconfirmedTitle` 等），失败分类 `FAILURE_KIND_KEYS` `:894-905`、正文组装 `failureText` `:955-975`。
+
+### 8.3 校验顺序：**先在本地列表里裁决，再问远端**
+
+`runInstall`（`manager-store.ts` `:1202-1282`）的顺序是本节最值得复用的一条：
+
+1. 空输入 / 正在跑 ⇒ 直接返回（`:1206`）。
+2. **先在已读到的包列表里按 name 命中**：`state.packages.find(pkg => pkg.name === spec)`（`:1207`）——这一步**完全不打远端**。
+3. 命中且 `availability !== 'missing'` ⇒ 直接进「已装」结局，并按 `availability === 'installation'` 分叉成两种说法：`shipped`（随 DSH 提供）或 `already-installed`（`:1234-1237`）。**这不是「谁优先」，是同一件事的两种来源**。
+4. 随 DSH 提供、默认隐藏且未启用的 bundle 直接进 done 屏（`:1222-1233`）。
+5. 以上都没命中才 `inspect()`（远端解析），之后才是真正的安装。
+
+结论：「这个包装过没装过」**在本地列表里就裁决完**，远端只负责「怎么装」。
+
+### 8.4 卸载入口与顺序
+
+- 卸载**只有一处**：插件详情页头的动作组（`PluginManagerPage.tsx` `:767-799`），顺序 **更新 → 卸载 → 开关**（`:782-796`）；动作组开头先 `renderSlot('plugins.detail.actions')`（`:768`）。
+- 两层可见性：外层条件 `installed || removable`，内层 `disabled`（busy 时）——**可见的不可点**与「不出现」是两件事，宿主用的是前者。
+- **行/卡片上没有卸载位**：`openInstall` 只被工具条与菜单调用，行内只有开关与「查看」。
+- 落点：`uninstall` action（`manager-store.ts` `:859-865`）→ 服务端 `removeBundle(name)`（`dsh-plugin-manager/lib/types/index.js` `:1194-1230`）。
+
+### 8.5 卸载确认与三条行为结论
+
+`ConfirmDialog`（`:1535-1559`）是 `Modal` + 标题 `confirmUninstallTitle`（zh「卸载「{name}」？」）+ 正文 `confirmUninstallDescription` + 两枚按钮 `confirmUninstall` / 取消；**没有事实表、没有勾选框**（`:1542-1556`）。三条可直接照抄的行为：
+
+1. **先关弹窗再发请求**：`confirm()` 取出 `pendingConfirm` → 清空 → `patch({ confirm: null })`，**然后**才 `await pending()`（`manager-store.ts` `:1156-1161`）。
+2. **成功静默，没有「已卸载」toast**：`applied()` 里 `application: 'applied'` 的分支直接 `return`（`:1527-1546`）——表达方式是「行消失 + 详情退回」。
+3. **失败才有文案**：`failedUninstall`（`locales.ts` `:275`）。
+
+### 8.6 服务端拒绝码面：没有 `E_*` 一族，也没有 per-refusal HTTP 状态
+
+- 拒绝走 `ManagementFailure(code)`（`dsh-plugin-manager/lib/types/failure.js`）：只有 `code` 与可选的 `incompatible`，**没有任何 HTTP 状态字段**（该文件全文 990 B，`statusCode` / `httpStatus` 零出现）。
+- 卸载相关四码：`not-removable`（`:1199`）、`stop-profile`（`:1203`）、`bundle-in-use`（`:1212`）、`unknown-plugin`（`:950`，该码也在别处复用）。
+- 码到人话的映射在**客户端**：`reasonManagementRequired` / `reasonUnaddressable` / `reasonUnknownPlugin` / `reasonAlreadyInstalled` …（`locales.ts` `:278-283`）。所以「一码一 HTTP + 一码一文案键」是本插件更强的口径；宿主只保证「一码一句人话」。
+
+### 8.7 我们照做了什么：只留指针
+
+本节只记宿主形状；**我们的口径与差异**都在契约里，使用者能感知到什么在 `CHANGELOG.md`，别在这儿复述：
+
+| 宿主事实 | 我们的落点 |
+| --- | --- |
+| 添加是「检查 → 安装」两段（`inspect()` 之后才装） | 合并成一段式，理由见 `docs/contracts/decisions.md` 附录 S-1 |
+| 只收绝对路径（`install-spec.js` 的路径分支） | 我们也收 `~` / `~/…`（有意放宽，已登记偏离），见附录 S-3 |
+| 卸载成功静默、先关弹窗 | 照抄（删除成功无 toast），见附录 S-5；先关弹窗再发请求写在 `docs/contracts/client.md` §3.9.7 |
+| 卸载前不问「本会话正在使用」（宿主靠 loader 持有判 `bundle-in-use`） | 这两层不搬，理由见附录 S-4；真机观察项写在 `docs/contracts/acceptance.md` 的「真机才能验证的项」 |
+| 卸载入口只在详情页头、行上没有 | 同构：`docs/contracts/installed-detail.md` 的「删除技能」一节；点击边界见 `AGENTS.md` 硬约束 9 |
+| 校验顺序里「先按 name 命中本地列表」 | 对应我们的 S6（`lstat` 同名即拒）+ S7（影子判据），见 `docs/contracts/routes.md` §3.3.4 与附录 S-6 |
+| 弹窗单输入 + 字段下报因 + 结局屏 | `docs/contracts/client.md` §3.9.7 |
+| 菜单尾部的 `plugins.add.actions` 插槽 | 不做（没有第二种添加方式） |
+| pnpm 日志 / 安装任务页 / 镜像恢复 | 不复刻（技能包不经过 pnpm） |

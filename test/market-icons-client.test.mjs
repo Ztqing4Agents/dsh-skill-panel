@@ -146,7 +146,7 @@ test('K61 marketIconsAttempted：整批失败只记 tried，静默、不碰 icon
   assert.equal(store.getSnapshot().market, before, '非字符串/空串被过滤，不产生空键');
 });
 
-test('K61 页头刷新与切来源/搜索/追加页一样保留图标缓存（缓存按身份键，只清分页）', () => {
+test('K61 切来源 / 搜索 / 追加页保留图标缓存（缓存按身份键，只清分页）', () => {
   const store = createStore();
   store.actions.marketPageAppended({ pages: [], merged: [item('one'), item('two')] });
   store.actions.marketIconsReady({
@@ -169,14 +169,16 @@ test('K61 页头刷新与切来源/搜索/追加页一样保留图标缓存（�
   assert.deepEqual(Object.keys(store.getSnapshot().market.icons), ['clawhub:acme:one'], '追加页保留已拿到的图标');
   assert.equal(store.getSnapshot().market.iconsTried['clawhub:acme:two'], true, '追加页保留 tried');
 
-  // 页头刷新（= marketReload，U13）：只清分页。清掉缓存会让卡片先退回字母再换图，
-  // 还会多打一轮 `market/icons`——而重问同一个身份不可能得到另一个答案。
-  store.actions.marketReload();
+  // 再切一次来源（`marketReload()` 已在 U20 收尾随页头刷新一起删掉）：重取仍然只清分页。
+  // 清掉缓存会让卡片先退回字母再换图，还会多打一轮 `market/icons`——而重问同一个身份
+  // 不可能得到另一个答案。
+  store.actions.marketSetFilter({ source: 'clawhub' });
+  assert.equal(store.getSnapshot().market.filters.source, 'clawhub', '来源又切了一次（前置条件）');
   const after = store.getSnapshot().market;
-  assert.deepEqual(after.icons, { 'clawhub:acme:one': 'https://cdn.example.com/zap.png' }, '刷新保留已拿到的图标');
-  assert.equal(after.iconsTried['clawhub:acme:two'], true, '刷新保留 tried（含「问过、没有图标」这条负结果）');
-  assert.equal(after.items.length, 3, '刷新保留列表（图标与卡片对得上）');
-  assert.equal(after.pages, 0, '刷新只清分页');
+  assert.deepEqual(after.icons, { 'clawhub:acme:one': 'https://cdn.example.com/zap.png' }, '重取保留已拿到的图标');
+  assert.equal(after.iconsTried['clawhub:acme:two'], true, '重取保留 tried（含「问过、没有图标」这条负结果）');
+  assert.equal(after.items.length, 3, '重取保留列表（图标与卡片对得上）');
+  assert.equal(after.pages, 0, '重取只清分页');
 });
 
 test('K69 iconSeeds：市场条目自带的 `iconUrl` 播进缓存，空值不收、已有的键不再播', () => {

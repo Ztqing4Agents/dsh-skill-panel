@@ -103,6 +103,11 @@ function props(setup = {}) {
     onUpdate: setup.onUpdate ?? (() => {}),
     onExpand: setup.onExpand ?? (() => {}),
     onUpdatePrompt: setup.onUpdatePrompt ?? (() => {}),
+    // U20 的删除侧：`deleting` 是页面局部状态，`deleteOpen` 是确认弹窗的开关。
+    deleting: setup.deleting ?? false,
+    deleteOpen: setup.deleteOpen ?? false,
+    onDeletePrompt: setup.onDeletePrompt ?? (() => {}),
+    onDelete: setup.onDelete ?? (() => {}),
   };
 }
 
@@ -390,16 +395,20 @@ test('H1 头排顺序：detailTop（图标 + 动作组）在 detailIntro（标�
   assert.ok(titleRow !== -1 && titleRow < author && author < desc, '标题行 → 作者 → 描述');
 });
 
-test('H1 动作组：卸载在前、开关在后，开关仍是 role="switch"', () => {
-  const html = render({ row: marketRow() });
-  const actions = /<div class="skc_detailActions">([\s\S]*?)<\/div><\/div>/.exec(html);
-  assert.ok(actions !== null, '有动作组');
-  const block = actions[1];
-  const uninstall = block.indexOf('title="卸载功能尚未支持"');
+test('K133 动作组顺序：更新 → 卸载 → 开关，开关仍是 role="switch"', () => {
+  const html = render({ row: marketRow(), check: readyVerdict({ candidate: '2.0.0' }) });
+  const actions = html.indexOf('class="skc_detailActions"');
+  assert.notEqual(actions, -1, '有动作组');
+  // 动作组一直画到 detailIntro 之前（按钮里没有 <div>，所以用区块边界切，别用正则数 div）。
+  const block = html.slice(actions, html.indexOf('class="skc_detailIntro"'));
+  const update = block.indexOf(t('detail.update'));
+  const remove = block.indexOf(t('detail.uninstall'));
   const toggle = block.indexOf('skc_bundleToggle');
-  assert.notEqual(uninstall, -1, '动作组里有卸载');
+  assert.notEqual(update, -1, '动作组里有更新');
+  assert.notEqual(remove, -1, '动作组里有卸载');
   assert.notEqual(toggle, -1, '动作组里有开关');
-  assert.ok(uninstall < toggle, '卸载在开关左边（与宿主同序）');
+  assert.ok(update < remove, '卸载在更新右边');
+  assert.ok(remove < toggle, '开关在卸载右边（最后一位，与宿主同序）');
   assert.equal((html.match(/role="switch"/g) ?? []).length, 1, '整页只有一个开关，且在动作组里');
 });
 
@@ -415,27 +424,82 @@ test('H1 软链行：动作组里是只读标记，没有开关', () => {
       readonlyReason: 'symlink',
     }),
   });
-  const block = /<div class="skc_detailActions">([\s\S]*?)<\/div><\/div>/.exec(html);
-  assert.ok(block !== null, '软链行也有动作组');
-  assert.ok(block[1].includes('class="skc_roTag"'), '动作组里是 roTag');
-  assert.equal(/role="switch"/.test(block[1]), false, '动作组里没有开关');
-  assert.ok(block[1].includes('title="卸载功能尚未支持"'), '卸载占位仍在（对所有行都画）');
+  const actions = html.indexOf('class="skc_detailActions"');
+  assert.notEqual(actions, -1, '软链行也有动作组');
+  const block = html.slice(actions, html.indexOf('class="skc_detailIntro"'));
+  assert.ok(block.includes('class="skc_roTag"'), '动作组里是 roTag');
+  assert.equal(/role="switch"/.test(block), false, '动作组里没有开关');
+  // K133：删除位**整枚不渲染**（不是 disabled）——软链归别的工具，硬约束 5 的第三层还在，
+  // 但「看着能点、点了被拒」是被明令禁止的形状。
+  assert.equal(block.includes(t('detail.uninstall')), false, '软链行没有删除位（整枚不渲染）');
+  assert.equal(/<button[^>]*skc_detailDanger/.test(block), false, '连那个危险按钮的壳都没有');
 });
 
-test('H1 卸载是 disabled 占位：type=button、title=卸载功能尚未支持、没有 onClick', () => {
+test('K133 卸载是真按钮：.skc_detailDanger + 文案「卸载」+ 有 onClick，空闲时不禁用', () => {
   const html = render({ row: marketRow() });
-  // 宿主那支卸载按钮是「红字 + 30% 红内环」，走 .skc_detailDanger 这条修饰类；仍然没有 handler。
-  const tag = /<button type="button" class="[^"]*skc_detailDanger[^"]*" disabled="" title="卸载功能尚未支持">/.exec(html);
-  assert.ok(tag !== null, '卸载渲染成 type=button + disabled + 那句 title + .skc_detailDanger');
-  assert.ok(html.includes('>卸载</button>'), '按钮文字是 detail.uninstall =「卸载」');
-  // SSR 会把 handler 丢掉，所以「没有 onClick」只能在元素树上验。
-  const tree = modules.installedDetail.InstalledDetail(props({ row: marketRow() }));
-  const uninstall = elementsOf(tree).find((element) => element.props?.children === t('detail.uninstall'));
-  assert.ok(uninstall !== undefined, '元素树里有卸载按钮');
-  assert.equal(uninstall.props.disabled, true, '是 disabled');
-  assert.equal(uninstall.props.onClick, undefined, '没有 onClick（点了什么都不会发生）');
-  assert.equal(uninstall.props.title, '卸载功能尚未支持', 'title 说明它还没做');
-  assert.equal(uninstall.props['aria-label'], undefined, '没有额外的 aria-label（文案就是按钮文字）');
+  // 宿主那支按钮是「红字 + 30% 红内环」，仍走 .skc_detailDanger 这条修饰类；U20 起它是真的。
+  const tag = /<button type="button" class="skc_detailDanger"[^>]*>/.exec(html);
+  assert.ok(tag !== null, '删除渲染成 .skc_detailDanger 的 type=button');
+  assert.equal(tag[0].includes('disabled'), false, '空闲时不 disabled');
+  assert.equal(tag[0].includes('title='), false, '那句「尚未支持」的 title 已删');
+  assert.ok(html.includes('>卸载</button>'), '按钮文字是 detail.uninstall =「卸载」（U20 第三轮改值、键名不便）');
+
+  // SSR 会把 handler 丢掉，所以 handler 与 disabled 只能在元素树上验。
+  const calls = [];
+  const tree = modules.installedDetail.InstalledDetail(props({
+    row: marketRow(),
+    onDeletePrompt: (open) => calls.push(open),
+  }));
+  const remove = elementsOf(tree).find((element) => element.props?.children === t('detail.uninstall'));
+  assert.ok(remove !== undefined, '元素树里有卸载按钮');
+  assert.equal(remove.props.className, 'skc_detailDanger', '带危险修饰类');
+  assert.equal(remove.props.disabled, false, '空闲时不禁用');
+  assert.equal(typeof remove.props.onClick, 'function', '有 onClick');
+  remove.props.onClick();
+  assert.deepEqual(calls, [true], '点它只打开确认弹窗（不直接发请求）');
+});
+
+test('K133 删除也走 deletable：内置行 / 无路径行整枚不渲染', () => {
+  for (const [label, rowOf] of [
+    ['内置行', () => row({ name: 'office', partition: 'builtin', provider: 'univer', path: null, writable: false, readonlyReason: 'provider-store' })],
+    ['无路径行', () => row({ name: 'ghost', path: null, writable: false, readonlyReason: 'no-frontmatter' })],
+  ]) {
+    const html = render({ row: rowOf() });
+    assert.equal(html.includes(t('detail.uninstall')), false, `${label}没有卸载位`);
+    assert.equal(/skc_detailDanger/.test(html), false, `${label}连危险按钮的壳都没有`);
+  }
+  // 对照：同一份 props 换成普通本地行 ⇒ 删除位在（否则上面那两条可能只是选择器写错）。
+  assert.ok(render({ row: marketRow({ partition: 'local', upstream: null, version: null }) })
+    .includes(t('detail.uninstall')), '普通本地行有删除位');
+});
+
+test('K133 删除在飞（deleting）：三枚动作一起禁用、文案不变、不加 StateDot', () => {
+  const tree = modules.installedDetail.InstalledDetail(props({
+    row: marketRow(),
+    deleting: true,
+    check: readyVerdict({ candidate: '2.0.0' }),
+  }));
+  const buttons = elementsOf(tree).filter((element) => element.type !== undefined
+    && typeof element.props?.className === 'string'
+    && /skc_detailDanger|skc_detailActions/.test(element.props.className) === false);
+  const update = elementsOf(tree).find((element) => element.props?.children === t('detail.update'));
+  const remove = elementsOf(tree).find((element) => element.props?.children === t('detail.uninstall'));
+  const toggle = elementsOf(tree).find((element) => element.props?.onToggle !== undefined);
+  assert.ok(update !== undefined && remove !== undefined, '更新与删除都在（deleting 不改可见性）');
+  assert.equal(update.props.disabled, true, '更新被一起禁用');
+  assert.equal(remove.props.disabled, true, '删除被一起禁用');
+  // 开关的禁用来自它自己的 `pending`（EnableSwitch 只认这一个 prop，内部再传给宿主 Switch）。
+  assert.equal(toggle.props.pending, true, '开关被一起禁用（pending ⇒ 宿主 Switch 的 disabled）');
+  assert.equal(remove.props.children, t('detail.uninstall'), '删除的文案不变（不写「正在删除」）');
+  // 删除请求不画自己的 spinner：`deleting` 只禁用，不把 icon 换成 StateDot。
+  // （开关位那枚 progress 点是 `pending` 的既有行为，不是本轮新增，别混在一起数。）
+  const danger = /<button[^>]*skc_detailDanger[^>]*>[\s\S]*?<\/button>/.exec(render({ row: marketRow(), deleting: true }));
+  assert.ok(danger !== null, '删除按钮仍在');
+  assert.match(danger[0], /disabled=""/, '删除按钮禁用');
+  assert.match(danger[0], /data-icon="trash"/, 'icon 仍是垃圾桶（不是转圈）');
+  assert.equal(/data-state=/.test(danger[0]), false, '按钮里没有 StateDot');
+  assert.equal(update.props.children, t('detail.update'), '更新文案不变（删除不改别人的文案）');
+  void buttons;
 });
 
 test('H1 调用名行：只有 <code>{name}</code>，upstream 有无都渲染', () => {
@@ -485,22 +549,22 @@ test('H1 页尾：正文盒 → 版本 → 来源信息 → 查看仓库；调�
   assert.equal(bare.includes(t('detail.checkUnavailable')), false, '页面里不出现「无法检查更新」');
 });
 
-test('H1 可交互元素清单：面包屑 / 开关 / 重新检查（错误态加重试），卸载不在其中', () => {
+test('K133 可交互元素清单：面包屑 / 删除 / 开关 / 重新检查（错误态加重试），一个不多', () => {
   const html = render({ row: marketRow() });
   const enabled = [...html.matchAll(/<button(?![^>]*\sdisabled="")[^>]*>/g)].map((match) => match[0]);
-  assert.equal(enabled.length, 3, `就绪态三个可点按钮（实测 ${enabled.length}）`);
+  assert.equal(enabled.length, 4, `就绪态四个可点按钮（实测 ${enabled.length}）`);
   assert.match(enabled[0], /class="skc_marketCrumb"/, '面包屑');
-  assert.match(enabled[1], /role="switch"/, '开关');
-  assert.ok(html.includes('>重新检查</button>'), '第三个是重新检查');
+  assert.match(enabled[1], /class="skc_detailDanger"/, '第二个是删除（紧跟面包屑之后）');
+  assert.match(enabled[2], /role="switch"/, '第三个是开关');
+  assert.ok(html.includes('>重新检查</button>'), '第四个是重新检查');
   assert.equal(html.includes('class="skc_callRow"'), false, '页面上没有组件式行');
   assert.equal(/aria-label="[^"]*复制/.test(html), false, '页面里没有复制按钮（调用名只是可选文本）');
   assert.equal(/<button[^>]*disabled=""[^>]*>[^<]*重新检查/.test(html), false, '空闲时重新检查可点');
-  assert.equal(enabled.some((tag) => /卸载/.test(tag)), false, '卸载不在可交互清单里（它是 disabled）');
   assert.equal((html.match(/<a /g) ?? []).length, 1, '就绪态恰好一个链接（查看仓库）');
 
   const errorHtml = render({ row: marketRow(), status: 'error' });
   const errorEnabled = [...errorHtml.matchAll(/<button(?![^>]*\sdisabled="")[^>]*>/g)];
-  assert.equal(errorEnabled.length, 4, '错误态四个：面包屑 / 开关 / 重新检查 / 重试');
+  assert.equal(errorEnabled.length, 5, '错误态五个：面包屑 / 删除 / 开关 / 重新检查 / 重试');
   assert.ok(/重试<\/button>/.test(errorHtml), '重试按钮在场');
 });
 
@@ -1156,7 +1220,7 @@ test('K122 更新按钮只在 available 态出现（其它态不渲染，不是 
   }
 });
 
-test('K122 动作组顺序：更新 → 卸载（占位、disabled）→ 开关', () => {
+test('K122 动作组顺序：更新 → 删除 → 开关', () => {
   const tree = modules.installedDetail.InstalledDetail(props({
     row: marketRow(), check: readyVerdict({ candidate: '2.0.0' }),
   }));
@@ -1166,14 +1230,14 @@ test('K122 动作组顺序：更新 → 卸载（占位、disabled）→ 开关'
   const indexOfLabel = (label) => labelled.findIndex((element) => element.props.children === label
     || element.props.label === label);
   const update = indexOfLabel(t('detail.update'));
-  const uninstall = indexOfLabel(t('detail.uninstall'));
+  const remove = indexOfLabel(t('detail.uninstall'));
   const toggle = labelled.findIndex((element) => element.props.onToggle !== undefined);
   assert.equal(update >= 0, true, '第一个位置是更新');
-  assert.equal(uninstall > update, true, '卸载在更新之后');
-  assert.equal(toggle > uninstall, true, '开关在最后');
-  const uninstallButton = labelled.find((element) => element.props.children === t('detail.uninstall'));
-  assert.equal(uninstallButton.props.disabled, true, '卸载是占位（disabled）');
-  assert.equal(uninstallButton.props.onClick, undefined, '占位没有 handler');
+  assert.equal(remove > update, true, '删除在更新之后');
+  assert.equal(toggle > remove, true, '开关在最后');
+  const removeButton = labelled.find((element) => element.props.children === t('detail.uninstall'));
+  assert.equal(removeButton.props.disabled, false, '删除不是占位：空闲时可点');
+  assert.equal(typeof removeButton.props.onClick, 'function', '删除有 handler（打开确认弹窗）');
 });
 
 test('K122 更新进行中：按钮文案「正在更新」并禁用', () => {
@@ -1272,7 +1336,8 @@ test('K122 软链行：有身份、有结论、本地也有版本，动作组里
   assert.equal(html.includes('data-skc-version-face='), false, '版本区块整块不渲染（硬约束 5 / D1）');
   assert.equal(html.includes(t('detail.checkAgain')), false, '连「重新检查」也没有');
   assert.equal(html.includes(t('detail.newerVersion', { version: '2.0.0' })), false, '也不提「可更新到」');
-  assert.ok(html.includes(t('detail.uninstall')), '动作组本身还在（不是整组被吞掉）');
+  assert.ok(html.includes('class="skc_roTag"'), '动作组本身还在（不是整组被吞掉，软链位给的是只读标记）');
+  assert.equal(html.includes(t('detail.uninstall')), false, '软链行同样没有删除位（K133 的四条件之一）');
 
   // 对照组：同一份数据只把 symlink 换成 false ⇒ 按钮出现且可点。
   // 没有这一半，上面「找不到按钮」也可能只是选择器写错了。

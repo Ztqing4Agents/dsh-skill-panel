@@ -8,6 +8,7 @@
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   Button,
+  Menu,
   SegmentedTabs,
   StateDot,
   Tooltip,
@@ -23,6 +24,7 @@ import { InstalledDetail } from './installed-detail.jsx';
 import { PluginDetail } from './plugin-detail.jsx';
 import { iconBatch, iconSeeds, iconUrlFor, marketKeyOf, nameSeeds, rowTitleOf } from './market-model.js';
 import { MarketPanel } from './market-panel.jsx';
+import { AddSkillDialog } from './skill-dialogs.jsx';
 import { ListSkeleton } from './skeleton.jsx';
 import { PluginBlock, SkillRow } from './row.jsx';
 import {
@@ -51,6 +53,12 @@ const MIN_INDICATOR_MS = 400;
 
 /** Fallback translate used only when a seat is rendered without a locale. */
 const identityTranslate = (key) => key;
+
+/** A portal needs a document; without one the menu renders in place (string render). */
+const CAN_PORTAL = typeof document !== 'undefined';
+
+/** The round token `headerUpdateNote` needs to read the cached verdicts as an answer set. */
+const NOTE_DONE_RUN = { id: 0, status: 'done' };
 
 /** Writes land before the frame paints; a string render has no DOM to write to. */
 const usePaintEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
@@ -371,6 +379,25 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
   /** The version list's expander and the update dialog: view state of one open detail. */
   const [expandedVersions, setExpandedVersions] = useState(false);
   const [updateTarget, setUpdateTarget] = useState(null);
+  /**
+   * The add dialog's state machine: `idle` / `busy` / `done`, the typed path, the failure
+   * code with its placeholders, and the route's answer for the outcome screen. The page
+   * owns it because the request is the page's business; the dialog only draws it.
+   */
+  const [add, setAdd] = useState({
+    open: false,
+    value: '',
+    status: 'idle',
+    code: null,
+    params: null,
+    result: null,
+  });
+  /** The add toolbar's chevron menu, and the list offset it must put back when it closes. */
+  const [addMenu, setAddMenu] = useState(false);
+  const addMenuTop = useRef(0);
+  /** The delete confirmation, and the identity whose delete is in flight. */
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletingKey, setDeletingKey] = useState(null);
 
   /**
    * Overwrite the open skill with one upstream version, and fold the outcome back.
@@ -441,6 +468,125 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
     }
   }, [api, load, loadDetail, store, t]);
 
+  /** Open the add dialog on a blank form: a finished add is not a template for the next one. */
+  const openAdd = useCallback(() => {
+    setAdd({ open: true, value: '', status: 'idle', code: null, params: null, result: null });
+  }, []);
+
+  /** Close it. A request still running is not cancelled - it is no longer tracked. */
+  const closeAdd = useCallback(() => {
+    setAdd({ open: false, value: '', status: 'idle', code: null, params: null, result: null });
+  }, []);
+
+  /**
+   * Copy one local directory into the skills root and fold the three outcomes back.
+   *
+   * Success keeps the page where it is: the dialog turns into its outcome screen, one toast
+   * says where the skill landed, and the list re-reads itself once. A failure puts the form
+   * back with the path still typed and the route's code under the field - the reader fixes
+   * the path instead of starting over.
+   * @returns {Promise<void>} resolves when the outcome has been drawn.
+   */
+  const runAdd = useCallback(async () => {
+    const path = add.value.trim();
+    if (path === '' || add.status !== 'idle') return;
+    setAdd((current) => ({ ...current, status: 'busy', code: null, params: null }));
+    try {
+      const result = await api.addSkill({ path });
+      store.actions.addApplied({ name: result?.name ?? '', path: result?.path ?? '' });
+      // A dialog closed while the request ran stays closed: the directory is on disk either
+      // way, and reopening a window the user dismissed is worse than saying nothing.
+      setAdd((current) => (current.open
+        ? { ...current, status: 'done', code: null, params: null, result: result ?? null }
+        : current));
+      void load('refresh');
+    } catch (error) {
+      const data = error?.data ?? {};
+      setAdd((current) => (current.open
+        ? {
+          ...current,
+          status: 'idle',
+          code: typeof error?.code === 'string' ? error.code : 'E_UNKNOWN',
+          params: {
+            name: data.declaredName ?? data.name ?? '',
+            path: data.path ?? '',
+            reason: error?.message ?? '',
+          },
+        }
+        : current));
+    }
+  }, [add.status, add.value, api, load, store]);
+
+  /**
+   * Delete the open skill: close the dialog first, then ask the host.
+   *
+   * The order is the host's own `confirm()`: a started deletion must never sit under a
+   * dialog that still offers to cancel it. Success says nothing - the row disappearing and
+   * the page falling back to the list is the message - so no toast is pushed (only a
+   * refresh-failure, an install and an update have one).
+   * @param {object} row - the row of the open detail.
+   * @returns {Promise<void>} resolves when the outcome has been drawn.
+   */
+  const runRemove = useCallback(async (row) => {
+    if (row === null || row === undefined) return;
+    const key = rowKey(row);
+    const path = typeof row.path === 'string' ? row.path : '';
+    setDeleteOpen(false);
+    setDeletingKey(key);
+    store.actions.pending(key);
+    try {
+      await api.removeSkill({ name: row.name, path });
+      store.actions.closeDetail();
+      store.actions.fail(key, '');
+      store.actions.marketInstalledStale();
+      void load('refresh');
+    } catch (error) {
+      const code = typeof error?.code === 'string' ? error.code : 'E_UNKNOWN';
+      // One line, one key: the delete route answers the row-write family's codes
+      // (`E_STALE_PATH` / `E_SYMLINK_READONLY` / `E_NOT_WRITABLE` / `E_NOT_FOUND` /
+      // `E_DELETE_IO`), so the row's own reason helper is the one that has their sentences.
+      store.actions.fail(key, reasonText(code, error?.message ?? '', t));
+      // The row, not the request, is what was wrong: re-read the list so the page stops
+      // offering a control that cannot work any more.
+      if (code === 'E_NOT_FOUND' || code === 'E_STALE_PATH') void load('refresh');
+    } finally {
+      setDeletingKey(null);
+    }
+  }, [api, load, store, t]);
+
+  /** The delete dialog's one visible flag: the page owns it, the detail page draws it. */
+  const askDelete = useCallback((open) => {
+    setDeleteOpen(open === true);
+  }, []);
+
+  /** Open the chevron menu, remembering the list offset it will steal back on close. */
+  const toggleAddMenu = useCallback(() => {
+    if (!addMenu) addMenuTop.current = bodyRef.current === null ? 0 : bodyRef.current.scrollTop;
+    setAddMenu(!addMenu);
+  }, [addMenu]);
+
+  // The host `Menu` hands focus back to its anchor when it closes, and focusing a control in
+  // the sticky page bar scrolls the body to the top - measured 300 -> 0, ~12ms after the
+  // close, i.e. after this component's effects. The offset is put back from the container's
+  // own scroll event for one menu-width of time, the same compensation the market toolbar
+  // keeps for its own menus.
+  useEffect(() => {
+    if (addMenu) return undefined;
+    const body = bodyRef.current;
+    if (body === null || addMenuTop.current === 0) return undefined;
+    const top = addMenuTop.current;
+    addMenuTop.current = 0;
+    const undo = () => {
+      if (body.scrollTop === 0) body.scrollTop = top;
+    };
+    body.addEventListener('scroll', undo);
+    const stop = setTimeout(() => body.removeEventListener('scroll', undo), 150);
+    return () => {
+      body.removeEventListener('scroll', undo);
+      clearTimeout(stop);
+    };
+  }, [addMenu]);
+
   // The provider page is a view of rows the list already holds: no request of its own.
   const pluginProvider = state.pluginDetail;
   const pluginBlock = pluginProvider === null
@@ -459,11 +605,12 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
     void loadDetail(detailRow);
   }, [detailRow, loadDetail]);
 
-  // Another skill (or the list) means the expander and the dialog start closed: neither
-  // describes anything once the row underneath them changed.
+  // Another skill (or the list) means the expander and both dialogs start closed: none of
+  // them describes anything once the row underneath them changed.
   useEffect(() => {
     setExpandedVersions(false);
     setUpdateTarget(null);
+    setDeleteOpen(false);
   }, [detailKey]);
 
   // "Check again" on the version block: this row's identity only, and it ignores the ten
@@ -522,11 +669,33 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
   const excluded = Number.isInteger(counts?.excluded) ? counts.excluded : 0;
   const showsInstalled = state.tab === TAB_INSTALLED;
   const installedRows = groups.find((group) => group.key === 'installed')?.skills ?? [];
-  // The header's update sentence is about the rows on screen, computed now: a row that was
+  // The header's update sentence is about the rows on screen and computed now: a row that was
   // installed, deleted or hand-edited since the round changes the count without a request.
-  const updateNote = showsInstalled && state.payload !== null
-    ? headerUpdateNote(installedRows, state.checks, state.checkRun, t)
-    : null;
+  // `headerUpdateNote` says nothing while a round is running (it reports an answer set, not a
+  // question), which is why the note used to vanish for the whole of a refresh and come back
+  // up to 8s later while the refresh button had already recovered. The last answer is kept
+  // below and stands in during the next question, so both controls recover at the same time.
+  const noteSeat = showsInstalled && state.payload !== null;
+  const liveNote = noteSeat ? headerUpdateNote(installedRows, state.checks, state.checkRun, t) : null;
+  const roundDone = state.checkRun?.status === 'done';
+  // No checkable row left means no old answer is worth keeping: the sentence would describe
+  // skills that are no longer on screen, so the slot goes quiet instead of holding a ghost.
+  const checkable = detectionTargets(installedRows).length > 0;
+  /** The last finished round's sentence, for the running one to stand on. Not render state. */
+  const lastNote = useRef(null);
+  useEffect(() => {
+    // Written only when a round has concluded: the ref is the previous answer, so a round
+    // that ends with nothing to say clears it rather than leaving the old sentence behind.
+    if (roundDone) lastNote.current = liveNote;
+  }, [roundDone, liveNote]);
+  // Standing in for the running round: the ref holds the exact sentence the last finished
+  // round printed (so the count does not drift as answers land one by one); before this
+  // mount has seen a conclusion it is empty, and the same sentence is recomputed from the
+  // cached verdicts, which are the previous round's until a new answer overwrites one.
+  const heldNote = lastNote.current ?? (noteSeat
+    ? headerUpdateNote(installedRows, state.checks, NOTE_DONE_RUN, t)
+    : null);
+  const updateNote = liveNote ?? (roundDone || !checkable ? null : heldNote);
 
   // One round per visit to the tab: every identity without a fresh answer, in row order.
   // The guard is a ref, not the checks: a round that ran out of budget marks rows `skipped`
@@ -552,9 +721,9 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
   const pluginOpen = showsInstalled && detailKey === null && pluginBlock !== null;
   const loadingFirst = state.status === 'loading' && state.payload === null;
   const failedFirst = state.status === 'error' && state.payload === null;
-  // The header's one refresh button follows the tab: the installed list below, the
-  // market's first page above.
-  const marketBusy = !showsInstalled && state.market.listStatus === 'loading';
+  // The add request in flight: both toolbar buttons follow it, and the primary button says
+  // what is happening instead of what it would do.
+  const addBusy = add.status === 'busy';
 
   // An installed row's icon comes from its `_meta.json` identity (Host puts the triple on
   // the row); rows without one - hand-copied, or written by another tool - keep the letter.
@@ -620,6 +789,7 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
               status={detailStatus}
               check={detailCheck}
               updating={detailIdentity !== '' && updatingKey === detailIdentity}
+              deleting={deletingKey !== null && deletingKey === detailKey}
               iconUrl={detailRow === null ? null : rowIconUrl(detailRow)}
               title={detailRow === null ? '' : rowTitleOf(detailRow, state.market)}
               expanded={expandedVersions}
@@ -631,6 +801,9 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
               onUpdate={runUpdate}
               onExpand={setExpandedVersions}
               onUpdatePrompt={setUpdateTarget}
+              deleteOpen={deleteOpen}
+              onDeletePrompt={askDelete}
+              onDelete={(row) => void runRemove(row)}
             />
             )}
           </div>
@@ -665,78 +838,100 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
                     </Tooltip>
                   </div>
                 </div>
-                <div
-                  className={cn('toolbar')}
-                  data-skc-header-part="toolbar"
-                >
-                  {/* The host's status slot holds this one sentence and nothing else: no count,
-                      no separator. `data-tone` is the only thing a state adds, and an empty
-                      round draws nothing at all - an answer set that does not exist yet cannot
-                      be summarised. */}
-                  {updateNote === null ? null : (
-                    <span className={cn('status')} data-tone={updateNote.tone ?? undefined}>
-                      {updateNote.text}
-                    </span>
-                  )}
-                  <Tooltip
-                    label={t('page.refresh')}
-                    delayMs={500}
-                    focusDelayMs={500}
-                    side="bottom"
-                    portal
-                    disabled={refreshing}
+                {/* The host hides this whole row on its market tab (`hidden={!onInstalled}`),
+                    and the market tab here keeps only its own filter toolbar inside the panel:
+                    status slot, refresh and add group therefore belong to the installed tab. */}
+                {showsInstalled ? (
+                  <div
+                    className={cn('toolbar')}
+                    data-skc-header-part="toolbar"
                   >
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={cn('addButton')}
-                      aria-label={t('page.refresh')}
-                      aria-busy={refreshing || marketBusy}
-                      disabled={refreshing || marketBusy}
-                      onClick={() => {
-                        if (!showsInstalled) {
-                          store.actions.marketReload();
-                          return;
-                        }
-                        // A refresh re-reads the list, and the detail view is a view of that
-                        // list: closing it first is the same rule the market's reload follows.
-                        store.actions.closeDetail();
-                        void load('refresh');
-                        // Refresh is the user asking again, so it ignores the ten minute
-                        // window the tab entry respects.
-                        void runCheck(detectionTargets(installedRows), { force: true });
-                      }}
-                      icon={refreshing || marketBusy
-                        ? <StateDot state="ongoing" size={13} />
-                        : <IconRefreshOutlineRegular size={13} />}
+                    {/* The host's status slot holds this one sentence and nothing else: no count,
+                        no separator. `data-tone` is the only thing a state adds, and an empty
+                        round draws nothing at all - an answer set that does not exist yet cannot
+                        be summarised. */}
+                    {updateNote === null ? null : (
+                      <span className={cn('status')} data-tone={updateNote.tone ?? undefined}>
+                        {updateNote.text}
+                      </span>
+                    )}
+                    <Tooltip
+                      label={t('page.refresh')}
+                      delayMs={500}
+                      focusDelayMs={500}
+                      side="bottom"
+                      portal
+                      disabled={refreshing}
                     >
-                      <span className={cn('toolbarLabel')}>{t('page.refresh')}</span>
-                    </Button>
-                  </Tooltip>
-                  {showsInstalled ? (
-                    <span className={cn('addGroup')} role="group" aria-label={t('add.label')} title={t('add.comingSoon')}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={cn('addButton')}
+                        aria-label={t('page.refresh')}
+                        aria-busy={refreshing}
+                        disabled={refreshing}
+                        onClick={() => {
+                          // A refresh re-reads the list, and the detail view is a view of that
+                          // list: closing it first is the same rule the market's reload follows.
+                          store.actions.closeDetail();
+                          void load('refresh');
+                          // Refresh is the user asking again, so it ignores the ten minute
+                          // window the tab entry respects.
+                          void runCheck(detectionTargets(installedRows), { force: true });
+                        }}
+                        icon={refreshing
+                          ? <StateDot state="ongoing" size={13} />
+                          : <IconRefreshOutlineRegular size={13} />}
+                      >
+                        <span className={cn('toolbarLabel')}>{t('page.refresh')}</span>
+                      </Button>
+                    </Tooltip>
+                    {/* The host's own add group: one primary button that opens the dialog, and a
+                        chevron holding the menu of ways to add (we have one - a local directory).
+                        Both stay disabled until the list itself is known, because the dialog's
+                        only job is to add to that list. */}
+                    <span className={cn('addGroup')} role="group" aria-label={t('add.label')}>
                       <Button
                         variant="primary"
                         size="sm"
                         className={cn('addPrimary')}
                         aria-label={t('add.label')}
-                        disabled
+                        aria-busy={addBusy}
+                        disabled={state.payload === null || addBusy}
+                        onClick={openAdd}
                         icon={<IconPlusOutlineRegular size={13} />}
                       >
-                        <span className={cn('toolbarLabel')}>{t('add.label')}</span>
+                        <span className={cn('toolbarLabel')}>{t(addBusy ? 'add.busy' : 'add.label')}</span>
                       </Button>
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        className={cn('addMore')}
-                        aria-label={t('add.comingSoon')}
-                        disabled
-                      >
-                        <IconChevronDownOutlineRegular size={13} aria-hidden="true" />
-                      </Button>
+                      <Menu
+                        open={addMenu}
+                        onClose={() => setAddMenu(false)}
+                        align="end"
+                        portal={CAN_PORTAL}
+                        autoFocus
+                        items={[{ id: 'from-path', label: t('add.fromPath') }]}
+                        onSelect={() => {
+                          setAddMenu(false);
+                          openAdd();
+                        }}
+                        anchor={(
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            className={cn('addMore')}
+                            aria-haspopup="menu"
+                            aria-expanded={addMenu}
+                            aria-label={t('add.chooseMethod')}
+                            disabled={state.payload === null || addBusy}
+                            onClick={toggleAddMenu}
+                          >
+                            <IconChevronDownOutlineRegular size={13} aria-hidden="true" />
+                          </Button>
+                        )}
+                      />
                     </span>
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
                 <div className={cn('pageTabs')} data-skc-header-part="tabs">
                   <SegmentedTabs
                     size="sm"
@@ -785,6 +980,19 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
                     {excluded > 0 ? <p className={cn('footer')}>{t('footer.excluded', { count: excluded })}</p> : null}
                   </Fragment>
                 )}
+                {add.open ? (
+                  <AddSkillDialog
+                    t={t}
+                    status={add.status}
+                    value={add.value}
+                    code={add.code}
+                    params={add.params}
+                    result={add.result}
+                    onChange={(text) => setAdd((current) => ({ ...current, value: text }))}
+                    onSubmit={() => void runAdd()}
+                    onClose={closeAdd}
+                  />
+                ) : null}
               </div>
             ) : (
               <div

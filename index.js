@@ -8,7 +8,9 @@
  * provider toggle store, one health route, and the nine market routes (bootstrap,
  * list, detail, installed map, install, versions, update, batched icons and the
  * local favourites write) that talk to the one upstream (the SkillHub mirror)
- * through lib/market/upstream.js.
+ * through lib/market/upstream.js. Two write routes serve the installed tab: one
+ * copies a local directory into the skills root, one deletes a skill directory and
+ * its ledger record.
  *
  * The browser half (./client) renders the sidebar entry and the global page; the
  * two halves meet only at the JSON envelope below.
@@ -69,6 +71,9 @@ export function apply(ctx, config) {
     sessions: ctx.sessions,
     logger,
     market,
+    // The installed tab's add/remove writes queue on the installer's own lock table:
+    // a directory being replaced by an update and one being deleted are the same write.
+    withWriteLock: (key, run) => market.installer.withWriteLock(key, run),
   });
   ctx.effect(() => {
     const disposers = routes.map((route) => ctx.webServer.register(route));

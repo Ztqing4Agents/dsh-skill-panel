@@ -140,7 +140,12 @@ test('设计 §8.3 键表要求的每一个键都在（按名字断言，不按�
     'market.confirmTitle', 'market.confirmTrust', 'market.confirmCancel', 'market.confirmInstall',
     'market.installStarted', 'market.installOk', 'market.installOkHint', 'market.nameInvalidNote',
     'row.enable', 'row.disable', 'row.applying', 'row.symlinkReadonly', 'row.symlinkTitle',
-    'add.label', 'add.comingSoon',
+    // 已安装页签的两条写路由（U20）：添加弹窗的十一键、删除确认弹窗的三键。
+    'add.label', 'add.chooseMethod', 'add.fromPath', 'add.title', 'add.description',
+    'add.pathLabel', 'add.pathPlaceholder', 'add.safety', 'add.run', 'add.busy', 'add.done', 'add.close',
+    'delete.title', 'delete.body', 'delete.confirm',
+    // U20 验收后：删除确认的事实标签不再复用 market.factInstallTo（见 K135）。
+    'delete.factDir',
     'error.E_NOT_FOUND', 'error.E_BAD_NAME', 'error.E_BAD_PATH', 'error.E_STALE_PATH',
     'error.E_SYMLINK_READONLY', 'error.E_FILE_CHANGED', 'error.E_NOT_WRITABLE',
     'error.E_WRITE_FAILED', 'error.E_VERIFY_FAILED', 'error.E_FORBIDDEN', 'error.E_UNKNOWN',
@@ -149,6 +154,8 @@ test('设计 §8.3 键表要求的每一个键都在（按名字断言，不按�
     'error.E_SOURCE_TIMEOUT', 'error.E_SOURCE_BAD_RESPONSE', 'error.E_SKILL_NAME_INVALID',
     'error.E_ALREADY_INSTALLED', 'error.E_PACKAGE_INVALID', 'error.E_DOWNLOAD_FAILED',
     'error.E_INSTALL_IO', 'error.E_INSTALL_BUSY',
+    // 本地面四个新码（routes.md §8.1 只登记在本表，§8.6 仍是二十行）。
+    'error.E_ADD_NOT_FOUND', 'error.E_ADD_NOT_SKILL_DIR', 'error.E_ADD_SHADOWED', 'error.E_DELETE_IO',
   ];
   for (const language of ['zh', 'en']) {
     const keys = new Set(flatten(language === 'zh' ? zh : en));

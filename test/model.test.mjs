@@ -17,6 +17,7 @@ import {
   checkPhaseOf,
   clockText,
   dateText,
+  deletable,
   detectionTargets,
   groupEmptyKey,
   headerUpdateNote,
@@ -128,7 +129,38 @@ test('reasonText 用错误码取行内文案，未知码回落 E_UNKNOWN', async
 test('KI-1 已修：E_BAD_NAME / E_BAD_PATH 各有专属文案，不再走 E_UNKNOWN 兜底', async () => {
   const t = translator(await dictionaryPromise);
   assert.equal(reasonText('E_BAD_NAME', 'name must be kebab-case', t), '技能名不合规范，未做任何修改', 'E_BAD_NAME 取专属文案');
-  assert.equal(reasonText('E_BAD_PATH', 'path must be absolute', t), '技能文件路径不合规范，未做任何修改', 'E_BAD_PATH 取专属文案');
+  // U20：这个码现在同时给 #17 add 用（本机目录路径），所以文案说的是「路径 / ~ 开头」
+  // 而不是「技能文件」——`error.E_BAD_PATH` 改值不改键。
+  assert.equal(
+    reasonText('E_BAD_PATH', 'path must be absolute', t),
+    '路径不合规范（需要以 / 或 ~ 开头的完整路径），未做任何修改',
+    'E_BAD_PATH 取专属文案（含 add 的 ~ 口径）',
+  );
+});
+
+test('K133 deletable 四条件：内置 / 软链 / 无路径 / 已有只读原因，任一成立就不渲染删除位', async () => {
+  // 详情头的删除位是**唯一**的本地删除入口（硬约束 9），所以「不该有」的四类行必须
+  // 在纯判据这一层就判掉：渲染层只负责 `deletable(row) ? <button/> : null`。
+  const plain = {
+    name: 'hand-made',
+    provider: 'filesystem',
+    partition: 'local',
+    symlink: false,
+    path: '/tmp/skills/hand-made/SKILL.md',
+    writable: true,
+    readonlyReason: null,
+  };
+  assert.equal(deletable(plain), true, '普通已安装 / 本地真目录行 ⇒ 可以删');
+
+  assert.equal(deletable({ ...plain, partition: 'builtin' }), false, '内置分区没有本面板拥有的目录');
+  assert.equal(deletable({ ...plain, symlink: true, path: null }), false, '软链行归别的工具（硬约束 5）');
+  assert.equal(deletable({ ...plain, path: null }), false, '没有可写路径的行没有东西可删');
+  assert.equal(deletable({ ...plain, readonlyReason: 'no-frontmatter' }), false, '已经说明只读原因的行不再给写入口');
+  assert.equal(deletable(null), false, '没有行就没有删除位（undefined 同理）');
+  assert.equal(deletable(undefined), false, 'undefined 也不是可删的');
+
+  // 只看这四个事实，不看 status：正在请求中由页面用 `deleting` 单独禁用（K133 后半）。
+  assert.equal(deletable({ ...plain, status: 'error' }), true, 'status 不参与判据（错误态的行仍可重试删除）');
 });
 
 test('页签常量与设计一致', () => {
@@ -358,4 +390,34 @@ test('K121 dateText / clockText：日期是 YYYY-MM-DD，时间是 HH:MM，坏�
   assert.equal(dateText(Number.NaN), '', 'NaN ⇒ 空串');
   assert.match(clockText(at), /^\d{2}:\d{2}$/, '时间是 24 小时制 HH:MM');
   assert.equal(clockText(null), '', 'null ⇒ 空串');
+});
+
+/* ------------------- K137 · headerUpdateNote 的纯函数语义（U20 验收后仍不动） ------------------- */
+
+test('K137 headerUpdateNote 只答「已结束的一轮」：running / 无对象 ⇒ null，done ⇒ 那一句', async () => {
+  // 两段式（页头在 running 期间保持上一轮那一句）是 page.jsx 的事；这个纯函数仍然只在
+  // 一轮结束后才总结，否则「保持」这一层就没有可保持的东西，两个来源会互相打架。
+  const t = translator(await dictionaryPromise);
+  const rows = [marketRow({ version: '1.0.0' }), marketRow({ name: 'other', upstream: { sourceId: 'clawhub', owner: 'ake', slug: 'dev-god' } })];
+  const checks = { 'skillhub:ake:dev-god': { phase: 'ready', candidate: '2.0.0', at: 1000 } };
+
+  assert.deepEqual(
+    headerUpdateNote(rows, checks, { id: 1, status: 'done' }, t),
+    { text: t('status.updatesAvailable', { count: 1 }), tone: 'info' },
+    'done ⇒ 按缓存里的答案总结',
+  );
+  assert.equal(headerUpdateNote(rows, checks, { id: 2, status: 'running' }, t), null, 'running ⇒ 不总结（答的是答案集，不是问题）');
+  assert.equal(headerUpdateNote(rows, checks, undefined, t), null, '没有轮次令牌 ⇒ 不总结');
+  assert.equal(headerUpdateNote([], checks, { id: 1, status: 'done' }, t), null, '没有检测对象 ⇒ null');
+  assert.equal(
+    headerUpdateNote(rows, {}, { id: 1, status: 'done' }, t),
+    null,
+    '空缓存 ⇒ null（结论为空时不许凭上一句造句子）',
+  );
+  // 只有 skipped 也不说话：预算耗尽既不算成功也不算失败。
+  assert.equal(
+    headerUpdateNote(rows, { 'skillhub:ake:dev-god': { phase: 'skipped', at: 1000 } }, { id: 1, status: 'done' }, t),
+    null,
+    '全 skipped ⇒ null',
+  );
 });

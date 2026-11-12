@@ -263,4 +263,36 @@ export class SkillCenterApi {
       body: JSON.stringify(body),
     });
   }
+
+  /**
+   * Copy one local directory into the skills root as a new skill.
+   *
+   * The body carries the path and nothing else: the name, the file list and the target
+   * directory are the host's business, and the route re-derives all three.
+   * @param {{path: string}} ref - the directory the reader typed.
+   * @returns {Promise<object>} `{name, path, files, bytes}`.
+   */
+  async addSkill(ref) {
+    return this.request('add', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: ref?.path ?? '' }),
+    });
+  }
+
+  /**
+   * Delete one installed skill's directory and its ledger record.
+   *
+   * `path` is the row's own `SKILL.md`: the route re-scans and refuses the delete unless
+   * the file it resolved is the one the panel is showing (AGENTS.md 6).
+   * @param {{name: string, path: string}} ref - the row's name and its own `SKILL.md`.
+   * @returns {Promise<object>} `{name, dir, ledger}`.
+   */
+  async removeSkill(ref) {
+    return this.request('remove', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: ref?.name ?? '', path: ref?.path ?? '' }),
+    });
+  }
 }

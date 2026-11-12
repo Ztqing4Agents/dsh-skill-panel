@@ -54,6 +54,15 @@ const MARKET_ERROR_CODES = new Set([
   'E_INSTALL_BUSY',
   'E_FAVORITE_FULL',
   'E_FAVORITE_IO',
+  // The installed tab's two write routes. The add dialog resolves its failure line through
+  // `reasonKeyOf`, so a code missing here would print E_UNKNOWN instead of its own sentence;
+  // `E_DELETE_IO` is listed because that route can answer it too (the row's own reason line
+  // reads it through `reasonText`, which knows the same code).
+  'E_BAD_PATH',
+  'E_ADD_NOT_FOUND',
+  'E_ADD_NOT_SKILL_DIR',
+  'E_ADD_SHADOWED',
+  'E_DELETE_IO',
 ]);
 
 /**

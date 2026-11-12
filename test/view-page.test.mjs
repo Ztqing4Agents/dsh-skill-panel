@@ -285,9 +285,11 @@ test('K25/K28 切到市场页签：挂载市场面板，已安装面整块退场
   assert.ok(/role="tabpanel"[^>]*id="[^"]*-market-panel"/.test(html), '市场面板是 tabpanel 且 id 按 market 页签拼');
   assert.equal(html.includes('data-skc-group='), false, '市场页签不渲染任何已安装分区');
   assert.equal(html.includes('skc_addPrimary'), false, '市场页签不显示「添加技能」（它只属于已安装面）');
-  // 页头的刷新按钮属于两页签共用：市场页签下它刷新市场首页，因此仍在原位可见。
-  assert.equal(html.includes('class="skc_toolbar"'), true, '工具栏保留（刷新按钮对市场页签同样有效）');
-  assert.ok(html.includes('aria-label="刷新"'), '市场页签下刷新按钮仍可点');
+  // U20 第三轮：整行工具条（状态位 + 刷新 + 添加组）只在已安装面渲染——宿主在自己的市场页签上
+  // 也是 `hidden={!onInstalled}`，市场的重取入口是它面板自己的搜索/筛选，不是页头刷新。
+  assert.equal(html.includes('class="skc_toolbar"'), false, '市场页签没有页头工具条');
+  assert.equal(html.includes('aria-label="刷新"'), false, '市场页签没有刷新按钮');
+  assert.equal(html.includes('class="skc_addGroup"'), false, '市场页签没有添加组');
 });
 
 test('页脚只在有被排除的技能时出现，并给出数量', () => {
@@ -313,14 +315,43 @@ test('K26 页头状态位只承载更新提示，不渲染技能计数', () => {
   assert.equal(withNote.includes('共 2 个技能'), false, '状态位里没有计数（宿主同位也只有这一句）');
 });
 
-test('页头四件套：标题、副标题、信息按钮、刷新按钮、添加按钮（禁用态）', () => {
+test('页头四件套 + 添加组：标题、副标题、信息、刷新、可点的添加按钮与 chevron', () => {
   const html = renderPage();
   assert.ok(html.includes('class="skc_pageTitle"'), '有大标题');
   assert.ok(html.includes('启用、停用和查看技能来源'), '有副标题');
   assert.ok(html.includes('aria-label="关于技能"'), '有 ⓘ 信息按钮');
   assert.ok(html.includes('aria-label="刷新"'), '有刷新按钮');
-  assert.ok(html.includes('title="即将支持"'), '添加技能是带「即将支持」提示的禁用态');
-  assert.ok(/class="skc_addPrimary"[^>]*disabled=""/.test(html), '添加按钮是禁用状态');
+
+  // K134 的工具条半边：宿主的 `addGroup` 形状＝一枚主按钮 + 一枚 chevron，两枚都在
+  // role="group" 里；payload 就绪时**不禁用**（U20 之前是「即将支持」的占位）。
+  assert.ok(html.includes('class="skc_addGroup"'), '添加组在（与宿主同形）');
+  assert.ok(html.includes('role="group" aria-label="添加技能"'), '添加组有可读的名字');
+  const primary = /<button[^>]*class="skc_addPrimary"[^>]*>/.exec(html);
+  assert.ok(primary !== null, '主按钮在');
+  assert.equal(primary[0].includes('disabled'), false, 'payload 就绪时主按钮可点');
+  assert.ok(html.includes('aria-label="添加技能"'), '主按钮的 aria-label 是 add.label（图标按钮也要可读）');
+  assert.ok(html.includes('添加技能</span>'), '主按钮的可见文案是 add.label');
+  // 单段式：工具条上不再有「即将支持」的 title（那是占位态的痕迹）。
+  assert.equal(html.includes('即将支持'), false, '「即将支持」的 title 已删');
+
+  const chevron = /<button[^>]*class="skc_addMore"[^>]*>/.exec(html);
+  assert.ok(chevron !== null, 'chevron 在');
+  assert.match(chevron[0], /aria-haspopup="menu"/, 'chevron 声明自己是菜单入口');
+  assert.match(chevron[0], /aria-expanded="false"/, '菜单默认收起');
+  assert.equal(chevron[0].includes('disabled'), false, 'payload 就绪时 chevron 可点');
+  assert.ok(html.includes('aria-label="选择添加技能方式"'), 'chevron 的 aria-label 是 add.chooseMethod');
+});
+
+test('K134 列表还没到手时两枚添加按钮都禁用（弹窗只能往已知列表里加）', () => {
+  for (const status of ['loading', 'error']) {
+    const html = renderPage({ status });
+    const primary = /<button[^>]*class="skc_addPrimary"[^>]*>/.exec(html);
+    const chevron = /<button[^>]*class="skc_addMore"[^>]*>/.exec(html);
+    assert.ok(primary !== null, `${status} 态主按钮仍渲染`);
+    assert.ok(chevron !== null, `${status} 态 chevron 仍渲染`);
+    assert.match(primary[0], /disabled=""/, `${status} 态主按钮禁用`);
+    assert.match(chevron[0], /disabled=""/, `${status} 态 chevron 禁用`);
+  }
 });
 
 test('行内原因：失败的行显示 localized 原因并以 alert 播报', () => {
@@ -867,9 +898,13 @@ test('K118 同一 identity 装进两个目录：只发一次请求，结论按�
 test('K111 市场页签不跟着改：页头与页签仍在，市场详情仍只替换网格', () => {
   const item = { id: 'skillhub:ake:pdf', sourceId: 'skillhub', owner: 'ake', slug: 'pdf', displayName: 'PDF 工具' };
   const listState = renderPage({ after: (store) => { store.actions.setTab('market'); } });
-  assert.ok(listState.includes('skc_pageBar'), '市场态有页头');
+  assert.ok(listState.includes('skc_pageBar'), '市场态有页头（标题 + ⓘ + 页签）');
   assert.ok(listState.includes('skc_pageTabList') || listState.includes('skc_pageTabs'), '市场态有页签');
-  assert.ok(listState.includes(t('page.refresh')), '市场态有刷新');
+  assert.ok(listState.includes('class="skc_pageTitle"'), '市场态标题仍在');
+  // 工具条整行退场（U20 第三轮）：市场页签没有状态位 / 刷新 / 添加组。
+  assert.equal(listState.includes('class="skc_toolbar"'), false, '市场态没有工具条');
+  assert.equal(listState.includes(t('page.refresh')), false, '市场态没有刷新');
+  assert.equal(listState.includes('class="skc_status"'), false, '市场态没有状态位');
 
   const detailState = renderPage({
     after: (store) => {
@@ -1039,13 +1074,100 @@ test('K119 skipped 不计入：既不报可更新也不报失败，全最新那�
   assert.equal(noteMarkupOf(onlySkipped), null, '全是 skipped ⇒ 一句也不说（不是「全部最新」）');
 });
 
-test('K119 未 done 或没有检测对象：状态位不渲染', () => {
-  const running = renderHeader({
-    finish: false,
-    verdicts: { 'skillhub:ake:ui-design': { phase: 'ready', candidate: '2.0.0', at: 1000 } },
-  });
-  assert.equal(noteMarkupOf(running), null, '一轮没结束就说话是假话');
+/* --------------------- K137 · 状态位两段式（U20 验收后修订：running 期间保持上一句） --------------------- */
 
+/** Two installed identities the check rounds below use. */
+const BEHIND_KEY = 'skillhub:ake:ui-design';
+const CURRENT_KEY = 'clawhub:ake:ui-design';
+
+/** One cached verdict: `ready` with a candidate version. */
+const ready = (candidate) => ({ phase: 'ready', candidate, at: 1000 });
+
+/**
+ * Mount the installed tab so one check round can advance between two renders.
+ *
+ * The page keeps the previous round's sentence in a ref written by an effect, and this
+ * harness cannot run effects - so what is exercised here is the *other* half of the same
+ * contract: the sentence is recomputed from the cached verdicts (which are the previous
+ * round's until a new answer overwrites one). That is the branch the real machine's
+ * refresh hits before the first new answer lands.
+ * @param {{payload?: object, api?: object}} [setup] - payload and api double.
+ * @returns {{store: object, render: Function}} the harness.
+ */
+function mountHeaderRun(setup = {}) {
+  const store = createStore();
+  store.actions.ready(setup.payload ?? headerPayload());
+  const api = setup.api ?? {
+    list: async () => store.getSnapshot().payload,
+    toggle: async () => {},
+    toggleProvider: async () => {},
+  };
+  const mounted = mountHooks(modules.page.SkillsPage, { store, api, t });
+  return { store, render: mounted.render };
+}
+
+/**
+ * The status slot as `{text, tone}`, or null when it is not rendered.
+ * @param {import('react').ReactNode} tree - rendered page.
+ * @returns {{text: string, tone: string|null}|null} the sentence.
+ */
+function statusOf(tree) {
+  const element = elementsOf(tree).find((candidate) => typeof candidate.props?.className === 'string'
+    && candidate.props.className.split(' ').includes('skc_status'));
+  if (element === undefined) return null;
+  return { text: element.props.children, tone: element.props['data-tone'] ?? null };
+}
+
+/** The refresh button's element (its `aria-busy` is K137's last clause). */
+function refreshOf(tree) {
+  return elementsOf(tree).find((element) => element.props?.['aria-label'] === t('page.refresh')
+    && typeof element.props?.onClick === 'function') ?? null;
+}
+
+test('K137 ① 首轮进行中（没有任何一轮 done）⇒ 状态位不渲染', () => {
+  const harness = mountHeaderRun();
+  harness.store.actions.checkStart([BEHIND_KEY, CURRENT_KEY]);
+  assert.equal(statusOf(harness.render()), null, '一轮还没结束、也没有上一轮结论 ⇒ 一句话都不说');
+
+  // 同一份 store 里落地答案并结束这一轮 ⇒ 句子出现（对照组，证明上面不是「永远不渲染」）。
+  harness.store.actions.checkLanded([
+    { key: BEHIND_KEY, ...ready('2.0.0') },
+    { key: CURRENT_KEY, ...ready('1.2.4') },
+  ]);
+  harness.store.actions.checkFinish();
+  assert.deepEqual(
+    statusOf(harness.render()),
+    { text: t('status.updatesAvailable', { count: 1 }), tone: 'info' },
+    '这一轮结束之后就说话',
+  );
+});
+
+test('K137 ② 已有上一轮结论 + 新一轮进行中 ⇒ 文本与 data-tone 与上一轮逐字相同', () => {
+  const harness = mountHeaderRun();
+  harness.store.actions.checkStart([BEHIND_KEY, CURRENT_KEY]);
+  harness.store.actions.checkLanded([
+    { key: BEHIND_KEY, ...ready('2.0.0') },
+    { key: CURRENT_KEY, ...ready('1.2.4') },
+  ]);
+  harness.store.actions.checkFinish();
+  const previous = statusOf(harness.render());
+  assert.deepEqual(previous, { text: t('status.updatesAvailable', { count: 1 }), tone: 'info' }, '上一轮的结论');
+
+  // 新一轮开始：缓存仍是上一轮的答案，还没有任何新答案落地。
+  harness.store.actions.checkStart([BEHIND_KEY, CURRENT_KEY]);
+  const running = statusOf(harness.render());
+  assert.deepEqual(running, previous, '进行中保持上一轮那一句（文本与 tone 逐字相同）');
+  assert.equal(running.text.includes('检查'), false, '不换成「检查中」这类新句子');
+  assert.deepEqual(statusOf(harness.render()), previous, '连帧渲染都不会消失一帧再回来');
+
+  // 答案一条条落地、但这一轮还没结束：句子仍不许跟着逐条跳（否则数字会一格格往上爬）。
+  harness.store.actions.checkLanded([{ key: BEHIND_KEY, ...ready('2.0.0') }]);
+  assert.deepEqual(statusOf(harness.render()), previous, '新答案落地但这一轮没结束 ⇒ 还是上一轮那一句');
+  harness.store.actions.checkLanded([{ key: CURRENT_KEY, ...ready('1.2.4') }]);
+  assert.deepEqual(statusOf(harness.render()), previous, '第二条答案落地也不改口（只在 done 时换）');
+});
+
+test('K137 ③ 没有检测对象 ⇒ 不渲染（含「有身份但没版本」）', () => {
   const noTargets = renderHeader({ payload: payload() });
   assert.equal(noteMarkupOf(noTargets), null, '没有检测对象 ⇒ 不渲染');
 
@@ -1057,9 +1179,129 @@ test('K119 未 done 或没有检测对象：状态位不渲染', () => {
       diagnostics: [],
       cwd: '/work',
     },
-    verdicts: { 'skillhub:ake:ui-design': { phase: 'ready', candidate: '2.0.0', at: 1000 } },
+    verdicts: { [BEHIND_KEY]: ready('2.0.0') },
   });
   assert.equal(noteMarkupOf(noVersion), null, '只有「有身份但没版本」的行 ⇒ 也不算有检测对象');
+
+  // 检查轮正在跑、缓存里还有答案，但屏幕上已经没有可检测的行 ⇒ 槽位静音（不留幽灵）。
+  const harness = mountHeaderRun({ payload: payload() });
+  harness.store.actions.checkStart([BEHIND_KEY]);
+  assert.equal(statusOf(harness.render()), null, '没有可检测行时，进行中也不说话');
+});
+
+test('K137 ④ 新一轮 done ⇒ 就地替换成新结论（不叠加、不残留）', () => {
+  const harness = mountHeaderRun();
+  harness.store.actions.checkStart([BEHIND_KEY, CURRENT_KEY]);
+  harness.store.actions.checkLanded([
+    { key: BEHIND_KEY, ...ready('2.0.0') },
+    { key: CURRENT_KEY, ...ready('1.2.4') },
+  ]);
+  harness.store.actions.checkFinish();
+  assert.deepEqual(statusOf(harness.render()).text, t('status.updatesAvailable', { count: 1 }), '第一轮：1 个可更新');
+
+  harness.store.actions.checkStart([BEHIND_KEY, CURRENT_KEY]);
+  assert.equal(statusOf(harness.render()).text, t('status.updatesAvailable', { count: 1 }), '进行中仍是旧句');
+
+  // 新答案：两个都追平 ⇒ 结论变「所有技能均为最新版本」，tone 回到 null。
+  harness.store.actions.checkLanded([
+    { key: BEHIND_KEY, ...ready('1.0.0') },
+    { key: CURRENT_KEY, ...ready('1.2.4') },
+  ]);
+  harness.store.actions.checkFinish();
+  assert.deepEqual(statusOf(harness.render()), { text: t('status.updatesNone'), tone: null }, '就地替换成新结论');
+});
+
+test('K137 ⑤ 新一轮结论为空（全部 skipped）⇒ 按「无对象」消失，不留幽灵', () => {
+  const harness = mountHeaderRun();
+  harness.store.actions.checkStart([BEHIND_KEY, CURRENT_KEY]);
+  harness.store.actions.checkLanded([
+    { key: BEHIND_KEY, ...ready('2.0.0') },
+    { key: CURRENT_KEY, ...ready('1.2.4') },
+  ]);
+  harness.store.actions.checkFinish();
+  assert.notEqual(statusOf(harness.render()), null, '先有一句结论');
+
+  harness.store.actions.checkStart([BEHIND_KEY, CURRENT_KEY]);
+  harness.store.actions.checkLanded([
+    { key: BEHIND_KEY, phase: 'skipped', at: 2000, reason: 'E_BUDGET' },
+    { key: CURRENT_KEY, phase: 'skipped', at: 2000, reason: 'E_BUDGET' },
+  ]);
+  harness.store.actions.checkFinish();
+  assert.equal(statusOf(harness.render()), null, '结论为空 ⇒ 上一句不许留成幽灵');
+});
+
+test('K137 ⑥ 切到市场页签：整行工具条一起消失（状态位 / 刷新 / 添加组都不在）', () => {
+  const harness = mountHeaderRun();
+  harness.store.actions.checkStart([BEHIND_KEY, CURRENT_KEY]);
+  harness.store.actions.checkLanded([
+    { key: BEHIND_KEY, ...ready('2.0.0') },
+    { key: CURRENT_KEY, ...ready('1.2.4') },
+  ]);
+  harness.store.actions.checkFinish();
+  const installed = harness.render();
+  assert.notEqual(statusOf(installed), null, '已安装页签里状态位在');
+  assert.equal(elementsOf(installed).some((element) => element.props?.className === 'skc_toolbar'), true, '已安装页签里有工具条行');
+  assert.notEqual(refreshOf(installed), null, '已安装页签里有刷新按钮');
+
+  harness.store.actions.setTab('market');
+  const market = harness.render();
+  assert.equal(statusOf(market), null, '市场页签里状态位不出现');
+  // 第三轮口径：整行工具条只在已安装面渲染（宿主同款 `hidden={!onInstalled}`）。
+  assert.equal(
+    elementsOf(market).some((element) => typeof element.props?.className === 'string'
+      && element.props.className.split(' ').includes('skc_toolbar')),
+    false,
+    '市场页签里连工具条那一行都没有（不是清空、不是禁用）',
+  );
+  assert.equal(refreshOf(market), null, '市场页签里没有刷新按钮');
+  assert.equal(
+    elementsOf(market).some((element) => element.props?.['aria-label'] === t('add.label')),
+    false,
+    '市场页签里没有添加组',
+  );
+  // 页头本身还在（标题 / ⓘ / 页签），只是少了工具条那一行。
+  assert.equal(
+    elementsOf(market).some((element) => element.props?.className === 'skc_pageTitle'),
+    true,
+    '页头标题仍在',
+  );
+});
+
+test('K137 ⑦ 刷新按钮的 aria-busy 只跟列表重扫，不因状态位保持而延长', async () => {
+  const gate = (() => {
+    let resolve;
+    const promise = new Promise((settle) => { resolve = settle; });
+    return { promise, resolve };
+  })();
+  const api = {
+    list: () => gate.promise,
+    toggle: async () => {},
+    toggleProvider: async () => {},
+    // 与上一轮同答案：这样「列表重扫结束」与「检查轮结束」不会互相掩盖。
+    marketVersions: async ({ source }) => ({ versions: [{ version: source === 'skillhub' ? '2.0.0' : '1.2.4' }], total: 1 }),
+  };
+  const harness = mountHeaderRun({ api });
+  harness.store.actions.checkStart([BEHIND_KEY, CURRENT_KEY]);
+  harness.store.actions.checkLanded([
+    { key: BEHIND_KEY, ...ready('2.0.0') },
+    { key: CURRENT_KEY, ...ready('1.2.4') },
+  ]);
+  harness.store.actions.checkFinish();
+  const previous = statusOf(harness.render());
+  const payloadNow = harness.store.getSnapshot().payload;
+
+  refreshOf(harness.render()).props.onClick();
+  let tree = harness.render();
+  assert.equal(refreshOf(tree).props['aria-busy'], true, '列表重扫在飞 ⇒ 按钮 busy');
+  assert.deepEqual(statusOf(tree), previous, '按钮 busy 期间状态位不变');
+
+  gate.resolve(payloadNow);
+  await gate.promise;
+  // `load('refresh')` 有一层 400ms 的最小指示时长，等它过去再看按钮。
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  tree = harness.render();
+  assert.equal(refreshOf(tree).props['aria-busy'], false, '列表重扫结束 ⇒ 按钮立刻恢复（不因状态位保持而延长）');
+  assert.deepEqual(statusOf(tree), previous, '状态位仍是那一句（检查轮怎么走都不影响它）');
 });
 
 test('K119 优先级：可更新 > 部分失败 > 全部最新；状态位里只有这一句（K26 的计数已退场）', () => {

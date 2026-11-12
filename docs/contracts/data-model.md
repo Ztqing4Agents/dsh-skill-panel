@@ -227,7 +227,7 @@ rankOf(level: string): number       // 1.4.3 表；未知 → 600（不是 Infin
 | 内置 + 用户根同名 | 由 `mergeCatalog` 的 rank 裁决：bundled(600) 与 user-dsh(400) 同名时 **400 胜**，显示为本地/已安装行；runtime(250) 与 user-dsh(400) 同名时 250 胜，显示为内置行 |
 | 「内置判定永远胜出」与「rank 小者胜」互斥 | **以 rank 为准**。理由：G1 的承诺是「面板显示的必须就是模型实际拿到的那一条」；若强制内置胜出，bundled(600) 会盖掉 rank 更小、模型真正拿到的 user-dsh(400) 条目，直接违背 G1。runtime(250) 的存在使两句在多数场景一致，只有 bundled 会冲突。已作为待用户拍板项 Q-B 登记 |
 | R5 与 R8 相悖（有前缀但台账记为 local） | `ledgerHit` 在序 5 先命中 ⇒ `installed` |
-| 同名只显示一次 | `mergeCatalog` 的 `groups` 内每个 `name` 出现一次 |
+| 同名只显示一次 | `mergeCatalog` 的 `groups` 内每个 `name` 出现一次。U20 的「影子」判据不问这里：`excluded` 的赢家根本不在 `groups` 里，所以添加侧改用 `lib/local/rules.js` 的 `shadowOf`（见 §3.2.6） |
 
 #### 3.2.3 `lib/classify.js` 的合并函数
 
@@ -247,8 +247,7 @@ mergeCatalog(input: MergeInput): Catalog
 
 1. 输出的所有 `name` 全局唯一（三分区合起来）。
 2. 每条输出的 `rank` 等于输入中同名候选的最小 rank；若并列则来自 `scanned`。
-3. `excluded + Σ|groups| === 输入中不同 name 的个数`。
-4. 输入含 `PRD` §3.1.3 的五条 fixture 时：`dev-docs-standards → local/R4`、两个 `clawhub-* → installed/R7`、两个 `indiv-* → installed/R8(medium)`。
+3. `excluded + Σ|groups| === 输入中不同 name 的个数`。4. 输入含 `PRD` §3.1.3 的五条 fixture 时：`dev-docs-standards → local/R4`、两个 `clawhub-* → installed/R7`、两个 `indiv-* → installed/R8(medium)`。
 
 #### 3.2.4 `lib/frontmatter.js`（字节级）
 
@@ -261,14 +260,10 @@ setDisableModelInvocation(original: Buffer, disabled: boolean): Rewrite
 
 | 属性 | 要求 |
 | --- | --- |
-| BOM（`EF BB BF`） | 有则保留在输出开头，位置不变 |
-| 行尾风格 | 逐行保留：CRLF 文件写完仍是 CRLF；混排文件逐行不变 |
-| 其它 frontmatter 行 | 字节不变（含空行、缩进、折叠/块标量、注释行） |
-| 目标键已存在 | 只替换该行的**值**，保留原前缀空白与行尾注释 |
-| 目标键不存在 | 追加为 frontmatter 块内**最后一个顶层键之后**的新行，行尾跟随块内风格 |
-| 正文与结尾分隔符之后 | 完全不变（`match[2]` 的原字节切片） |
-| 幂等 | `f(f(x,true),true) === f(x,true)`（`changed === false`） |
-| 无 frontmatter | 抛 `NO_FRONTMATTER`（路由把它映射成 409 `E_NOT_WRITABLE`，绝不新建块） |
+| BOM（`EF BB BF`） / 行尾风格 | 有则保留在输出开头、位置不变；行尾逐行保留（CRLF 文件写完仍是 CRLF，混排文件逐行不变） |
+| 其它 frontmatter 行 / 目标键已存在 | 其余字节不变（含空行、缩进、折叠/块标量、注释行）；目标键只替换该行的**值**，保留原前缀空白与行尾注释 |
+| 目标键不存在 / 正文与结尾分隔符之后 | 追加为 frontmatter 块内**最后一个顶层键之后**的新行（行尾跟随块内风格）；正文与结尾分隔符之后完全不变（`match[2]` 的原字节切片） |
+| 幂等 / 无 frontmatter | `f(f(x,true),true) === f(x,true)`（`changed === false`）；无 frontmatter 时抛 `NO_FRONTMATTER`（路由映射成 409 `E_NOT_WRITABLE`，绝不新建块） |
 
 **读侧契约（`parseFrontmatter` / `stripFrontmatter`）**——写入器与解析器解耦：写入器只替换
 `disable-model-invocation` 那一行，本节的解析规则只影响**读出什么值**，不影响写回什么字节。
@@ -287,8 +282,7 @@ parseFrontmatter(text: string): Frontmatter
 | 公共缩进 | 取正文非空行的最小缩进，逐行剥离；块可以整体更靠右（不要求 2 空格） |
 | `-` / `+` / 缺省（chomping） | `-` 去掉末尾换行；缺省(clip) 保留**一个**末尾 `\n`；`+` 保留全部末尾换行 |
 | 标量边界 | 正文遇到**非空且不缩进**的行即结束（同级键或闭合 `---`）；指示符后允许行尾 `# 注释` 与可选缩进数字 |
-| 空正文（`description: >` 紧跟同级键） | 值为 `''`（因此该条目在扫描层被当作「没有 description」跳过，与宿主 `stringField` 的 `length > 0` 一致） |
-| 布尔字段 | 块标量形式同样接受，值按 `true/false/yes/no/on/off/1/0` 判定 |
+| 空正文（`description: >` 紧跟同级键） / 布尔字段 | 值 `''`（扫描层当作「没有 description」跳过，与宿主 `stringField` 的 `length > 0` 一致）；布尔字段的块标量形式同样接受，值按 `true/false/yes/no/on/off/1/0` 判定 |
 
 真机样本：`~/.dsh/skills/clawhub-wpank--ui-design/SKILL.md` 的 `description: >` +
 三行缩进正文 → 三句以空格连接、末尾一个 `\n`；修复前该行被读成一个 `>`（QA 报告 KI-2）。
@@ -300,6 +294,19 @@ rowViewState(row: Row, rows: Map<string,RowRuntime>): 'idle'|'pending'|'failed'
 groupEmptyKey(key: 'builtin'|'local'|'installed'): string             // 'group.builtinEmpty' 等
 interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几何插值，无 DOM
 ```
+
+#### 3.2.6 `lib/local/rules.js`（添加/删除的判据，U20）
+
+```js
+expandHome(value: string): string|null     // '~' 与 '~/…' 按 homedir() 展开；展开后非绝对 / 含 NUL / 超 MAX_PATH_CHARS（1024）⇒ null
+skillNameOf(declaredName: string, dirName: string): string|null   // 声明名 trim 优先，空则退回目录名；两者都过 isSkillName 才返回值（不改名、不用别的名字顶替）
+shadowOf(summaries: RegistrySummary[], name: string): {rank: int, provider: string}|null   // 同名摘要里最小 rank 且 < rankOf('user-dsh') 的那条；否则 null
+LOCAL_LIMITS = {maxEntries: 2000, maxFileBytes: 8 MiB, maxTotalBytes: 64 MiB}   // S9 的源目录上限；超限 ⇔ E_PACKAGE_INVALID
+isSkippedEntry(name: string): boolean      // 'node_modules' 与点开头：跳过不复制，不算失败
+checkPlan(entries: {path: string, size: int, symlink: boolean}[]): {ok: boolean, code?: string}   // 纯判据：含软链 / 超条目 / 超单文件 / 超总量 ⇒ ok:false
+```
+
+与 `src/client/model.js` 的 `deletable(row)`（`partition !== 'builtin'` ∧ `symlink !== true` ∧ `path !== null` ∧ `readonlyReason === null`）同属纯判据族：无 I/O、无时钟、node 可直测。`shadowOf` 只读 `rankOf` 的那张表（**不改 `classifySkill` 的九级阶梯**），判据理由见 `docs/contracts/decisions.md` 附录 S-6。同族的编排入口 `createLocalSkills({skillsRoot, dshHome, store, withWriteLock, rescan, copy?})` 里 **`copy` 是可选依赖**（注入点 `planCopy` / `copyPlan` / `landSkill` / `tempDirOf`，缺省走 `lib/local/copy.js`）：它只用来把 S10 / S11 的失败点变成 node 里造得出来的输入，**注入不得改变守卫顺序（S0–S12）与错误码**，也不得绕过 `.skc-install-*` 的清理。
 
 ---
 
@@ -322,8 +329,7 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
   "downloads": 11340092,             // 上游；缺失 null（**绝不补 0**）
   "saves": 99, "score": 100000, "tags": ["代码生成", "Bug 修复"],   // 上游 stars/score（缺失 null，绝不补 0）/ subCategories.name 前 3（≤3 条、单条 ≤24 字符、保留大小写、**缺 = []**）
   "updatedAt": 1794205858796,        // 上游；epoch 毫秒，只用于排序，**不上屏**
-  "category": "dev-programming",     // 上游；两源都有（U8 起 ClawHub 也有分类）
-  "packageKind": "files"             // 本地算：当前两源恒 'files'（'zip' 已于 U7 退役）
+  "category": "dev-programming", "packageKind": "files"   // 上游（两源都有，U8 起 ClawHub 也有分类）/ 本地算：当前两源恒 'files'（'zip' 已于 U7 退役）
 }
 ```
 
@@ -333,8 +339,7 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
   "item": MarketItem,
   "iconUrl": "恒等于 item.iconUrl",            // 路由层复制一份，详情头部直接用；两处永不相同
   "overview": "SKILL.md 正文（≤ 8000 字符）",   // stripFrontmatter 后；正文为空则回落 summary
-  "declaredName": "dev-god",                  // parseFrontmatter(SKILL.md).name；不合规也原样给出
-  "nameValid": true,                          // isSkillName(declaredName)
+  "declaredName": "dev-god", "nameValid": true, // parseFrontmatter(SKILL.md).name（不合规也原样给出）/ isSkillName(declaredName)
   "installTo": "/Users/…/.dsh/skills/dev-god", // nameValid ? join(skillsRoot, declaredName) : skillsRoot
   "files": [{ "path": "SKILL.md", "size": 7953 }], // 清单顺序；sha256 不下发
   "filesComplete": true                        // 'files' 形态恒 true（zip 读不全的 false 分支已于 U7 退役）
@@ -362,21 +367,17 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
 // lib/market/normalize.js —— 无 I/O、无时钟
 textOrNull(value): string|null / numberOrNull(value): number|null / finiteOrNull(value): number|null / timestampOrNull(value): number|null / mirrorOwnerOf(raw): string|null   // 空串与不可解析 → null；numberOrNull 取整、finiteOrNull 不截断（score 是连续分）；mirrorOwnerOf 取原生 ClawHub owner（upstream_owner_login → 剥 clawhub_ → null）
 clampLine(value, max) / clampBlock(value, max): string / tagListOf(value): string[]   // 单行折叠 / 保留换行，超长截断 / 标签：≤3 条、取 subCategories[].name、去重、保留大小写
-marketId(sourceId, owner, slug): string    // `${sourceId}:${owner ?? ''}:${slug ?? ''}`
-marketItem(fields): MarketItem              // 字段补齐（上表）
+marketId(sourceId, owner, slug): string    // `${sourceId}:${owner ?? ''}:${slug ?? ''}`；marketItem(fields): MarketItem 补齐字段（上表）
 fromSkillhubListItem(raw, packageKind?): MarketItem|null / fromMirrorRow(raw): MarketItem|null   // 后者按 raw.source 折叠身份（两个适配器共用）
-fromSkillhubDetail(raw, packageKind?): MarketItem|null
-fromClawhubMirrorItem(raw, packageKind?): MarketItem|null   // 镜像条目：复用 fromSkillhubListItem 的字段读取，owner 取 upstream_owner_login，id 重拼，version 过 versionLike
+fromSkillhubDetail(raw, packageKind?): MarketItem|null / fromClawhubMirrorItem(raw, packageKind?): MarketItem|null   // 镜像条目：复用 fromSkillhubListItem 的字段读取，owner 取 upstream_owner_login，id 重拼，version 过 versionLike
 fromClawhubMirrorDetail(raw, owner): MarketItem|null        // 镜像详情：字段同 SkillHub，身份用调用方解析出的原生 owner（detail() 用）
-overviewOf(sourceText, fallback?): string   // stripFrontmatter → 正文；空则回落 fallback
-declaredNameOf(sourceText): string / nameIsValid(name): boolean   // 声明名，及其是否合文法
+overviewOf(sourceText, fallback?): string   // stripFrontmatter → 正文；空则回落 fallback；declaredNameOf(sourceText): string / nameIsValid(name): boolean   // 声明名，及其是否合文法
 sortByUpdatedDesc(items): MarketItem[]      // 新的降序数组；null 时间排最后，相等时保持原序
 ```
 
 契约要点：
 
-1. **同一个上游响应重复喂进去，输出必须逐字段相同**（无随机、无时钟、无缓存）。
-2. `fromSkillhubListItem` 的 `owner` 取自 `namespace.handle`；缺失时 `owner = null` 且该条不可安装（不猜、不补）。`summary` 超 400 字符时截断并以 ASCII `...` 结尾。
+1. **同一个上游响应重复喂进去，输出必须逐字段相同**（无随机、无时钟、无缓存）。2. `fromSkillhubListItem` 的 `owner` 取自 `namespace.handle`；缺失时 `owner = null` 且该条不可安装（不猜、不补）。`summary` 超 400 字符时截断并以 ASCII `...` 结尾。
 3. `fromClawhubMirrorItem` **认不出身份就返回 `null`**（`upstream_owner_login` 缺且 `namespace.handle` 不是 `clawhub_<owner>`、或 `slug` 为空）：装不上的卡片不如不出现；`version` 过 `versionLike()`，像 id 的串一律 `null`。
 
 ```js

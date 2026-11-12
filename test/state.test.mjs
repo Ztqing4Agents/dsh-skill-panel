@@ -2,7 +2,7 @@
  * `src/client/state.js` — the page store that outlives the page.
  *
  * Contract: docs/contracts/client.md §3.5 (state machine, store scope) and §3.9.3 (the
- * market sub-state's 30 actions; the bookmark write side was removed in U5 - see
+ * market sub-state's 31 actions; the bookmark write side was removed in U5 - see
  * docs/contracts/decisions.md appendix L - and only the read side is left); case ids K45,
  * K105 (a filter change keeps `items`, M10) and K108 (the four fields the landing paint
  * effect depends on, see §3.9.1 "落点").
@@ -221,7 +221,7 @@ test('K45 marketCommitKeyword：关键词落定、输入框同步、分页重置
   assert.equal(market.items.length, 1, '旧结果暂留');
 });
 
-test('K45 marketReload：只清分页与详情、列表留在屏幕上（页头刷新按钮走这条路）', () => {
+test('K45 市场重取（切来源 / 搜索落定）：只清分页与详情、列表留在屏幕上', () => {
   const store = createStore();
   store.actions.marketPageAppended({
     pages: [{ sourceId: 'skillhub', page: { items: [marketItem('skillhub:ake:a')], next: 'c2' } }],
@@ -229,7 +229,9 @@ test('K45 marketReload：只清分页与详情、列表留在屏幕上（页头�
   });
   store.actions.marketDetailOpen(marketItem('skillhub:ake:a'));
   const before = store.getSnapshot().market;
-  store.actions.marketReload();
+  // 页头刷新按钮与 `marketReload()` 都已撤除（U20 收尾，用户拍板「零调用方的 action 不留」）：
+  // 重取仍由切来源 / 搜索落定 / 面板 effect / 错误态「重试」驱动，走的都是 `clearedPaging`。
+  store.actions.marketSetFilter({ source: 'clawhub' });
   const market = store.getSnapshot().market;
   // U13：卡片不再是「消失—骨架—重来」，重取期间旧列表直出（整页高度与滚动位置不动）。
   assert.deepEqual(market.items, [marketItem('skillhub:ake:a')], '卡片留着（重取期间不换骨架）');
@@ -242,10 +244,10 @@ test('K45 marketReload：只清分页与详情、列表留在屏幕上（页头�
   assert.deepEqual(market.exhausted, {}, '耗尽标记清空');
   assert.equal(market.page.status, 'idle', '尾部回 idle（重取第一页不是「追加」）');
 
-  // 空列表上刷新（首屏失败后重试那条路）：没有 items 可留 ⇒ 仍回 idle，由面板 effect 重拉。
+  // 空列表上重取（首屏失败后换来源 / 重试那条路）：没有 items 可留 ⇒ 回 idle，由面板 effect 重拉。
   store.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 't' });
-  store.actions.marketReload();
-  assert.equal(store.getSnapshot().market.listStatus, 'idle', '空列表刷新回 idle（effect 据此重拉第一页）');
+  store.actions.marketSetFilter({ source: 'skillhub' });
+  assert.equal(store.getSnapshot().market.listStatus, 'idle', '空列表重取回 idle（effect 据此重拉第一页）');
   assert.equal(store.getSnapshot().market.pages, 0, '分页仍是 0');
 });
 
@@ -385,8 +387,17 @@ test('K45 市场子状态的 action 数量是可核对的：收藏只剩读侧�
   const store = createStore();
   const names = Object.keys(store.actions);
   const market = names.filter((name) => name.startsWith('market'));
-  assert.equal(market.length, 30, '市场子状态共 30 个 action（U5 撤掉写侧 3 个）');
+  // U20 收尾：`marketReload()` 因「零调用方」被删（页头刷新已随工具条退场），31 → 30。
+  assert.equal(market.length, 30, '市场子状态共 30 个 action（U5 撤写侧 3 个，U20 加 marketInstalledStale 1 个、删 marketReload 1 个）');
+  assert.equal(market.includes('marketReload'), false, 'marketReload 已删（零调用方的 action 不留）');
   assert.equal(market.includes('marketFavoritesLoaded'), true, '读侧 action 仍在（bootstrap 仍下发收藏）');
+  // 添加技能成功后台账已过期（新目录还没进台账）：由这个 action 打标，安装页据此重读。
+  assert.equal(market.includes('marketInstalledStale'), true, 'U20 的台账过期标记仍在（add 成功后用）');
+  assert.equal(
+    names.includes('addApplied'),
+    true,
+    'addApplied 不带 market 前缀，所以不计入这 30 个（它归已安装页的 notice）',
+  );
   for (const gone of ['marketFavoriteToggle', 'marketFavoriteOk', 'marketFavoriteFail']) {
     assert.equal(market.includes(gone), false, `${gone} 已随卡片上的收藏开关一起撤除`);
   }
@@ -415,13 +426,13 @@ test('K45 marketFavoritesLoaded：数组变布尔映射，非数组/坏条目一
   assert.equal(store.getSnapshot().market.favoritesOk, false, 'ok=false 说明 Host 没读到文件');
 });
 
-test('K45 reload / boot 兜底都不动收藏，也不把 favoritesOk 置 true', () => {
+test('K45 重取 / boot 兜底都不动收藏，也不把 favoritesOk 置 true', () => {
   const store = createStore();
   store.actions.marketFavoritesLoaded(['skillhub:ake:dev-god'], false);
   const favorites = store.getSnapshot().market.favorites;
 
-  store.actions.marketReload();
-  assert.equal(store.getSnapshot().market.favorites, favorites, 'reload 只清分页与详情，但不碰收藏（收藏不是缓存）');
+  store.actions.marketSetFilter({ source: 'clawhub' });
+  assert.equal(store.getSnapshot().market.favorites, favorites, '重取只清分页与详情，但不碰收藏（收藏不是缓存）');
   assert.equal(store.getSnapshot().market.favoritesOk, false, '也不顺手把可用性改成 true');
 
   store.actions.marketBootFallback([{ id: 'skillhub', labelKey: 'market.source.skillhub', hasCategories: true, packageKind: 'files' }]);
@@ -500,7 +511,9 @@ test('K108 落点键只被筛选与搜索改动：刷新 / 翻页 / 加载态 / 
   assert.equal(key, 'all|null|recommended|', '键的构成：四条查询输入，默认值也参与');
 
   const untouched = [
-    ['页头刷新（U13：保住原位置）', () => store.actions.marketReload()],
+    // 页头刷新（= `marketReload()`）已撤；替代它占位的是一条同样「只动缓存、不动查询键」
+    // 的 market action：台账过期标记（add 成功后用）。
+    ['台账过期标记（marketInstalledStale）', () => store.actions.marketInstalledStale()],
     ['第一页请求在飞', () => store.actions.marketListLoading()],
     ['追加请求在飞', () => store.actions.marketPageStart()],
     ['一页答案落地', () => store.actions.marketPageAppended({
@@ -834,4 +847,35 @@ test('K123 checkStart / checkLanded / checkFinish：一轮的三步与幂等', (
   store.actions.checkStart(['skillhub:ake:dev-god']);
   assert.equal(store.getSnapshot().checkRun.id, 2, '第二轮令牌继续自增');
   assert.equal(store.getSnapshot().checks['skillhub:ake:dev-god'].candidate, '2.0.0', '已有答案在重查期间保留（不闪空）');
+});
+
+test('K134/K135 store 语义：添加只推 notice、删除才置台账过期，市场卡都不长出「已安装」', () => {
+  const store = createStore();
+  store.actions.marketInstalledLoaded({ 'skillhub:ake:a': { name: 'a' } });
+  store.actions.addApplied({ name: 'qa-probe', path: '/tmp/skills/qa-probe' });
+  const state = store.getSnapshot();
+  // 静默成功：toast 用的是市场装完那一个座（kind 仍是三种之一），文案由页面按 kind 选。
+  assert.equal(state.notice.kind, 'install-ok', 'toast 复用 install-ok 座（kind 仍是三种之一）');
+  assert.equal(state.notice.name, 'qa-probe', 'toast 带上技能名（文案要显示它）');
+  assert.equal(state.notice.path, '/tmp/skills/qa-probe', 'toast 带上落位路径');
+  assert.equal(state.notice.code, '', '成功没有错误码');
+  // 加的技能没有上游身份，进不了市场卡的那种映射：台账**不用**作废（作废了只是白重读一次）。
+  assert.equal(state.market.installedReady, true, '本地新增不动市场映射（它没有上游身份）');
+  assert.deepEqual(state.market.installed, { 'skillhub:ake:a': { name: 'a' } }, '映射原封不动');
+  assert.deepEqual(state.market.installs, {}, '加的技能不是市场条目：installs 不长出条目');
+  assert.equal(state.market.installedDirty, false, '没有借 installedDirty 顺手让列表重扫（那是另一件事）');
+
+  // 再读一次台账就把过期标收回（下次进市场页的正常路径）。
+  store.actions.marketInstalledLoaded({});
+  assert.equal(store.getSnapshot().market.installedReady, true, '重读后过期标收回');
+
+  // 删除走同一条路：目录没了，市场页的「已安装」也得重读。
+  store.actions.marketInstalledStale();
+  assert.equal(store.getSnapshot().market.installedReady, false, '删除后台账同样过期');
+
+  // 契约只要求「置回 false、不动 map」——不额外钉「重复调用不产生新快照」：
+  // 那是 filters 那条空操作优化（K45 marketSetFilter）的语义，不是这一条的。
+  store.actions.marketInstalledStale();
+  assert.equal(store.getSnapshot().market.installedReady, false, '重复标记仍是 false');
+  assert.deepEqual(store.getSnapshot().market.installed, {}, '重复标记仍不动 map');
 });

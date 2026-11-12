@@ -498,7 +498,7 @@ test('K89 图标管道与分类开关不回归：market/icons、icons()、caps�
   assert.equal(typeof ROUTES.marketIcons, 'string', 'market/icons 这条路由仍在');
   assert.equal(ROUTES.marketLucide, undefined, 'market/lucide 已删除（U7）');
   assert.equal(ROUTES.marketClawhubIcon, undefined, 'market/clawhub-icon 已删除（U7）');
-  assert.equal(Object.keys(ROUTES).length, 14, '路由 14 条（5 本地 + 9 市场）');
+  assert.equal(Object.keys(ROUTES).length, 16, '路由 16 条（7 本地 + 9 市场）');
   const indexText = await readFile(join(ROOT, 'index.js'), 'utf8');
   assert.match(indexText, /import \{ makeRoutes \} from '\.\/lib\/routes\.js'/, 'index.js 仍从 routes.js 取路由表');
   assert.match(indexText, /makeRoutes\(ctx, \{/, '仍然一次装配、逐条 register');
@@ -569,7 +569,7 @@ test('K93 单源退场：lib 与 client 里没有 clawhub.ai，退役的模块�
   assert.equal(routesText.includes('market/clawhub-icon'), false, '路由表里没有 clawhub-icon 代理');
   assert.match(indexText, /nine market routes/, 'index.js 的头注说的是九条市场路由');
   const { ROUTES } = await import('../lib/routes.js');
-  assert.equal(Object.keys(ROUTES).length, 14, '路由 14 条');
+  assert.equal(Object.keys(ROUTES).length, 16, '路由 16 条');
 
   // Both sources report the same package shape.
   const { descriptors } = await import('../lib/market/sources/index.js');
@@ -617,19 +617,32 @@ function routeNumbersOf(slice) {
     .map((line) => line.split('|')[1].trim());
 }
 
-test('K115 契约自洽：ROUTES、§3.3 与 §3.7.1 两张路由表说的是同一个十四条', async () => {
+test('K115 契约自洽：ROUTES、§3.3 与 §3.7.1 两张路由表说的是同一个十六条', async () => {
   const { ROUTES } = await import('../lib/routes.js');
-  assert.equal(Object.keys(ROUTES).length, 14, 'ROUTES 恰好 14 个键');
+  assert.equal(Object.keys(ROUTES).length, 16, 'ROUTES 恰好 16 个键');
 
   const text = await readFile(join(ROOT, 'docs', 'contracts', 'routes.md'), 'utf8');
-  assert.match(text, /十四条 \*\*exact\*\* 路由/, '§3.3 头注说十四条');
+  assert.match(text, /十六条 \*\*exact\*\* 路由/, '§3.3 头注说十六条');
+  assert.match(text, /本地面 7 条/, '§3.3 头注说本地面七条');
   const local = routeNumbersOf(sectionOf(text, '## 3.3 ', '#### 3.3.1'));
   const market = routeNumbersOf(sectionOf(text, '#### 3.7.1', '#### 3.7.2'));
-  assert.deepEqual(local, ['1', '2', '3', '4', '14'], '本地面五条：#1–#4 与 #14（历史编号不重排）');
+  assert.deepEqual(local, ['1', '2', '3', '4', '14', '17', '18'], '本地面七条：#1–#4、#14、#17/#18（历史编号不重排、不复用）');
   assert.deepEqual(market, ['5', '6', '7', '8', '9', '11', '13', '15', '16'], '市场面九条：#10 与 #12 已退役，编号留空；#15/#16 是 U19 的两条');
-  assert.equal(local.length + market.length, 14, '两张表的条数合计就是 14 条');
+  assert.equal(local.length + market.length, 16, '两张表的条数合计就是 16 条');
   assert.match(text, /\| 14 \| `GET \/api\/dsh-skill-center\/detail` \|/, '#14 就是 detail（GET + ?name=）');
   assert.match(text, /只收 name，没有任何路径 \/ 目录参数/, '#14 的入参白名单写在表里');
+  // U20 的两条写路由（#17 add / #18 remove）与它们的守卫节。
+  assert.match(text, /\| 17 \| `POST \/api\/dsh-skill-center\/add` \|/, '#17 就是 add（POST + {path}）');
+  assert.match(text, /\| 18 \| `POST \/api\/dsh-skill-center\/remove` \|/, '#18 就是 remove（POST + {name,path}）');
+  assert.match(text, /#### 3\.3\.4 add（#17）与 remove（#18）的守卫与不变式/, '§3.3.4 记着 S0–S12 / D0–D9 的守卫表');
+  for (const step of ['S0', 'S7', 'S12', 'D1', 'D6', 'D9']) {
+    assert.ok(text.includes(`${step} `), `§3.3.4 逐条编号到 ${step}`);
+  }
+  assert.match(text, /fail ⇔ ∄ <skillsRoot>\/<name>/, '§3.3.4 写清添加侧的不变式');
+  assert.match(text, /\| `E_ADD_NOT_FOUND` \| 404 \|/, '§8.1 登记了四个新码之一 E_ADD_NOT_FOUND');
+  for (const code of ['E_ADD_NOT_FOUND', 'E_ADD_NOT_SKILL_DIR', 'E_ADD_SHADOWED', 'E_DELETE_IO']) {
+    assert.match(text, new RegExp('\\| `' + code + '` \\| \\d{3} \\|'), `§8.1 有 ${code} 这一行`);
+  }
 });
 
 test('K115 §3.3.3 的读盘围栏与出参都在契约里', async () => {
@@ -709,9 +722,10 @@ test('K115 visual.md A.5 有整行可点的三条刻度与「待真机取色」'
   }
 });
 
-test('K115 体积门禁抬到 165000，locale 恰好 165 键（含 6 个 markdown.* chrome 标签）', async () => {
+test('K115 体积门禁抬到 175000，locale 恰好 182 键（含 6 个 markdown.* chrome 标签）', async () => {
   const bundleTest = await readFile(join(ROOT, 'test', 'bundle-contract.test.mjs'), 'utf8');
-  assert.match(bundleTest, /size < 165_000/, '产物上限是 165000 B');
+  assert.match(bundleTest, /size < 175_000/, '产物上限是 175000 B');
+  assert.equal(/size < 165_000/.test(bundleTest), false, '旧上限 165000 已经不在（不能两个都在）');
   assert.equal(/size < 150_000/.test(bundleTest), false, '旧上限 150000 已经不在（不能两个都在）');
   assert.equal(/size < 145_000/.test(bundleTest), false, '旧上限 145000 已经不在（不能两个都在）');
   assert.equal(/size < 142_000/.test(bundleTest), false, '旧上限 142000 已经不在（不能两个都在）');
@@ -721,14 +735,14 @@ test('K115 体积门禁抬到 165000，locale 恰好 165 键（含 6 个 markdow
   assert.equal(gate.code, 0, `check:i18n 必须 exit 0：${gate.stdout}${gate.stderr}`);
   const summary = /check-i18n: OK \((\d+) keys in both dictionaries/.exec(gate.stdout);
   assert.ok(summary !== null, '门禁输出里带键数');
-  assert.equal(Number(summary[1]), 165, `locale 恰好 165 键（实际 ${summary[1]}）`);
+  assert.equal(Number(summary[1]), 182, `locale 恰好 182 键（实际 ${summary[1]}）`);
 
-  // 口径自查：163 个扁平键 + meta 的两项 = 165（嵌套字典会让界面显示原始键名）。
+  // 口径自查：180 个扁平键 + meta 的两项 = 182（嵌套字典会让界面显示原始键名）。
   const [zh, en] = await Promise.all(['zh', 'en'].map(async (language) => (
     JSON.parse(await readFile(join(ROOT, 'locale', `${language}.json`), 'utf8'))
   )));
   const flat = (dictionary) => Object.keys(dictionary).filter((key) => key !== 'meta');
-  assert.equal(flat(zh).length + Object.keys(zh.meta).length, 165, 'zh：163 扁平 + meta 两项');
+  assert.equal(flat(zh).length + Object.keys(zh.meta).length, 182, 'zh：180 扁平 + meta 两项');
   assert.deepEqual(flat(zh).sort(), flat(en).sort(), 'zh/en 键集一致');
   assert.deepEqual(
     flat(zh).filter((key) => key.startsWith('detail.')).sort(),
@@ -736,11 +750,11 @@ test('K115 体积门禁抬到 165000，locale 恰好 165 键（含 6 个 markdow
       'detail.back', 'detail.checkAgain', 'detail.checkFailed', 'detail.checkOffline', 'detail.checkedAt', 'detail.checking',
       'detail.collapse', 'detail.error', 'detail.factCodeSource', 'detail.factVersion', 'detail.filesTruncated', 'detail.loading',
       'detail.moreNewVersions', 'detail.newVersionCount', 'detail.newerVersion', 'detail.noBody', 'detail.publishedAt', 'detail.retry',
-      'detail.sectionSource', 'detail.sectionVersion', 'detail.sourceBuiltin', 'detail.truncated', 'detail.uninstall', 'detail.uninstallSoon',
+      'detail.sectionSource', 'detail.sectionVersion', 'detail.sourceBuiltin', 'detail.truncated', 'detail.uninstall',
       'detail.upToDate', 'detail.update', 'detail.updateBody', 'detail.updateFailed', 'detail.updateLost', 'detail.updateOk',
       'detail.updateRolledBack', 'detail.updateTitle', 'detail.updateTo', 'detail.updateUnknown', 'detail.updating', 'detail.viewRepo',
     ],
-    'detail.* 恰好 36 个键（U19 加 15 个更新相关键，退役 checkIdle / checkUnavailable）',
+    'detail.* 恰好 35 个键（U20 退役 uninstallSoon：占位变成真删除按钮，键值改文案不改键名）',
   );
 
   // 内置区折块 + 插件页：五个键（列表块副行、区块标题、计数行、行内状态两态；复制命令已删）。
@@ -821,13 +835,13 @@ test('K115 契约自洽：§3.7 头注说的市场条数与共用 guard 的名�
   assert.match(intro, /#14/, '§3.7 头注列举「共用 guard()」的本地路由时带上 #14（detail 也走同一个 guard）');
 });
 
-/* ---------------------- K125 · 门禁同步（D15：14 条 / 165 键 / 20 码 / 165000） ---------------------- */
+/* ---------------------- K125 · 门禁同步（D15：16 条 / 182 键 / 20 码 / 175000） ---------------------- */
 
-test('K125 门禁同步：14 条路由、165 键、§8.6 二十个码、产物 ≤ 165000、check:docs 与 check:board 0 warn', async () => {
+test('K125 门禁同步：16 条路由、182 键、§8.6 二十个码、产物 ≤ 175000、check:docs 与 check:board 0 warn', async () => {
   // 四件事都各有一个更细的用例（K35/K89/K115/K30）在守；这一条是「同一轮里必须一起绿」
   // 的合并判据——上一轮它们分四处漂，谁都没先红。
   const { ROUTES } = await import('../lib/routes.js');
-  assert.equal(Object.keys(ROUTES).length, 14, '十四条路由（本地面 5 + 市场面 9）');
+  assert.equal(Object.keys(ROUTES).length, 16, '十六条路由（本地面 7 + 市场面 9）');
   assert.deepEqual(
     Object.values(ROUTES).filter((path) => path.includes('/market/')).length,
     9,
@@ -838,7 +852,7 @@ test('K125 门禁同步：14 条路由、165 键、§8.6 二十个码、产物 �
   assert.equal(i18n.code, 0, `check:i18n 必须 exit 0：${i18n.stdout}${i18n.stderr}`);
   const keys = /check-i18n: OK \((\d+) keys in both dictionaries/.exec(i18n.stdout);
   assert.ok(keys !== null, '门禁输出里带键数');
-  assert.equal(Number(keys[1]), 165, `locale 恰好 165 键（实际 ${keys[1]}）`);
+  assert.equal(Number(keys[1]), 182, `locale 恰好 182 键（实际 ${keys[1]}）`);
 
   const routesText = await readFile(join(ROOT, 'docs', 'contracts', 'routes.md'), 'utf8');
   const table = routesText.slice(routesText.indexOf('## 8.6'));
@@ -850,10 +864,10 @@ test('K125 门禁同步：14 条路由、165 键、§8.6 二十个码、产物 �
   assert.equal(new Set(codes).size, codes.length, '一行一个码，没有重复');
 
   const bundleTest = await readFile(join(ROOT, 'test', 'bundle-contract.test.mjs'), 'utf8');
-  assert.match(bundleTest, /size < 165_000/, '体积门禁是 165000');
+  assert.match(bundleTest, /size < 175_000/, '体积门禁是 175000');
   const artifact = await readFile(join(ROOT, 'client.js'), 'utf8');
   const size = Buffer.byteLength(artifact);
-  assert.equal(size < 165_000, true, `产物 ${size} B 在 165000 以内`);
+  assert.equal(size < 175_000, true, `产物 ${size} B 在 175000 以内`);
   assert.equal(size > 40_000, true, `产物 ${size} B 不是空壳`);
 
   const docs = await runGate('check-docs.mjs');

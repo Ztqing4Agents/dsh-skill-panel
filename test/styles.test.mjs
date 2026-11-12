@@ -441,3 +441,24 @@ function capturedCss() {
   }
   return captured;
 }
+
+test('K136 U20 零新增样式：四个已有挂点仍在、类名总数没涨', () => {
+  const css = capturedCss();
+  // 添加技能与删除技能复用宿主的按钮形状，所以本轮 `styles.js` 应当零字节变化。
+  // 「零新增」用两件事一起钉：四个挂点仍各有规则（名称没被改名/删掉），以及**类名总数**
+  // 恰好是本轮实测的 134 —— 多数一个，就是有人顺手加了新类。
+  // 注：不能要求「每个挂点只出现一次」：`.skc_addPrimary` 本来就有三条规则
+  // （基础形状 / 圆角修正 / 页头内的修正），`skc_addMore` 与 `skc_detailDanger` 各两条。
+  const counts = (selector) => (css.match(new RegExp(`\\.${selector}(?![A-Za-z0-9_])`, 'g')) ?? []).length;
+  const expected = { skc_addGroup: 1, skc_addPrimary: 3, skc_addMore: 2, skc_detailDanger: 2 };
+  for (const [selector, want] of Object.entries(expected)) {
+    assert.equal(counts(selector), want, `.skc_${selector.slice(5)} 的规则条数是 ${want}（实际 ${counts(selector)}）`);
+  }
+  const classes = [...new Set([...css.matchAll(/\.(skc_[A-Za-z0-9_]+)/g)].map((match) => match[1]))];
+  assert.equal(classes.length, 134, `skc_ 类名总数是 134（实际 ${classes.length}：多一个就说明新增了类）`);
+  // 弹窗与确认框用的是市场面那套（skc_marketDialog / skc_marketConfirmBody / skc_detailActions）：
+  // 它们已经在表里，U20 只是复用。
+  for (const reused of ['.skc_marketDialog', '.skc_marketConfirmBody', '.skc_detailActions']) {
+    assert.ok(css.includes(reused), `${reused} 已有规则（复用它，不另造一套）`);
+  }
+});

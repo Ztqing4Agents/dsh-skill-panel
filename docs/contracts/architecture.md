@@ -298,8 +298,7 @@ ledger.readAll() ─────────────────┘   （R5�
 | `index.js` | **Host 半部入口**：`name` / `inject` / `apply(ctx, config)`；解析 `dshHome`/`skillsRoot`，装配 `makeRoutes()`，`ctx.effect` 注册与释放路由 |
 | `client.js` ★ | **Client 半部产物**：`__ModuleLoader__.load` 外壳 + 全部页面代码（由 `scripts/build-client.mjs` 生成） |
 | `assets/icon.svg` | 插件列表图标（`package.json` 的 `icon` 指向它） |
-| `README.md` | 使用者视角：能力、安装、已知限制（P0 只读软链、市场页签占位） |
-| `AGENTS.md` | 维护者视角：命令、真源文件地图、硬约束（不提交构建产物以外的生成物、不硬编码中文） |
+| `README.md` / `AGENTS.md` | 使用者视角（能力、安装、已知限制）与维护者视角（命令、真源文件地图、硬约束：不手改产物、不硬编码中文） |
 | `locale/zh.json` | 唯一中文文案真源（含 `meta.title` = 入口名、`panel.label`、全部 UI 键） |
 | `locale/en.json` | 英文真源，键集必须与 `zh.json` 完全一致（`check:i18n` 强制） |
 
@@ -316,8 +315,9 @@ ledger.readAll() ─────────────────┘   （R5�
 | `lib/scan.js` | 扫描 `$DSH_HOME/skills`（跳过 `.system`、点文件、非技能条目）；产出 `ScanCandidate[]`（含 `symlink`/`realPath`、`upstream` 身份三元组、`version`）；`readSkillContent(row)` = 详情页那一次读盘（围栏见 `docs/contracts/routes.md` §3.3.3） |
 | `lib/registry.js` | `snapshotRegistry(ctx.skills, cwd)` + `rankOfSummary(summary)`（= 先按 `source`/`provider` 映射成 level，再调 `classify.rankOf(level)`；映射表见 1.4.3）；summary 的 `resourceBase.path` 由 `lib/classify.js` 的 `buildRow` 透出成 `Row.originPath`（内置块靠它算包名，纯展示，不参与判据） |
 | `lib/classify.js` | **纯函数核心**：`rankOf(level)`、`classifySkill(input)`、`mergeCatalog({scanned, registry, ledger})`、`buildGroups()` |
-| `lib/provider-toggles.js` | 自有存储 `$DSH_HOME/dsh-skill-center/provider-toggles.json`：`deserialize`/`serialize`/`read`/`setEnabled`（原子写、损坏降级） |
-| `lib/routes.js` | `makeRoutes(ctx, deps) → WebRoute[]`：`list` / `toggle` / `provider-toggle` / `health` / `detail` 五条本地面 exact 路由 + 市场面 **9 条**（批量图标 `market/icons`、本地收藏写 `market/favorite`、版本列表 `market/versions` 与覆盖安装 `market/update` 在内；两条图片端点已于 U7 退场）+ 围栏 + 身份校验 |
+| `lib/provider-toggles.js` | 自有存储 `$DSH_HOME/dsh-skill-center/provider-toggles.json`：`deserialize`/`serialize`/`read`/`setEnabled`（原子写、损坏降级）。同族的另一份自有存储是 `lib/market/store.js` 的安装台账（形状与 `writeAtomic` 见 `docs/contracts/routes.md` §3.7.4） |
+| `lib/routes.js` | `makeRoutes(ctx, deps) → WebRoute[]`：`list` / `toggle` / `provider-toggle` / `health` / `detail` / `add` / `remove` 七条本地面 exact 路由 + 市场面 **9 条**（批量图标 `market/icons`、本地收藏写 `market/favorite`、版本列表 `market/versions` 与覆盖安装 `market/update` 在内；两条图片端点已于 U7 退场）+ 围栏 + 身份校验 |
+| `lib/local/`（本地写入面，U20） | `errors.js`（`LOCAL_STATUS` 四个新码 + `asLocalError` 归一）、`rules.js`（纯判据：`expandHome` / `skillNameOf` / `shadowOf` / `LOCAL_LIMITS` / `checkPlan`，见 `docs/contracts/data-model.md` §3.2.6）、`copy.js`（复制管线：`.skc-install-*` 临时目录 → 逐文件复制 → 目录 fsync → 占位 `mkdir` + `rename`）、`index.js`（`createLocalSkills({skillsRoot, dshHome, store, withWriteLock, rescan, copy?})` → `{add, remove}`，守卫 S0–S12 / D0–D9 在 `docs/contracts/routes.md` §3.3.4；**`copy` 可注入**——缺省用 `copy.js` 的真实实现，只为让 S10「落位失败」与 S11「回读名不一致」在 node 里造得出失败点，注入不改变守卫顺序与错误码）。**它不弹自己的锁**：`withWriteLock` 由 `createInstaller` 提供（同一张锁表，见 `docs/contracts/decisions.md` 附录 S-8） |
 | `lib/market/`（市场面） | 源适配器、上游客户端、安装**与覆盖安装**链路、两份自有存储（台账 / 收藏），共 11 个文件；本表不展开，逐个职责见 `docs/contracts/market.md` 附录 G |
 
 ### 2.3 Client 半部源码（`src/client/`，ESM + JSX，esbuild 打包）
@@ -335,6 +335,7 @@ ledger.readAll() ─────────────────┘   （R5�
 | `src/client/header-scroll.js` | `attachHeader(bar)`（克隆量测 + 观测）+ **纯函数** `interpolateParts(parts, offset)` |
 | `src/client/styles.js` | 单一 CSS 字符串（`docs/contracts/visual.md` 的全文）+ `injectStyles()`（按 `data-plugin-css` 去重） |
 | `src/client/toast.jsx` | `shell.overlay` 占位者：渲染刷新失败 toast（primitives `Toast`），离开页面后仍可见 |
+| `src/client/skill-dialogs.jsx` | 已安装页签的两个弹窗（U20）：`AddSkillDialog`（一条路径输入 + 三态 + 就地报因）与 `DeleteConfirm`（标题 + 正文 + 一行路径事实）；座位与 `market-confirm.jsx` 同一套 `Modal`，规范见 `docs/contracts/client.md` §3.9.7 |
 | `src/client/` 下的 `market-*` 文件 | 市场页的纯函数模块与 6 个组件（列表 / 筛选 / 卡片 / 详情 / 骨架 / 确认）加图形单元（品牌位图与三段字形）；职责见 `docs/contracts/market.md` 附录 G。`installed-detail.jsx`（已安装详情页）与 `markdown.jsx`（两页共用的正文渲染 + 兜底）见 `docs/contracts/installed-detail.md` |
 
 ### 2.4 构建与门禁脚本（`scripts/`）

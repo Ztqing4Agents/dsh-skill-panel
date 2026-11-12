@@ -615,15 +615,53 @@ test('K48 已安装页签零回归：页头按页签分工，行的可点边界�
   assert.equal(market.includes('data-skc-group='), false, '市场页签不渲染技能分区');
 });
 
-test('K49 市场页签的刷新按钮跟随市场加载状态（aria-busy / disabled），已安装面不受影响', () => {
-  const busy = renderMarket((store) => {
-    store.actions.marketListLoading();
-  });
-  const refresh = /<button[^>]*aria-label="刷新"[^>]*>/.exec(busy);
-  assert.ok(refresh !== null, '市场页签下页头仍有刷新按钮');
-  assert.equal(refresh[0].includes('aria-busy="true"'), true, '市场加载中刷新按钮 aria-busy=true');
-  assert.equal(refresh[0].includes('disabled=""'), true, '市场加载中刷新按钮禁用（防自己怼自己）');
-  assert.equal(busy.includes('data-state="ongoing"'), true, '按钮上换成进行中指示');
+/**
+ * Every market action the store exposes, sorted (U20 收尾：`marketReload` 已删 → 30 个）。
+ * A closed set on purpose: adding or removing one is a state-machine change and has to be
+ * argued for here, not discovered by a count.
+ */
+const MARKET_ACTIONS = [
+  'marketBootFallback',
+  'marketBootLoading',
+  'marketBootReady',
+  'marketClearInstalledDirty',
+  'marketCommitKeyword',
+  'marketDetailClose',
+  'marketDetailFailed',
+  'marketDetailOpen',
+  'marketDetailReady',
+  'marketFavoritesLoaded',
+  'marketIconsAttempted',
+  'marketIconsReady',
+  'marketIconsSeeded',
+  'marketInstallCancel',
+  'marketInstallConfirm',
+  'marketInstallFail',
+  'marketInstallOk',
+  'marketInstallStart',
+  'marketInstalledLoaded',
+  'marketInstalledStale',
+  'marketListFailed',
+  'marketListLoading',
+  'marketNamesReady',
+  'marketNamesSeeded',
+  'marketPageAppended',
+  'marketPageFailed',
+  'marketPageStart',
+  'marketSetFilter',
+  'marketSetInput',
+  'marketSetScroll',
+].sort();
+
+test('K49 「技能市场」页签没有页头刷新，store 里也没有 marketReload（重取由面板自己驱动）', () => {
+  // 页头那一行（状态位 / 刷新 / 添加组）只属于已安装面——宿主在自己的市场页签上也是
+  // `hidden={!onInstalled}`。市场的重取入口是它自己的搜索 / 范围 / 排序 / 分类，以及整页
+  // 错误态里的「重试」。`marketReload()` 这个 action **保留**（面板仍用它清分页），只是页头
+  // 不再有它的入口。
+  const busy = renderMarket((store) => { store.actions.marketListLoading(); });
+  assert.equal(/aria-label="刷新"/.test(busy), false, '市场加载中也没有页头刷新按钮');
+  assert.equal(busy.includes('class="skc_toolbar"'), false, '市场页签没有页头工具条');
+  assert.equal(busy.includes('class="skc_status"'), false, '市场页签没有状态位');
 
   const idle = renderMarket((store) => {
     store.actions.marketPageAppended({
@@ -631,9 +669,52 @@ test('K49 市场页签的刷新按钮跟随市场加载状态（aria-busy / disa
       merged: [item()],
     });
   });
-  const idleRefresh = /<button[^>]*aria-label="刷新"[^>]*>/.exec(idle);
-  assert.equal(idleRefresh[0].includes('disabled=""'), false, '空闲时刷新按钮可点');
-  assert.ok(idle.includes('data-icon="refresh"'), '空闲时是刷新图标');
+  assert.equal(/aria-label="刷新"/.test(idle), false, '空闲时也没有页头刷新按钮');
+  assert.ok(idle.includes('class="skc_marketSection"'), '市场自己的那套栏还在（搜索 / 范围 / 排序）');
+
+  // `marketReload()` 已删（U20 收尾，用户拍板「零调用方的 action 不留」）：`store.actions` 里
+  // 不该再有它，页头也不再有它的入口。重取语义改由 `clearedPaging()` 承载（切来源 / 搜索落定 /
+  // 面板 effect / 错误态「重试」四条路），所以这半条验的是**语义等价**而不是那个 action。
+  const store = marketStore();
+  assert.equal('marketReload' in store.actions, false, 'store.actions 里没有 marketReload（已删除）');
+  assert.deepEqual(
+    Object.keys(store.actions).filter((name) => name.startsWith('market')).sort(),
+    MARKET_ACTIONS,
+    '市场子状态的 action 清单是闭集（删掉一个就得同轮改这里）',
+  );
+  store.actions.marketIconsReady({ 'skillhub:ake:pdf': ICON_URL });
+  store.actions.marketPageAppended({
+    pages: [{ sourceId: 'skillhub', page: { items: [item()], next: 'c2' } }],
+    merged: [item()],
+  });
+  store.actions.marketDetailOpen(item());
+  const before = store.getSnapshot().market;
+  store.actions.marketSetFilter({ source: 'clawhub' });
+  const after = store.getSnapshot().market;
+  assert.equal(after.filters.source, 'clawhub', '来源确实切了（这条断言的前置条件）');
+  assert.equal(after.items, before.items, '卡片不重挂（同一数组引用，滚动位置不被甩回顶部）');
+  assert.deepEqual(after.icons, before.icons, '图标缓存保留');
+  assert.deepEqual(after.iconsTried, before.iconsTried, '「问过没」也保留');
+  assert.equal(after.listStatus, 'ready', '有卡片时 listStatus 仍 ready（不闪骨架）');
+  assert.equal(after.pages, 0, '分页重置');
+  assert.deepEqual(after.cursors, {}, '游标清空');
+  assert.deepEqual(after.exhausted, {}, '耗尽标记清空');
+  assert.equal(after.detail, null, '详情关闭');
+  assert.equal(after.page.status, 'idle', '尾部回 idle（重取第一页不是「追加」）');
+
+  // 这一条正是面板的重取条件（`pages === 0` 且 `listStatus` 不是 loading/error ⇒ loadFirst）。
+  store.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 't' });
+  store.actions.marketSetFilter({ source: 'skillhub' });
+  assert.equal(store.getSnapshot().market.listStatus, 'idle', '空列表上重取回 idle，面板 effect 据此重取第一页');
+  assert.equal(store.getSnapshot().market.pages, 0, '分页仍是 0');
+
+  // 整页错误态里的「重试」是面板自己的入口（不是页头）。
+  const failed = renderMarket((seeded) => {
+    seeded.actions.marketListLoading();
+    seeded.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 'timeout' });
+  });
+  assert.ok(failed.includes(t('market.retry')), '整页错误态里有「重试」按钮');
+  assert.equal(/aria-label="刷新"/.test(failed), false, '错误态也没有页头刷新');
 });
 
 /* ------------------------------------------------- K54/K55/K56 · 数量、单源、contain */
@@ -1289,7 +1370,7 @@ test('K100 无障碍只播报一次：视觉行 aria-hidden，sr-only role="stat
 });
 
 // ---------------------------------------------------------------------------
-// U13 — "refresh jitters". Both `marketReload` (header refresh) and a keyword
+// U13 — "refresh jitters". Both a scope pick (`marketSetFilter`) and a keyword
 // commit keep `items`, so `listStatus` no longer falls to `idle`: the grid on
 // screen is the loading placeholder now. `page.status === 'loading'` therefore
 // means two different things, and only an append (`pages > 0`) may grow the
@@ -1304,16 +1385,17 @@ const placeholderCards = (html) => html.split('skc_marketSkeletonAction').length
 /** The whole-screen skeleton's own `role="status"` grid; the tail has no such `<ul>`. */
 const hasSkeletonGrid = (html) => /<ul class="[^"]*skc_marketGrid"[^>]*role="status"/.test(html);
 
-test('K101 页头刷新重取期间：旧卡片直出，不换整页骨架、也不插尾部占位卡', () => {
+test('K101 第一页重取（切来源 / 搜索落定）期间：旧卡片直出，不换整页骨架、也不插尾部占位卡', () => {
   const count = (html, needle) => html.split(needle).length - 1;
   const store = marketStore((it) => {
     it.actions.marketPageAppended({
       pages: [{ sourceId: 'all', page: { items: [item()], next: 'c2' } }],
       merged: [item()],
     });
-    // What the header button does, in order: `marketReload` (page.jsx) then the panel's
-    // effect notices `pages === 0` and calls `marketListLoading` before the request.
-    it.actions.marketReload();
+    // What a scope pick does, in order: `marketSetFilter` clears the paging (page.jsx 已无
+    // 页头刷新，`marketReload()` 随之删除), then the panel's effect notices `pages === 0`
+    // and calls `marketListLoading` before the request.
+    it.actions.marketSetFilter({ source: 'clawhub' });
     it.actions.marketListLoading();
   });
   const html = renderStore(store);
@@ -1321,7 +1403,7 @@ test('K101 页头刷新重取期间：旧卡片直出，不换整页骨架、也
   // The store side of the same moment: the list is `ready` (so the panel never picks the
   // skeleton) while the page-one request is in flight.
   const market = store.getSnapshot().market;
-  assert.equal(market.items.length, 1, '刷新后列表还在');
+  assert.equal(market.items.length, 1, '重取后列表还在');
   assert.equal(market.listStatus, 'loading', 'listStatus 是 loading（整页骨架的判据是「loading 且列表为空」）');
   assert.equal(market.page.status, 'loading', '第一页请求确实在飞（否则这条用例什么都没测）');
   assert.equal(market.pages, 0, 'pages 归零：这是重取第一页，不是追加');
@@ -1380,8 +1462,12 @@ test('K103 重取与追加互斥：任何一刻 role="status" 最多一条', () 
   assert.equal(statuses(first), 1, '首屏只有骨架那一条');
   assert.equal(count(first, 'skc_progressAnnouncement'), 0, '叠加的 sr-only 播报不出现（改前这里是两条）');
 
-  // ② 重取第一页（刷新/搜索）：列表还在 ⇒ 由 sr-only 播报「正在读取」，骨架不说话。
-  const reload = renderMarket((it) => { onePage(it); it.actions.marketReload(); it.actions.marketListLoading(); });
+  // ② 重取第一页（切来源 / 搜索落定）：列表还在 ⇒ 由 sr-only 播报「正在读取」，骨架不说话。
+  const reload = renderMarket((it) => {
+    onePage(it);
+    it.actions.marketSetFilter({ source: 'clawhub' });
+    it.actions.marketListLoading();
+  });
   assert.equal(statuses(reload), 1, '重取时恰好一条');
   assert.equal(count(reload, 'skc_progressAnnouncement'), 1, '就是面板那条 sr-only 播报器');
   assert.equal(count(reload, '正在加载更多'), 0, '重取不说「加载更多」');

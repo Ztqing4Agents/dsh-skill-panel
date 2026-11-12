@@ -595,19 +595,6 @@ export function createStore() {
       });
     },
     /**
-     * The header's refresh button was pressed on the market tab: forget the loaded pages so
-     * the list starts over - nothing else. The cards stay on screen until the answer arrives
-     * (`clearedPaging` keeps `listStatus` at `ready` while `items` is non-empty): swapping a
-     * full grid for the six-card skeleton and back moved the document by ~1k px and threw the
-     * scroll to the top. The icon and title caches survive for the same reason a filter change
-     * keeps them - they are keyed by identity, a re-asked identity cannot answer differently,
-     * and dropping them repainted 8 of 24 avatars as letters until the batch came back.
-     * @returns {void}
-     */
-    marketReload: () => {
-      setMarket({ detail: null, ...clearedPaging(state.market) });
-    },
-    /**
      * Cache icons the list route already answered inline (SkillHub puts `iconUrl` on the
      * item itself). This is a known answer, not an upstream question, so `iconsTried` is
      * deliberately left alone - seeding must not claim we asked anyone anything.
@@ -901,6 +888,42 @@ export function createStore() {
      */
     marketClearInstalledDirty: () => {
       setMarket({ installedDirty: false });
+    },
+    /**
+     * A skill was added or deleted on disk: the market's installed map is one answer old.
+     *
+     * Only `installedReady` moves. `installed` keeps the entries it has - a stale map is
+     * better than a blank one, and the next visit to the market tab reads it again. This is
+     * deliberately not `installedDirty`, which only makes the list re-scan.
+     * @returns {void}
+     */
+    marketInstalledStale: () => {
+      setMarket({ installedReady: false });
+    },
+    /**
+     * A local directory was added as a skill.
+     *
+     * One event, one field: the toast seat `install-ok` already uses (same kind, so the
+     * toast host needs no new branch and `notice.kind` stays at three values), and nothing
+     * else - an added skill is not a market item, so `installed`/`installs` must not grow an
+     * entry that the market cards would then have to explain. The list re-scan is the
+     * page's explicit follow-up, never an implied one.
+     * @param {{name?: string, path?: string}} applied - the route's answer: the skill's name
+     *   and the directory it now occupies.
+     * @returns {void}
+     */
+    addApplied: (applied) => {
+      seq += 1;
+      set({
+        notice: {
+          kind: 'install-ok',
+          name: typeof applied?.name === 'string' ? applied.name : '',
+          path: typeof applied?.path === 'string' ? applied.path : '',
+          code: '',
+          message: '',
+          seq,
+        },
+      });
     },
   };
   return {

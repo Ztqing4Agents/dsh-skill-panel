@@ -12,7 +12,7 @@
 
 ## 3.3 Host 路由清单
 
-十四条 **exact** 路由（`kind:'exact'`，`ctx.webServer.register(route)` 返回 disposer；重复注册同路径会抛错，见 `EX/dsh-host-webserver/README.md`「Registering routes」）。本地面 5 条（下表 #1–#4 与 #14；`#` 是历史编号，不重排也不复用，两条退役的图片端点不回收），市场面 9 条见 §3.7。
+十六条 **exact** 路由（`kind:'exact'`，`ctx.webServer.register(route)` 返回 disposer；重复注册同路径会抛错，见 `EX/dsh-host-webserver/README.md`「Registering routes」）。本地面 7 条（下表 #1–#4、#14、#17、#18；`#` 是历史编号，不重排也不复用，两条退役的图片端点不回收），市场面 9 条见 §3.7。
 
 统一信封（§8.1）：成功 `200 {code:'OK', data, message:''}`；失败 `4xx/5xx {code:'E_…', data:null, message}`。**没有例外**：U7 之后市场面的两条图片代理路由（`market/lucide` 与 `market/clawhub-icon`）随 `clawhub.ai` 一起退场，图标改为上游绝对 `https` 直连（`decisions.md` 附录 N 的 N-11），所以每条路由都回信封。
 
@@ -23,6 +23,8 @@
 | 3 | `POST /api/dsh-skill-center/provider-toggle` | `{provider, name, enabled}` | `{provider, name, disabled}` | `403`、`405`、`400`、`400 E_BAD_NAME`、`404 E_NOT_FOUND`（该 (provider,name) 不再是内置行）、`500 E_WRITE_FAILED` |
 | 4 | `GET /api/dsh-skill-center/health` | 无 | `{ok, version, dshHome, skillsRoot, counts, ledger:{sources:string[]}, providerToggles:{readable:bool, disabled:int}, complete:bool}` | `403`、`405`、`500` |
 | 14 | `GET /api/dsh-skill-center/detail` | `?name=<kebab>`（必填，`isSkillName` 校验；**只收 name，没有任何路径 / 目录参数**） | `SkillContent`（§3.3.3） | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_NAME`、`404 E_NOT_FOUND`、`500 E_INTERNAL` |
+| 17 | `POST /api/dsh-skill-center/add` | `{path}`（`objectOnly`，≤ 64 KiB；**只有这一个字段：没有 name、没有目录参数、没有文件清单**） | `{name, path, files, bytes}`——`path` 是落位后的 `<skillsRoot>/<name>`，`files`/`bytes` 与 #9 同口径（落盘去重路径数 / 字节合计） | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_REQUEST`、`400 E_BAD_PATH`、`404 E_ADD_NOT_FOUND`、`422 E_ADD_NOT_SKILL_DIR`、`422 E_SKILL_NAME_INVALID`、`422 E_PACKAGE_INVALID`、`409 E_ALREADY_INSTALLED`、`409 E_ADD_SHADOWED`、`429 E_INSTALL_BUSY`、`500 E_INSTALL_IO`（顺序见 §3.3.4） |
+| 18 | `POST /api/dsh-skill-center/remove` | `{name, path}`（`objectOnly`，≤ 64 KiB；`path` 是这一行**当场扫描出来的 `SKILL.md` 路径**，硬约束 6） | `{name, dir, ledger:'cleared'\|'kept'}`——`dir` 是刚删掉的目录，`ledger:'kept'` 表示目录已删、台账那条没清掉（§3.3.4 D9） | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_REQUEST`、`400 E_BAD_NAME`、`404 E_NOT_FOUND`、`409 E_SYMLINK_READONLY`、`409 E_NOT_WRITABLE`、`409 E_STALE_PATH`、`429 E_INSTALL_BUSY`、`500 E_DELETE_IO`（顺序见 §3.3.4） |
 
 body 上限 **64 KiB**（`readBoundedJson(req, 65536)`；超过即 `400`，不 drain）。
 
@@ -51,13 +53,11 @@ body 上限 **64 KiB**（`readBoundedJson(req, 65536)`；超过即 `400`，不 d
   "displayName": "…",               // 仅当 frontmatter 有；P0 只进 title
   "provider": "filesystem",
   "partition": "local",
-  "rule": "R4",                     // 便于 QA/P1 tooltip
-  "confidence": "high",
+  "rule": "R4", "confidence": "high",   // 便于 QA/P1 tooltip
   "symlink": false,
   "path": "/Users/…/.dsh/skills/dev-docs-standards/SKILL.md",  // 软链为 null（不可写）
   "realPath": null,                 // 仅软链行给值：realpath(entry)/SKILL.md，用于 tooltip 显示指向
-  "enabled": true,                  // = !disable-model-invocation
-  "writable": true,                 // false ⇒ 客户端不渲染开关
+  "enabled": true, "writable": true, // enabled = !disable-model-invocation；writable=false ⇒ 客户端不渲染开关
   "readonlyReason": null,           // 'symlink' | 'provider-store' | 'no-file'
   "upstream": { "sourceId": "clawhub", "owner": "awspace", "slug": "pdf" }, // 或 null：上游身份，见下
   "version": "1.2.4",                // 或 null：_meta.json 的 version（≤64 字符），展示字段
@@ -120,6 +120,12 @@ const st = await lstat(file)                                           // ⑤ �
                             // 上游 URL（硬约束 13），客户端只把它放进 href，不发任何请求。
 ```
 
+#### 3.3.4 add（#17）与 remove（#18）的守卫与不变式
+
+- **`add`**：S0 body 是对象且 ≤ 64 KiB（这两件在**路由层**），`path` 是非空字符串（这一件在**编排层**，码不变，仍 `400 E_BAD_REQUEST`；**空串与全空白归 S0**，S1 只判「给了但不是可用的绝对路径」）→ S1 `~` / `~/…` 按当前用户家目录展开后须绝对、无 NUL、≤1024（`400 E_BAD_PATH`；展开同样在编排层）→ S2 `lstat(path)` 成功（`404 E_ADD_NOT_FOUND`）→ S3 是目录（**顶层软链允许**，按 `realpath` 取真实目录再判）→ S4 该目录下 `SKILL.md` 是普通文件（`lstat`，不跟随软链；S3/S4 同为 `422 E_ADD_NOT_SKILL_DIR`）→ S5 目标名 = `parseFrontmatter` 的 `name` `trim()`，空则退回目录名，须过 `isSkillName`（`422 E_SKILL_NAME_INVALID` + `data.declaredName`，**不改名、不用别的名字顶替**）→ S6 `lstat(skillsRoot/<name>)` 存在即拒，目录/文件/软链一视同仁（`409 E_ALREADY_INSTALLED` + `data.path`）→ S7 重扫后同名候选里存在 `rank < rankOf('user-dsh')` 的注册表行即拒（`409 E_ADD_SHADOWED` + `data.provider`：那条会在同名裁决里压掉刚落位的目录，用户会「加成功但看不见」）→ S8 复用 §3.7.4 S1 的**同一张锁表**与全局上限 2（`429 E_INSTALL_BUSY`）→ S9 源目录清点：条目 ≤2000、单文件 ≤8 MiB、总计 ≤64 MiB、**内部任一条目是软链即整次拒**，`node_modules` 与点开头条目跳过不复制（`422 E_PACKAGE_INVALID`）→ S10 建 `.skc-install-*` 临时目录 → 复制 → 目录 fsync → `mkdir` 占位 + `rename` 原子落位（`500 E_INSTALL_IO`）→ S11 回读 `<name>/SKILL.md` 重新断言 `name` 一致（不一致则删掉刚落位的目录，`500 E_INSTALL_IO`）→ S12 写自有台账一条（`500 E_INSTALL_IO`，**目录不回滚**，与 §3.7.4 S13 同一处例外）。
+- **`remove`**：D0 body 是对象（`400 E_BAD_REQUEST`）→ D1 `isSkillName(name)`（`400 E_BAD_NAME`）→ D2 重扫后按 name 找到行（`404 E_NOT_FOUND`）→ D3 该行软链（`409 E_SYMLINK_READONLY`，硬约束 5 第三层）→ D4 `row.path === null`（builtin / provider-store 行，`409 E_NOT_WRITABLE`）→ D4b 请求**根本没带** `path`（空串）⇒ `409 E_NOT_WRITABLE`（「没有可写路径」而不是「路径变了」）→ D5 带了但不相等：`row.path !== path`（严格字符串相等，不 `realpath`、不折叠大小写；`409 E_STALE_PATH`，硬约束 6）→ D6 纵深防御：`dirname(row.path)` 的父目录**逐字等于** `skillsRoot` 且该目录本身不是软链（`409 E_NOT_WRITABLE`）→ D7 共用同一把锁（`429 E_INSTALL_BUSY`）→ D8 递归删目录（`500 E_DELETE_IO`，`data:null`）→ D9 清台账里同名那一条（临时文件 + fsync + rename），**失败仍是 `200`**（`data.ledger:'kept'` + `message` 记「目录已删、台账未清」）。
+- **顺序理由与不变式**：D2→D3→D4→D5 与 §3.3.2 的 toggle 四步是同一套语义（任何一步先返回都能给出可区分的码），D6 是「kind 校验」不是身份校验所以排在 D5 之后。**先删目录（D8）后清台账（D9）**：目录删不掉时台账一点没动（无副作用、可重试），台账没清掉时用户看到的结果已正确（行消失），且残留被 S6 的「台账有记录但目录不存在 ⇒ 允许」容忍。`ok ⇔ ∃ <skillsRoot>/<name>/SKILL.md ∧ 台账有 {source:'local', name} ∧ ∄ .skc-install-*`；`fail ⇔ ∄ <skillsRoot>/<name> ∧ ∄ .skc-install-* ∧ 台账逐字节未变`；删除侧 `ok ⇔ ∄ <skillsRoot>/<name>`。四个新码（`E_ADD_NOT_FOUND` / `E_ADD_NOT_SKILL_DIR` / `E_ADD_SHADOWED` / `E_DELETE_IO`）登记在 §8.1，其余复用的码见 §8.6。阶段时序图见 `docs/contracts/flows.md` §4.8、§4.9。
+
 ---
 
 ## 3.4 开关写入实现
@@ -138,14 +144,12 @@ const st = await lstat(file)                                           // ⑤ �
 
 #### 3.4.2 逐字节保真改写（`lib/frontmatter.js`）
 
-只在内存里做字节手术，不做 YAML 重新序列化：
+只在内存里做字节手术，不做 YAML 重新序列化（逐条规则与读侧解析见 `docs/contracts/data-model.md` §3.2.4）：
 
 ```js
-// 伪代码（≤10 行）
+// 伪代码：BOM 与每行行尾原样保留
 const bom = bytes.subarray(0,3).equals(BOM) ? bytes.subarray(0,3) : empty
-const body = bom.length ? bytes.subarray(3) : bytes
-const block = matchFrontmatterBlock(body)            // 开头 '---'+EOL … '---'，返回 [start,end) 与 lines（含各自行尾）
-const eol = block.eol                                 // 由开头分隔行决定：'\r\n' | '\n'
+const block = matchFrontmatterBlock(bom.length ? bytes.subarray(3) : bytes)  // 返回 [start,end) 与 lines（含行尾）；eol 由开头分隔行决定
 const hit = block.lines.findIndex(l => /^disable-model-invocation[ \t]*:/.test(l.text))
 if (hit >= 0) block.lines[hit] = replaceValuePreserving(block.lines[hit], enabled ? 'false' : 'true')
 else block.lines.push({ text: `disable-model-invocation: ${enabled ? 'false' : 'true'}`, eol })
@@ -179,8 +183,7 @@ return concat(bom, block, body.subarray(block.end))   // 其余字节一个不�
 - **身份**是 `provider#name`（`PRD` §3.4 所说的「键」），磁盘上存成数组而非对象键：name 有文法约束但 provider id 无，用 `#` 拼接作对象键会引入分隔符注入；数组形态也是 `PROF/@linxin666/dsh-client-ui-skill-explorer/lib/types/provider-toggles.d.ts` 的已验证形状。
 - 归一化：`name` 必须过 `isSkillName`；`provider` 限 64 字符的可打印 ASCII；`provider` 缺失归一成 `''`。
 - 降级（`PRD` A5）：文件缺失 / 非法 JSON / 顶层不是对象 / `version !== 1` / `disabled` 不是数组 / 单条不合规格 / 文件 > 64 KiB ⇒ 视为 **`{version:1, disabled:[]}`（全部启用）**，并在 `diagnostics` 里留一条，**绝不让 list 失败**。
-- 写：临时文件 + `fsync` + `rename`；双向幂等（停用两次只留一条；启用不存在的记录则不写盘）。
-- 只读别人的存储（`PRD` §3.4 通用规则 5）：`~/.dsh/skills-manager/state.json`、`$DSH_HOME/skill-market/*`、`.skills-lock.json` **只读不写**。
+- 写：临时文件 + `fsync` + `rename`；双向幂等（停用两次只留一条；启用不存在的记录则不写盘）。只读别人的存储（`PRD` §3.4 通用规则 5）：`~/.dsh/skills-manager/state.json`、`$DSH_HOME/skill-market/*`、`.skills-lock.json` **只读不写**。
 
 ---
 
@@ -214,10 +217,7 @@ install 出参里两个数字的口径**不一样，别混**：`files` 是**落�
 1. **`source` 是可缺省的 scope，不是身份 id。** 取值 `all`（缺省）/`skillhub`/`clawhub`；`all` 与缺省都不给上游传 `source`（站点「所有来源」就是这个意思，224,219 条已混排），`skillhub` 传 `community`、`clawhub` 传 `clawhub`。**`all` 只在 `list`/`bootstrap` 合法**：`detail`/`install`/`icons` 的白名单只有两个身份 id，传 `all` ⇒ `400 E_BAD_QUERY`。三者共用 `{page}` 游标，一次请求一页。
 2. `limit` 是**这一页**条数（默认 12）。`1..24` 之外**夹取不报错**；非数字才是 `400 E_BAD_QUERY`。
 3. `cursor` 是该 scope 自己的不透明游标：不传 = 第一页；传了但解码失败（或不是本插件签发的形状）→ `400 E_BAD_QUERY`，不是 500。客户端只负责原样回传，**不解析、不拼接**；**scope / category / sort / keyword 任一变化都必须清游标**（游标只有页码，不带筛选签名）。
-4. 关键词非空**自动走 `source.search`**，为空走 `source.list`；`keyword` 与 `category` 可同时给。
-5. 上游失败**用 HTTP 状态码表达**（502/503/504 + `E_*`），不塞进 200 的响应体：一次请求就是一个 scope 的一页，失败即整页失败（可重试）。
-6. `total` 三个 scope 都给（`data.total`），是**该 scope 的**总数；`all` 是两源之和，末页判定沿用 `page*limit >= total`。
-7. **服务端不合并、不交错、不排序跨源项**：路由返回的就是「这一档的一页」，混排顺序由上游给；追加与去重在 `src/client/market-model.js` 的 `mergeBatches` 里（§3.8.2）。
+4. 关键词非空**自动走 `source.search`**，为空走 `source.list`；`keyword` 与 `category` 可同时给。5. 上游失败**用 HTTP 状态码表达**（502/503/504 + `E_*`），不塞进 200 的响应体：一次请求就是一个 scope 的一页，失败即整页失败（可重试）。6. `total` 三个 scope 都给（`data.total`），是**该 scope 的**总数，`all` 是两源之和，末页判定沿用 `page*limit >= total`；**服务端不合并、不交错、不排序跨源项**（返回的就是「这一档的一页」，混排顺序由上游给；追加与去重在 `src/client/market-model.js` 的 `mergeBatches`，见 §3.8.2）。
 
 超时、并发与互斥：
 
@@ -252,8 +252,7 @@ const SORTS     = new Set(['recommended', 'updated', 'downloads']);
 
 七条硬规则（每条都对应一次真会发生的失败）：
 
-1. `owner` / `slug` / `version` 过正则后**还必须检查不含 `..` 子串**（`a..b` 能过字符类，不能过这一条）。
-2. URL 一律 `new URL(path, ORIGIN)` + `url.searchParams.set(...)`；**禁止字符串拼接**（`?path=${p}` 会被 `&`/`#`/`%` 打断）。
+1. `owner` / `slug` / `version` 过正则后**还必须检查不含 `..` 子串**（`a..b` 能过字符类，不能过这一条）。2. URL 一律 `new URL(path, ORIGIN)` + `url.searchParams.set(...)`；**禁止字符串拼接**（`?path=${p}` 会被 `&`/`#`/`%` 打断）。
 3. 拼完断言 `url.origin === ORIGIN`（钉死成 `https://api.skillhub.cn` / `https://clawhub.ai`），不成立即 `E_INTERNAL`（编程错误，不是用户错误）。
 4. 302 一律**手动处理**：`location` 必须 `https:` 且 host 命中 `^[a-z0-9-]+\.cos\.accelerate\.myqcloud\.com$`，否则 `422 E_PACKAGE_INVALID`；**最多跟 1 跳**。
 5. **客户端不传文件路径**：install 的 body 只有 `{source,owner,slug,version}`；清单由 Host 自己取，清单里每个 `path` 再过 `isSafeRelativePath()`（`lib/names.js`：无前导 `/`、无 `\`、无 `:`、无 `..` 段、段长 ≤ 100、整体 ≤ 240），不在清单里的路径永不请求。
@@ -323,10 +322,8 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 
 #### 3.7.6 `market/favorite` 的幂等与上限
 
-1. **幂等**：`favorited` 与现状一致 ⇒ 不写盘、直接回当前列表；取消一个不存在的 id 也算成功——页面状态猜错时再点一次即可自愈，且不产生无意义的 mtime 变化。**上限 500**：满时新增 ⇒ `409 E_FAVORITE_FULL`，取消永远允许（上限只拦增长，不拦减少）。
-2. **进程内串行化**：两个并发 POST 在 `lib/market/favorites.js` 里被一条 Promise 链排队，读-改-写整体排他，不会互相覆盖。跨进程并发不处理（与 `install.js` 同一档次的本机单宿主假设，见 `docs/contracts/market.md` §7.7）。
-3. **响应永远是权威全量** `favorites[]`（最新在前）：客户端整份替换，不做增量合并。
-4. **写失败** ⇒ `500 E_FAVORITE_IO`，`message` 带系统错误摘要；日志只记 `{route, code}`，**永不**记 owner / slug。**U5 起没有 UI 入口**：卡片上的收藏按钮已按用户决定撤除（`docs/contracts/decisions.md` 附录 L），本路由与 `bootstrap` 的 `favorites` / `favoritesOk` 原样保留（将来要接回入口时零 Host 改动，当前不排期）；K76 仍守着它。
+1. **幂等**：`favorited` 与现状一致 ⇒ 不写盘、直接回当前列表；取消一个不存在的 id 也算成功——页面状态猜错时再点一次即可自愈，且不产生无意义的 mtime 变化。**上限 500**：满时新增 ⇒ `409 E_FAVORITE_FULL`，取消永远允许（上限只拦增长，不拦减少）。2. **进程内串行化**：两个并发 POST 在 `lib/market/favorites.js` 里被一条 Promise 链排队，读-改-写整体排他，不会互相覆盖。跨进程并发不处理（与 `install.js` 同一档次的本机单宿主假设，见 `docs/contracts/market.md` §7.7）。
+3. **响应永远是权威全量** `favorites[]`（最新在前）：客户端整份替换，不做增量合并。4. **写失败** ⇒ `500 E_FAVORITE_IO`，`message` 带系统错误摘要；日志只记 `{route, code}`，**永不**记 owner / slug。**U5 起没有 UI 入口**：卡片上的收藏按钮已按用户决定撤除（`docs/contracts/decisions.md` 附录 L），本路由与 `bootstrap` 的 `favorites` / `favoritesOk` 原样保留（将来要接回入口时零 Host 改动，当前不排期）；K76 仍守着它。
 
 #### 3.7.7 `market/update` 的覆盖安装契约
 
@@ -348,17 +345,21 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 | `E_METHOD` | 405 | 方法不对 | 同上（正常不会发生） |
 | `E_BAD_REQUEST` | 400 | body 非法 / 超 64 KiB / 字段类型错 | 同上 |
 | `E_BAD_NAME` | 400 | 技能名不合文法 | 行内原因 |
-| `E_BAD_PATH` | 400 | 路径非绝对或不以 `SKILL.md` 结尾 | 行内原因 |
+| `E_BAD_PATH` | 400 | 路径不合规：非绝对 / 不以 `SKILL.md` 结尾（#2、#14）/ 不以 `/` 或 `~` 开头（#17） | 行内原因 |
 | `E_NOT_FOUND` | 404 | 重新扫描后该 name 不存在 | 行内原因 + 建议刷新 |
 | `E_STALE_PATH` | 409 | 同名但路径变了（拒绝回退） | 行内原因 + 建议刷新 |
 | `E_SYMLINK_READONLY` | 409 | 目标行是软链 | 行内原因（正常不可达，双保险） |
 | `E_FILE_CHANGED` | 409 | 指纹变化（并发编辑） | 行内原因 + 建议刷新 |
-| `E_NOT_WRITABLE` | 409 | 无可写路径 / 越界 / 无 frontmatter | 行内原因 |
+| `E_NOT_WRITABLE` | 409 | 无可写路径 / 越界 / 无 frontmatter / 目标目录不是技能根的直接子目录（#18 D4·D6） | 行内原因 |
 | `E_WRITE_FAILED` | 500 | 落盘失败（权限、磁盘、rename） | 行内原因（含系统错误摘要） |
 | `E_VERIFY_FAILED` | 500 | 回读不一致，已回滚 | 行内原因 |
+| `E_ADD_NOT_FOUND` | 404 | #17 的源目录 `lstat` 不成（`~` 已展开） | 弹窗字段下那一行 + 保留输入 |
+| `E_ADD_NOT_SKILL_DIR` | 422 | #17 的源不是目录 / 没有 `SKILL.md` / `SKILL.md` 不是普通文件 | 同上 |
+| `E_ADD_SHADOWED` | 409 | #17 的目标名已有一条 rank 更小的注册表行（`data.provider`），加进去会被同名裁决压掉 | 同上 |
+| `E_DELETE_IO` | 500 | #18 删目录失败（权限 / 被占用 / 磁盘），目录可能不完整 | 详情页 `.skc_reason` + 建议刷新 |
 | `E_INTERNAL` | 500 | 未预期异常（已 `logger.warn`） | 整页错误态 + 重试 |
 
-市场路由（§3.7）的错误码见 §8.6：那组的语义是「上游不可用 / 包不合规」，与本节「本地写盘失败」分开，客户端按 `code` 取不同文案与不同的重试动作。
+市场路由（§3.7）的错误码见 §8.6：那组的语义是「上游不可用 / 包不合规」，与本节「本地写盘失败」分开，客户端按 `code` 取不同文案与不同的重试动作。#17/#18 复用 §8.6 的 `E_ALREADY_INSTALLED` / `E_SKILL_NAME_INVALID` / `E_PACKAGE_INVALID` / `E_INSTALL_BUSY` / `E_INSTALL_IO` 五个码（词表只有一份，`statusOfMarketError()` 直接用），**四个新码只登记在本表**——§8.6 的二十个单码行保持不变，市场码表与 `MARKET_STATUS` 逐条对应的判据因此不受影响。
 
 ---
 

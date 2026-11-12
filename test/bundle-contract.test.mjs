@@ -88,13 +88,19 @@ test('产物体积没有异常膨胀（防止误把依赖打进来）', async ()
   // builtin provider blocks + provider page, and U2b to 145 KB when that page was rebuilt on
   // the skill detail's own component rows.
   //
-  // 165 KB is the lead's call for U19 (update check + overwrite install), not a lazier gate:
-  // that feature is ~10 KB of real client code (five faces, the version list, the dialog, the
-  // serial runner) and the artifact reached 160597 B with nothing left to strip - esbuild
-  // emits no comments and the code is reachable. Conditions stay the same as before: the
-  // stylesheet keeps exactly one CSS comment (the K41 anchor), and any next feature starts by
-  // reading `npm run build`'s byte count. ~40 KB to react is still the discriminator (the
-  // lost-`external` mistake lands near 190 KB), so do not raise it again without deleting
-  // something first.
-  assert.equal(size < 165_000, true, `产物不超过 165 KB（实际 ${size} B，说明没有把 react 之类打进来）`);
+  // 160 KB was the lead's call for U19 (update check + overwrite install): that feature is
+  // ~10 KB of real client code (five faces, the version list, the dialog, the serial runner)
+  // and the artifact reached 160597 B with nothing left to strip - esbuild emits no comments
+  // and the code is reachable. U20 raised it once more, see below. Conditions stay the same
+  // as before: the stylesheet keeps exactly one CSS comment (the K41 anchor), and any next
+  // feature starts by reading `npm run build`'s byte count.
+  // 175 KB is the lead's call for U20 (add / delete skill: one dialog module with two
+  // components, the toolbar's chevron menu, the detail header's second action and the
+  // delete confirmation). Measured after the U20 follow-up round (menu alignment, the
+  // uninstall dialog's own fact label, the two-stage status slot, and the market tab
+  // dropping the header toolbar, then dropping the dead `marketReload` action): **171055 B**
+  // (was 160041 B before U20), i.e. ~3.9 KB of headroom left. The discriminator is unchanged:
+  // bundling react/react-dom instead of requiring them from the shell still lands near
+  // 190 KB, so ~19 KB of the ceiling separates a correct build from that mistake.
+  assert.equal(size < 175_000, true, `产物不超过 175 KB（实际 ${size} B，说明没有把 react 之类打进来）`);
 });

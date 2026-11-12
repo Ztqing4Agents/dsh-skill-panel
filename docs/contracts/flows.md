@@ -310,6 +310,74 @@ sequenceDiagram
 
 四条回滚路径、十个阶段与三条不变式见 `docs/contracts/market.md` §7.11；前置校验的顺序与失败码见 `docs/contracts/routes.md` §3.7.7；两个页面的落点见 `docs/contracts/installed-detail.md`。与安装（§4.6）的关系：**同一张锁表**（`source:owner:slug` + 全局最多 2 个），所以同一个技能不可能同时在装和在更新。
 
+### 4.8 添加技能（本机目录 → 用户技能根）
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as 用户
+    participant PG as page.jsx（addGroup + AddSkillDialog）
+    participant API as SkillCenterApi
+    participant RT as 路由 add（#17）
+    participant LS as local/index.js
+    participant T as skillsRoot/.skc-install-*
+    participant L as market/store.js
+
+    U->>PG: 点「＋ 添加技能」或 chevron 的「从本地目录添加」→ 填路径 → 回车
+    PG->>API: addSkill({path})
+    API->>RT: POST add（≤ 64 KiB，只有 path）
+    RT->>RT: guard → S0/S1（body、`~` 展开后绝对、无 NUL、≤1024）
+    RT->>LS: add({path})
+    LS->>LS: S2–S4 lstat：存在 / 是目录 / SKILL.md 是普通文件
+    LS->>LS: S5 声明名 trim（空则目录名）→ isSkillName
+    LS->>LS: S6 lstat(skillsRoot/<name>) 存在即拒
+    LS->>RT: S7 rescan() 取同一次新扫描 + 注册表快照 → shadowOf(rank < 400) 命中即拒
+    LS->>LS: S8 withWriteLock('local:<name>')（与市场安装同一张锁表）
+    LS->>LS: S9 清点（≤2000 条 / 单文件 ≤8 MiB / 总 ≤64 MiB / 内部软链即拒）
+    LS->>T: S10 临时目录 → 复制 → 目录 fsync → 占位 mkdir + rename
+    LS->>LS: S11 回读 SKILL.md 断言 name 一致（不一致 ⇒ 删目录 + 500）
+    LS->>L: S12 store.append({source:'local', name, dirName, fromPath, installedAt})
+    LS-->>RT: {name, path, files, bytes}
+    RT-->>API: 200 OK
+    API-->>PG: 结局屏「已添加」+ 副行给落位路径 + toast「已安装 <name> · 新会话生效」+ 一次 load('refresh')
+    Note over LS,T: 任一步失败 → finally 删临时目录 → 不写台账 → skillsRoot 条目集合与添加前逐字节相同
+```
+
+唯一的例外窗口与市场安装同款：台账写失败时目录保留、返回 `500 E_INSTALL_IO`（这一行会落「本地」组而不是「已安装」组，下次同名添加被 S6 拦下，不产生坏数据）。守卫顺序、四个新码与不变式见 `docs/contracts/routes.md` §3.3.4 §8.1；弹窗三态见 `docs/contracts/client.md` §3.9.7。
+
+### 4.9 卸载技能（详情页头 → 用户技能根下的真目录）
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as 用户
+    participant DV as InstalledDetail + DeleteConfirm
+    participant PG as page.jsx
+    participant API as SkillCenterApi
+    participant RT as 路由 remove（#18）
+    participant LS as local/index.js
+    participant D as skillsRoot/<name>/
+    participant L as market/store.js
+
+    U->>DV: 头动作组第 2 位「卸载」（deletable(row) 为 true 才渲染）→ 确认弹窗 → 点「卸载」
+    DV->>PG: onConfirm（**先关弹窗**）
+    PG->>API: removeSkill({name, path})（path = 这一行的 SKILL.md）
+    API->>RT: POST remove
+    RT->>LS: remove({name, path})
+    LS->>LS: D0–D1 body / isSkillName
+    LS->>LS: D2–D5 重扫找行 → 软链 → path===null → 路径不等（各一个码）
+    LS->>LS: D6 目标目录的父目录逐字等于 skillsRoot 且本身不是软链
+    LS->>LS: D7 withWriteLock('local:<name>')
+    LS->>D: D8 rm -r（递归）
+    LS->>L: D9 store.remove(name)（临时文件 + fsync + rename；失败仍 200 + ledger:'kept'）
+    LS-->>RT: {name, dir, ledger}
+    RT-->>API: 200 OK
+    API-->>PG: closeDetail() 回列表 + load('refresh') + marketInstalledStale()，**没有成功 toast**
+    Note over LS,D: 失败 ⇒ 目录仍在、台账逐字节未变 ⇒ 留详情 + .skc_reason
+```
+
+卸载**只有这一个入口**（行与卡片上没有卸载位，硬约束 9）；目的地只有 `skillsRoot` 的直接子目录（D6），软链在扫描层 / 前端 / 路由三层同时被拦（硬约束 5）。成功后的「市场卡片已安装标记」靠 `marketInstalledStale()` 在下一次进市场页签时重读，不用 `installedDirty`（`docs/contracts/decisions.md` 附录 S-9）。
+
 ## 5 待明确事项
 
 > 详细取舍与验证方法见文末「待明确 / 假设」。这里只列**影响实现顺序**的三项。

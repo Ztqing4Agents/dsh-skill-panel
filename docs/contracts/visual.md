@@ -378,7 +378,8 @@ font-size: 13px; line-height: 20px; display: inline-flex;
 | 副标题 | 13px / 20px / `label-secondary` | `.skc_pageIntro` |
 | ⓘ | 20×20 盒，图标 11px，与副标题 gap 4px | `.skc_infoButton` |
 | 状态文案 | **12px / 18px** / `label-tertiary`；有更新 `business-primary`、失败 `error-primary` | `.skc_status[data-tone]`（= 宿主 `.updatesNote`，页头只有这一句） |
-| 刷新按钮 | 高 32px，padding 0 12px，13px/20px，`radius-md` | `.skc_addButton` |
+| 刷新按钮 | 高 32px，padding 0 12px，13px/20px，`radius-md`；**只在「已安装」页签出现**（页头工具条整行 `hidden={!onInstalled}`，市场页签没有这一行） | `.skc_addButton` |
+| 添加组菜单 | `align="end"`：菜单右缘 = `.skc_addGroup` 右缘（实测**差 0px**，验收判据 \|差\| ≤ 1px）；**向左生长**（左缘比添加组左缘多出 **16px**）；菜单 `top` − 添加组 `bottom` = **+4px**；菜单项恰好**一项** | `Menu align="end"`——**宿主同款**：右缘对齐添加组右缘、向左生长，不居中对齐也不向右溢出；真机量于 2026-11-12（K136） |
 | 页签总高 | **34px** = 30px tab + 2px×2（`SegmentedTabs size="sm"`） | `SHELL` `._tabs_1lga9_1[data-size=sm]` |
 | 页签文字 | 14px / 20px，选中 500（sm 档） | `._tab_1lga9_1` |
 | 区标题 | 14px / 22px / 500 | `.skc_groupTitle` |
