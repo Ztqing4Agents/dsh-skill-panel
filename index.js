@@ -1,7 +1,7 @@
 /**
- * dsh-skill-center - Host half.
+ * dsh-skill-panel - Host half.
  *
- * Serves the skill center data plane under /api/dsh-skill-center/*: one read
+ * Serves the skill center data plane under /api/dsh-skill-panel/*: one read
  * route that merges a fresh scan of $DSH_HOME/skills with the skill registry and
  * the install ledgers, one write route that rewrites the `disable-model-invocation`
  * field of a local SKILL.md byte for byte, one write route for the panel-owned
@@ -26,7 +26,7 @@ const require = createRequire(import.meta.url);
 const pkg = require('./package.json');
 
 /** Stable cordis plugin name; also the sidebar panel id. */
-export const name = 'dsh-skill-center';
+export const name = 'dsh-skill-panel';
 
 /** Services that must be up before the route table can mount. */
 export const inject = ['webServer', 'skills', 'sessions'];
@@ -81,5 +81,5 @@ export function apply(ctx, config) {
       for (const dispose of disposers) dispose();
       market.dispose();
     };
-  }, 'dsh-skill-center: routes');
+  }, 'dsh-skill-panel: routes');
 }

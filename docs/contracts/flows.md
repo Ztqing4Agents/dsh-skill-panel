@@ -29,14 +29,14 @@ sequenceDiagram
     participant CL as Classifier
 
     U->>SH: 点击侧栏「技能」
-    SH->>SH: selectPanel('dsh-skill-center')
-    SH->>PG: renderSlot('main', {entryKey:'dsh-skill-center'})
+    SH->>SH: selectPanel('dsh-skill-panel')
+    SH->>PG: renderSlot('main', {entryKey:'dsh-skill-panel'})
     PG->>ST: getSnapshot()
     ST-->>PG: status='idle', payload=undefined
     PG->>ST: actions.loading()
     PG-->>U: 骨架（区标题占位 + 4 行）
     PG->>API: list()
-    API->>RT: GET api/dsh-skill-center/list
+    API->>RT: GET api/dsh-skill-panel/list
     RT->>RT: isLoopbackRequest(req)  → false 则 403 E_FORBIDDEN
     RT->>SC: scanUserSkills($DSH_HOME/skills)
     SC-->>RT: ScanCandidate[]（含 symlink / realPath / frontmatter）
@@ -82,7 +82,7 @@ sequenceDiagram
     PG->>ST: actions.pending(identityKey)   // 不做乐观 UI
     PG-->>U: 开关 disabled + StateDot(ongoing) + aria-live 播报
     PG->>API: toggle({name, path, enabled})
-    API->>RT: POST api/dsh-skill-center/toggle
+    API->>RT: POST api/dsh-skill-panel/toggle
     RT->>RT: isLoopbackRequest → 403 E_FORBIDDEN
     RT->>SC: 重新扫描（磁盘是唯一真源）
     SC-->>RT: row' | undefined

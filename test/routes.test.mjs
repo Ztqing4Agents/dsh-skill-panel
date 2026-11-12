@@ -52,22 +52,22 @@ async function mount(options = {}) {
 
 test('路由表就是设计里的十六条 exact 路由（本地面 7 + 市场面 9）', () => {
   assert.deepEqual(ROUTES, {
-    list: '/api/dsh-skill-center/list',
-    detail: '/api/dsh-skill-center/detail',
-    toggle: '/api/dsh-skill-center/toggle',
-    providerToggle: '/api/dsh-skill-center/provider-toggle',
-    health: '/api/dsh-skill-center/health',
-    marketBootstrap: '/api/dsh-skill-center/market/bootstrap',
-    marketList: '/api/dsh-skill-center/market/list',
-    marketDetail: '/api/dsh-skill-center/market/detail',
-    marketInstalled: '/api/dsh-skill-center/market/installed',
-    marketInstall: '/api/dsh-skill-center/market/install',
-    marketVersions: '/api/dsh-skill-center/market/versions',
-    marketUpdate: '/api/dsh-skill-center/market/update',
-    marketIcons: '/api/dsh-skill-center/market/icons',
-    marketFavorite: '/api/dsh-skill-center/market/favorite',
-    add: '/api/dsh-skill-center/add',
-    remove: '/api/dsh-skill-center/remove',
+    list: '/api/dsh-skill-panel/list',
+    detail: '/api/dsh-skill-panel/detail',
+    toggle: '/api/dsh-skill-panel/toggle',
+    providerToggle: '/api/dsh-skill-panel/provider-toggle',
+    health: '/api/dsh-skill-panel/health',
+    marketBootstrap: '/api/dsh-skill-panel/market/bootstrap',
+    marketList: '/api/dsh-skill-panel/market/list',
+    marketDetail: '/api/dsh-skill-panel/market/detail',
+    marketInstalled: '/api/dsh-skill-panel/market/installed',
+    marketInstall: '/api/dsh-skill-panel/market/install',
+    marketVersions: '/api/dsh-skill-panel/market/versions',
+    marketUpdate: '/api/dsh-skill-panel/market/update',
+    marketIcons: '/api/dsh-skill-panel/market/icons',
+    marketFavorite: '/api/dsh-skill-panel/market/favorite',
+    add: '/api/dsh-skill-panel/add',
+    remove: '/api/dsh-skill-panel/remove',
   }, '十六条路径与设计逐字一致（本地面 7 条 + 市场面 9 条，见 routes.md §3.3 / §3.7.1）');
 });
 
@@ -422,7 +422,7 @@ test('provider-toggle 对内建行写面板存储，随后的 list 反映停用'
     });
     assert.equal(toggle.status, 200, '内建行写面板存储返回 200');
     assert.deepEqual(toggle.json.data, { provider: 'runtime', name: 'office', disabled: true }, '返回停用结果');
-    const store = JSON.parse(await readFile(join(mounted.tree.dshHome, 'dsh-skill-center', 'provider-toggles.json'), 'utf8'));
+    const store = JSON.parse(await readFile(join(mounted.tree.dshHome, 'dsh-skill-panel', 'provider-toggles.json'), 'utf8'));
     assert.deepEqual(store.disabled, [{ provider: 'runtime', name: 'office' }], '存储里登记了这条身份');
 
     const list = await callRoute(mounted.byPath[ROUTES.list], { headers: LOOPBACK_HEADERS });
@@ -614,7 +614,7 @@ const detailOf = (mounted, query, options = {}) => callRoute(mounted.byPath[ROUT
 test('K112 detail 在表里，正常行 200：出参形状 + 已去 frontmatter 的正文 + 相对路径清单', async () => {
   const mounted = await mount({ entries: DETAIL_ENTRIES });
   try {
-    assert.equal(ROUTES.detail, '/api/dsh-skill-center/detail', '路径就是契约里那一条');
+    assert.equal(ROUTES.detail, '/api/dsh-skill-panel/detail', '路径就是契约里那一条');
     assert.equal(Object.keys(ROUTES).length, 16, 'route 表恰好 16 条（本地面 7 + 市场面 9）');
 
     const response = await detailOf(mounted, '?name=hand-made');

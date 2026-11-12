@@ -31,7 +31,7 @@
 | 7 | 软链技能只读（队长决策 2） | 三层同时拦：扫描层给 `symlink` 事实 → 展示层渲染静态标记不渲染开关 → **写路由拒绝并发错误码** | 队长消息（2026-11-08）；`PRD` §3.1.1 R4（`lstat().isSymbolicLink()`，不是 `stat`） |
 | 8 | 已安装详情页的正文从哪来 | **本地读盘**（`lib/scan.js` 的 `readSkillContent`，第 12 条路由当场读一次），**不借** `market/detail` | 已安装详情答的是「我磁盘上这一份」，与上游那份允许不一致（`upstream === null` 是常态，见 `docs/contracts/decisions.md` 附录 I）；只有当场读盘才能反映手改 |
 
-架构模式：**分层 + 两半（dual-face）**。Host 半部 = 纯数据面（扫描/判定/写入/路由，零 React）；Client 半部 = 纯展示面（React 组件 + 一个模块级 store），二者只通过 `/api/dsh-skill-center/*` 的 JSON 契约耦合。
+架构模式：**分层 + 两半（dual-face）**。Host 半部 = 纯数据面（扫描/判定/写入/路由，零 React）；Client 半部 = 纯展示面（React 组件 + 一个模块级 store），二者只通过 `/api/dsh-skill-panel/*` 的 JSON 契约耦合。
 
 ### 1.2 包形态与接线
 
@@ -42,7 +42,7 @@
 ```jsonc
 // package.json（节选；完整形态以文件本身为准）
 {
-  "name": "dsh-skill-center",
+  "name": "dsh-skill-panel",
   "type": "module",
   "main": "index.js",                       // Host 半部入口（ESM，无构建）
   "exports": {
@@ -80,16 +80,16 @@
 只有一行 plugin 条目：**bundle 层要能把这个包选成 profile bundle，就必须有一条 Host 行**（Host 行本身可以什么都不注册）。
 
 ```yaml
-# bundle layer for dsh-skill-center —— 本插件的 Host 半部负责 /api/dsh-skill-center/* 路由，
+# bundle layer for dsh-skill-panel —— 本插件的 Host 半部负责 /api/dsh-skill-panel/* 路由，
 # Client 半部负责侧栏「技能」行与主区全局页。这一条只是让包可被 profile 选中。
 - insert:
-    - id: dsh-skill-center
-      name: dsh-skill-center
+    - id: dsh-skill-panel
+      name: dsh-skill-panel
 ```
 
 依据：`PROF/dsh-hidder/cordis.patch.yml`（单行 `insert`）、`PROF/@linxin666/dsh-client-ui-skill-explorer/cordis.patch.yml`、`PROF/@michengai/dsh-skills-manager/cordis.patch.yml`、`PROF/@montersy123/dsh-skill-market/cordis.patch.yml` —— 四份文件都是「一个 `insert` 一个 id/name」的形状。
 
-**部署侧（不属于包内容，装的时候才做）**：`~/.dsh/profiles/desktop/package.json` 加 `"dsh-skill-center": "link:../../Documents/Agents/Plugins/dsh-skill-center"`、`dsh.profile.bundles` 插入 `"dsh-skill-center"`、`node_modules` 建相对软链。bundle 列表**只在启动时读**，改完必须重启 DSH（项目记忆「DSH 插件开发」条已记录同一坑）。
+**部署侧（不属于包内容，装的时候才做）**：`~/.dsh/profiles/desktop/package.json` 加 `"dsh-skill-panel": "link:/path/to/dsh-skill-panel"`、`dsh.profile.bundles` 插入 `"dsh-skill-panel"`、`node_modules` 建相对软链。bundle 列表**只在启动时读**，改完必须重启 DSH（项目记忆「DSH 插件开发」条已记录同一坑）。
 
 #### 1.2.3 侧栏入口 + 全局页的注册方式（与宿主「插件」页同构）
 
@@ -99,7 +99,7 @@
 // ① 侧栏行：shell 拥有按钮、标签、tooltip、rail 几何；我们只画图标
 ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
   name: 'sidebar.panellist',
-  id: PANEL_ID,              // 'dsh-skill-center'
+  id: PANEL_ID,              // 'dsh-skill-panel'
   order: PANEL_ORDER,        // 40
   label: () => tt('panel.label'),   // 单一 i18n 键；请勿硬编码中文
 }, PanelIcon));
@@ -146,8 +146,8 @@ react, react/jsx-runtime, react-dom, react-dom/client, @deepseek-ai/cordis, zod,
 #### 1.2.5 接线相关的硬事实（不照做就会白屏）
 
 1. client bundle 必须自己调用 `window.__ModuleLoader__.load({ id, factory })`，且 `id` 与包名一致；否则宿主报 `bundle … loaded without registering "<id>" via __ModuleLoader__.load`（`EX/dsh-client-modules/lib/client.js`）。`PROF/dsh-hidder/client.js`、`PROF/@michengai/dsh-skills-manager/lib/client.js`、`EX/dsh-client-ui-plugin-manager/lib/client.js` 三处都是这个形状。
-2. 样式**自己注入**为 `<style data-plugin-css="dsh-skill-center/client.css">`，并按同一选择器去重（宿主同款：`PluginManagerPage.module.css` 的 loader 用 `tag.dataset.pluginCss = tagId`）。`HIDDER/docs/reference/settings-ui.md` §9 把 `style[data-plugin-css=…]` 列为可健康检查的稳定钩子。
-3. 路由 URL 必须**文档相对**（`api/dsh-skill-center/list`，没有前导 `/`）：GUI 用 `<base href="./">`，子路径部署下根绝对路径会逃出前缀。`PROF/@linxin666/dsh-client-ui-skill-explorer/lib/types/client/api.d.ts` 的注释 + 其 `EX/dsh-client-ui-skill-explorer/lib/client.js` 的 `API` 常量就是这套写法（issue #1707 的现场记录）。
+2. 样式**自己注入**为 `<style data-plugin-css="dsh-skill-panel/client.css">`，并按同一选择器去重（宿主同款：`PluginManagerPage.module.css` 的 loader 用 `tag.dataset.pluginCss = tagId`）。`HIDDER/docs/reference/settings-ui.md` §9 把 `style[data-plugin-css=…]` 列为可健康检查的稳定钩子。
+3. 路由 URL 必须**文档相对**（`api/dsh-skill-panel/list`，没有前导 `/`）：GUI 用 `<base href="./">`，子路径部署下根绝对路径会逃出前缀。`PROF/@linxin666/dsh-client-ui-skill-explorer/lib/types/client/api.d.ts` 的注释 + 其 `EX/dsh-client-ui-skill-explorer/lib/client.js` 的 `API` 常量就是这套写法（issue #1707 的现场记录）。
 
 ### 1.3 构建方式：**明确决定 —— esbuild 打单一 client bundle，源码按模块拆分，产物入库**
 
@@ -177,7 +177,7 @@ const result = await esbuild.build({
   minify: false,                 // 保持可读：报错栈要能落回源码行
   write: false,
 });
-// 外壳：window.__ModuleLoader__.load({ id: '@…/dsh-skill-center', factory: (require) => { … } })
+// 外壳：window.__ModuleLoader__.load({ id: '@…/dsh-skill-panel', factory: (require) => { … } })
 ```
 
 为什么 `external` 用通配 `@deepseek-ai/*` 而不是逐个列：seed 与 graph 的解析在运行时完成，打包期把它们留在 `require(...)` 里就是唯一正确做法；漏列一个会让 esbuild 试图内联宿主的私有实现。
@@ -287,7 +287,7 @@ ledger.readAll() ─────────────────┘   （R5�
 
 ## 2 文件清单
 
-相对 `~/Documents/Agents/Plugins/dsh-skill-center/`；标 **★** 的由构建产出并入库。
+相对仓库根；标 **★** 的由构建产出并入库。
 
 ### 2.1 包根与接线
 
@@ -315,7 +315,7 @@ ledger.readAll() ─────────────────┘   （R5�
 | `lib/scan.js` | 扫描 `$DSH_HOME/skills`（跳过 `.system`、点文件、非技能条目）；产出 `ScanCandidate[]`（含 `symlink`/`realPath`、`upstream` 身份三元组、`version`）；`readSkillContent(row)` = 详情页那一次读盘（围栏见 `docs/contracts/routes.md` §3.3.3） |
 | `lib/registry.js` | `snapshotRegistry(ctx.skills, cwd)` + `rankOfSummary(summary)`（= 先按 `source`/`provider` 映射成 level，再调 `classify.rankOf(level)`；映射表见 1.4.3）；summary 的 `resourceBase.path` 由 `lib/classify.js` 的 `buildRow` 透出成 `Row.originPath`（内置块靠它算包名，纯展示，不参与判据） |
 | `lib/classify.js` | **纯函数核心**：`rankOf(level)`、`classifySkill(input)`、`mergeCatalog({scanned, registry, ledger})`、`buildGroups()` |
-| `lib/provider-toggles.js` | 自有存储 `$DSH_HOME/dsh-skill-center/provider-toggles.json`：`deserialize`/`serialize`/`read`/`setEnabled`（原子写、损坏降级）。同族的另一份自有存储是 `lib/market/store.js` 的安装台账（形状与 `writeAtomic` 见 `docs/contracts/routes.md` §3.7.4） |
+| `lib/provider-toggles.js` | 自有存储 `$DSH_HOME/dsh-skill-panel/provider-toggles.json`：`deserialize`/`serialize`/`read`/`setEnabled`（原子写、损坏降级）。同族的另一份自有存储是 `lib/market/store.js` 的安装台账（形状与 `writeAtomic` 见 `docs/contracts/routes.md` §3.7.4） |
 | `lib/routes.js` | `makeRoutes(ctx, deps) → WebRoute[]`：`list` / `toggle` / `provider-toggle` / `health` / `detail` / `add` / `remove` 七条本地面 exact 路由 + 市场面 **9 条**（批量图标 `market/icons`、本地收藏写 `market/favorite`、版本列表 `market/versions` 与覆盖安装 `market/update` 在内；两条图片端点已于 U7 退场）+ 围栏 + 身份校验 |
 | `lib/local/`（本地写入面，U20/U21） | `errors.js`（`LOCAL_STATUS` 四个新码 + `asLocalError` 归一）、`rules.js`（纯判据：`expandHome` / `skillNameOf` / `shadowOf` / `LOCAL_LIMITS` / `checkPlan` / **`classifyAddSpec`**（`spec` → path 或 github，U21）/ **`locateSkillDir`**（克隆后定位源目录），见 `docs/contracts/data-model.md` §3.2.6）、**`git.js`**（唯一的子进程出口：`cloneRepo` 走 `execFile` + `--depth 1 --single-branch [--branch <ref>] --no-recurse-submodules`；**env 自建、不带父环境**（`PATH`/`HOME`/可选 `TMPDIR` + `LC_ALL=C`/`GIT_TERMINAL_PROMPT=0`/空 `GIT_ASKPASS`·`SSH_ASKPASS`/`SSH_ASKPASS_REQUIRE=never`/`GCM_INTERACTIVE=never` + `GIT_CONFIG_COUNT|KEY_0|VALUE_0` 表达 `credential.helper=''`，共 11–12 键）；输出 ≤16384、60s 超时 + SIGKILL、诊断不落日志也不过 `message`）、`copy.js`（复制管线：`.skc-install-*` 临时目录 → 逐文件复制 → 目录 fsync → 占位 `mkdir` + `rename`）、`index.js`（`createLocalSkills({skillsRoot, dshHome, store, withWriteLock, rescan, copy?, git?})` → `{add, remove}`，守卫 S0–S12 / D0–D9 与 U21 的 G0–G12 在 `docs/contracts/routes.md` §3.3.4；**`copy` 与 `git` 都可注入**——缺省用 `copy.js` 的真实实现，前者只为让 S10「落位失败」与 S11「回读名不一致」在 node 里造得出失败点、后者让「无 git / 超时 / 404 / 定位多候选」在 L2 里造得出来；两者都**不改变守卫顺序与错误码**）。**它不弹自己的锁**：`withWriteLock` 由 `createInstaller` 提供（同一张锁表，见 `docs/contracts/decisions.md` 附录 S-8） |
 | `lib/market/`（市场面） | 源适配器、上游客户端、安装**与覆盖安装**链路、两份自有存储（台账 / 收藏），共 11 个文件；本表不展开，逐个职责见 `docs/contracts/market.md` 附录 G |

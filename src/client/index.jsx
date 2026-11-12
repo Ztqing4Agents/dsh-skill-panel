@@ -1,5 +1,5 @@
 /**
- * dsh-skill-center - Client half.
+ * dsh-skill-panel - Client half.
  *
  * Registers three seats and one stylesheet:
  *   - the sidebar entry (`sidebar.panellist`), with a label that is only a locale
@@ -23,10 +23,10 @@ import { injectStyles } from './styles.js';
 import { ToastHost } from './toast.jsx';
 
 /** Locale namespace this plugin owns. */
-export const NS = 'dsh-skill-center';
+export const NS = 'dsh-skill-panel';
 
 /** The id shared by the sidebar entry and the page it opens. */
-export const PANEL_ID = 'dsh-skill-center';
+export const PANEL_ID = 'dsh-skill-panel';
 
 /** Where the entry sits among the other sidebar rows. */
 export const PANEL_ORDER = 40;
@@ -158,7 +158,7 @@ function uiDictionary(dictionary) {
 export function apply(ctx) {
   ctx.effect(
     () => ctx.locale.register(NS, { zh: uiDictionary(zh), en: uiDictionary(en) }),
-    'dsh-skill-center: dictionaries',
+    'dsh-skill-panel: dictionaries',
   );
   injectStyles();
   const t = ctx.locale.bind(NS);
@@ -168,5 +168,5 @@ export function apply(ctx) {
   disposers.push(...registerToast(ctx, { store }));
   ctx.effect(() => () => {
     for (const dispose of disposers.splice(0)) dispose();
-  }, 'dsh-skill-center: ui mounts');
+  }, 'dsh-skill-panel: ui mounts');
 }

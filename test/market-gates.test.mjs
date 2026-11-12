@@ -402,7 +402,7 @@ test('K85 客户端收藏写侧已撤、后端一条未删（负向门禁）', a
   // Kept on the Host: store, route, bootstrap keys, both error copies.
   assert.equal(existsSync(join(ROOT, 'lib', 'market', 'favorites.js')), true, 'lib/market/favorites.js 仍在');
   const { ROUTES } = await import('../lib/routes.js');
-  assert.equal(ROUTES.marketFavorite, '/api/dsh-skill-center/market/favorite', '第 13 条路由仍在');
+  assert.equal(ROUTES.marketFavorite, '/api/dsh-skill-panel/market/favorite', '第 13 条路由仍在');
   const routes = await readFile(join(ROOT, 'lib', 'routes.js'), 'utf8');
   assert.match(routes, /favorites: bookmarks\.favorites/, 'bootstrap 仍下发 favorites');
   assert.match(routes, /favoritesOk: bookmarks\.readable/, 'bootstrap 仍下发 favoritesOk');
@@ -629,11 +629,11 @@ test('K115 契约自洽：ROUTES、§3.3 与 §3.7.1 两张路由表说的是同
   assert.deepEqual(local, ['1', '2', '3', '4', '14', '17', '18'], '本地面七条：#1–#4、#14、#17/#18（历史编号不重排、不复用）');
   assert.deepEqual(market, ['5', '6', '7', '8', '9', '11', '13', '15', '16'], '市场面九条：#10 与 #12 已退役，编号留空；#15/#16 是 U19 的两条');
   assert.equal(local.length + market.length, 16, '两张表的条数合计就是 16 条');
-  assert.match(text, /\| 14 \| `GET \/api\/dsh-skill-center\/detail` \|/, '#14 就是 detail（GET + ?name=）');
+  assert.match(text, /\| 14 \| `GET \/api\/dsh-skill-panel\/detail` \|/, '#14 就是 detail（GET + ?name=）');
   assert.match(text, /只收 name，没有任何路径 \/ 目录参数/, '#14 的入参白名单写在表里');
   // U20 的两条写路由（#17 add / #18 remove）与它们的守卫节。
-  assert.match(text, /\| 17 \| `POST \/api\/dsh-skill-center\/add` \|/, '#17 就是 add（POST + {path}）');
-  assert.match(text, /\| 18 \| `POST \/api\/dsh-skill-center\/remove` \|/, '#18 就是 remove（POST + {name,path}）');
+  assert.match(text, /\| 17 \| `POST \/api\/dsh-skill-panel\/add` \|/, '#17 就是 add（POST + {path}）');
+  assert.match(text, /\| 18 \| `POST \/api\/dsh-skill-panel\/remove` \|/, '#18 就是 remove（POST + {name,path}）');
   assert.match(text, /#### 3\.3\.4 add（#17）与 remove（#18）的守卫与不变式/, '§3.3.4 记着 S0–S12 / D0–D9 的守卫表');
   for (const step of ['S0', 'S7', 'S12', 'D1', 'D6', 'D9']) {
     assert.ok(text.includes(`${step} `), `§3.3.4 逐条编号到 ${step}`);

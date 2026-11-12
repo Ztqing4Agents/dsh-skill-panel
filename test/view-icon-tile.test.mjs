@@ -104,7 +104,7 @@ function ruleBody(source, selector) {
 }
 
 test('K68 传 `iconUrl` ⇒ 首帧探测图 + 字母，onLoad 后可见图；始终没有新增可点区域', () => {
-  const url = 'api/dsh-skill-center/market/lucide?name=zap';
+  const url = 'api/dsh-skill-panel/market/lucide?name=zap';
   // R8：任何一帧都不空。首帧 = [隐藏探测图, 字母]；探测图加载完成后才是可见图。
   const mounted = mountHooks(modules.iconTile.IconTile, { iconUrl: url, title: 'ui-design' });
   const first = mounted.render();
@@ -162,7 +162,7 @@ test('K68 不传 `iconUrl` ⇒ 与改动前的字母瓦片逐字节相同', () =
 });
 
 test('K68 `MarketIcon` 与 `IconTile` 对同一 `iconUrl` 输出相同（同一个视觉单元）', () => {
-  const url = 'api/dsh-skill-center/market/lucide?name=zap';
+  const url = 'api/dsh-skill-panel/market/lucide?name=zap';
   const item = { id: 'clawhub:awspace:pdf', sourceId: 'clawhub', owner: 'awspace', slug: 'pdf', iconUrl: null };
   const market = { items: [], icons: { 'clawhub:awspace:pdf': url }, iconsTried: {} };
   const fromMarket = renderToStaticMarkup(createElement(cardModules.card.MarketIcon, { item, title: 'pdf', market }));
@@ -206,7 +206,7 @@ test('K68 客户端源码里没有第二条上色/画图路径（视觉单元只
 });
 
 test('K70 任何一帧都不空：首帧字母、onLoad 只剩可见图、onError 只剩字母', () => {
-  const url = 'api/dsh-skill-center/market/clawhub-icon?hash=' + 'ab'.repeat(32);
+  const url = 'api/dsh-skill-panel/market/clawhub-icon?hash=' + 'ab'.repeat(32);
   /**
    * Whether one rendered tile shows *something*: a letter, or a visible image.
    * @param {{props: object}} node - rendered tile.
@@ -239,7 +239,7 @@ test('K70 任何一帧都不空：首帧字母、onLoad 只剩可见图、onErro
   assert.match(String(loadedKids[0].props.className), /skc_marketIconImg/, '剩下的是可见图');
 
   // 3) 换到另一个 URL 并 404：只剩字母，<img> 消失，仍然不空
-  const broken = 'api/dsh-skill-center/market/lucide?name=nope';
+  const broken = 'api/dsh-skill-panel/market/lucide?name=nope';
   const probing = mounted.render({ iconUrl: broken, title: 'dev-god' });
   const [probe2, letter2] = kidsOf(probing);
   assert.equal(letter2, 'D', '新 URL 探测期间字母仍在');
@@ -260,7 +260,7 @@ test('K70 任何一帧都不空：首帧字母、onLoad 只剩可见图、onErro
 });
 
 test('K70 探测图与可见图同 src：只发一次请求；容器四条几何逐字未变', () => {
-  const url = 'api/dsh-skill-center/market/lucide?name=brain';
+  const url = 'api/dsh-skill-panel/market/lucide?name=brain';
   const mounted = mountHooks(modules.iconTile.IconTile, { iconUrl: url, title: 'shieldcortex' });
   const first = mounted.render();
   const [probe] = kidsOf(first);

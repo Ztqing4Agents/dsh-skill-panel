@@ -1,4 +1,4 @@
-# AGENTS.md — dsh-skill-center 维护者开工地图
+# AGENTS.md — dsh-skill-panel 维护者开工地图
 
 只写「不写就会返工」的。契约细节在 `docs/contracts/*.md`（真源），本文件不复述。
 

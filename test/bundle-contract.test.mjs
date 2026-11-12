@@ -56,9 +56,9 @@ test('产物只 require 平台 seed 模块（浏览器里其它模块一律解�
 test('产物是宿主认识的 __ModuleLoader__.load 形状，且 id 与包名一致', async () => {
   const text = await bundle();
   assert.equal(text.includes('window.__ModuleLoader__.load('), true, '产物由 __ModuleLoader__ 装载');
-  assert.match(text, /id:\s*"dsh-skill-center"/, 'loader id 是包名');
+  assert.match(text, /id:\s*"dsh-skill-panel"/, 'loader id 是包名');
   assert.match(text, /factory:\s*\(require\)\s*=>/, 'loader 收到一个 require 工厂');
-  assert.equal(text.includes('dsh-skill-center/client.css'), true, '样式注入钩子随产物一起进包');
+  assert.equal(text.includes('dsh-skill-panel/client.css'), true, '样式注入钩子随产物一起进包');
 });
 
 test('package.json 的客户端契约字段齐全', async () => {

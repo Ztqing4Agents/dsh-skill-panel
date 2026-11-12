@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-13
+
 ### Added
 
 - 「已安装」页签的行可点开本地详情：调用名（kebab，可选中纯文本）、技能文件与真实位置、提供者与只读原因、`SKILL.md` 正文（宿主 markdown 渲染），以及从市场装的技能在来源元数据里带的那一条版本号（手工装的技能没有这一块，就不显示）；返回回到原来的滚动位置，开关仍是行里唯一的独立控件。
@@ -40,9 +42,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **不兼容变更（breaking）**：包名由 `dsh-skill-center` 改为 **`dsh-skill-panel`**，中文名改为「技能面板」，仓库与发行页随之搬到 `github.com/Ztqing4Agents/dsh-skill-panel`。
+  - 16 条路由前缀 `/api/dsh-skill-center/*` 全部改为 `/api/dsh-skill-panel/*`（本地面 7 条 + 市场面 9 条），浏览器半部用的文档相对前缀与 `__ModuleLoader__` 的 id、样式注入钩子 `style[data-plugin-css=…]` 同步改名；宿主与 profile 里挂的 bundle id 必须一起换成新名，否则面板不会出现。
+  - 自有存储目录 `$DSH_HOME/dsh-skill-center/` 改为 `$DSH_HOME/dsh-skill-panel/`（安装台账 `installed.json`、收藏 `favorites.json`、内置技能的插件开关 `provider-toggles.json` 三个文件都在里面）。
+  - **升级前先把旧目录改名**：`mv ~/.dsh/dsh-skill-center ~/.dsh/dsh-skill-panel`（不跑这一步，新版读不到旧数据，表现成收藏清空、安装台账丢失、内置技能开关全部回到默认；旧目录不会被自动迁移、也不会被回读）。
+  - 从 GitHub 装（`dsh plugin add github:…`）的旧包与新包是**两个包名**，升级时要先把旧的从 profile 里摘掉再装新的，装完重启 DSH。
 - 技能详情（「已安装」里点行标题进入）：打开即覆盖整页页头，从面包屑「技能」开始 —— 头行（49 图标 + 右侧动作组「更新（可更新时才有）→ 卸载 → 开关」）→ 名称 + 版本号 → **调用名（等宽纯文本）** → 描述 → 正文盒（`SKILL.md`，宿主 markdown 渲染，盒内滚正文）→ [版本区块，仅市场装的技能：手动「重新检查」五态] → 来源信息（代码来源 / 当前版本）→ 查看仓库外链。**作者行（`@owner/slug`）不再显示**；文件清单、分区标签与「技能文件 / 提供者」事实表已去掉；卸载仍是禁用的占位按钮。**本页没有复制入口**——调用名与等宽名都是可选中的纯文本，复制靠系统选区。
 - 插件页（内置技能在列表里按 provider 折成块，点块进入）：页内是「包含的组件」——每行 **41 图标 + 名称 + 两行描述 + 右侧「● 运行中 / ○ 已停用」与开关**，行高 **74** 与宿主一致；行是**只读信息行**：不可点、无 hover、无复制，行底也不再挂等宽的 kebab 调用名（要复制调用名去技能详情页）。页面没有版本区块与仓库链接（内置不检查更新）。
-- 文案：新增 **30** 个键（`add.*` 15 / `delete.*` 4 / 11 个 `error.E_*`）、退役 2 个（`add.comingSoon`、`detail.uninstallSoon`）、改值 11 处（`detail.uninstall`、`delete.{title,body,confirm}` 与 `E_DELETE_IO` 统一用「卸载」——宿主同词；`E_INSTALL_BUSY` 与 `E_BAD_PATH` 措辞放宽；`add.{description,pathLabel,safety}` 与 `E_PACKAGE_INVALID` 扩到 GitHub 形态）；字典 165 → **197** 键（键名未变），客户端产物 160041 → **177498 B**（门禁上限两轮抬到 **180000 B**，余 2502 B）。
+- 文案：新增 **30** 个键（`add.*` 15 / `delete.*` 4 / 11 个 `error.E_*`）、退役 2 个（`add.comingSoon`、`detail.uninstallSoon`）、改值 11 处（`detail.uninstall`、`delete.{title,body,confirm}` 与 `E_DELETE_IO` 统一用「卸载」——宿主同词；`E_INSTALL_BUSY` 与 `E_BAD_PATH` 措辞放宽；`add.{description,pathLabel,safety}` 与 `E_PACKAGE_INVALID` 扩到 GitHub 形态）；字典 165 → **197** 键（键名未变），客户端产物 160041 → **177498 B**（门禁上限两轮抬到 **180000 B**，余 2502 B；1.0.0 改名让字符串变短，重建后 **177491 B**，余 2509 B）。
 - 「添加技能」的 chevron 菜单按宿主对齐：菜单右缘与添加组右缘齐平（此前向右溢出约 200px），向左生长，垂直间距 4px。
 - 页头那句更新提示不再在刷新时先消失：**已有结论时，刷新 / 重新检查期间保持上一轮那句话与颜色**，一轮检查结束才就地换成新结论（首轮仍是一轮跑完才出现）；刷新按钮的转圈仍只跟列表重扫，不会被拖长。
 - 删除确认里那行要删的目录，标签从复用的「安装到」改成「目录」（新键 `delete.factDir`）。

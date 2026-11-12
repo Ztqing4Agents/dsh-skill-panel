@@ -18,9 +18,9 @@ import { tempDir } from './helpers/tree.mjs';
  */
 async function homeWith(raw) {
   const { dir, cleanup } = await tempDir();
-  const file = join(dir, 'dsh-skill-center', 'provider-toggles.json');
+  const file = join(dir, 'dsh-skill-panel', 'provider-toggles.json');
   if (raw !== undefined) {
-    await mkdir(join(dir, 'dsh-skill-center'), { recursive: true });
+    await mkdir(join(dir, 'dsh-skill-panel'), { recursive: true });
     await writeFile(file, raw, 'utf8');
   }
   return { dshHome: dir, file, cleanup };

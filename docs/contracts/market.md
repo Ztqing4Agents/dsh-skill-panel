@@ -156,7 +156,7 @@ sort 映射（`sort` 四个值，路由层已白名单化；**默认仍是 `reco
 
 ### 7.7 收藏（本地书签）
 
-**身份键与文件**：收藏键 = `MarketItem.id` = `marketId(source, owner, slug)`（与图标缓存、上游标题、安装台账同一个键）。落本插件自己的文件 `$DSH_HOME/dsh-skill-center/favorites.json`：`{version:1, favorites:[id…]}`，**最新在前**（将来「我的收藏」列表天然是收藏时间倒序）。数组而不是对象键，理由同 `provider-toggles.json`：id 里含 `:`，用它当对象键会把分隔符歧义写进文件格式。**不碰** `~/.dsh/skills-manager/state.json`、其他市场插件的 `skill-market/*`、`.skills-lock.json`（AGENTS.md 硬约束 10）。
+**身份键与文件**：收藏键 = `MarketItem.id` = `marketId(source, owner, slug)`（与图标缓存、上游标题、安装台账同一个键）。落本插件自己的文件 `$DSH_HOME/dsh-skill-panel/favorites.json`：`{version:1, favorites:[id…]}`，**最新在前**（将来「我的收藏」列表天然是收藏时间倒序）。数组而不是对象键，理由同 `provider-toggles.json`：id 里含 `:`，用它当对象键会把分隔符歧义写进文件格式。**不碰** `~/.dsh/skills-manager/state.json`、其他市场插件的 `skill-market/*`、`.skills-lock.json`（AGENTS.md 硬约束 10）。
 
 **读侧只有一处**：`market/bootstrap` 的 `favorites` 与 `favoritesOk`。**不新增 GET**——收藏是全局集合，而 `bootstrap` 正是「全局一次」的那条，同一往返拿齐、首帧书签就对；新开一条只读端点，等于为「bootstrap 挂了还能读收藏」这一个代价多一份 `guard()` / 错误码 / 测试，却不减少任何一次往返。`bootstrap` 失败时书签态未知，由 #13 的权威回包自愈（点一下无论方向，响应里的 `favorites` 就是真值，且 `toggle` 幂等）。`bootstrap?refresh=1` **不清**收藏（收藏不是缓存）。
 
@@ -340,8 +340,8 @@ Host 半部（`lib/market/`，纯 node ESM，无构建）：
 | `lib/market/sources/clawhub.js` | ClawHub 的**配置**：身份（`upstream_owner_login`）、镜像行归一化、`namespace` 解析（`keyword=<slug>` 双匹配）、图标事实（同一次查询）、`caps`；HTTP 那半在 `mirror.js` |
 | `lib/market/sources/mirror.js` | 市场面唯一的 HTTP 实现：`createMirrorAdapter(config)`（列表 / 详情 / 清单 / 单文件 / **版本列表** / 分类 / 计数 / 图标缓存），只连 `api.skillhub.cn`；两个适配器都是它的配置 |
 | `lib/market/install.js` | 安装**与覆盖安装**编排：`install()` = 解析名字 → 冲突检测 → 临时目录 → 逐文件校验写入 → 原子 rename → 台账 → 失败清理（唯一 `rm -rf` 处）；`update()` = 同样的管道 + 启用状态搬运 + 两次 rename 交换 + 回滚（§7.11），两者共用同一张锁表 |
-| `lib/market/store.js` | 自有台账 `$DSH_HOME/dsh-skill-center/installed.json` 的读/写（临时文件 + fsync + rename；损坏降级为空；形状与 `lib/ledger.js` 的 `own-record` 兼容）；`writeAtomic(file, text, tempPrefix)` 供收藏复用 |
-| `lib/market/favorites.js` | 自有收藏集合 `$DSH_HOME/dsh-skill-center/favorites.json` 的读/写（复用 `store.js` 的 `writeAtomic`；进程内串行化；损坏降级为空；上限 500；幂等不写盘） |
+| `lib/market/store.js` | 自有台账 `$DSH_HOME/dsh-skill-panel/installed.json` 的读/写（临时文件 + fsync + rename；损坏降级为空；形状与 `lib/ledger.js` 的 `own-record` 兼容）；`writeAtomic(file, text, tempPrefix)` 供收藏复用 |
+| `lib/market/favorites.js` | 自有收藏集合 `$DSH_HOME/dsh-skill-panel/favorites.json` 的读/写（复用 `store.js` 的 `writeAtomic`；进程内串行化；损坏降级为空；上限 500；幂等不写盘） |
 
 Client 半部（`src/client/`，纯逻辑模块 node 可直接 import）：
 

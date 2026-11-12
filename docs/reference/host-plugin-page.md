@@ -41,7 +41,7 @@ grep -ac -- --bundle-progress-size "$A"   # 打开进度占位宽（本文 §4�
 | `EX/` | `/Applications/DeepSeek Harness.app/Contents/Resources/app.asar` 内的 `dsh/node_modules/@deepseek-ai/` | asar 是「头部 JSON + 拼接内容」，不是目录：`u32@4 = headerSize`、`u32@12 = jsonLen`、JSON 从 byte 16 起、内容区 = `8 + headerSize` |
 | `SHELL/` | `EX/dsh-web-frontend/dist/assets`（`index-BgUyXZcc.js`、`index-lh_YM6sT.css`） | 前端 shell 产物，单行压缩，按唯一字串 grep |
 | `PROF/` | `~/.dsh/profiles/desktop/node_modules/` | 本机已装插件 |
-| `HIDDER/` | `~/Documents/Agents/Plugins/dsh-hidder/` | 用户自己的插件；`HIDDER/docs/reference/host-selectors.md`、`HIDDER/docs/reference/settings-ui.md`、`HIDDER/spec.md` 有宿主真实取值 |
+| `HIDDER/` | `~/<plugins-dir>/dsh-hidder/` | 用户自己的插件；`HIDDER/docs/reference/host-selectors.md`、`HIDDER/docs/reference/settings-ui.md`、`HIDDER/spec.md` 有宿主真实取值 |
 | `PRD` | `git show a8141eb:docs/PRD.md` | 上游产品规格。2026-11-09 作为过程产物移出工作树，正文里的 `PRD §x` 引用保留以便追溯 |
 
 > 宿主版本：`0.2.2-rc.1`（`HIDDER/docs/reference/host-selectors.md` 头部的双证采集记录）。本文所有宿主读数采集于 2026-11-08，同一版本。
@@ -161,7 +161,7 @@ locale 键值（逐字，来自该包的 zh 表）：
 | 事实行 | 高 **60.5**、`padding: 8px 2px`、**无 `min-height`**（长路径自己折到 ~60）、分隔线 `.5px rgba(0,0,0,.1)`（深色 `rgba(255,255,255,.12)`，最后一行也有） |
 | 来源信息 | 行盒高**由内容决定**（本条实测 60.5，无 `min-height`）、`padding: 8px 2px`、两端对齐；左 `dt` `13px/20px/400` `rgb(97,102,107)`、右 `dd` `13px/20px/400` `rgb(15,17,21)`；`dd > code` `12px / 20px`、底 `rgb(245,246,247)`（深色 `rgb(53,54,56)`）、`padding: 2px 6px`、圆角 4；每行都有 `.5px` 分隔线 |
 | **版本区块**（截图可见，**px 未逐值采集**） | `h4` 标题（`14/20/500`，与其它区块标题同阶）+ 右侧「重新检查」小按钮；下面一张圆角卡：✓ 圆底 + 「已是最新版本 / 上次检查于 HH:MM」。区块自身服从技术区规则（`detailSections{gap:32}`、区块内 `gap:12`、`margin:0`），**卡内 px 与按钮刻度尚未量**，这一条是余项（我们的取值见 `docs/contracts/visual.md` A.5） |
-| **本地插件**（截图 2026-11-10，px 未逐值采） | 底部**没有版本区块**——「来源信息」只有两行：`代码来源` = `link:/Users/…/dsh-skill-center`（本地 `link:` 依赖就是这个形状）、`当前版本` = `0.1.0`（npm 包的包版本）。**本地技能按此办理**：不显示更新检查，代码来源给目录 / `link:` |
+| **本地插件**（截图 2026-11-10，px 未逐值采） | 底部**没有版本区块**——「来源信息」只有两行：`代码来源` = `link:/Users/…/<包目录>`（本地 `link:` 依赖就是这个形状）、`当前版本` = `0.1.0`（npm 包的包版本）。**本地技能按此办理**：不显示更新检查，代码来源给目录 / `link:` |
 | **查看仓库** | 页尾右下角一个带外链图标的小链接（`tertiary` 一档，hover 变主色）；同样**未逐值采集** |
 | **「包含的组件」区块**（**已用于我们的「调用名」区块**） | 行高 **74**、图标 **41×41**（圆角 12）、`rowId` **13.5px / 20px / 500**、`rowModule` **11.5px / 16px** 灰、区块标题 14/20/500 且带「共 N 个 · M 运行中」计数（我们**不照搬计数**）。我们把这一行的形状用在「调用名」上（名字＝调用名、副行＝技能描述两行裁切、右侧挂复制按钮） |
 
@@ -187,7 +187,7 @@ locale 键值（逐字，来自该包的 zh 表）：
 
 ### 7.8 采集坑（下次别再花时间）
 
-1. 隔离 profile 只写 `dsh.profile.bundles` 时，宿主「插件」页**不列**第三方包；必须同时在该 `package.json` 里写 `dependencies: {"dsh-skill-center": "link:<仓库绝对路径>"}`。
+1. 隔离 profile 只写 `dsh.profile.bundles` 时，宿主「插件」页**不列**第三方包；必须同时在该 `package.json` 里写 `dependencies: {"dsh-skill-panel": "link:<仓库绝对路径>"}`。
 2. 该组的卡片常在首屏外（1440×920 下 y≈883），要先滚到底再点。
 3. 宿主类名是构建哈希（`w6M7KW_*`），只能按 `[class*="crumb"]` / `[class*="detailTitle"]` 这类语义片段定位。
 4. 在 `<html>` 上模拟 `data-platform=darwin` 会让整轮静默挂死（宿主外壳也读它）；要验 darwin 分支只在 `.skc_page` 上打属性。

@@ -15,7 +15,7 @@
 ```
 ClientPlugin.apply(ctx)
   ├─ ctx.effect(() => ctx.locale.register(NS, { zh, en }))          // 字典来自 locale/*.json（构建期内联）
-  ├─ injectStyles()                                                // <style data-plugin-css="dsh-skill-center/client.css">
+  ├─ injectStyles()                                                // <style data-plugin-css="dsh-skill-panel/client.css">
   ├─ slots.inject('sidebar.panellist', …)  → SkillsPanelIcon
   ├─ slots.inject('main', …)               → SkillsPage（inject: {store, api, uiWorkspace}——U22 起用它的 `startSession` 开**创造模式草稿**，见 §3.9.7）
   └─ slots.inject('shell.overlay', …)      → ToastHost（inject: {store}）  // 离开页面仍可见（P0-12）
@@ -253,13 +253,13 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 
 | 对象 | 规则 | 例 |
 | --- | --- | --- |
-| 面板 id | 与包名同值，全局唯一 | `dsh-skill-center` |
-| 路由前缀 | `/api/dsh-skill-center/*`（服务端带前导 `/`；客户端用**文档相对** `api/dsh-skill-center/*`） | —— |
+| 面板 id | 与包名同值，全局唯一 | `dsh-skill-panel` |
+| 路由前缀 | `/api/dsh-skill-panel/*`（服务端带前导 `/`；客户端用**文档相对** `api/dsh-skill-panel/*`） | —— |
 | 分区 key | `builtin` / `local` / `installed`（**机器值**，永不本地化） | `group.local` |
 | CSS 类 | `skc_` 前缀 + camelCase；局部自定义属性 `--skc-*` | `skc_cardHead`、`--skc-page-inset` |
-| 样式注入钩子 | `style[data-plugin-css="dsh-skill-center/client.css"]` | —— |
-| 自有存储 | `$DSH_HOME/dsh-skill-center/provider-toggles.json` | —— |
-| 市场路由前缀 | `/api/dsh-skill-center/market/*`（服务端）；客户端 `api/dsh-skill-center/market/*` | `market/list` |
+| 样式注入钩子 | `style[data-plugin-css="dsh-skill-panel/client.css"]` | —— |
+| 自有存储 | `$DSH_HOME/dsh-skill-panel/provider-toggles.json` | —— |
+| 市场路由前缀 | `/api/dsh-skill-panel/market/*`（服务端）；客户端 `api/dsh-skill-panel/market/*` | `market/list` |
 | 市场 CSS 类 | `skc_market*` 前缀，取值见 `docs/contracts/market.md` 附录 F | `skc_marketCard` |
 | 技能名文法 | `^[a-z0-9]+(?:-[a-z0-9]+)*$`（宿主同文法） | `dev-docs-standards` |
 | 身份键 | `${provider}#${name}`（内存）；磁盘用 `{provider,name}` 数组 | `filesystem#ui-design` |
@@ -268,7 +268,7 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 
 ## 8.3 i18n 键约定
 
-- 命名空间 `NS = 'dsh-skill-center'`；`locale/zh.json` / `locale/en.json` 是**唯一文案真源**，键集必须一致。
+- 命名空间 `NS = 'dsh-skill-panel'`；`locale/zh.json` / `locale/en.json` 是**唯一文案真源**，键集必须一致。
 - **文件形状：单层扁平点号键**（`"panel.label": "技能"`），**不是**嵌套对象（`{"panel":{"label":…}}`）。
   依据是宿主实现：`ctx.locale` 的 `lookup(ns,key)` 是 `locales.get(locale)?.[key]` ——**字面量属性查找**，
   找不到就 `?? key` 回落成键名；它不做点号路径遍历。嵌套字典在真机上的表现是**整页显示原始键名**

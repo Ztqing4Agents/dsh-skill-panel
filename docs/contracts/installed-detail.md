@@ -22,7 +22,7 @@
 
 ## 数据：Row 快照 + 第 12 条路由
 - 身份与版本（`upstream` / `version` / `name`）来自列表里的 `Row`：打开详情**不重扫列表、不重拉 `list`**。**整页以宿主为准**：分区 Tag、软链 Tag、技能文件/真实位置/提供者/只读原因那张事实表都不渲染（宿主没有这些块）；软链只读只靠头部的「软链·只读」标记说明，`no-file` 行不解释原因——这两条是有意的。
-- 正文与文件清单来自第 12 条路由 `GET /api/dsh-skill-center/detail?name=<kebab>` → `SkillContent{name,path,size,truncated,body,files,filesTruncated}`；围栏见 `docs/contracts/routes.md` §3.3.3。
+- 正文与文件清单来自第 12 条路由 `GET /api/dsh-skill-panel/detail?name=<kebab>` → `SkillContent{name,path,size,truncated,body,files,filesTruncated}`；围栏见 `docs/contracts/routes.md` §3.3.3。
 - `body === null` 是「这条没有可读文件」（内置行）⇒ `detail.noBody` 文案，**不是错误**；`files === null` 时文件段整段不渲染。
 - `Row.version` 是展示字段（`_meta.json` 的 `version`，0 次新增磁盘读）：它**只做两件事**——画版本 Tag、与候选版本做**严格相等**比对（§更新检测）；不排序、不比较大小、不参与分区判据。为空时版本 Tag 整块不渲染，不写「未知」，且该行的版本区块落「无法检查更新」。
 
@@ -216,6 +216,6 @@ store.checkRun = {id: number, status: 'idle'|'running'|'done'}   // 一轮自动
 
 ## 验收
 
-- `npm run check:client` 逐字节通过；`npm run check:i18n` 报 **197** 键且 zh/en 键集一致、`lib/**` 与 `src/client/**` 无 CJK；产物 ≤ **180000** B（U20 实测 **177498 B**；上限 180000 由用户预授权，K115 行与本文件同值）。
+- `npm run check:client` 逐字节通过；`npm run check:i18n` 报 **197** 键且 zh/en 键集一致、`lib/**` 与 `src/client/**` 无 CJK；产物 ≤ **180000** B（1.0.0 实测 **177491 B**，U20 时为 177498 B；上限 180000 由用户预授权，K115 行与本文件同值）。
 - K110–K115（`docs/contracts/acceptance.md` 附录 D.5）、U19 的 K116–K125（附录 D.7）与 U20 的 K126–K136（附录 D.8）逐条绿。
 - 真机三项：面包屑返回落点与打开前一致、40 KB 正文可滚且 Markdown 正常、触屏 `:active` 有底色。

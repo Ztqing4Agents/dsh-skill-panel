@@ -74,8 +74,8 @@ test('技能根下的 .skills-lock.json 用 skills{} 的键命中', async () => 
 
 test('本插件自己的安装记录也被读取（P2 之前不写，但读法先定死）', async () => {
   const dshHome = join(home.dir, 'home-own');
-  await mkdir(join(dshHome, 'dsh-skill-center'), { recursive: true });
-  await writeFile(join(dshHome, 'dsh-skill-center', 'installed.json'), JSON.stringify({
+  await mkdir(join(dshHome, 'dsh-skill-panel'), { recursive: true });
+  await writeFile(join(dshHome, 'dsh-skill-panel', 'installed.json'), JSON.stringify({
     installs: [{ name: 'own-install' }],
     skills: { 'own-skill': {} },
   }), 'utf8');

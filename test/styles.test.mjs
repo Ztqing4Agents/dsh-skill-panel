@@ -44,7 +44,7 @@ test('有 DOM 时注入一个带 data-plugin-css 钩子的 style 标签，且不
     injectStyles();
     injectStyles();
     assert.equal(appended.length, 1, '同一文档只注入一次样式表');
-    assert.equal(appended[0].dataset.pluginCss, 'dsh-skill-center/client.css', '样式钩子是插件自己的样式表 id');
+    assert.equal(appended[0].dataset.pluginCss, 'dsh-skill-panel/client.css', '样式钩子是插件自己的样式表 id');
     assert.ok(appended[0].textContent.includes('.skc_page'), '样式表里含有页面骨架规则');
   } finally {
     delete globalThis.document;

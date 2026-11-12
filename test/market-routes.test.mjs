@@ -543,7 +543,7 @@ test('K36 installed：没有台账时 readable=false 且 items 为空对象', as
 test('K36 installed：台账读不出来时也降级成 readable=false，不抛 500', async () => {
   const mounted = await mount();
   try {
-    await mkdir(join(mounted.dshHome, 'dsh-skill-center'), { recursive: true });
+    await mkdir(join(mounted.dshHome, 'dsh-skill-panel'), { recursive: true });
     const { writeFile } = await import('node:fs/promises');
     await writeFile(mounted.storeFile, '{ not json', 'utf8');
     const response = await callRoute(mounted.byPath[ROUTES.marketInstalled], { headers: LOOPBACK_HEADERS });
@@ -1113,7 +1113,7 @@ test('K76 两个失败码：满 500 ⇒ 409 E_FAVORITE_FULL，写盘失败 ⇒ 5
   // The cap is exercised through the *real* store: a file holding 500 bookmarks, then
   // one more POST. The I/O failure needs a store that cannot write, so that one is stubbed.
   const capped = await mount();
-  await mkdir(join(capped.dshHome, 'dsh-skill-center'), { recursive: true });
+  await mkdir(join(capped.dshHome, 'dsh-skill-panel'), { recursive: true });
   await writeFile(
     capped.favoritesFile,
     `${JSON.stringify({
@@ -1157,7 +1157,7 @@ test('K76 两个失败码：满 500 ⇒ 409 E_FAVORITE_FULL，写盘失败 ⇒ 5
 test('K77 bootstrap 下发收藏：正常文件透传（最新在前）+ favoritesOk:true', async () => {
   const mounted = await mount();
   try {
-    await mkdir(join(mounted.dshHome, 'dsh-skill-center'), { recursive: true });
+    await mkdir(join(mounted.dshHome, 'dsh-skill-panel'), { recursive: true });
     await writeFile(
       mounted.favoritesFile,
       `${JSON.stringify({ version: 1, favorites: ['clawhub:ivangdavila:design', 'skillhub:ake:dev-god'] }, null, 2)}\n`,
@@ -1187,7 +1187,7 @@ test('K77 收藏文件缺失 / 损坏都仍是 200：缺失报 favoritesOk:true�
     assert.equal(missing.json.data.favoritesOk, true, '缺失 ≠ 损坏：首启不报「书签可能丢了」');
 
     // 2. A corrupt file: this is the case the flag exists for.
-    await mkdir(join(mounted.dshHome, 'dsh-skill-center'), { recursive: true });
+    await mkdir(join(mounted.dshHome, 'dsh-skill-panel'), { recursive: true });
     await writeFile(mounted.favoritesFile, '{"favorites": 3}\n', 'utf8');
 
     const broken = await callRoute(mounted.byPath[ROUTES.marketBootstrap], { headers: LOOPBACK_HEADERS });
@@ -1259,7 +1259,7 @@ test('K77 契约文本与实现同形：routes.md 的 bootstrap 行必须列出 
   // K77 says the response has exactly eight keys; the route table is where a reader
   // learns that shape, so the two cannot disagree. (K30 does the same for the codes.)
   const text = await readFile(join(ROOT, 'docs', 'contracts', 'routes.md'), 'utf8');
-  const row = text.split('\n').find((line) => line.includes('`GET /api/dsh-skill-center/market/bootstrap`'));
+  const row = text.split('\n').find((line) => line.includes('`GET /api/dsh-skill-panel/market/bootstrap`'));
   assert.ok(row !== undefined, 'routes.md §3.7.1 里找得到 bootstrap 一行');
   assert.match(row, /\bfavorites\b/, '出参 data 里写着 favorites（收藏随 bootstrap 下发）');
   assert.match(row, /\bfavoritesOk\b/, '出参 data 里写着 favoritesOk（读成功才是 true）');

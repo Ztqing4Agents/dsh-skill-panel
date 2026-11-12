@@ -1,7 +1,7 @@
 /**
  * The browser's only door to the host half.
  *
- * URLs are document-relative (`api/dsh-skill-center/list`, no leading slash): the
+ * URLs are document-relative (`api/dsh-skill-panel/list`, no leading slash): the
  * GUI is served from `<base href="./">` and may live under a path prefix, where a
  * root-absolute URL would escape the deployment.
  *
@@ -27,7 +27,7 @@ export class ApiError extends Error {
 }
 
 /** The route prefix, document-relative on purpose. */
-const BASE = 'api/dsh-skill-center';
+const BASE = 'api/dsh-skill-panel';
 
 /**
  * Build a query string from the values that are actually present.

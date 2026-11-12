@@ -104,7 +104,7 @@
 
 | # | 假设 | 验证方法 |
 | --- | --- | --- |
-| A1 | 本 profile（desktop）的 `ctx.skills` 在 Host 平面能看到 `dsh-skill-filesystem` 的 provider 条目（因为 `@deepseek-ai/dsh-base` 在 profile 层挂了它） | 调 `GET /api/dsh-skill-center/health`，看 `registry.complete` 与 `counts`；若 builtin 恒为 0 而实际有 bundled 技能 → 假设不成立，退化为「只靠自扫描 + 硬编码无 builtin」（`lib/registry.js` 已把快照失败降级成空集） |
+| A1 | 本 profile（desktop）的 `ctx.skills` 在 Host 平面能看到 `dsh-skill-filesystem` 的 provider 条目（因为 `@deepseek-ai/dsh-base` 在 profile 层挂了它） | 调 `GET /api/dsh-skill-panel/health`，看 `registry.complete` 与 `counts`；若 builtin 恒为 0 而实际有 bundled 技能 → 假设不成立，退化为「只靠自扫描 + 硬编码无 builtin」（`lib/registry.js` 已把快照失败降级成空集） |
 | A2 | `SkillSummary` 的字段就是 `{name, path?, description, whenToUse?, invocation, source, provider, resourceBase?}`（无 `rank`） | 读 `EX/dsh-skill/lib/index.js` 的 `toSummary`；已在 §1.4.1 引用 |
 | A3 | `dsh.client.immediately` 只影响预取，不影响 apply 时机 | 真机：禁用网络节流首次打开 GUI，侧栏「技能」行是否首屏可见；`SHELL/index-BgUyXZcc.js` 的 `prefetchImmediateTier` 已证 |
 | A4 | 行内 `Switch` 与页签 `SegmentedTabs` 的 props 名（`checked`/`onChange`、`items[].value/label/id/panelId`）在 `0.2.2-rc.1` 稳定 | 宿主自身调用点即契约（§1.5.3）；升级后按 `HIDDER/docs/reference/settings-ui.md` §9 的健康检查思路复核 |
@@ -122,7 +122,7 @@
 | # | 待定说法 | 实际（逐字证据 / 算式） | 处理 |
 | --- | --- | --- | --- |
 | J-1 | 卡片的**来源标识**用什么 | 用户诉求是「skillhub 就显示 skillhub 的 icon」，因此保真是需求本身：单色自绘 path 只能做到六成神似（等于自造 logo）；运行时直连品牌 URL 会踩「浏览器半部零 URL」那条回归门禁 | **内联位图**：`src/client/market-marks.jsx` 里两段 `data:image/png;base64`（SkillHub 站点自带 32×32 favicon 1334 B、sha256 `b00f1749…25a0fc`；ClawHub 站点自带 logo 由 192×192 降采样到 32×32、2357 B、sha256 `64a32b4f…949600`），显示 16×16、零网络、零新路由、不新增依赖。**替换**原来那枚文字 Tag（同一位），`title` 保留来源名；注释里不写 URL |
-| J-2 | 收藏存哪、键是什么 | 别人的存储（`~/.dsh/skills-manager/state.json`、`skill-market/*`、`.skills-lock.json`）对本面板只读（`AGENTS.md` 硬约束 10），书签只能落本插件自己的目录 | `$DSH_HOME/dsh-skill-center/favorites.json`，键 = `marketId(source, owner, slug)`（与图标缓存 / 上游标题 / 安装台账同一个键）；`{version:1, favorites:[…]}` 最新在前；上限 500；写盘走 `store.js` 的 `writeAtomic`；进程内一条 Promise 链串行化；与现状一致的写入不落盘（幂等）。读侧只在 `market/bootstrap`（`favorites` + `favoritesOk`），**不新增 GET**；写侧一条 `POST market/favorite`（见 `docs/contracts/routes.md` §3.7.6） |
+| J-2 | 收藏存哪、键是什么 | 别人的存储（`~/.dsh/skills-manager/state.json`、`skill-market/*`、`.skills-lock.json`）对本面板只读（`AGENTS.md` 硬约束 10），书签只能落本插件自己的目录 | `$DSH_HOME/dsh-skill-panel/favorites.json`，键 = `marketId(source, owner, slug)`（与图标缓存 / 上游标题 / 安装台账同一个键）；`{version:1, favorites:[…]}` 最新在前；上限 500；写盘走 `store.js` 的 `writeAtomic`；进程内一条 Promise 链串行化；与现状一致的写入不落盘（幂等）。读侧只在 `market/bootstrap`（`favorites` + `favoritesOk`），**不新增 GET**；写侧一条 `POST market/favorite`（见 `docs/contracts/routes.md` §3.7.6） |
 | J-3 | 三段数字各是什么口径 | 参考项目的 `Stats` 是「下载 / 收藏 / 评分」三段；SkillHub 的 `stars` 是小整数（实测 37 / 99 / 158）、`score` 是 0–100000 的连续分（实测 `95757.41562195931`） | 下载 = `downloads`；收藏 = 上游 **`stars`**（不是你自己的书签，你自己的由按钮 `aria-pressed` 表达，两者不合并）；评分 = `4 + min(1, score/100000)` 量化到一位小数。`rating` **不进数据层**：它是客户端的显示投影，Host 只给原料 `score`（`normalize.js` 的「只映射、不解释」）。`score <= 0` 时评分段整段不出现——`4.0` 是缺值伪装成的分数 |
 | J-4 | 三段与安装按钮能否同一行 | 安装按钮四态（安装 / 已安装 / 安装中… / 重试）宽度不同：段宽 =（内容宽 − 按钮宽 − gap）/ 3，`安装` 与 `已安装` 差一个汉字 ≈12.5px ⇒ 每段差 ≈4.2px，同屏两卡的「收藏」「评分」列各错开 4.2 / 8.4px；最窄卡（280−28=252px）塞进「安装中…」（≈78px）后三格只剩 ≈166px，每格 ≈55px 而中文 `1135万` 需 ≈39px 文本 + 16px 图标 | **三段独占一行**（`repeat(3, minmax(0,72px))` 左对齐）、安装按钮另起一行右对齐（`.skc_marketCardEnd` 既有声明一字不改）。代价是卡片高 ≈28px，换来四种情况下数字列零抖动 |
 | J-5 | 缺段的格子：占位还是不占位 | 若缺段就让后面的段左移，一张缺「收藏」的卡会把「评分」挪到第二格，同屏立刻错位 | **槽位占位、内容不出现**：三格轨道恒在（同列的 x 坐标在任何两张卡上相同），空格里没有图标、没有数字、没有 `0`、没有破折号，读屏也读不到（`aria-hidden`）；三格全缺时整行不渲染（否则卡片中部剩三格空白） |

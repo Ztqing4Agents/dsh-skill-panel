@@ -14,7 +14,7 @@
 const PREFIX = 'skc_';
 
 /** The style element identity the host lets a plugin own. */
-const STYLE_ID = 'dsh-skill-center/client.css';
+const STYLE_ID = 'dsh-skill-panel/client.css';
 
 /**
  * Build a class name from one of this stylesheet's own keys.

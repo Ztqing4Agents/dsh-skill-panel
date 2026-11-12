@@ -49,7 +49,7 @@ function fakeContext() {
 }
 
 test('插件自报的名字与必需服务与设计一致', () => {
-  assert.equal(name, 'dsh-skill-center', '插件名就是包名');
+  assert.equal(name, 'dsh-skill-panel', '插件名就是包名');
   assert.deepEqual(inject, ['webServer', 'skills', 'sessions'], '必需服务是 webServer/skills/sessions');
 });
 
@@ -60,22 +60,22 @@ test('首次 apply 注册十六条路由，且扫描的是 config 指定的目�
     apply(ctx, { dshHome: tree.dshHome, skillsRoot: tree.skillsRoot });
     assert.equal(registrations.length, 16, '一次 apply 注册十六条路由（本地面 7 + 市场面 9）');
     assert.deepEqual(registrations.map((route) => route.path).sort(), [
-      '/api/dsh-skill-center/add',
-      '/api/dsh-skill-center/detail',
-      '/api/dsh-skill-center/health',
-      '/api/dsh-skill-center/list',
-      '/api/dsh-skill-center/market/bootstrap',
-      '/api/dsh-skill-center/market/detail',
-      '/api/dsh-skill-center/market/favorite',
-      '/api/dsh-skill-center/market/icons',
-      '/api/dsh-skill-center/market/install',
-      '/api/dsh-skill-center/market/installed',
-      '/api/dsh-skill-center/market/list',
-      '/api/dsh-skill-center/market/update',
-      '/api/dsh-skill-center/market/versions',
-      '/api/dsh-skill-center/provider-toggle',
-      '/api/dsh-skill-center/remove',
-      '/api/dsh-skill-center/toggle',
+      '/api/dsh-skill-panel/add',
+      '/api/dsh-skill-panel/detail',
+      '/api/dsh-skill-panel/health',
+      '/api/dsh-skill-panel/list',
+      '/api/dsh-skill-panel/market/bootstrap',
+      '/api/dsh-skill-panel/market/detail',
+      '/api/dsh-skill-panel/market/favorite',
+      '/api/dsh-skill-panel/market/icons',
+      '/api/dsh-skill-panel/market/install',
+      '/api/dsh-skill-panel/market/installed',
+      '/api/dsh-skill-panel/market/list',
+      '/api/dsh-skill-panel/market/update',
+      '/api/dsh-skill-panel/market/versions',
+      '/api/dsh-skill-panel/provider-toggle',
+      '/api/dsh-skill-panel/remove',
+      '/api/dsh-skill-panel/toggle',
     ], '十六条路径与设计一致（routes.md §3.3 + §3.7.1）');
     assert.equal(registrations.every((route) => typeof route.handler === 'function'), true, '每条路由都有 handler');
     assert.equal(registrations.every((route) => route.kind === 'exact'), true, '全部是 exact 路由');

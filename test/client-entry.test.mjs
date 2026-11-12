@@ -30,8 +30,8 @@ before(async () => {
 });
 
 test('注册的座位与顺序常量与设计一致', () => {
-  assert.equal(entry.NS, 'dsh-skill-center', '命名空间就是包名');
-  assert.equal(entry.PANEL_ID, 'dsh-skill-center', '面板 id 与包名同值');
+  assert.equal(entry.NS, 'dsh-skill-panel', '命名空间就是包名');
+  assert.equal(entry.PANEL_ID, 'dsh-skill-panel', '面板 id 与包名同值');
   assert.equal(entry.PANEL_ORDER, 40, '侧栏行位置是 40');
 });
 
@@ -39,7 +39,7 @@ test('apply 注册双语字典、三个座位与至少一个样式挂点', () =>
   const { ctx, registrations, dictionaries } = strictContext(entry);
   entry.apply(ctx);
   assert.equal(dictionaries.length, 1, '只注册一次字典');
-  assert.equal(dictionaries[0].namespace, 'dsh-skill-center', '字典挂在插件自己的命名空间');
+  assert.equal(dictionaries[0].namespace, 'dsh-skill-panel', '字典挂在插件自己的命名空间');
   assert.equal(typeof dictionaries[0].dictionary.zh, 'object', '字典里有中文');
   assert.equal(typeof dictionaries[0].dictionary.en, 'object', '字典里有英文');
   assert.deepEqual(
@@ -53,9 +53,9 @@ test('侧栏行的标题来自 locale，中文是「技能」', async () => {
   const { ctx, registrations } = strictContext(entry, translator(await readDictionary('zh')));
   entry.apply(ctx);
   const row = registrations.find(({ registration }) => registration.name === 'sidebar.panellist');
-  assert.equal(row.registration.id, 'dsh-skill-center', '侧栏行 id 与面板 id 同值');
+  assert.equal(row.registration.id, 'dsh-skill-panel', '侧栏行 id 与面板 id 同值');
   assert.equal(row.registration.order, 40, '侧栏行 order 是 40');
-  assert.equal(row.registration.locale, 'dsh-skill-center', '侧栏行声明自己的命名空间');
+  assert.equal(row.registration.locale, 'dsh-skill-panel', '侧栏行声明自己的命名空间');
   assert.equal(row.registration.label(), '技能', '中文环境下的入口名是「技能」');
 });
 
@@ -70,8 +70,8 @@ test('全局页用同一个 key 注册，并注入 store 与 api', () => {
   const { ctx, registrations } = strictContext(entry);
   entry.apply(ctx);
   const page = registrations.find(({ registration }) => registration.name === 'main');
-  assert.equal(page.registration.key, 'dsh-skill-center', 'main 槽的 key 与侧栏行 id 相同');
-  assert.equal(page.registration.locale, 'dsh-skill-center', '全局页声明命名空间（于是组件拿到 t）');
+  assert.equal(page.registration.key, 'dsh-skill-panel', 'main 槽的 key 与侧栏行 id 相同');
+  assert.equal(page.registration.locale, 'dsh-skill-panel', '全局页声明命名空间（于是组件拿到 t）');
   const props = page.registration.inject();
   assert.deepEqual(Object.keys(props).sort(), ['agent', 'api', 'store'],
     '注入 store / api 与「让 Agent 创建技能」那个座位（agent）');
@@ -87,7 +87,7 @@ test('浮层里注册刷新失败提示，并单独注入 store', () => {
   const { ctx, registrations } = strictContext(entry);
   entry.apply(ctx);
   const overlay = registrations.find(({ registration }) => registration.name === 'shell.overlay');
-  assert.equal(overlay.registration.id, 'dsh-skill-center.refresh-toast', '浮层座位的 id 带自己的后缀');
+  assert.equal(overlay.registration.id, 'dsh-skill-panel.refresh-toast', '浮层座位的 id 带自己的后缀');
   assert.equal(typeof overlay.registration.inject().store.getSnapshot, 'function', '浮层只拿 store');
   assert.equal(typeof overlay.component, 'function', '浮层注册的是组件');
 });

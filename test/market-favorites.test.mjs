@@ -53,7 +53,7 @@ const textOf = (file) => readFile(file, 'utf8');
  */
 async function tempLeftovers(dshHome) {
   try {
-    const names = await readdir(join(dshHome, 'dsh-skill-center'));
+    const names = await readdir(join(dshHome, 'dsh-skill-panel'));
     return names.filter((name) => name.includes('.tmp'));
   } catch {
     return [];
@@ -170,7 +170,7 @@ test('K75 最新在前：后收藏的排在最前，取消只删那一条', asyn
 test('K75 上限 500：满时新增 409 E_FAVORITE_FULL，取消永远允许', async () => {
   const { store, dshHome, file, close } = await tempStore();
   try {
-    await mkdir(join(dshHome, 'dsh-skill-center'), { recursive: true });
+    await mkdir(join(dshHome, 'dsh-skill-panel'), { recursive: true });
     const full = Array.from({ length: MAX_FAVORITES }, (_, i) => `skillhub:ake:id-${i}`);
     await writeFile(file, serializeFavorites(full), 'utf8');
 
@@ -197,7 +197,7 @@ test('K75 原子写失败：旧文件字节不变、没有 .tmp 残留、错误�
   try {
     await store.toggle(A, true);
     const before = await textOf(file);
-    const dir = join(dshHome, 'dsh-skill-center');
+    const dir = join(dshHome, 'dsh-skill-panel');
     // A read-only directory is the cheapest real I/O failure: the temp file cannot be
     // created, so the old bytes must survive untouched.
     await chmod(dir, 0o555);
@@ -240,11 +240,11 @@ test('K75 进程内串行化：同一 tick 两次 toggle 都落盘，不互相�
 test('K75 文件位置就是本插件自己的目录，不碰别人的存储', async () => {
   const { store, dshHome, file, close } = await tempStore();
   try {
-    assert.equal(file, join(dshHome, 'dsh-skill-center', 'favorites.json'), '落在 $DSH_HOME/dsh-skill-center/');
+    assert.equal(file, join(dshHome, 'dsh-skill-panel', 'favorites.json'), '落在 $DSH_HOME/dsh-skill-panel/');
     await store.toggle(A, true);
     assert.deepEqual(
       (await readdir(dshHome)).sort(),
-      ['dsh-skill-center'],
+      ['dsh-skill-panel'],
       '除了自己的目录什么都不创建（不写 skills-manager / skill-market / lock 文件）',
     );
   } finally {
@@ -294,7 +294,7 @@ test('K75 同一 tick 一收一取同一个 id：排队后两条都生效，最�
 test('K75 满 500 时重复收藏已有条目仍然成功：上限只拦增长，不误拦幂等', async () => {
   const { store, dshHome, file, close } = await tempStore();
   try {
-    await mkdir(join(dshHome, 'dsh-skill-center'), { recursive: true });
+    await mkdir(join(dshHome, 'dsh-skill-panel'), { recursive: true });
     const full = Array.from({ length: MAX_FAVORITES }, (_, i) => `skillhub:ake:id-${i}`);
     await writeFile(file, serializeFavorites(full), 'utf8');
     const before = await textOf(file);

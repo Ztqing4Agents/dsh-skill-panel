@@ -1,6 +1,6 @@
-# Bundle layer for dsh-skill-center. The Host half serves /api/dsh-skill-center/*;
+# Bundle layer for dsh-skill-panel. The Host half serves /api/dsh-skill-panel/*;
 # the Client half renders the sidebar entry and the global page. This one row only
 # makes the package selectable as a profile bundle.
 - insert:
-    - id: dsh-skill-center
-      name: dsh-skill-center
+    - id: dsh-skill-panel
+      name: dsh-skill-panel

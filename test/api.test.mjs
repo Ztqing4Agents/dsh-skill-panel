@@ -35,7 +35,7 @@ function fetchStub(reply) {
 test('请求用文档相对路径，不带前导斜杠（GUI 可能挂在路径前缀下）', async () => {
   const { fetchImpl, calls } = fetchStub({ body: { code: 'OK', data: { groups: [] }, message: '' } });
   await new SkillCenterApi(fetchImpl).list();
-  assert.equal(calls[0].url, 'api/dsh-skill-center/list', 'URL 是文档相对的 list 路由');
+  assert.equal(calls[0].url, 'api/dsh-skill-panel/list', 'URL 是文档相对的 list 路由');
   assert.equal(calls[0].url.startsWith('/'), false, 'URL 不以 / 开头');
 });
 
@@ -75,7 +75,7 @@ test('响应不是 JSON 或没有 code 时变成 E_UNKNOWN', async () => {
 test('toggle 提交 name/path/enabled，方法为 POST', async () => {
   const { fetchImpl, calls } = fetchStub({ body: { code: 'OK', data: { name: 'a' }, message: '' } });
   await new SkillCenterApi(fetchImpl).toggle({ name: 'a', path: '/skills/a/SKILL.md', enabled: false });
-  assert.equal(calls[0].url, 'api/dsh-skill-center/toggle', 'URL 是 toggle 路由');
+  assert.equal(calls[0].url, 'api/dsh-skill-panel/toggle', 'URL 是 toggle 路由');
   assert.equal(calls[0].init.method, 'POST', '方法是 POST');
   assert.equal(calls[0].init.headers['content-type'], 'application/json', '声明 JSON 正文');
   assert.deepEqual(JSON.parse(calls[0].init.body), { name: 'a', path: '/skills/a/SKILL.md', enabled: false }, '正文就是三件事实');
@@ -84,7 +84,7 @@ test('toggle 提交 name/path/enabled，方法为 POST', async () => {
 test('toggleProvider 提交 provider/name/enabled，缺 provider 时补空串', async () => {
   const { fetchImpl, calls } = fetchStub({ body: { code: 'OK', data: {}, message: '' } });
   await new SkillCenterApi(fetchImpl).toggleProvider({ name: 'office', enabled: true });
-  assert.equal(calls[0].url, 'api/dsh-skill-center/provider-toggle', 'URL 是 provider-toggle 路由');
+  assert.equal(calls[0].url, 'api/dsh-skill-panel/provider-toggle', 'URL 是 provider-toggle 路由');
   assert.deepEqual(JSON.parse(calls[0].init.body), { provider: '', name: 'office', enabled: true }, 'provider 缺失时补空串');
 });
 
@@ -113,7 +113,7 @@ test('K44 六个市场方法的 URL 都是文档相对的 market/* 路由', asyn
     const { fetchImpl, calls } = fetchStub({ body: { code: 'OK', data: {}, message: '' } });
     const api = new SkillCenterApi(fetchImpl);
     await run(api);
-    assert.equal(calls[0].url, `api/dsh-skill-center/${expected}`, `${name} 的 URL 是文档相对的 ${expected}`);
+    assert.equal(calls[0].url, `api/dsh-skill-panel/${expected}`, `${name} 的 URL 是文档相对的 ${expected}`);
     assert.equal(calls[0].url.startsWith('/'), false, `${name} 不以 / 开头（GUI 可能挂在路径前缀下）`);
   }
 });
@@ -124,11 +124,11 @@ test('K44 marketList 只发送有值的参数：空的值一律不出现在 URL 
   await api.marketList({ source: 'clawhub', sort: 'updated', category: null, keyword: '  ', cursor: null, limit: 12 });
   assert.equal(
     calls[0].url,
-    'api/dsh-skill-center/market/list?source=clawhub&sort=updated&limit=12',
+    'api/dsh-skill-panel/market/list?source=clawhub&sort=updated&limit=12',
     '空分类 / 空白关键词 / 空游标都不出现在查询串里',
   );
   await api.marketList({ source: 'skillhub', limit: 0 });
-  assert.equal(calls[1].url, 'api/dsh-skill-center/market/list?source=skillhub', 'limit=0 当作没给（由 Host 夹取）');
+  assert.equal(calls[1].url, 'api/dsh-skill-panel/market/list?source=skillhub', 'limit=0 当作没给（由 Host 夹取）');
 });
 
 test('K44 marketDetail 没有版本时不传 version 参数', async () => {

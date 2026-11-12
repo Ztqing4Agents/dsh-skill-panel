@@ -1,11 +1,29 @@
 {
-  "name": "dsh-skill-center",
-  "version": "0.1.0",
-  "private": true,
+  "name": "dsh-skill-panel",
+  "version": "1.0.0",
   "type": "module",
-  "description": "DSH skill center: tell built-in, local, and market-installed skills apart at a glance, and switch each one on or off.",
+  "description": "DSH skill panel: tell built-in, local, and market-installed skills apart at a glance, and switch each one on or off.",
   "icon": "assets/icon.svg",
   "license": "BSD-3-Clause",
+  "author": {
+    "name": "Ztqing"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ztqing4Agents/dsh-skill-panel.git"
+  },
+  "homepage": "https://github.com/Ztqing4Agents/dsh-skill-panel#readme",
+  "bugs": {
+    "url": "https://github.com/Ztqing4Agents/dsh-skill-panel/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "skill",
+    "skills",
+    "skill-manager"
+  ],
   "main": "index.js",
   "exports": {
     ".": "./index.js",
