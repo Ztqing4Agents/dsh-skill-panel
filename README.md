@@ -19,9 +19,11 @@ DSH 技能面板：一个侧栏入口 + 一页全局面板，把**内置 / 本�
 
 ## 安装
 
-装完**重启 DSH**——bundle 列表只在启动时读取。
+装完都要**重启 DSH**——bundle 列表只在启动时读取。
 
-**从 GitHub 装（推荐）**：`dsh plugin add github:Ztqing4Agents/dsh-skill-panel`（装好后侧栏出现「技能」一行，点开就是本页）。
+**桌面 App 用户**：在 App 内「插件」页 → 添加插件 → 粘贴 `github:Ztqing4Agents/dsh-skill-panel`，装好后侧栏出现「技能」一行，点开就是本页。不走 CLI 是因为 `--profile desktop` 由 App 独占，CLI 会被 `error: profile "desktop" is managed exclusively by the Electron application` 挡住。
+
+**CLI / 自建 profile 用户**：`dsh plugin --profile <name> add github:Ztqing4Agents/dsh-skill-panel`（`--profile` 是必填项，缺了报 `error: required option '--profile <name>' not specified`）。需要 `pnpm` 在 PATH 上（缺了报 `spawn pnpm ENOENT`）；安装时会去 npm registry 补装 8 条 peer 依赖，所以不能只通 github.com。重复执行是幂等的（`Already up to date`）。
 
 **本地开发用 `link:`**（安装时不需要构建，`client.js` 已随包入库；只有改 `src/client/**` 时才需要 `npm run build`）：profile 的 `package.json` 里写 `"dsh-skill-panel": "link:/path/to/dsh-skill-panel"`、`dsh.profile.bundles` 加上 `dsh-skill-panel`，再在 profile 的 `node_modules` 里建一条相对软链指向包目录。
 
