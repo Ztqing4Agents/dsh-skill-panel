@@ -296,7 +296,6 @@ parseFrontmatter(text: string): Frontmatter
 #### 3.2.5 `src/client/model.js` / `header-scroll.js`
 
 ```js
-statusLine(counts: {total:int, disabled:int}, t: TFunction): string   // '共 N 个技能' + （disabled>0 时）'，M 个已停用'
 rowViewState(row: Row, rows: Map<string,RowRuntime>): 'idle'|'pending'|'failed'
 groupEmptyKey(key: 'builtin'|'local'|'installed'): string             // 'group.builtinEmpty' 等
 interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几何插值，无 DOM
@@ -306,7 +305,7 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
 
 ## 3.8 市场类型与归一化纯函数
 
-#### 3.8.1 `MarketItem` / `MarketDetail` / `SourcePage`
+#### 3.8.1 `MarketItem` / `MarketDetail` / `MarketVersions` / `SourcePage`
 
 ```jsonc
 // MarketItem —— 市场页唯一的渲染输入，也是去重键的来源
@@ -342,16 +341,20 @@ interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几�
 }
 ```
 
+```jsonc
+// MarketVersions —— market/versions 的 data（新的在前，不排序、不过滤，保留前 50 条）
+{ "source": "skillhub", "owner": "ake", "slug": "dev-god", "namespace": "ake",
+  "latest": "1.2.4", "versions": [{ "version": "1.2.4", "publishedAt": 1762396800000 }], "total": 3 }
+```
+
 `SourcePage`（`list` / `search` 的返回）= `{items: MarketItem[], next: string|null, total: number|null}`：`next` 由 `encodeCursor` 产出、客户端原样回传（`null` = 没有下一页），`total` 只有 SkillHub 给。
 
 「缺 = null」不变式（逐条可断言）：
 
 1. 每个字段都存在，不出现 `undefined`；上游没给的一律 `null`，`downloads`、`saves`、`score` 不补 `0`、`version` 不补 `'latest'`、`category` 不补 `''`、**`tags` 是 `[]` 不是 `null`**。
-2. `id` 全仓库唯一；同一 `id` 出现两次时保留第一次出现的那条（浏览器侧 `mergeBatches` 负责）。
-3. `installTo` 在 `nameValid === false` 时等于 `skillsRoot` 本身（不吃掉最后一级目录名），界面据此显示「不能安装」。
-4. `overview` 不含 frontmatter 分隔行与 `name:`/`description:` 头字段。
-5. 卡片与详情**不显示任何时间**：`updatedAt` 只影响顺序。
-6. `iconUrl` 只有两种合法形态：① 绝对 `https:`（可解析即接受，**不做 host/path 白名单**——两个图床都是逐技能真图）；② `null`。`http:`、相对路径、空值与非字符串归 `null`；`null` 与**加载失败**都是「回落首字母头像」，破图由浏览器侧 `onError` 兜住。`lucide:FileText` 与 `/api/v1/skill-icons/<64hex>` 两种旧形态随 `clawhub.ai` 与两条代理路由于 U7 退场。
+2. `id` 全仓库唯一；同一 `id` 出现两次时保留第一次出现的那条（浏览器侧 `mergeBatches` 负责）；`installTo` 在 `nameValid === false` 时等于 `skillsRoot` 本身（不吃掉最后一级目录名），界面据此显示「不能安装」。`overview` 不含 frontmatter 分隔行与 `name:`/`description:` 头字段。
+3. 卡片与详情**不显示任何时间**：`updatedAt` 只影响顺序。**唯一例外**：已安装详情的版本展开列表显示 `publishedAt`（上游 `createdAt`，格式化成 `YYYY-MM-DD`）——不同字段、不同页面，登记在 `docs/contracts/decisions.md` 附录 R-1。
+4. `iconUrl` 只有两种合法形态：① 绝对 `https:`（可解析即接受，**不做 host/path 白名单**——两个图床都是逐技能真图）；② `null`。`http:`、相对路径、空值与非字符串归 `null`；`null` 与**加载失败**都是「回落首字母头像」，破图由浏览器侧 `onError` 兜住。`lucide:FileText` 与 `/api/v1/skill-icons/<64hex>` 两种旧形态随 `clawhub.ai` 与两条代理路由于 U7 退场。
 
 #### 3.8.2 `lib/market/normalize.js` 与 `mergeBatches` 的纯函数契约
 
@@ -385,11 +388,8 @@ mergeBatches(pages: {sourceId: string, items: MarketItem[]}[], options?: {existi
 
 `mergeBatches` 的语义（每条都是断言）：**不交错、不排序**（2026-11-09 队长裁决取消 1:1 交错与「让位」）。
 
-- `existing` 原样保留在前；新一页的条目按 `pages` 给的**来源顺序整段拼接**（先第一个源那一页的全部，再第二个源的），已有项的相对顺序永不被打乱。
-- **函数不排序**：`updated` 的页内顺序由适配器负责（`sortByUpdatedDesc`），跨源不重排。
-- 去重按 `marketKeyOf`：同一个 key 第二次出现即丢弃，**保留第一次出现的条目**。
-- 短页照收（n < limit 就只追加 n 条）；「还有没有下一页」只看 `next === null`，不看本页条数。
-- 输入为空时返回 `existing` 的副本；函数不修改任何入参。
+- `existing` 原样保留在前；新一页的条目按 `pages` 给的**来源顺序整段拼接**（先第一个源那一页的全部，再第二个源的），已有项的相对顺序永不被打乱。**函数不排序**：`updated` 的页内顺序由适配器负责（`sortByUpdatedDesc`），跨源不重排。
+- 去重按 `marketKeyOf`：同一个 key 第二次出现即丢弃，**保留第一次出现的条目**；短页照收（n < limit 就只追加 n 条），「还有没有下一页」只看 `next === null`、不看本页条数；输入为空时返回 `existing` 的副本，函数不修改任何入参。
 
 ---
 

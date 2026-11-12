@@ -53,12 +53,12 @@ test('插件自报的名字与必需服务与设计一致', () => {
   assert.deepEqual(inject, ['webServer', 'skills', 'sessions'], '必需服务是 webServer/skills/sessions');
 });
 
-test('首次 apply 注册十二条路由，且扫描的是 config 指定的目录', async () => {
+test('首次 apply 注册十四条路由，且扫描的是 config 指定的目录', async () => {
   const tree = await customTree({ 'configured-skill': skillFile({ name: 'configured-skill' }) });
   try {
     const { ctx, registrations, cleanups } = fakeContext();
     apply(ctx, { dshHome: tree.dshHome, skillsRoot: tree.skillsRoot });
-    assert.equal(registrations.length, 12, '一次 apply 注册十二条路由（本地面 5 + 市场面 7）');
+    assert.equal(registrations.length, 14, '一次 apply 注册十四条路由（本地面 5 + 市场面 9）');
     assert.deepEqual(registrations.map((route) => route.path).sort(), [
       '/api/dsh-skill-center/detail',
       '/api/dsh-skill-center/health',
@@ -70,9 +70,11 @@ test('首次 apply 注册十二条路由，且扫描的是 config 指定的目�
       '/api/dsh-skill-center/market/install',
       '/api/dsh-skill-center/market/installed',
       '/api/dsh-skill-center/market/list',
+      '/api/dsh-skill-center/market/update',
+      '/api/dsh-skill-center/market/versions',
       '/api/dsh-skill-center/provider-toggle',
       '/api/dsh-skill-center/toggle',
-    ], '十二条路径与设计一致（routes.md §3.3 + §3.7.1）');
+    ], '十四条路径与设计一致（routes.md §3.3 + §3.7.1）');
     assert.equal(registrations.every((route) => typeof route.handler === 'function'), true, '每条路由都有 handler');
     assert.equal(registrations.every((route) => route.kind === 'exact'), true, '全部是 exact 路由');
 
@@ -91,7 +93,7 @@ test('首次 apply 注册十二条路由，且扫描的是 config 指定的目�
     assert.equal(cleanups.length, 1, 'apply 通过 ctx.effect 登记了路由清理函数');
     assert.equal(typeof cleanups[0], 'function', '清理函数可调用');
     cleanups[0]();
-    assert.equal(registrations.length, 12, '清理之后注册记录仍然可读（注销发生在宿主侧）');
+    assert.equal(registrations.length, 14, '清理之后注册记录仍然可读（注销发生在宿主侧）');
   } finally {
     await tree.cleanup();
   }

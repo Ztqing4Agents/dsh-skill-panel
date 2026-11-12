@@ -270,6 +270,46 @@ sequenceDiagram
 
 ---
 
+### 4.7 更新检测与覆盖安装
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as 用户
+    participant PG as page.jsx（检测 runner）
+    participant API as SkillCenterApi
+    participant DV as 路由 market/versions
+    participant MV as 路由 market/update
+    participant IN as install.js update()
+    participant T as skillsRoot/.skc-update-* / .skc-backup-*
+    participant L as market/store.js
+
+    Note over PG: 进「已安装」页签 / 打开详情 / 点刷新 / 点「重新检查」<br/>目标 = upstream 非空 ∧ 非软链 ∧ version 非空
+    loop 按 identity 串行（2s/行、8s/轮）
+        PG->>API: marketVersions({source, owner, slug})
+        API->>DV: GET market/versions
+        DV-->>API: {namespace, latest, versions[], total}
+        API-->>PG: 答案（按 identity 落 checks，失败只影响这一行）
+    end
+    PG-->>U: 页头一句更新提示（「N 个技能可更新」，宿主 .updatesNote 同形）+ 版本区块五态
+    U->>PG: 点「更新」→ 确认弹窗 → 确认
+    PG->>API: marketUpdate({source, owner, slug, version, name, path})
+    API->>MV: POST market/update
+    MV->>MV: P0–P7 前置校验（重新扫描 / 软链 / path / 身份三件套 / 同版本 / 加锁）
+    MV->>IN: update(ref, target)
+    IN->>T: 暂存全量文件 + 新 _meta.json + 搬运启用状态 + 交换前回读
+    IN->>T: rename(target → .skc-backup-*) → rename(temp → target) → syncDirectory
+    IN->>IN: verifyLanded → store.append
+    IN->>T: rm(备份)
+    IN-->>MV: {name, path, version, from, files, bytes}
+    MV-->>API: 200 OK
+    API-->>PG: 结果
+    PG-->>U: Tag 换 {to} + toast「已更新到 {to}」+ 后台重扫/重拉正文
+    Note over IN,T: 失败 → R1 暂存失败（旧版本逐字节未动）/ R3·R5 回滚成功（E_UPDATE_RESTORED）/<br/>R4 回滚也失败（E_UPDATE_LOST）/ R6 台账未写（E_UPDATE_UNCONFIRMED）
+```
+
+四条回滚路径、十个阶段与三条不变式见 `docs/contracts/market.md` §7.11；前置校验的顺序与失败码见 `docs/contracts/routes.md` §3.7.7；两个页面的落点见 `docs/contracts/installed-detail.md`。与安装（§4.6）的关系：**同一张锁表**（`source:owner:slug` + 全局最多 2 个），所以同一个技能不可能同时在装和在更新。
+
 ## 5 待明确事项
 
 > 详细取舍与验证方法见文末「待明确 / 假设」。这里只列**影响实现顺序**的三项。

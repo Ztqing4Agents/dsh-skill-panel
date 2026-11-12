@@ -12,7 +12,7 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { ROUTES, makeRoutes } from '../lib/routes.js';
@@ -132,8 +132,10 @@ function adapter(options) {
      */
     async fetchFile(plan, path) {
       calls.push(`fetch:${path}`);
+      if (options.gate !== undefined) await options.gate;
       if (path !== 'SKILL.md') return Buffer.from('x');
-      return Buffer.from('---\nname: dev-god\ndescription: Fixture.\n---\n');
+      const name = options.declaredName ?? 'dev-god';
+      return Buffer.from(`---\nname: ${name}\ndescription: Fixture.\n---\n`);
     },
     /**
      * Return the package manifest.
@@ -141,7 +143,26 @@ function adapter(options) {
      */
     async plan() {
       calls.push('plan');
-      return { version: '1.0.0', files: [{ path: 'SKILL.md', size: 44 }], meta: null };
+      const declared = options.declaredName ?? 'dev-god';
+      const body = Buffer.from(`---\nname: ${declared}\ndescription: Fixture.\n---\n`);
+      return { version: options.planVersion ?? '1.0.0', files: [{ path: 'SKILL.md', size: body.length }], meta: null };
+    },
+    /**
+     * Answer a version list (route #15).
+     * @param {object} ref - item reference.
+     * @returns {Promise<object>} MarketVersions.
+     */
+    async versions(ref) {
+      calls.push(`versions:${ref.owner}/${ref.slug}`);
+      if (options.failVersions !== undefined) {
+        throw Object.assign(new Error('upstream down'), { code: options.failVersions });
+      }
+      return options.versions ?? {
+        namespace: ref.owner,
+        latest: '2.0.0',
+        versions: [{ version: '2.0.0', publishedAt: 1762396800000 }],
+        total: 1,
+      };
     },
   };
 }
@@ -242,6 +263,7 @@ async function mount(options = {}) {
     favoritesCalls,
     favoritesFile: favoritesFile(dir),
     storeFile: storeFile(dir),
+    installer,
     close: cleanup,
   };
 }
@@ -1312,6 +1334,292 @@ test('K94 bootstrap 的范围轴：缺省回显 all，三档把各自的 sourceP
       assert.equal(response.status, 400, `source=${bad} ⇒ 400`);
       assert.equal(response.json.code, 'E_BAD_QUERY', '不在三值白名单里就是参数错误');
     }
+  } finally {
+    await mounted.close();
+  }
+});
+
+/* ---------------------------------- K117 · market/versions（#15） ---------------------------------- */
+
+test('K117 market/versions：正常 200，出参恰好七个键（白名单），source 是身份', async () => {
+  const mounted = await mount();
+  try {
+    const response = await callRoute(mounted.byPath[ROUTES.marketVersions], {
+      headers: LOOPBACK_HEADERS,
+      url: `${ROUTES.marketVersions}?source=skillhub&owner=ake&slug=dev-god`,
+    });
+    assert.equal(response.status, 200, '正常行 200');
+    assert.equal(response.json.code, 'OK', '信封的 code');
+    const data = response.json.data;
+    assert.deepEqual(Object.keys(data).sort(), [
+      'latest', 'namespace', 'owner', 'slug', 'source', 'total', 'versions',
+    ], '出参就是 MarketVersions 的七个字段（上游多给的一律不进信封）');
+    assert.equal(data.source, 'skillhub', 'source 回显请求里的身份');
+    assert.equal(data.namespace, 'ake', 'namespace 是解析结果');
+    assert.deepEqual(data.versions, [{ version: '2.0.0', publishedAt: 1762396800000 }], '版本行只有 version + publishedAt');
+    assert.equal(data.total, 1, 'total 是上游条数');
+    assert.deepEqual(mounted.sources[0].calls, ['versions:ake/dev-god'], '只调一次适配器（没有额外 detail/plan）');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K117 参数白名单：source 必填、all ⇒ 400、坏 owner/slug ⇒ 400，且一次上游都没触达', async () => {
+  const mounted = await mount();
+  try {
+    const bad = [
+      ['?owner=ake&slug=dev-god', 'E_BAD_QUERY', 'source 必填'],
+      ['?source=all&owner=ake&slug=dev-god', 'E_BAD_QUERY', 'all 是 scope，不是身份'],
+      ['?source=nope&owner=ake&slug=dev-god', 'E_BAD_QUERY', '未注册的源'],
+      ['?source=skillhub&owner=..&slug=dev-god', 'E_BAD_QUERY', 'owner 里有 ..'],
+      ['?source=skillhub&owner=ake&slug=..', 'E_BAD_QUERY', 'slug 里有 ..'],
+      ['?source=skillhub&owner=ake', 'E_BAD_QUERY', 'slug 必填'],
+    ];
+    for (const [query, code, why] of bad) {
+      const response = await callRoute(mounted.byPath[ROUTES.marketVersions], {
+        headers: LOOPBACK_HEADERS,
+        url: `${ROUTES.marketVersions}${query}`,
+      });
+      assert.equal(response.status, 400, `${why} ⇒ 400`);
+      assert.equal(response.json.code, code, `${why} ⇒ ${code}`);
+      assert.equal(response.json.data, null, '失败信封 data 是 null');
+    }
+    assert.deepEqual(mounted.sources.flatMap((source) => source.calls), [], '坏参数一次上游都没打');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K117 上游失败透传 502/503/504；非 loopback 403、POST 405', async () => {
+  for (const [code, status] of [['E_SOURCE_BAD_RESPONSE', 502], ['E_SOURCE_UNAVAILABLE', 503], ['E_SOURCE_TIMEOUT', 504]]) {
+    const mounted = await mount({ skillhub: adapter({ id: 'skillhub', failVersions: code }) });
+    try {
+      const response = await callRoute(mounted.byPath[ROUTES.marketVersions], {
+        headers: LOOPBACK_HEADERS,
+        url: `${ROUTES.marketVersions}?source=skillhub&owner=ake&slug=dev-god`,
+      });
+      assert.equal(response.status, status, `${code} ⇒ ${status}`);
+      assert.equal(response.json.code, code, '码原样透传（客户端按码分辨离线与形状不符）');
+    } finally {
+      await mounted.close();
+    }
+  }
+
+  const mounted = await mount();
+  try {
+    const fenced = await callRoute(mounted.byPath[ROUTES.marketVersions], {
+      headers: LOOPBACK_HEADERS,
+      url: `${ROUTES.marketVersions}?source=skillhub&owner=ake&slug=dev-god`,
+      remoteAddress: '10.0.0.2',
+    });
+    assert.equal(fenced.status, 403, '非回环来源 403');
+    assert.equal(fenced.json.code, 'E_FORBIDDEN', '围栏先于一切');
+
+    const wrongMethod = await callRoute(mounted.byPath[ROUTES.marketVersions], {
+      method: 'POST',
+      headers: LOOPBACK_HEADERS,
+      body: '{}',
+    });
+    assert.equal(wrongMethod.status, 405, 'POST 405');
+    assert.equal(wrongMethod.json.code, 'E_METHOD', '方法不对的码');
+  } finally {
+    await mounted.close();
+  }
+});
+
+/* ------------------------ K124 · market/update（#16）的前置校验 P0–P7 ------------------------ */
+
+/**
+ * Write one market-installed skill directory under the mounted skills root.
+ * @param {object} mounted - the mount() result.
+ * @param {{name?: string, source?: string, owner?: string, slug?: string, version?: string,
+ *   disabled?: boolean}} [over] - metadata overrides.
+ * @returns {Promise<string>} the absolute `SKILL.md` path (what the panel sends as `path`).
+ */
+async function writeInstalledSkill(mounted, over = {}) {
+  const name = over.name ?? 'dev-god';
+  const dir = join(mounted.skillsRoot, name);
+  await mkdir(dir, { recursive: true });
+  const flag = over.disabled === true ? 'disable-model-invocation: true\n' : '';
+  const skillPath = join(dir, 'SKILL.md');
+  await writeFile(skillPath, `---\nname: ${name}\ndescription: Installed fixture.\n${flag}---\n\n# ${name}\n`);
+  await writeFile(join(dir, '_meta.json'), JSON.stringify({
+    source: over.source ?? 'skillhub',
+    ownerId: over.owner ?? 'ake',
+    slug: over.slug ?? 'dev-god',
+    version: over.version ?? '1.0.0',
+    name,
+    installedAt: NOW(),
+  }));
+  return skillPath;
+}
+
+/**
+ * POST one `market/update` request.
+ * @param {object} mounted - the mount() result.
+ * @param {object} body - request body.
+ * @returns {Promise<{status: number, json: any}>} the response.
+ */
+async function updateRoute(mounted, body) {
+  return callRoute(mounted.byPath[ROUTES.marketUpdate], {
+    method: 'POST',
+    headers: LOOPBACK_HEADERS,
+    body: JSON.stringify(body),
+  });
+}
+
+test('K124 P0：body 白名单（source/owner/slug/version/name/path 逐条校验）⇒ 400 E_BAD_QUERY', async () => {
+  const mounted = await mount();
+  try {
+    const good = { source: 'skillhub', owner: 'ake', slug: 'dev-god', version: '2.0.0', name: 'dev-god', path: '/tmp/x/SKILL.md' };
+    const cases = [
+      [{ ...good, source: 'all' }, 'source 是 all（scope 不是身份）'],
+      [{ ...good, source: undefined }, 'source 缺失'],
+      [{ ...good, owner: '../etc' }, 'owner 带 ..'],
+      [{ ...good, slug: 'a..b' }, 'slug 带 ..'],
+      [{ ...good, version: '' }, 'version 空'],
+      [{ ...good, name: 'Bad Name' }, 'name 不合 isSkillName'],
+      [{ ...good, path: 'skills/dev-god/SKILL.md' }, 'path 不是绝对路径'],
+      [{ ...good, path: '/tmp/x/README.md' }, 'path 不以 SKILL.md 结尾'],
+      [{ ...good, path: undefined }, 'path 缺失'],
+    ];
+    for (const [body, why] of cases) {
+      const response = await updateRoute(mounted, body);
+      assert.equal(response.status, 400, `${why} ⇒ 400`);
+      assert.equal(response.json.code, 'E_BAD_QUERY', `${why} ⇒ E_BAD_QUERY`);
+    }
+    const notObject = await callRoute(mounted.byPath[ROUTES.marketUpdate], {
+      method: 'POST', headers: LOOPBACK_HEADERS, body: '"a string"',
+    });
+    assert.equal(notObject.status, 400, '非对象 body ⇒ 400');
+    assert.equal(notObject.json.code, 'E_BAD_REQUEST', '形状不对是 E_BAD_REQUEST');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K124 P1/P3/P4：不在盘上 404、路径对不上 409 E_STALE_PATH，两者都不动磁盘', async () => {
+  const mounted = await mount();
+  try {
+    const missing = await updateRoute(mounted, {
+      source: 'skillhub', owner: 'ake', slug: 'dev-god', version: '2.0.0', name: 'ghost', path: join(mounted.skillsRoot, 'ghost', 'SKILL.md'),
+    });
+    assert.equal(missing.status, 404, 'P1 先重新扫描：磁盘上没有这个名字');
+    assert.equal(missing.json.code, 'E_NOT_FOUND', '404 E_NOT_FOUND');
+
+    const realPath = await writeInstalledSkill(mounted);
+    const moved = await updateRoute(mounted, {
+      source: 'skillhub', owner: 'ake', slug: 'dev-god', version: '2.0.0', name: 'dev-god', path: join(mounted.skillsRoot, 'moved-skill', 'SKILL.md'),
+    });
+    assert.equal(moved.status, 409, 'P3 路径不一致');
+    assert.equal(moved.json.code, 'E_STALE_PATH', '409 E_STALE_PATH（硬约束 6）');
+    assert.equal(await readFile(realPath, 'utf8'), '---\nname: dev-god\ndescription: Installed fixture.\n---\n\n# dev-god\n', '一个字节都没动');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K124 P2：软链行 409 E_SYMLINK_READONLY（三层拦截的第二层在路由上）', async () => {
+  const mounted = await mount();
+  try {
+    const outside = join(mounted.dshHome, 'linked-target');
+    await mkdir(outside, { recursive: true });
+    const body = '---\nname: linked-skill\ndescription: Linked.\n---\n\n# linked\n';
+    await writeFile(join(outside, 'SKILL.md'), body);
+    await writeFile(join(outside, '_meta.json'), JSON.stringify({
+      source: 'skillhub', ownerId: 'ake', slug: 'dev-god', version: '1.0.0', name: 'linked-skill',
+    }));
+    await symlink(outside, join(mounted.skillsRoot, 'linked-skill'));
+
+    const response = await updateRoute(mounted, {
+      source: 'skillhub',
+      owner: 'ake',
+      slug: 'dev-god',
+      version: '2.0.0',
+      name: 'linked-skill',
+      path: join(mounted.skillsRoot, 'linked-skill', 'SKILL.md'),
+    });
+    assert.equal(response.status, 409, '软链一律只读');
+    assert.equal(response.json.code, 'E_SYMLINK_READONLY', '409 E_SYMLINK_READONLY');
+    assert.equal(await readFile(join(outside, 'SKILL.md'), 'utf8'), body, '链接目标一个字节都没动');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K124 P5/P6：身份三件套任一不符 409 E_NOT_MARKET_INSTALLED，同版本 409 E_ALREADY_UP_TO_DATE', async () => {
+  const mounted = await mount();
+  try {
+    const skillPath = await writeInstalledSkill(mounted);
+    const before = await readFile(skillPath, 'utf8');
+    for (const mismatch of [
+      { source: 'clawhub' },
+      { owner: 'someone-else' },
+      { slug: 'other-skill' },
+    ]) {
+      const response = await updateRoute(mounted, {
+        source: 'skillhub', owner: 'ake', slug: 'dev-god', version: '2.0.0', name: 'dev-god', path: skillPath,
+        ...mismatch,
+      });
+      assert.equal(response.status, 409, `身份不符（${JSON.stringify(mismatch)}）⇒ 409`);
+      assert.equal(response.json.code, 'E_NOT_MARKET_INSTALLED', 'P5 逐字相等，不做任何宽容');
+    }
+
+    const same = await updateRoute(mounted, {
+      source: 'skillhub', owner: 'ake', slug: 'dev-god', version: '1.0.0', name: 'dev-god', path: skillPath,
+    });
+    assert.equal(same.status, 409, '同版本没有可做的事');
+    assert.equal(same.json.code, 'E_ALREADY_UP_TO_DATE', 'P6 只比相等、不排序');
+    assert.equal(await readFile(skillPath, 'utf8'), before, '四种拒绝都是字节零改动');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K124 P7：同一身份正在写盘时 429 E_INSTALL_BUSY（update 与 install 共用一张锁表）', async () => {
+  let release = () => {};
+  const gate = new Promise((resolve) => { release = resolve; });
+  // 占住锁的 install 声明另一个名字：ident 相同（source:owner:slug）就够了，不会撞 E_ALREADY_INSTALLED。
+  const mounted = await mount({ skillhub: adapter({ id: 'skillhub', gate, declaredName: 'other-skill', planVersion: '2.0.0' }) });
+  try {
+    const skillPath = await writeInstalledSkill(mounted);
+    const busy = mounted.installer.install({ sourceId: 'skillhub', owner: 'ake', slug: 'dev-god', version: '2.0.0' });
+    // 等到 install 真的进了 fetchFile（锁已拿到），再打 update。
+    for (let attempt = 0; attempt < 200 && !mounted.sources[0].calls.includes('fetch:SKILL.md'); attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    assert.equal(mounted.sources[0].calls.includes('fetch:SKILL.md'), true, 'install 正卡在写盘阶段（锁在手上）');
+
+    const response = await updateRoute(mounted, {
+      source: 'skillhub', owner: 'ake', slug: 'dev-god', version: '2.0.0', name: 'dev-god', path: skillPath,
+    });
+    assert.equal(response.status, 429, '同 identity 的第二个写操作 ⇒ 429');
+    assert.equal(response.json.code, 'E_INSTALL_BUSY', '429 E_INSTALL_BUSY');
+
+    release();
+    await busy.catch(() => {});
+  } finally {
+    release();
+    await mounted.close();
+  }
+});
+
+test('K124 成功：200 + 九个字段，from 是更新前版本，目录已换新', async () => {
+  const mounted = await mount({ skillhub: adapter({ id: 'skillhub', planVersion: '2.0.0' }) });
+  try {
+    const skillPath = await writeInstalledSkill(mounted);
+    const response = await updateRoute(mounted, {
+      source: 'skillhub', owner: 'ake', slug: 'dev-god', version: '2.0.0', name: 'dev-god', path: skillPath,
+    });
+    assert.equal(response.status, 200, '成功 200');
+    const data = response.json.data;
+    assert.deepEqual(Object.keys(data).sort(), [
+      'bytes', 'files', 'from', 'name', 'owner', 'path', 'slug', 'source', 'version',
+    ], '出参是九个字段');
+    assert.equal(data.from, '1.0.0', 'from 是更新前的版本（读旧 _meta.json）');
+    assert.equal(data.version, '2.0.0', 'version 是装上的版本');
+    const meta = JSON.parse(await readFile(join(mounted.skillsRoot, 'dev-god', '_meta.json'), 'utf8'));
+    assert.equal(meta.version, '2.0.0', '落盘后的 _meta.json 已是新版本');
   } finally {
     await mounted.close();
   }

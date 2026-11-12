@@ -199,6 +199,46 @@ export class SkillCenterApi {
   }
 
   /**
+   * Read every version of one skill, newest first.
+   *
+   * `source` is the identity here (`skillhub` / `clawhub`), not the list's scope: the
+   * versions belong to one source's package.
+   * @param {{source: string, owner: string, slug: string}} ref - the item.
+   * @returns {Promise<object>} `{source, owner, slug, namespace, latest, versions, total}`.
+   */
+  async marketVersions(ref) {
+    return this.request(`market/versions${queryString({
+      source: ref?.source,
+      owner: ref?.owner,
+      slug: ref?.slug,
+    })}`);
+  }
+
+  /**
+   * Overwrite-install one skill over the directory it already occupies.
+   *
+   * `path` is the row's own `SKILL.md`: the route re-scans and refuses the write unless the
+   * file it resolved is the one the panel is showing (AGENTS.md 6).
+   * @param {{source: string, owner: string, slug: string, version: string, name: string,
+   *   path: string}} ref - the update.
+   * @returns {Promise<object>} `{name, path, version, from, source, owner, slug, files, bytes}`.
+   */
+  async marketUpdate(ref) {
+    return this.request('market/update', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: ref?.source ?? '',
+        owner: ref?.owner ?? '',
+        slug: ref?.slug ?? '',
+        version: ref?.version ?? '',
+        name: ref?.name ?? '',
+        path: ref?.path ?? '',
+      }),
+    });
+  }
+
+  /**
    * Read which market items this machine already installed, keyed by market item id.
    * @returns {Promise<object>} `{items, readable}`.
    */

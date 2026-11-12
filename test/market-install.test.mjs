@@ -124,14 +124,27 @@ async function rig(source, options = {}) {
   await mkdir(skillsRoot, { recursive: true });
   const now = options.now ?? (() => Date.parse('2026-11-09T06:00:00.000Z'));
   const store = options.store ?? createStore({ dshHome: dir, skillsRoot, now });
+  // A holder, not a bound reference: an update test installs 1.0.0 from one package and
+  // then hands the same source id a different package (2.0.0), which is exactly what the
+  // market does between two versions of one skill.
+  const holder = { source };
   const installer = createInstaller({
     skillsRoot,
     io: {},
-    sourceById: (id) => (id === source?.id ? source : undefined),
+    sourceById: (id) => (id === SOURCE ? holder.source : undefined),
     store,
     now,
   });
-  return { dshHome: dir, skillsRoot, store, install: installer.install, cleanup };
+  return {
+    dshHome: dir,
+    skillsRoot,
+    store,
+    install: installer.install,
+    update: installer.update,
+    /** Point the source id at another package (the next version). */
+    useSource: (next) => { holder.source = next; },
+    cleanup,
+  };
 }
 
 /** The ref every case installs. */
@@ -157,6 +170,16 @@ async function entriesOf(dir) {
  */
 async function stagingLeftovers(dir) {
   return (await entriesOf(dir)).filter((entry) => entry.startsWith('.skc-install-'));
+}
+
+/**
+ * Every dot-prefixed working directory an install or an update may leave behind.
+ * @param {string} dir - skills root.
+ * @returns {Promise<string[]>} leftovers (must be empty after both success and failure).
+ */
+async function workLeftovers(dir) {
+  return (await entriesOf(dir)).filter((entry) => entry.startsWith('.skc-install-')
+    || entry.startsWith('.skc-update-') || entry.startsWith('.skc-backup-'));
 }
 
 test('K34 成功路径：SKILL.md + _meta.json{source,ownerId,slug,version} + 台账，且台账被 lib/ledger.js 读出', async () => {
@@ -590,4 +613,266 @@ test('K34 安装失败的清理是可重复的：连续失败三次后目录仍�
   } finally {
     await card.cleanup();
   }
+});
+
+/* ------------------- K123/K124 · 覆盖安装：成功、启用状态往返、四条回滚 ------------------- */
+
+/** The 2.0.0 package every update test installs over 1.0.0. */
+const UPDATE_REF = { sourceId: SOURCE, owner: 'ake', slug: 'dev-god', version: '2.0.0', name: 'dev-god' };
+
+/**
+ * Install 1.0.0 and point the source at 2.0.0, the way the market moves between releases.
+ * @param {object} card - the rig.
+ * @param {object} next - the 2.0.0 package.
+ * @returns {Promise<string>} the installed directory.
+ */
+async function installThenStage(card, next) {
+  await card.install(REF);
+  card.useSource(next);
+  return join(card.skillsRoot, 'dev-god');
+}
+
+test('K123 更新成功：全量文件 + _meta.json version=to + 台账一次 + 无任何点开头残留', async () => {
+  const v1 = fakeSource({ files: { 'SKILL.md': skillText('dev-god'), 'scripts/old.md': 'old\n' } });
+  const v2 = fakeSource({
+    version: '2.0.0',
+    files: { 'SKILL.md': skillText('dev-god', 'v2 body'), 'scripts/new.md': '# new\n' },
+  });
+  const card = await rig(v1);
+  try {
+    const target = await installThenStage(card, v2);
+    const result = await card.update(UPDATE_REF, target);
+    assert.equal(result.name, 'dev-god', '名字不变（包内声明名逐字相等才允许更新）');
+    assert.equal(result.path, target, '落点就是原目录');
+    assert.equal(result.version, '2.0.0', '版本是目标版本');
+    assert.equal(result.from, '1.0.0', 'from 读出更新前的版本');
+    assert.equal(result.files, 3, '两个包内文件 + 一个 _meta.json');
+    assert.equal(result.bytes, Buffer.byteLength(skillText('dev-god', 'v2 body')) + Buffer.byteLength('# new\n'),
+      'bytes 只算包内文件（口径与 install 逐字相同）');
+
+    const skillAfter = await readFile(join(target, 'SKILL.md'), 'utf8');
+    // 新包的字节 + 一行显式的启用状态（U5 把「缺 = 启用」写成 `false`，让状态在文件里可见）。
+    assert.equal(
+      skillAfter,
+      skillText('dev-god', 'v2 body').replace('description: A fixture package.\n', 'description: A fixture package.\ndisable-model-invocation: false\n'),
+      'SKILL.md 换成新包的字节（只多一行搬运过来的启用状态）',
+    );
+    assert.equal(await readFile(join(target, 'scripts', 'new.md'), 'utf8'), '# new\n', '新包的文件都在');
+    assert.equal(existsSync(join(target, 'scripts', 'old.md')), false, '旧版本独有的文件不残留（整目录替换，不是覆盖合并）');
+    const meta = JSON.parse(await readFile(join(target, '_meta.json'), 'utf8'));
+    assert.equal(meta.version, '2.0.0', '_meta.json 的 version 是 to');
+    assert.equal(meta.source, SOURCE, 'source 不变');
+    assert.equal(meta.ownerId, 'ake', 'ownerId 不变');
+    assert.equal(meta.slug, 'dev-god', 'slug 不变');
+
+    const ledger = await card.store.read();
+    assert.equal(ledger.doc.installs.length, 1, '台账一条：同名覆盖（append 按 source:owner:slug:name 覆盖，不追加第二条）');
+    assert.equal(ledger.doc.installs[0].version, '2.0.0', '覆盖后记的是新版本');
+    assert.equal(ledger.doc.installs[0].name, 'dev-god', '记的是被更新的名字');
+    assert.equal(ledger.doc.installs[0].owner, 'ake', 'owner 不变');
+    assert.equal(ledger.doc.installs[0].slug, 'dev-god', 'slug 不变');
+    assert.deepEqual(await workLeftovers(card.skillsRoot), [], '成功之后既没有 .skc-update-* 也没有 .skc-backup-*');
+  } finally {
+    await card.cleanup();
+  }
+});
+
+test('K123 启用状态往返：停用 → 更新 → 仍停用；启用 → 更新 → 仍启用', async () => {
+  // 停用方向：用户在这一页关掉了开关，覆盖安装必须把那一行搬到新包上。
+  const disabledAtSource = skillText('dev-god').replace(
+    'description: A fixture package.\n',
+    'description: A fixture package.\ndisable-model-invocation: true\n',
+  );
+  const v1 = fakeSource({ files: { 'SKILL.md': skillText('dev-god') } });
+  const v2 = fakeSource({ version: '2.0.0', files: { 'SKILL.md': skillText('dev-god', 'v2') } });
+  const card = await rig(v1);
+  try {
+    const target = await installThenStage(card, v2);
+    await writeFile(join(target, 'SKILL.md'), disabledAtSource);
+    const result = await card.update(UPDATE_REF, target);
+    assert.equal(result.from, '1.0.0', 'from 仍从 _meta.json 读（不是从新包猜）');
+    const after = await readFile(join(target, 'SKILL.md'), 'utf8');
+    assert.ok(after.includes('v2'), '确实是新包的正文');
+    assert.ok(after.includes('disable-model-invocation: true'), '停用状态被搬到新包上');
+    assert.equal(
+      after.split('\n').filter((line) => line.startsWith('disable-model-invocation')).length,
+      1,
+      '只有一行（不追加第二行）',
+    );
+  } finally {
+    await card.cleanup();
+  }
+
+  // 启用方向：旧版本启用，新包自己写着 true（上游带的）⇒ 更新后必须变成 false。
+  const v2Disabled = fakeSource({
+    version: '2.0.0',
+    files: { 'SKILL.md': disabledAtSource.replace('# dev-god\n', '# dev-god\n\nv2\n') },
+  });
+  const enabledV1 = fakeSource({ files: { 'SKILL.md': skillText('dev-god') } });
+  const other = await rig(enabledV1);
+  try {
+    const target = await installThenStage(other, v2Disabled);
+    await other.update(UPDATE_REF, target);
+    const after = await readFile(join(target, 'SKILL.md'), 'utf8');
+    assert.ok(after.includes('disable-model-invocation: false'), '启用态覆盖新包里的 true（用户状态优先于上游）');
+    assert.equal(after.includes('disable-model-invocation: true'), false, '不再有停用那一行');
+  } finally {
+    await other.cleanup();
+  }
+});
+
+test('K123 CRLF 夹具：状态搬运只做字节手术，新包自己的行尾与 BOM 原样', async () => {
+  const crlf = (name, extraHeader = '') => `---\r\nname: ${name}\r\ndescription: A fixture package.\r\n${extraHeader}---\r\n\r\n# ${name}\r\n`;
+  const v1 = fakeSource({ files: { 'SKILL.md': crlf('dev-god') } });
+  const v2 = fakeSource({ version: '2.0.0', files: { 'SKILL.md': crlf('dev-god') } });
+  const card = await rig(v1);
+  try {
+    const target = await installThenStage(card, v2);
+    await writeFile(join(target, 'SKILL.md'), crlf('dev-god', 'disable-model-invocation: true\r\n'));
+    await card.update(UPDATE_REF, target);
+    const text = (await readFile(join(target, 'SKILL.md'))).toString('utf8');
+    assert.ok(text.includes('disable-model-invocation: true'), '状态搬过来了');
+    assert.equal(/[^\r]\n/.test(text), false, '没有一行被洗成裸 LF（硬约束 7 / K73）');
+    assert.equal(text.startsWith('\ufeff'), false, '没有凭空多出 BOM');
+  } finally {
+    await card.cleanup();
+  }
+
+  // 反方向：旧文件是 CRLF、新包是 LF ⇒ 新包仍是 LF（旧文件的行尾不属于新文件）。
+  const lfV2 = fakeSource({ version: '2.0.0', files: { 'SKILL.md': skillText('dev-god', 'v2') } });
+  const crlfV1 = fakeSource({ files: { 'SKILL.md': crlf('dev-god') } });
+  const mixed = await rig(crlfV1);
+  try {
+    const target = await installThenStage(mixed, lfV2);
+    await writeFile(join(target, 'SKILL.md'), crlf('dev-god', 'disable-model-invocation: true\r\n'));
+    await mixed.update(UPDATE_REF, target);
+    const text = (await readFile(join(target, 'SKILL.md'))).toString('utf8');
+    assert.ok(text.includes('disable-model-invocation: true'), '状态搬过来了');
+    assert.equal(text.includes('\r'), false, '新包自己的 LF 没有被旧文件的 CRLF 污染');
+  } finally {
+    await mixed.cleanup();
+  }
+});
+
+test('K124 预取阶段失败：旧版本逐字节不变、无残留、台账不变', async () => {
+  const v1 = fakeSource({ files: { 'SKILL.md': skillText('dev-god'), 'scripts/keep.md': 'keep\n' } });
+  const v2 = fakeSource({
+    version: '2.0.0',
+    files: { 'SKILL.md': skillText('dev-god', 'v2') },
+    fail: { at: 'fetch', code: 'E_DOWNLOAD_FAILED' },
+  });
+  const card = await rig(v1);
+  try {
+    const target = await installThenStage(card, v2);
+    const before = {
+      skill: await readFile(join(target, 'SKILL.md'), 'utf8'),
+      meta: await readFile(join(target, '_meta.json'), 'utf8'),
+      keep: await readFile(join(target, 'scripts', 'keep.md'), 'utf8'),
+    };
+    await assert.rejects(() => card.update(UPDATE_REF, target), (error) => {
+      assert.equal(error.code, 'E_DOWNLOAD_FAILED', '取包失败沿用安装阶段的码（动盘之前不报新码）');
+      return true;
+    });
+    assert.equal(await readFile(join(target, 'SKILL.md'), 'utf8'), before.skill, 'SKILL.md 逐字节不变');
+    assert.equal(await readFile(join(target, '_meta.json'), 'utf8'), before.meta, '_meta.json 逐字节不变');
+    assert.equal(await readFile(join(target, 'scripts', 'keep.md'), 'utf8'), before.keep, '其余文件也都在');
+    assert.deepEqual(await workLeftovers(card.skillsRoot), [], '没有 .skc-update-* / .skc-backup-*');
+    const ledger = await card.store.read();
+    assert.equal(ledger.doc.installs.length, 1, '台账与更新前逐字节相同（还是只有那条 install）');
+  } finally {
+    await card.cleanup();
+  }
+});
+
+test('K124 暂存目录已建之后失败：暂存被删、目标仍零改动', async () => {
+  const v1 = fakeSource({ files: { 'SKILL.md': skillText('dev-god') } });
+  // SKILL.md 放行、第二个文件失败 ⇒ 此时 .skc-update-* 已经建好了。
+  const v2 = fakeSource({
+    version: '2.0.0',
+    files: { 'SKILL.md': skillText('dev-god', 'v2'), 'scripts/new.md': '# new\n' },
+    fail: { at: 'fetch', code: 'E_DOWNLOAD_FAILED', path: 'scripts/new.md' },
+  });
+  const card = await rig(v1);
+  try {
+    const target = await installThenStage(card, v2);
+    await assert.rejects(() => card.update(UPDATE_REF, target), (error) => error.code === 'E_DOWNLOAD_FAILED');
+    assert.deepEqual(await workLeftovers(card.skillsRoot), [], 'finally 删掉了暂存目录，一个字节都没落到目标上');
+    const meta = JSON.parse(await readFile(join(target, '_meta.json'), 'utf8'));
+    assert.equal(meta.version, '1.0.0', '目标仍是旧版本');
+  } finally {
+    await card.cleanup();
+  }
+});
+
+test('K124 台账失败 ⇒ E_UPDATE_UNCONFIRMED：目录是新版本、备份保留、台账是旧的', async () => {
+  const v1 = fakeSource({ files: { 'SKILL.md': skillText('dev-god') } });
+  const v2 = fakeSource({ version: '2.0.0', files: { 'SKILL.md': skillText('dev-god', 'v2') } });
+  let failAppend = false;
+  let realStore = null;
+  const store = {
+    /**
+     * Append to the real ledger unless the test has broken it.
+     * @param {object} entry - one ledger record.
+     * @returns {Promise<object>} the store's answer.
+     */
+    append: (entry) => (failAppend ? Promise.reject(new Error('ledger down')) : realStore.append(entry)),
+    /** @returns {Promise<object>} the ledger as it is on disk. */
+    read: () => realStore.read(),
+  };
+  const card = await rig(v1, { store });
+  realStore = createStore({ dshHome: card.dshHome, skillsRoot: card.skillsRoot, now: () => Date.parse('2026-11-09T06:00:00.000Z') });
+  try {
+    const target = await installThenStage(card, v2);
+    failAppend = true;
+    await assert.rejects(() => card.update(UPDATE_REF, target), (error) => {
+      assert.equal(error.code, 'E_UPDATE_UNCONFIRMED', '新版本落地了但台账没写：只报未确认');
+      assert.equal(error.detail.from, '1.0.0', 'data.from 让客户端说得出「已恢复到哪个版本」');
+      assert.equal(error.detail.path, target, 'data.path 指出目录在哪');
+      return true;
+    });
+
+    const text = await readFile(join(target, 'SKILL.md'), 'utf8');
+    assert.ok(text.includes('v2'), '目录是**新版本完整**（不回滚目录，契约 §7.11 R6）');
+    const meta = JSON.parse(await readFile(join(target, '_meta.json'), 'utf8'));
+    assert.equal(meta.version, '2.0.0', '_meta.json 也是新版本');
+
+    const leftovers = await workLeftovers(card.skillsRoot);
+    assert.equal(leftovers.length, 1, '备份目录保留（它是唯一的一份旧版本）');
+    assert.match(leftovers[0], /^\.skc-backup-/, '留下的是 .skc-backup-*');
+    assert.equal(existsSync(join(card.skillsRoot, leftovers[0], 'SKILL.md')), true, '备份里就是旧版本');
+    assert.equal(await readFile(join(card.skillsRoot, leftovers[0], 'SKILL.md'), 'utf8'), skillText('dev-god'),
+      '备份里是更新前的字节');
+
+    const ledger = await (failAppend ? realStore.read() : card.store.read());
+    assert.equal(ledger.doc.installs.length, 1, '台账仍是旧的（只有那条 install）');
+    assert.equal(ledger.doc.installs[0].version, '1.0.0', '旧版本号还在台账里');
+  } finally {
+    await card.cleanup();
+  }
+});
+
+test('K124 E_UPDATE_RESTORED / E_UPDATE_LOST 只做代码级断言（rename 失败注入不了）', async () => {
+  // 限制：交换是两次 rename，注入「第二次 rename 失败」需要在两次调用之间改变文件系统
+  // 权限/占用，node 没有 hook 点；用 chmod 会把两个 rename 一视同仁地弄挂。所以这三条
+  // 只能钉「代码里确实这么接的」，行为由真机抽查（D16）之外的契约文本保证。
+  const source = await readFile(new URL('../lib/market/install.js', import.meta.url), 'utf8');
+  assert.match(source, /E_UPDATE_RESTORED/, '交换失败且回滚成功 ⇒ E_UPDATE_RESTORED');
+  assert.match(source, /E_UPDATE_LOST/, '回滚也失败 ⇒ E_UPDATE_LOST');
+  assert.equal(
+    (source.match(/await restoreBackup\(backup, target\)/g) ?? []).length,
+    2,
+    '两条失败分支（交换失败、落位回读失败）都走 restoreBackup',
+  );
+  assert.equal(
+    (source.match(/keepBackup = !restored/g) ?? []).length,
+    2,
+    '回滚没成功时保留备份（它是唯一副本）',
+  );
+  assert.match(source, /E_UPDATE_UNCONFIRMED/, '台账失败 ⇒ E_UPDATE_UNCONFIRMED');
+  assert.match(source, /keepBackup = true;[\s\S]{0,200}E_UPDATE_UNCONFIRMED/, '台账失败也保留备份');
+
+  const { MARKET_STATUS } = await import('../lib/market/errors.js');
+  assert.equal(MARKET_STATUS.E_UPDATE_RESTORED, 500, '码表里 E_UPDATE_RESTORED ⇒ 500');
+  assert.equal(MARKET_STATUS.E_UPDATE_LOST, 500, '码表里 E_UPDATE_LOST ⇒ 500');
+  assert.equal(MARKET_STATUS.E_UPDATE_UNCONFIRMED, 500, '码表里 E_UPDATE_UNCONFIRMED ⇒ 500');
 });

@@ -8,14 +8,26 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  CHECK_BUDGET_MS,
+  CHECK_TIMEOUT_MS,
+  CHECK_TTL_MS,
   TAB_INSTALLED,
   TAB_MARKET,
+  VERSION_ROWS,
+  checkPhaseOf,
+  clockText,
+  dateText,
+  detectionTargets,
   groupEmptyKey,
+  headerUpdateNote,
+  identityOf,
+  needsCheck,
+  newerVersions,
+  verdictOf,
   isPending,
   reasonText,
   rowKey,
   rowViewState,
-  statusLine,
   switchMode,
   toGroups,
   packageOf,
@@ -44,18 +56,6 @@ function row(overrides = {}) {
     ...overrides,
   };
 }
-
-test('K26 计数文案：有停用与没有停用两种形态', async () => {
-  const t = translator(await dictionaryPromise);
-  assert.equal(statusLine({ total: 5, disabled: 1 }, t), '共 5 个技能，1 个已停用', '有停用时追加停用计数');
-  assert.equal(statusLine({ total: 5, disabled: 0 }, t), '共 5 个技能', '没有停用时只有总数');
-});
-
-test('K26 计数缺失或非整数时按 0 处理，不抛错', async () => {
-  const t = translator(await dictionaryPromise);
-  assert.equal(statusLine(undefined, t), '共 0 个技能', '没有 counts 时按 0');
-  assert.equal(statusLine({ total: '5', disabled: null }, t), '共 0 个技能', '非整数字段按 0');
-});
 
 test('rowKey 用 provider#name 作为开关的身份', () => {
   assert.equal(rowKey(row()), 'filesystem#hand-written', '身份键是 provider#name');
@@ -232,4 +232,130 @@ test('packageOf 三层优先级：pluginPackage > originPath 的 node_modules �
   assert.equal(packageOf({ provider: 'univer' }), 'univer', '字段缺失也是 provider');
   assert.equal(packageOf({ provider: 'univer', pluginPackage: '' }), 'univer', '空串不算给了包名');
   assert.equal(packageOf({ provider: 'univer', pluginPackage: 42 }), 'univer', '非字符串不算给了包名');
+});
+
+/* --------------------- K118 · 检测对象、缓存与预算（纯函数半边，D1/D2/D3） --------------------- */
+
+/** An installed row with an upstream identity, a version, and whatever else the case needs. */
+function marketRow(overrides = {}) {
+  return row({
+    name: 'dev-god',
+    partition: 'installed',
+    rule: 'R7',
+    upstream: { sourceId: 'skillhub', owner: 'ake', slug: 'dev-god' },
+    version: '1.2.4',
+    ...overrides,
+  });
+}
+
+test('K118 identityOf：source:owner:slug，缺一项就是空串（空串不进缓存）', () => {
+  assert.equal(identityOf({ sourceId: 'skillhub', owner: 'ake', slug: 'dev-god' }), 'skillhub:ake:dev-god', '标准形态');
+  for (const bad of [null, undefined, {}, { sourceId: 'skillhub' }, { sourceId: 'skillhub', owner: 'ake' }, { sourceId: 'skillhub', owner: 'ake', slug: '' }]) {
+    assert.equal(identityOf(bad), '', `不完整 ⇒ 空串（${JSON.stringify(bad)}）`);
+  }
+});
+
+test('K118 detectionTargets 只收「市场装 ∧ 非软链 ∧ 有版本」，同 identity 去重', () => {
+  const rows = [
+    marketRow(),
+    marketRow({ name: 'copy-of-dev-god' }),
+    marketRow({ name: 'no-version', version: null }),
+    marketRow({ name: 'empty-version', version: '' }),
+    marketRow({ name: 'linked', symlink: true }),
+    row({ name: 'hand-made' }),
+    row({ name: 'builtin', provider: 'runtime', partition: 'builtin', path: null }),
+  ];
+  assert.deepEqual(detectionTargets(rows), [
+    { key: 'skillhub:ake:dev-god', source: 'skillhub', owner: 'ake', slug: 'dev-god' },
+  ], '两个目录装同一个技能只查一次；软链 / 手工 / 内置 / 无版本一次都不查');
+  assert.deepEqual(detectionTargets([]), [], '空数组安全');
+  assert.deepEqual(detectionTargets(undefined), [], '非数组安全');
+  const twoSources = detectionTargets([
+    marketRow(),
+    marketRow({ name: 'claw', upstream: { sourceId: 'clawhub', owner: 'ake', slug: 'dev-god' } }),
+  ]);
+  assert.equal(twoSources.length, 2, '同 owner/slug 的两个源是两个 identity（两份包）');
+});
+
+test('K118 needsCheck：TTL 10 分钟，skipped 必重试，busy 不重入', () => {
+  assert.equal(CHECK_TTL_MS, 600000, 'TTL 是 10 分钟');
+  const now = 1_000_000_000_000;
+  assert.equal(needsCheck(null, now), true, '没有条目 ⇒ 要查');
+  assert.equal(needsCheck(undefined, now), true, 'undefined 也一样');
+  assert.equal(needsCheck({ phase: 'ready', at: now - 1, busy: false }, now), false, '刚查过 ⇒ 不查');
+  assert.equal(needsCheck({ phase: 'ready', at: now - 599_999, busy: false }, now), false, 'TTL 内 ⇒ 不查');
+  assert.equal(needsCheck({ phase: 'ready', at: now - 600_000, busy: false }, now), true, '满 10 分钟 ⇒ 重查');
+  assert.equal(needsCheck({ phase: 'offline', at: now - 1, busy: false }, now), false, '失败答案同样缓存一个 TTL');
+  assert.equal(needsCheck({ phase: 'skipped', at: now - 1, busy: false }, now), true, '预算截断的没有答案 ⇒ 下次必重试');
+  assert.equal(needsCheck({ phase: 'running', at: null, busy: false }, now), true, 'running 但没人持有 ⇒ 可以开始');
+  assert.equal(needsCheck({ phase: 'ready', at: now - 600_000, busy: true }, now), false, '有请求在飞时不重入');
+  assert.equal(needsCheck({ phase: 'ready', at: null, busy: false }, now), true, '没有 at 就当没有答案');
+});
+
+test('K118 预算常量与契约一致：单行 2s、整轮 8s', () => {
+  assert.equal(CHECK_TIMEOUT_MS, 2000, '单行 2s');
+  assert.equal(CHECK_BUDGET_MS, 8000, '整轮 8s');
+});
+
+test('K118 checkPhaseOf：只有「连不上源」的码落 offline，其余落 failed', () => {
+  for (const code of ['E_SOURCE_UNAVAILABLE', 'E_SOURCE_TIMEOUT', 'E_SOURCE_BAD_RESPONSE']) {
+    assert.equal(checkPhaseOf(code), 'offline', `${code} ⇒ offline`);
+  }
+  for (const code of ['E_BAD_QUERY', 'E_INSTALL_IO', 'E_UNKNOWN', '', 'E_NO_VERSIONS']) {
+    assert.equal(checkPhaseOf(code), 'failed', `${code || '(空)'} ⇒ failed`);
+  }
+});
+
+test('K118 verdictOf 五态：答案按「与这一行自己的 version 相等吗」判', () => {
+  const ready = (candidate) => ({ phase: 'ready', candidate });
+  assert.equal(verdictOf(null, '1.2.4'), 'checking', '没有答案 ⇒ checking（区块挂载即此态）');
+  assert.equal(verdictOf(ready('1.2.4'), '1.2.4'), 'upToDate', '相等 ⇒ 最新');
+  assert.equal(verdictOf(ready('9.9.9'), '1.2.4'), 'available', '不等 ⇒ 可更新（不比较大小）');
+  assert.equal(verdictOf(ready('1.0.0'), '1.2.4'), 'available', '更小的上游版本也算「不等」（只比相等）');
+  assert.equal(verdictOf(ready(''), '1.2.4'), 'failed', '没有 candidate 的答案算失败（不是「最新」）');
+  assert.equal(verdictOf({ phase: 'offline' }, '1.2.4'), 'offline', 'offline');
+  assert.equal(verdictOf({ phase: 'failed' }, '1.2.4'), 'failed', 'failed');
+  assert.equal(verdictOf({ phase: 'skipped' }, '1.2.4'), 'failed', 'skipped 在区块里同样说「无法检查更新」');
+  assert.equal(verdictOf({ phase: 'running' }, '1.2.4'), 'checking', 'running 也是 checking');
+});
+
+/* ------------------------- K121 · 展开列表的窗口与日期（纯函数半边） ------------------------- */
+
+test('K121 newerVersions：count 是当前版本之前的条数，当前不在列表时回落 total', () => {
+  const versions = [
+    { version: '3.0.0' }, { version: '2.5.0' }, { version: '2.0.0' }, { version: '1.2.4' }, { version: '1.0.0' },
+  ];
+  const three = newerVersions(versions, '1.2.4', 5);
+  assert.equal(three.count, 3, '排在已安装版本之前的条数就是「N 个新版本」');
+  assert.deepEqual(three.items.map((entry) => entry.version), ['3.0.0', '2.5.0', '2.0.0', '1.2.4', '1.0.0'], '窗口是列表前 5 条');
+  assert.equal(three.more, 0, '刚好 5 行，没有「另有」');
+
+  const absent = newerVersions(versions, '9.9.9', 12);
+  assert.equal(absent.count, 12, '当前版本不在列表 ⇒ count = total（上游说有几条就是几条）');
+  assert.equal(absent.more, 7, 'more = count - 打印行数');
+
+  const empty = newerVersions([], '1.2.4', 0);
+  assert.deepEqual(empty, { count: 0, items: [], more: 0 }, '空列表安全');
+  assert.deepEqual(newerVersions(undefined, '1.2.4', 0), { count: 0, items: [], more: 0 }, '非数组安全');
+  assert.equal(newerVersions([{ version: '' }, { version: 42 }, null], '1.2.4', 3).count, 3,
+    '坏条目被丢掉，但 count 仍按上游 total（drop 只影响能打印的行）');
+});
+
+test('K121 newerVersions：最多 5 行，超出的进「另有 N 个」', () => {
+  assert.equal(VERSION_ROWS, 5, '展示上限是 5 行');
+  const versions = Array.from({ length: 10 }, (unused, index) => ({ version: `2.0.${10 - index}` }));
+  const window = newerVersions([...versions, { version: '1.0.0' }], '1.0.0', 11);
+  assert.equal(window.items.length, 5, '只打印 5 行');
+  assert.equal(window.count, 10, '当前版本之前有 10 条');
+  assert.equal(window.more, 5, '另有 5 条没列出来');
+});
+
+test('K121 dateText / clockText：日期是 YYYY-MM-DD，时间是 HH:MM，坏输入给空串', () => {
+  const at = Date.UTC(2026, 10, 12, 6, 5);
+  assert.match(dateText(at), /^\d{4}-\d{2}-\d{2}$/, '日期格式固定（不用相对时间）');
+  assert.equal(dateText(at), `${new Date(at).getFullYear()}-${String(new Date(at).getMonth() + 1).padStart(2, '0')}-${String(new Date(at).getDate()).padStart(2, '0')}`, '本地时区的日历日');
+  assert.equal(dateText(null), '', 'null ⇒ 空串（渲染层据此不画日期）');
+  assert.equal(dateText(Number.NaN), '', 'NaN ⇒ 空串');
+  assert.match(clockText(at), /^\d{2}:\d{2}$/, '时间是 24 小时制 HH:MM');
+  assert.equal(clockText(null), '', 'null ⇒ 空串');
 });

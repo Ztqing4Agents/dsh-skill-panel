@@ -12,7 +12,7 @@
 
 ## 3.3 Host 路由清单
 
-十二条 **exact** 路由（`kind:'exact'`，`ctx.webServer.register(route)` 返回 disposer；重复注册同路径会抛错，见 `EX/dsh-host-webserver/README.md`「Registering routes」）。本地面 5 条（下表 #1–#4 与 #14；`#` 是历史编号，不重排也不复用，两条退役的图片端点不回收），市场面 7 条见 §3.7。
+十四条 **exact** 路由（`kind:'exact'`，`ctx.webServer.register(route)` 返回 disposer；重复注册同路径会抛错，见 `EX/dsh-host-webserver/README.md`「Registering routes」）。本地面 5 条（下表 #1–#4 与 #14；`#` 是历史编号，不重排也不复用，两条退役的图片端点不回收），市场面 9 条见 §3.7。
 
 统一信封（§8.1）：成功 `200 {code:'OK', data, message:''}`；失败 `4xx/5xx {code:'E_…', data:null, message}`。**没有例外**：U7 之后市场面的两条图片代理路由（`market/lucide` 与 `market/clawhub-icon`）随 `clawhub.ai` 一起退场，图标改为上游绝对 `https` 直连（`decisions.md` 附录 N 的 N-11），所以每条路由都回信封。
 
@@ -86,8 +86,7 @@ if (!isWithin(skillsRoot, row.path)) return fail(res, 409, 'E_NOT_WRITABLE') // 
 ```
 
 - **比较用严格字符串相等**（不做 `realpath`、不做大小写折叠）：客户端回传的就是我们刚发出的绝对路径；软链已在 ② 被拒，因此不存在「同一个文件两条路径」的歧义。
-- ①②③ 的顺序不可换：先确认「这条还在」，再拒软链，最后比对路径，任何一步先返回都能给出可区分的错误码（前端文案不同）。
-- 每次 `toggle` 都**重新扫描**（不查内存缓存）：这是「磁盘是唯一真源」的落地方式，也让「面板打开后有人手改了文件」变成 409 而不是静默改错文件。
+- ①②③ 的顺序不可换：先确认「这条还在」，再拒软链，最后比对路径，任何一步先返回都能给出可区分的错误码（前端文案不同）；每次 `toggle` 都**重新扫描**（不查内存缓存）——这是「磁盘是唯一真源」的落地方式，也让「面板打开后有人手改了文件」变成 409 而不是静默改错文件。
 
 #### 3.3.3 `detail` 的读盘围栏与出参
 
@@ -104,8 +103,7 @@ const st = await lstat(file)                                           // ⑤ �
 - **`lstat` 末端**：扫描层已经把软链目录解析成 `realPath`，这里再看一次是为了拦住「`SKILL.md` 自己也是软链」的那一层；仍是软链 ⇒ **不再跟随**，按「没有可读文件」返回（`body: null`、`size: null`），不是错误。
 - **`MAX_TEXT_BYTES = 262144`（256 KiB）**：超限只读前 256 KiB，`truncated: true`、`size` 仍是截断前的真实大小。真样本最长 39 618 B（`decisions.md` 附录 E-2），上限是护栏不是功能需要。
 - **frontmatter 只走读侧解析器**：正文 = `stripFrontmatter` 的结果，实现只在 `lib/frontmatter.js`；**不许**手写正则切 `---`。
-- **文件清单**：`readdir` 递归，深度 ≤4（以技能目录里的条目为第 1 层）、条目 ≤200，跳过点开头、`node_modules` 与 `dirent.isSymbolicLink()`（与硬约束 14「不跟随包内软链」同一条线）；超限置 `filesTruncated: true` 并停，不报错；子目录在遍历期间消失按「读不到」跳过（清单是尽力而为，正文读失败才是 500）。文案与顺序按路径字符串稳定排序，路径是相对技能目录的 `/` 分隔串。
-- **读失败 = `500 E_INTERNAL`**：`readCandidate` 刚刚成功读过同一个文件（否则这一行根本不存在），所以这里失败属于真异常，不新增错误码——§8.1 的表零改动。
+- **文件清单**：`readdir` 递归，深度 ≤4（以技能目录里的条目为第 1 层）、条目 ≤200，跳过点开头、`node_modules` 与 `dirent.isSymbolicLink()`（与硬约束 14「不跟随包内软链」同一条线）；超限置 `filesTruncated: true` 并停，不报错；子目录在遍历期间消失按「读不到」跳过（清单是尽力而为，正文读失败才是 500）。文案与顺序按路径字符串稳定排序，路径是相对技能目录的 `/` 分隔串；**正文读失败 = `500 E_INTERNAL`**（`readCandidate` 刚成功读过同一个文件，否则这一行根本不存在），清单读不到只是「尽力而为」，不新增错误码——§8.1 的表零改动。
 
 出参 `SkillContent`：
 
@@ -154,8 +152,7 @@ else block.lines.push({ text: `disable-model-invocation: ${enabled ? 'false' : '
 return concat(bom, block, body.subarray(block.end))   // 其余字节一个不动
 ```
 
-- **启用路径写 `false`，不删键**：双向切换幂等（`PRD` §3.4 允许「删除或写 false」，这里取「写 false」——删键会让 `git diff` 在 enable/disable 之间反复增删行，且删掉了作者原本的写入意图）。此为对 PRD 的实现选择，非偏离。
-- 目标键已存在且带行尾注释（`disable-model-invocation: true  # 临时关闭`）时，**保留注释**，只换值（正则 `^(\s*disable-model-invocation\s*:\s*)([^\s#]+)(.*)$`）。
+- **启用路径写 `false`，不删键**：双向切换幂等（`PRD` §3.4 允许「删除或写 false」，这里取「写 false」——删键会让 `git diff` 在 enable/disable 之间反复增删行，且删掉了作者原本的写入意图）。此为对 PRD 的实现选择，非偏离。目标键已存在且带行尾注释（`disable-model-invocation: true  # 临时关闭`）时，**保留注释**，只换值（正则 `^(\s*disable-model-invocation\s*:\s*)([^\s#]+)(.*)$`）。
 - 真实约束：本机 `indiv-guipi--find-skills/SKILL.md` 是 CRLF，现成实现（`PROF/@linxin666/dsh-client-ui-skill-explorer/lib/index.js` 的 `setFrontmatterField`）会把整块换成 LF —— 因此我们不用它，且 QA 必须有一条 CRLF fixture（§6 A3）。
 
 #### 3.4.3 原子落盘 + 指纹 + 回读（`lib/write-skill.js`）
@@ -189,9 +186,9 @@ return concat(bom, block, body.subarray(block.end))   // 其余字节一个不�
 
 ## 3.7 市场路由清单
 
-市场面 7 条 **exact** 路由，前缀 `/api/dsh-skill-center/market/*`。它们与 #1–#4、#14 **共用同一个 `guard()`**（loopback 围栏 → 方法），共用 `writeJson` 的 `{code,data,message}` 信封与 `no-store`，但**不共用 `collect()`**：本地扫描是磁盘面，市场是网络面，混在一起会让「市场超时」连累「已安装」页签。
+市场面 9 条 **exact** 路由，前缀 `/api/dsh-skill-center/market/*`。它们与 #1–#4、#14 **共用同一个 `guard()`**（loopback 围栏 → 方法），共用 `writeJson` 的 `{code,data,message}` 信封与 `no-store`，但**不共用 `collect()`**：本地扫描是磁盘面，市场是网络面，混在一起会让「市场超时」连累「已安装」页签。
 
-#### 3.7.1 七条路由
+#### 3.7.1 九条路由
 
 | # | 方法 + 路径 | 入参 | 出参 `data` | 错误码（全量） |
 | --- | --- | --- | --- | --- |
@@ -202,6 +199,8 @@ return concat(bom, block, body.subarray(block.end))   // 其余字节一个不�
 | 9 | `POST /api/dsh-skill-center/market/install` | `{source, owner, slug, version?}`（`objectOnly`，≤ 64 KiB；**没有 path / files / name 字段**） | `{name, path, version, source, owner, slug, files:number, bytes:number}` | `403`、`405`、`400 E_BAD_REQUEST`、`400 E_BAD_QUERY`、`409 E_ALREADY_INSTALLED`、`422 E_SKILL_NAME_INVALID`、`422 E_PACKAGE_INVALID`、`429 E_INSTALL_BUSY`、`502 E_DOWNLOAD_FAILED`、`502 E_SOURCE_BAD_RESPONSE`、`503 E_SOURCE_UNAVAILABLE`、`504 E_SOURCE_TIMEOUT`、`500 E_INSTALL_IO`、`500 E_INTERNAL` |
 | 11 | `POST /api/dsh-skill-center/market/icons` | body `{items:[{source?, owner, slug}], source?}`：`items` ≤ **24**，每条 `source`/`owner`/`slug` 走 §3.7.3 的上游白名单；`source` 逐条给，顶层 `source` 只是**兼容默认值**（item 优先，详见 §3.7.5） | `{icons:{'<source>:<owner>:<slug>': iconUrl\|null}, names:{同键→上游标题\|null}}`——两图的**键集合与顺序逐键相同**，缺名也是「键在、值 `null`」 | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_REQUEST`（`items` 缺失/为空/超 24）、`400 E_BAD_QUERY`（标识符不合白名单，或 `source` 未注册）、`500 E_INTERNAL`。单条失败只让该项 `null`，**单源失败只让该源 `null`**，整体仍 `200` |
 | 13 | `POST /api/dsh-skill-center/market/favorite` | `{source, owner, slug, favorited:boolean}`（`objectOnly`，≤ 64 KiB；**没有 id / path / version 生效位**） | `{favorites:string[], favorited:boolean}`（权威全量列表，最新在前；`favorited` 是实际生效的状态） | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_REQUEST`（body 非对象 / `favorited` 非布尔）、`400 E_BAD_QUERY`（身份不合白名单或源未注册）、`409 E_FAVORITE_FULL`、`500 E_FAVORITE_IO`、`500 E_INTERNAL` |
+| 15 | `GET /api/dsh-skill-center/market/versions` | `source`（**必填**，身份 id：`skillhub`/`clawhub`；`all` ⇒ `400`）、`owner`、`slug`（必填，§3.7.3 白名单；`version` 不参与，传了忽略） | `MarketVersions`（§3.8.1）：`{source, owner, slug, namespace, latest:string\|null, versions:[{version, publishedAt:number\|null}], total:number}`——`versions` 新的在前（**上游顺序，不重排**）、保留前 **50** 条，`total` 是上游返回的原始条数；`changelog`/`versionId`/`securityReports` **不下发** | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_QUERY`（源未知 / 传 `all` / `owner`/`slug` 不合规）、`502 E_SOURCE_BAD_RESPONSE`（`versions` 不是数组）、`503 E_SOURCE_UNAVAILABLE`、`504 E_SOURCE_TIMEOUT`、`500 E_INTERNAL` |
+| 16 | `POST /api/dsh-skill-center/market/update` | `{source, owner, slug, version, name, path}`（`objectOnly`，≤ 64 KiB；`parseUpdateBody`：前四个走 §3.7.3 白名单，`name` 过 `isSkillName`，`path` 过 `isAbsoluteSkillFile`；**没有 files / 目标目录 / 新名字**字段） | `{name, path, version, from, source, owner, slug, files, bytes}`——`from` 是更新前的版本（旧 `_meta.json` 读不到为 `null`），`files`/`bytes` 口径与 #9 逐字相同 | `403`、`405`、`400 E_BAD_REQUEST`、`400 E_BAD_QUERY`、`404 E_NOT_FOUND`、`409 E_STALE_PATH`、`409 E_SYMLINK_READONLY`、`409 E_NOT_WRITABLE`、`409 E_NOT_MARKET_INSTALLED`、`409 E_ALREADY_UP_TO_DATE`、`422 E_SKILL_NAME_INVALID`、`422 E_PACKAGE_INVALID`、`429 E_INSTALL_BUSY`、`502 E_DOWNLOAD_FAILED`、`502 E_SOURCE_BAD_RESPONSE`、`503 E_SOURCE_UNAVAILABLE`、`504 E_SOURCE_TIMEOUT`、`500 E_UPDATE_RESTORED`、`500 E_UPDATE_LOST`、`500 E_UPDATE_UNCONFIRMED`、`500 E_INSTALL_IO`、`500 E_INTERNAL`（前置校验顺序与三个「动过磁盘之后」的新码见 §3.7.7） |
 
 **表里的 `#` 是历史编号，不重排也不复用**：`#10 market/lucide` 与 `#12 market/clawhub-icon` 已于 U7 随 `clawhub.ai` 退场（`decisions.md` 附录 N 的 N-11），所以编号在 9 与 11、11 与 13 之间各有一个空位。**现在没有任何非信封路由**：图标是上游绝对 `https`，由浏览器 `<img>` 直连，`onError` 退回首字母头像。
 
@@ -311,41 +310,36 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 }
 ```
 
-自有台账 `$DSH_HOME/dsh-skill-center/installed.json` 的形状是 `{version:1, installs:[{source,owner,slug,name,version,installedAt,files,bytes}]}`：`installs[].name` 正是 `lib/ledger.js` 的 `own-record` 读取器要找的字段（`installs[].files` / `bytes` 与 install 出参同口径）。因此装完的技能必然命中 R5，`lib/classify.js` 一行不改。
-
-包内容的安全边界（逐条，`files` 形态下没有压缩包要解）：清单非空且含 `SKILL.md`；路径过 `isSafeRelativePath` 且落在临时目录内（`isWithin`）；同一路径两次 ⇒ 拒绝整包；逐文件比 `size`（清单给了 `sha256` 再比摘要）；**永不执行**包内任何文件；只写清单里列出的 `path`；落位前磁盘上唯一的痕迹是点开头的临时目录（目录 0755、文件 0644）。
+自有台账 `$DSH_HOME/dsh-skill-center/installed.json` 的形状是 `{version:1, installs:[{source,owner,slug,name,version,installedAt,files,bytes}]}`：`installs[].name` 正是 `lib/ledger.js` 的 `own-record` 读取器要找的字段（`installs[].files` / `bytes` 与 install 出参同口径）。因此装完的技能必然命中 R5，`lib/classify.js` 一行不改。 包内容的安全边界（逐条，`files` 形态下没有压缩包要解）：清单非空且含 `SKILL.md`；路径过 `isSafeRelativePath` 且落在临时目录内（`isWithin`）；同一路径两次 ⇒ 拒绝整包；逐文件比 `size`（清单给了 `sha256` 再比摘要）；**永不执行**包内任何文件；只写清单里列出的 `path`；落位前磁盘上唯一的痕迹是点开头的临时目录（目录 0755、文件 0644）。
 
 ---
 
 #### 3.7.5 `market/icons` 的双源分发
 
-一条端点覆盖两个源：已安装行只有身份、没有市场列表载荷，而两个源的图标查询方式差一次请求（SkillHub 的 owner 就是 namespace，一次 detail；ClawHub 得先按 `keyword=<slug>` 找到那一行，见 §7.8 第 2 条）。
+一条端点覆盖两个源：已安装行只有身份、没有市场列表载荷，而两源查图标的方式差一次请求（SkillHub 的 owner 就是 namespace，一次 detail；ClawHub 先按 `keyword=<slug>` 找那一行，见 `docs/contracts/market.md` §7.8 第 2 条）。`MarketSource.icons?(refs, io, {now})` 是**可选能力**（今天两源都有）：有它的源按自己的并发/预算/缓存实现，没有它的源整批条目 `null`（不进错误分支）。
 
-- **能力**：`MarketSource.icons?(refs, io, {now})` 是**可选能力**。有 `icons` 的源按自己的并发/预算/缓存实现；没有该能力的源，它的条目在本批里全部 `null`（不进错误分支）。今天 `skillhub` 与 `clawhub` 都有。
-- **分发**：路由把 `items` 按 `source` 分组，**各组并行**发起，两源各自计时（各 6s），所以混合批次 ≈ `max(两源耗时)`，不是相加。
-- **出参**：`data` 是 `{icons, names}` 两张同键图。`names[key]` 是**上游标题**（SkillHub 的 `data.skill.displayName`、ClawHub 列表行的 `name`），与图标同一条请求带出，**零额外请求**；归一规则与图标一致（非空字符串才收，否则 `null`）。
-- **回填**：先把各源结果收进一张 `Map`，再按 `items` **原序**逐条写进 `icons` 与 `names`——并发完成顺序不影响出参顺序，两次相同请求逐字节可比；两图的键序列由同一个循环产出，**逐键相同**（缺名是 `null` 不是缺键），客户端可遍历一张、索引另一张。
-- **失败隔离**：一个源整体失败（超时、域名不可达、适配器抛错）只让**该源**的条目 `null`（图标与标题一起），另一个源照常返回；`200` 不变。**任何图标失败都不升级成路由错误**，标题失败同理——标题缺失只是显示 slug，不是错误。
-- **`source` 的优先级**：每条的 `source` 优先；缺省时用顶层 `source`（这是**兼容默认值**，旧页面握旧 `client.js` 时只会发 `{source:'clawhub', items:[{owner,slug}]}`，保留它等于「永不为此 400」）。两者都缺 ⇒ 该条 `source` 为空 ⇒ 不合白名单 ⇒ `400 E_BAD_QUERY`。
-- **每源每批 12** 是**客户端的选批口径**（`ICON_PER_SOURCE_LIMIT`），不是服务端上限：服务端只认 §3.7.1 #11 的合计 ≤ 24，因此一条 24 条的 ClawHub 批次（旧客户端的合法请求）**依然被接受**。客户端两侧各取 12 的理由是「一个慢源不许吃掉整批额度」。
-- **不新增端点**：已安装行与市场卡片共用这一条；`market/installed`（#7）**不返回图标**，也不为图标加请求。
+- **分发与出参**：路由按 `source` 分组、**各组并行**（两源各 6s ⇒ 混合批次 ≈ `max(两源耗时)`，不是相加）；`data` 是 `{icons, names}` 两张同键图，`names[key]` 是**上游标题**（SkillHub 的 `data.skill.displayName`、ClawHub 列表行的 `name`），与图标同一条请求带出、**零额外请求**，归一规则一致（非空字符串才收，否则 `null`），**键序列由同一个循环产出、逐键相同**（缺名是 `null` 不是缺键）。
+- **回填与失败隔离**：各源结果先收进一张 `Map`，再按 `items` **原序**写入两张图（并发完成顺序不影响出参顺序，两次相同请求逐字节可比）；一个源整体失败只让**该源**的条目 `null`（图标与标题一起），另一个源照常、`200` 不变——**任何图标失败都不升级成路由错误**（标题缺失只是显示 slug）。- **`source` 优先级与额度**：每条的 `source` 优先、缺省用顶层 `source`（**兼容默认值**，旧页面握旧 `client.js` 只会发 `{source:'clawhub', items:[{owner,slug}]}`，保留它等于「永不为此 400」），两者都缺 ⇒ `400 E_BAD_QUERY`；**每源每批 12 是客户端的选批口径**，服务端只认合计 ≤ 24（24 条的旧批次依然被接受）；`market/installed`（#7）不返回图标、也不为图标加请求。
 
 #### 3.7.6 `market/favorite` 的幂等与上限
 
-1. **幂等**：`favorited` 与现状一致 ⇒ 不写盘、直接回当前列表；取消一个不存在的 id 也算成功。页面状态猜错时再点一次即可自愈，且不产生无意义的 mtime 变化。
-2. **上限 500**：满时新增 ⇒ `409 E_FAVORITE_FULL`；取消永远允许（上限只拦增长，不拦减少）。
-3. **进程内串行化**：两个并发 POST 在 `lib/market/favorites.js` 里被一条 Promise 链排队，读-改-写整体排他，不会互相覆盖。跨进程并发不处理（与 `install.js` 同一档次的本机单宿主假设，见 `docs/contracts/market.md` §7.7）。
-4. **响应永远是权威全量** `favorites[]`（最新在前）：客户端整份替换，不做增量合并。
-5. **写失败** ⇒ `500 E_FAVORITE_IO`，`message` 带系统错误摘要；日志只记 `{route, code}`，**永不**记 owner / slug。
-6. **U5 起没有 UI 入口**：卡片上的收藏按钮已按用户决定撤除（`docs/contracts/decisions.md` 附录 L），本路由与 `bootstrap` 的 `favorites` / `favoritesOk` 原样保留（将来要接回入口时零 Host 改动，当前不排期）；K76 仍守着它。
+1. **幂等**：`favorited` 与现状一致 ⇒ 不写盘、直接回当前列表；取消一个不存在的 id 也算成功——页面状态猜错时再点一次即可自愈，且不产生无意义的 mtime 变化。**上限 500**：满时新增 ⇒ `409 E_FAVORITE_FULL`，取消永远允许（上限只拦增长，不拦减少）。
+2. **进程内串行化**：两个并发 POST 在 `lib/market/favorites.js` 里被一条 Promise 链排队，读-改-写整体排他，不会互相覆盖。跨进程并发不处理（与 `install.js` 同一档次的本机单宿主假设，见 `docs/contracts/market.md` §7.7）。
+3. **响应永远是权威全量** `favorites[]`（最新在前）：客户端整份替换，不做增量合并。
+4. **写失败** ⇒ `500 E_FAVORITE_IO`，`message` 带系统错误摘要；日志只记 `{route, code}`，**永不**记 owner / slug。**U5 起没有 UI 入口**：卡片上的收藏按钮已按用户决定撤除（`docs/contracts/decisions.md` 附录 L），本路由与 `bootstrap` 的 `favorites` / `favoritesOk` 原样保留（将来要接回入口时零 Host 改动，当前不排期）；K76 仍守着它。
+
+#### 3.7.7 `market/update` 的覆盖安装契约
+
+- **前置校验（路由层，顺序不许换）**：P0 `parseUpdateBody` 白名单 → P1 按 `name` **重新扫描**定位行（`404 E_NOT_FOUND`）→ P2 软链 `409 E_SYMLINK_READONLY` → P3 `row.path !== path` `409 E_STALE_PATH` → P4 越界 `409 E_NOT_WRITABLE` → P5 `_meta.json` 的 `source`/`ownerId`/`slug` 与请求**逐字相等**，否则 `409 E_NOT_MARKET_INSTALLED` → P6 `row.version === version` `409 E_ALREADY_UP_TO_DATE`（只比相等，不排序）→ P7 与 `install` **共用同一张锁表**与 `MAX_CONCURRENT_INSTALLS`（`429 E_INSTALL_BUSY`）。
+- **落盘十个阶段（U1–U10）、四条回滚路径与三条不变式见 `docs/contracts/market.md` §7.11**：实现在 `lib/market/install.js` 的 `update(ref, target)`，复用安装的暂存/元数据/回读/台账内部件。
+- **三个新码只描述「动过磁盘之后」的结局**：`E_UPDATE_RESTORED`（回滚成功，旧版本逐字节完整）/ `E_UPDATE_LOST`（目录已不在，旧版本留在 `.skc-backup-*`）/ `E_UPDATE_UNCONFIRMED`（新版本已落位回读通过，台账未写）。动手之前失败一律走 `E_INSTALL_IO` 与上游码——不许拿 `E_INSTALL_IO` 糊「已回滚」这种结论。
 
 ---
 
 ## 8.1 响应格式与错误码
 
 - 信封：`{ code: string, data: T|null, message: string }`。
-- `code`：成功恒 `'OK'`；失败为 `E_*` 常量（下表）。`message` 是**给开发者看的英文短句**（日志/排查用），**界面文案由客户端按 `code` 取 i18n 键**，不直接显示 `message`（避免把英文丢给中文用户）。
-- HTTP status 与 `code` 双写：status 给网关/调试，`code` 给客户端分支。
+- `code`：成功恒 `'OK'`；失败为 `E_*` 常量（下表）。`message` 是**给开发者看的英文短句**（日志/排查用），**界面文案由客户端按 `code` 取 i18n 键**，不直接显示 `message`（避免把英文丢给中文用户）。HTTP status 与 `code` 双写：status 给网关/调试，`code` 给客户端分支。
 
 | code | HTTP | 含义 | 前端表现 |
 | --- | --- | --- | --- |
@@ -370,7 +364,7 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 
 ## 8.6 市场错误码
 
-市场面 7 条路由的 `E_*` 全集。HTTP status 与 `code` 双写，规则同 §8.1；`message` 仍是给开发者看的英文短句，界面文案由客户端按 `code` 取 i18n 键。#11 用 `E_BAD_REQUEST` 表示「形状不对」，用 `E_BAD_QUERY` 表示「这个源没有图标可补」。
+市场面 9 条路由的 `E_*` 全集。HTTP status 与 `code` 双写，规则同 §8.1；`message` 仍是给开发者看的英文短句，界面文案由客户端按 `code` 取 i18n 键。#11 用 `E_BAD_REQUEST` 表示「形状不对」，用 `E_BAD_QUERY` 表示「这个源没有图标可补」。
 
 | code | HTTP | 含义 | 前端表现 |
 | --- | --- | --- | --- |
@@ -388,6 +382,11 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 | `E_INSTALL_IO` | 500 | 落盘失败（权限、磁盘、rename、台账写失败、回读不一致） | 行内原因 + 「重试」 |
 | `E_FAVORITE_FULL` | 409 | 收藏已达上限（500 条），且这次是新增 | toast 说明上限，按钮回滚到点击前的状态 |
 | `E_FAVORITE_IO` | 500 | 收藏写盘失败（权限、磁盘、rename） | toast 说明写盘失败（带原因），按钮回滚 |
+| `E_NOT_MARKET_INSTALLED` | 409 | 目标行不是市场装：`_meta.json` 的 `source`/`ownerId`/`slug` 与请求不逐字相等，或这一行没有可写路径 | 行内原因；**防御性**（只有行在面板打开后被换掉才见得到），客户端回落 `error.E_UNKNOWN` |
+| `E_ALREADY_UP_TO_DATE` | 409 | 请求的目标版本与本地版本**逐字相等**（没有可做的事；只比相等、不排序） | 不作错误提示：客户端把卡面直接落回「已是最新版本」 |
+| `E_UPDATE_RESTORED` | 500 | 更新在交换或落位回读阶段失败、**已回滚**（旧版本逐字节完整，`data` 带 `from`） | 卡面回「可更新到 {to}」+ 行内原因「更新失败，已恢复到 {from}」；可再点更新（幂等） |
+| `E_UPDATE_LOST` | 500 | 更新失败且回滚也失败：目录已不在，旧版本留在 `.skc-backup-*`（`data` 带 `from`） | 详情转 `E_NOT_FOUND` 态 + 「更新失败，技能未安装」+ 触发重扫 |
+| `E_UPDATE_UNCONFIRMED` | 500 | 新版本已落位并回读通过，但台账未写（`data` 带 `from`/`to`；目录**不回滚**） | 「无法确认更新结果，请刷新查看」+ 卡面转「无法检查更新」+ 触发重扫 |
 | `E_INTERNAL` | 500 | 未预期异常（已 `logger.warn`） | 整页错误态 + 重试 |
 
 **唯一的信封例外**：市场路由失败时 `data` 可以携带一个小对象（`{path?, existing?, declaredName?, name?, source?, owner?, slug?}`），因为界面要显示「已装在哪」「包声明的是什么名字」。**#13 的失败不带 `data`**：它的界面只有一句 toast，不需要回传任何东西。其余路由的失败信封 `data` 恒 `null`（§8.1）。客户端可以忽略 `data`，只按 `code` 分支也不会错。

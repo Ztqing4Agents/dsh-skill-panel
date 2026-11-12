@@ -603,7 +603,7 @@ test('K48 已安装页签零回归：页头按页签分工，行的可点边界�
     t,
   }));
 
-  assert.ok(installed.includes('class="skc_status"'), '已安装页签有状态行');
+  assert.ok(installed.includes('data-skc-group='), '已安装页签渲染技能分区');
   assert.ok(installed.includes('skc_addPrimary'), '已安装页签有「添加技能」');
   assert.equal(installed.includes('class="skc_marketSection"'), false, '已安装页签不挂载市场面板');
   assert.equal(installed.includes('skc_marketCardOpen'), false, '已安装行没有市场的整卡点击锚点');
@@ -612,7 +612,7 @@ test('K48 已安装页签零回归：页头按页签分工，行的可点边界�
   assert.equal(rows.includes('tabindex'), false, '已安装行不可聚焦（K22 照旧）');
 
   assert.equal(market.includes('class="skc_marketSection"'), true, '市场页签挂载市场面板');
-  assert.equal(market.includes('class="skc_status"'), false, '市场页签没有已安装面的状态行');
+  assert.equal(market.includes('data-skc-group='), false, '市场页签不渲染技能分区');
 });
 
 test('K49 市场页签的刷新按钮跟随市场加载状态（aria-busy / disabled），已安装面不受影响', () => {

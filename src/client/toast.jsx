@@ -1,5 +1,6 @@
 /**
- * The shell overlay's notices: a refresh that failed, and an install that landed.
+ * The shell overlay's notices: a refresh that failed, an install that landed, and an update
+ * that did.
  *
  * They live outside the page on purpose: a refresh can fail after the user has clicked
  * back into a conversation, and an install keeps running while they browse on. Both
@@ -30,6 +31,17 @@ export function ToastHost({ t = identityTranslate, store }) {
   const notice = useSyncExternalStore(store.subscribe, read, read);
   if (notice === null) return null;
   const dismiss = () => store.actions.dismissNotice(notice.seq);
+  if (notice.kind === 'update-ok') {
+    return (
+      <Toast
+        key={notice.seq}
+        holdMs={INSTALL_HOLD_MS}
+        tone="success"
+        text={t('detail.updateOk', { version: notice.version ?? '' })}
+        onDone={dismiss}
+      />
+    );
+  }
   if (notice.kind === 'install-ok') {
     return (
       <Toast

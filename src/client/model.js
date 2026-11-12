@@ -116,20 +116,6 @@ export function toPluginBlocks(group) {
 }
 
 /**
- * The header's status line: how many skills the panel shows, and how many are off.
- * @param {{total?: number, disabled?: number}|undefined} counts - payload counts.
- * @param {Function} t - translate function.
- * @returns {string} e.g. "5 skills, 1 turned off".
- */
-export function statusLine(counts, t) {
-  const total = Number.isInteger(counts?.total) ? counts.total : 0;
-  const disabled = Number.isInteger(counts?.disabled) ? counts.disabled : 0;
-  const head = t('status.count', { total });
-  if (disabled <= 0) return head;
-  return `${head}${t('status.offSuffix', { count: disabled })}`;
-}
-
-/**
  * Whether a row is mid-write or failed its last write.
  * @param {object} row - a row from the payload.
  * @param {Map<string, {pending: boolean, reason: string|null}>} rows - per-row runtime state.
@@ -203,5 +189,205 @@ export function detailStateOf(state, key) {
   const detail = state?.detail ?? null;
   if (detail === null || detail.key !== key) return 'idle';
   return typeof detail.status === 'string' ? detail.status : 'idle';
+}
+
+/* -------------------------------------------------------------- update checks */
+
+/** How long one skill's answer is reused before a visit re-asks (10 minutes). */
+export const CHECK_TTL_MS = 10 * 60 * 1000;
+
+/** Budget for one version request; the queue moves on and the late answer still lands. */
+export const CHECK_TIMEOUT_MS = 2000;
+
+/** Soft budget for one whole round; the rows left over are marked skipped, not asked. */
+export const CHECK_BUDGET_MS = 8000;
+
+/** How many rows the expanded version list prints. */
+export const VERSION_ROWS = 5;
+
+/** Upstream codes that mean "we could not reach the source", not "the answer is wrong". */
+const OFFLINE_CODES = new Set(['E_SOURCE_UNAVAILABLE', 'E_SOURCE_TIMEOUT', 'E_SOURCE_BAD_RESPONSE']);
+
+/**
+ * The identity a row's upstream facts are cached under: `source:owner:slug`.
+ *
+ * One identity can be installed into more than one directory under different names, and
+ * those directories can sit at different versions - so the cache key is the identity,
+ * while every verdict drawn from it is computed against that row's own version.
+ * @param {object|null} upstream - the row's `upstream`.
+ * @returns {string} the key, or '' when the row has no upstream identity.
+ */
+export function identityOf(upstream) {
+  const sourceId = typeof upstream?.sourceId === 'string' ? upstream.sourceId : '';
+  const owner = typeof upstream?.owner === 'string' ? upstream.owner : '';
+  const slug = typeof upstream?.slug === 'string' ? upstream.slug : '';
+  if (sourceId === '' || owner === '' || slug === '') return '';
+  return `${sourceId}:${owner}:${slug}`;
+}
+
+/**
+ * The rows an update check is allowed to ask about: market-installed, not a symlink, and
+ * carrying a version of its own. Anything else is one request fewer.
+ * @param {object[]} rows - the installed partition's rows.
+ * @returns {{key: string, source: string, owner: string, slug: string}[]} one entry per
+ *   identity, in row order.
+ */
+export function detectionTargets(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const seen = new Set();
+  const targets = [];
+  for (const row of list) {
+    if (row?.upstream === null || row?.upstream === undefined) continue;
+    if (row.symlink === true) continue;
+    if (typeof row.version !== 'string' || row.version === '') continue;
+    const key = identityOf(row.upstream);
+    if (key === '' || seen.has(key)) continue;
+    seen.add(key);
+    targets.push({
+      key,
+      source: row.upstream.sourceId,
+      owner: row.upstream.owner,
+      slug: row.upstream.slug,
+    });
+  }
+  return targets;
+}
+
+/**
+ * Whether one cached verdict has to be asked for again.
+ *
+ * A failed answer is cached for the same ten minutes as a good one - otherwise every visit
+ * to the tab would hit the upstream again - and `skipped` (out of budget) means "never got
+ * an answer", so the next visit retries it.
+ * @param {object|null|undefined} verdict - the cached entry.
+ * @param {number} now - epoch milliseconds.
+ * @param {number} [ttl] - reuse window.
+ * @returns {boolean} true when a request is needed.
+ */
+export function needsCheck(verdict, now, ttl = CHECK_TTL_MS) {
+  if (verdict === null || verdict === undefined) return true;
+  if (verdict.busy === true) return false;
+  if (verdict.phase === 'skipped' || verdict.phase === 'running') return true;
+  const at = Number.isFinite(verdict.at) ? verdict.at : null;
+  return at === null || now - at >= ttl;
+}
+
+/**
+ * The five faces the version block can show, computed against the row's own version.
+ *
+ * `checking` also covers "never asked": the block mounts in that state and the round
+ * starts right after. A verdict belongs to an identity, so the same cache entry yields
+ * "up to date" here and "update available" one row below.
+ * @param {object|null|undefined} verdict - the cached entry for this identity.
+ * @param {string|null} version - this row's installed version.
+ * @returns {'checking'|'upToDate'|'available'|'offline'|'failed'} the face.
+ */
+export function verdictOf(verdict, version) {
+  if (verdict === null || verdict === undefined) return 'checking';
+  if (verdict.phase === 'ready') {
+    const candidate = typeof verdict.candidate === 'string' ? verdict.candidate : '';
+    if (candidate === '') return 'failed';
+    return candidate === version ? 'upToDate' : 'available';
+  }
+  if (verdict.phase === 'offline') return 'offline';
+  if (verdict.phase === 'failed' || verdict.phase === 'skipped') return 'failed';
+  return 'checking';
+}
+
+/**
+ * The window of the version list the expanded block prints.
+ *
+ * `count` is how many versions sit above the installed one - the promise "there is
+ * something newer" - and falls back to the upstream's own total when the installed version
+ * is not in the list at all (a hand-edited `_meta.json`, or a version the upstream dropped).
+ * @param {object[]} versions - the version list, newest first.
+ * @param {string|null} current - this row's installed version.
+ * @param {number} total - the upstream's reported count.
+ * @returns {{count: number, items: object[], more: number}} the window and the tail count.
+ */
+export function newerVersions(versions, current, total) {
+  const list = (Array.isArray(versions) ? versions : [])
+    .filter((entry) => typeof entry?.version === 'string' && entry.version !== '');
+  const at = current === null ? -1 : list.findIndex((entry) => entry.version === current);
+  const count = at >= 0
+    ? at
+    : (Number.isInteger(total) && total > 0 ? total : list.length);
+  const items = list.slice(0, VERSION_ROWS);
+  return { count, items, more: Math.max(0, count - items.length) };
+}
+
+/**
+ * The header's update note: four states, one sentence, one tone.
+ *
+ * Priority is "can update" over "some checks failed" over "all up to date"; `skipped`
+ * counts as neither, and a round that has not finished says nothing at all - the host
+ * draws its own note only after every check is done, and "everything is up to date" is a
+ * lie before a single answer exists.
+ * @param {object[]} rows - the installed partition's rows (the note is about these).
+ * @param {Record<string, object>} checks - cached verdicts by identity.
+ * @param {{id: number, status: string}|undefined} run - the round token.
+ * @param {Function} t - translate function.
+ * @returns {{text: string, tone: 'info'|'error'|null}|null} the note, or null.
+ */
+export function headerUpdateNote(rows, checks, run, t) {
+  if (detectionTargets(rows).length === 0) return null;
+  if (run?.status !== 'done') return null;
+  const cache = checks ?? {};
+  let available = 0;
+  let failed = 0;
+  let ready = 0;
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const key = identityOf(row?.upstream);
+    if (key === '') continue;
+    const version = typeof row.version === 'string' && row.version !== '' ? row.version : null;
+    if (version === null) continue;
+    const verdict = cache[key];
+    // Out of budget is neither a success nor a failure: that row's block says "cannot
+    // check", and the header stays silent about it.
+    if (verdict === null || verdict === undefined || verdict.phase === 'skipped') continue;
+    const face = verdictOf(verdict, version);
+    if (face === 'available') available += 1;
+    else if (face === 'offline' || face === 'failed') failed += 1;
+    else if (face === 'upToDate') ready += 1;
+  }
+  if (available > 0) return { text: t('status.updatesAvailable', { count: available }), tone: 'info' };
+  if (failed > 0) return { text: t('status.updatesPartial'), tone: 'error' };
+  if (ready > 0) return { text: t('status.updatesNone'), tone: null };
+  return null;
+}
+
+/**
+ * The face state of a failed check, from the code the route reported.
+ * @param {string} code - `E_*` code, or '' when the request failed without one.
+ * @returns {'offline'|'failed'} which face the block shows.
+ */
+export function checkPhaseOf(code) {
+  return OFFLINE_CODES.has(code) ? 'offline' : 'failed';
+}
+
+/**
+ * A local wall-clock time as `HH:MM` (24 hours, no seconds).
+ * @param {number|null} at - epoch milliseconds.
+ * @returns {string} the time, or '' when there is none.
+ */
+export function clockText(at) {
+  if (!Number.isFinite(at)) return '';
+  return new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+/**
+ * A local calendar day as `YYYY-MM-DD`.
+ *
+ * The one date the panel prints (a version's publish date). Never relative: "3 days ago"
+ * drifts on every render, and the contract puts the time of day on the check instead.
+ * @param {number|null} at - epoch milliseconds.
+ * @returns {string} the day, or '' when there is none.
+ */
+export function dateText(at) {
+  if (!Number.isFinite(at)) return '';
+  const date = new Date(at);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 

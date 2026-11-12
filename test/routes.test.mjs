@@ -50,7 +50,7 @@ async function mount(options = {}) {
   };
 }
 
-test('路由表就是设计里的十二条 exact 路由（本地面 5 + 市场面 7）', () => {
+test('路由表就是设计里的十四条 exact 路由（本地面 5 + 市场面 9）', () => {
   assert.deepEqual(ROUTES, {
     list: '/api/dsh-skill-center/list',
     detail: '/api/dsh-skill-center/detail',
@@ -62,21 +62,23 @@ test('路由表就是设计里的十二条 exact 路由（本地面 5 + 市场�
     marketDetail: '/api/dsh-skill-center/market/detail',
     marketInstalled: '/api/dsh-skill-center/market/installed',
     marketInstall: '/api/dsh-skill-center/market/install',
+    marketVersions: '/api/dsh-skill-center/market/versions',
+    marketUpdate: '/api/dsh-skill-center/market/update',
     marketIcons: '/api/dsh-skill-center/market/icons',
     marketFavorite: '/api/dsh-skill-center/market/favorite',
-  }, '十二条路径与设计逐字一致（本地面 5 条 + 市场面 7 条，见 routes.md §3.3 / §3.7.1）');
+  }, '十四条路径与设计逐字一致（本地面 5 条 + 市场面 9 条，见 routes.md §3.3 / §3.7.1）');
 });
 
 test('路由都是 exact 类型，不用前缀匹配', async () => {
   const mounted = await mount();
   try {
     const routes = Object.values(mounted.byPath);
-    assert.equal(routes.length, 12, '一共注册十二条路由');
-    assert.equal(routes.every((route) => route.kind === 'exact'), true, '十二条都是 exact 路由');
+    assert.equal(routes.length, 14, '一共注册十四条路由');
+    assert.equal(routes.every((route) => route.kind === 'exact'), true, '十四条都是 exact 路由');
     assert.equal(
       routes.filter((route) => route.path.includes('/market/')).length,
-      7,
-      '市场面恰好七条（bootstrap/list/detail/installed/install/icons/favorite）',
+      9,
+      '市场面恰好九条（bootstrap/list/detail/installed/install/versions/update/icons/favorite）',
     );
   } finally {
     await mounted.close();
@@ -611,7 +613,7 @@ test('K112 detail 在表里，正常行 200：出参形状 + 已去 frontmatter 
   const mounted = await mount({ entries: DETAIL_ENTRIES });
   try {
     assert.equal(ROUTES.detail, '/api/dsh-skill-center/detail', '路径就是契约里那一条');
-    assert.equal(Object.keys(ROUTES).length, 12, 'route 表恰好 12 条（本地面 5 + 市场面 7）');
+    assert.equal(Object.keys(ROUTES).length, 14, 'route 表恰好 14 条（本地面 5 + 市场面 9）');
 
     const response = await detailOf(mounted, '?name=hand-made');
     assert.equal(response.status, 200, '正常行 200');

@@ -12,13 +12,16 @@
  * Contract: docs/contracts/acceptance.md 附录 D.1 (L3) and case ids K22, K23, K24, K25.
  */
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import test, { before } from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { avatarOf } from '../src/client/avatar.js';
+import { verdictOf } from '../src/client/model.js';
 import { createStore } from '../src/client/state.js';
-import { loadClientModules, zhTranslator } from './helpers/ssr.mjs';
+import { ROOT, loadClientModules, zhTranslator } from './helpers/ssr.mjs';
 import { mountHooks } from './helpers/hooks.mjs';
 
 /** The bundled client modules under test. */
@@ -281,7 +284,6 @@ test('K25/K28 切到市场页签：挂载市场面板，已安装面整块退场
   assert.ok(html.includes('class="skc_marketSection"'), '市场面板挂载（skc_marketSection）');
   assert.ok(/role="tabpanel"[^>]*id="[^"]*-market-panel"/.test(html), '市场面板是 tabpanel 且 id 按 market 页签拼');
   assert.equal(html.includes('data-skc-group='), false, '市场页签不渲染任何已安装分区');
-  assert.equal(html.includes('class="skc_status"'), false, '市场页签的页头不显示「共 N 个技能」状态行');
   assert.equal(html.includes('skc_addPrimary'), false, '市场页签不显示「添加技能」（它只属于已安装面）');
   // 页头的刷新按钮属于两页签共用：市场页签下它刷新市场首页，因此仍在原位可见。
   assert.equal(html.includes('class="skc_toolbar"'), true, '工具栏保留（刷新按钮对市场页签同样有效）');
@@ -295,10 +297,20 @@ test('页脚只在有被排除的技能时出现，并给出数量', () => {
   assert.equal(without.includes('首版不展示'), false, '没有被排除的技能时不显示页脚');
 });
 
-test('K26 页头状态行给出总数与停用数', () => {
-  const html = renderPage();
-  assert.ok(html.includes('class="skc_status"'), '页头有状态行');
-  assert.ok(html.includes('共 4 个技能，1 个已停用'), '状态行是「共 4 个技能，1 个已停用」');
+test('K26 页头状态位只承载更新提示，不渲染技能计数', () => {
+  const plain = renderPage();
+  assert.equal(plain.includes('class="skc_status"'), false, '没有可检查的技能时状态位不渲染');
+  assert.equal(plain.includes('共 4 个技能'), false, '页头不渲染技能计数');
+  assert.equal(plain.includes('个已停用'), false, '页头不渲染停用计数');
+
+  const withNote = renderHeader({
+    verdicts: {
+      'skillhub:ake:ui-design': { phase: 'ready', candidate: '2.0.0', at: 1000 },
+      'clawhub:ake:ui-design': { phase: 'ready', candidate: '1.2.4', at: 1000 },
+    },
+  });
+  assert.equal((withNote.match(/<span class="skc_status"/g) ?? []).length, 1, '状态位只有一个 span');
+  assert.equal(withNote.includes('共 2 个技能'), false, '状态位里没有计数（宿主同位也只有这一句）');
 });
 
 test('页头四件套：标题、副标题、信息按钮、刷新按钮、添加按钮（禁用态）', () => {
@@ -409,10 +421,22 @@ function checkPropOf(tree) {
   return detail.props.onCheck;
 }
 
-/** The api client stub the detail tests use; `calls` records every route touched. */
+/**
+ * The api client stub the detail tests use; `calls` records every route touched.
+ *
+ * `marketVersions` is the only route an update check may touch (`docs/contracts/routes.md`
+ * 3.7.1 #15); `marketDetail` stays for the tests that only need a version tag.
+ * @param {string[]} calls - sink for one string per route touched.
+ * @param {object} [detail] - body the skillDetail stub answers with.
+ * @param {{versions?: object[], versionsFail?: boolean, versionsCode?: string,
+ *   version?: string}} [options] - version list, failure switch and the detail tag version.
+ * @returns {object} the stub.
+ */
 function recordingApi(calls, detail = { body: 'text', files: [], filesTruncated: false }, options = {}) {
   const apiVersion = options.version ?? '1.2.4';
-  const apiDetailFails = options.fails === true;
+  const versions = options.versions ?? [{ version: '1.2.4', publishedAt: 1762396800000 }];
+  const versionsFail = options.versionsFail === true;
+  const versionsCode = options.versionsCode ?? 'E_SOURCE_TIMEOUT';
   return {
     list: async () => { calls.push('list'); },
     toggle: async () => {},
@@ -420,10 +444,54 @@ function recordingApi(calls, detail = { body: 'text', files: [], filesTruncated:
     skillDetail: async (arg) => { calls.push(`skillDetail:${arg?.name}`); return detail; },
     marketDetail: async (arg) => {
       calls.push(`marketDetail:${arg?.source}/${arg?.owner}/${arg?.slug}`);
-      if (apiDetailFails) throw new Error('boom');
       return { item: { version: apiVersion } };
     },
+    marketVersions: async (arg) => {
+      calls.push(`marketVersions:${arg?.source}/${arg?.owner}/${arg?.slug}`);
+      if (versionsFail) throw Object.assign(new Error('boom'), { code: versionsCode });
+      return {
+        source: arg?.source,
+        owner: arg?.owner,
+        slug: arg?.slug,
+        namespace: arg?.owner,
+        latest: versions.length === 0 ? null : versions[0].version,
+        versions,
+        total: versions.length,
+      };
+    },
   };
+}
+
+/**
+ * One identity's cached verdict, or null.
+ * @param {object} store - the page store.
+ * @param {string} key - `source:owner:slug`.
+ * @returns {object|null} the entry.
+ */
+function verdictIn(store, key) {
+  return store.getSnapshot().checks[key] ?? null;
+}
+
+/**
+ * Click one row's title the way the host does, and let the follow-up requests settle.
+ *
+ * `openDetail` on the page is what kicks the one `ensure` an open needs, so the check has
+ * to be driven through the row handler - calling `store.actions.openDetail` skips it.
+ * @param {Function} render - the harness render.
+ * @param {object} store - the page store, for the settled-state assertions.
+ * @param {string} name - the row's `name`.
+ * @returns {Promise<object>} the row that was opened.
+ */
+async function openViaPage(render, store, name) {
+  const skillRow = elementsOf(render()).find(
+    (element) => element.type === modules.row.SkillRow && element.props.row.name === name,
+  );
+  assert.ok(skillRow !== undefined, `页面上有 ${name} 这一行`);
+  await skillRow.props.onOpen(skillRow.props.row);
+  // 版本请求是 openDetail 之后 `void` 出去的，落地要等一个宏任务。
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.notEqual(store.getSnapshot().detail, null, `${name} 的详情开了`);
+  return skillRow.props.row;
 }
 
 test('K111 详情就地替换列表：三分区不在，详情在', () => {
@@ -506,7 +574,7 @@ test('K111 点行进详情：150 ms 还没到就退回 loading 态，正文后�
   assert.deepEqual(calls, ['skillDetail:ui-design'], '全程 1 笔正文请求、0 笔 list');
 });
 
-test('openDetail 两个入口：带 data 就是 ready、带 error 就是 error，check 的前置判定不受影响', () => {
+test('K118 openDetail 两个入口：带 data 就是 ready、带 error 就是 error，检测缓存一概不碰', () => {
   const store = createStore();
   store.actions.ready(payload());
   const localRow = row({ name: 'ui-design', partition: 'installed', rule: 'R7' });
@@ -514,19 +582,27 @@ test('openDetail 两个入口：带 data 就是 ready、带 error 就是 error�
   store.actions.openDetail(localRow, { body: '正文', files: [], filesTruncated: false });
   assert.equal(store.getSnapshot().detail.status, 'ready', '带正文 ⇒ ready');
   assert.equal(store.getSnapshot().detail.data.body, '正文', '正文落位');
-  assert.equal(store.getSnapshot().check, null, '没有 upstream ⇒ check 仍是 null');
 
   store.actions.openDetail(localRow, { error: { code: 'E_READ' } });
   assert.equal(store.getSnapshot().detail.status, 'error', '带 error ⇒ error');
   assert.equal(store.getSnapshot().detail.code, 'E_READ', 'code 落位');
   assert.equal(store.getSnapshot().detail.data, null, 'error 时没有 data');
 
-  // 有 upstream 但没有本地版本：两个入口都应该给出「无法检查」的前置判定。
-  const upstreamRow = row({ name: 'versioned', partition: 'installed', rule: 'R7', upstream: { kind: 'skillhub', owner: 'ake', slug: 'versioned' }, version: null });
-  store.actions.openDetail(upstreamRow, { body: '正文' });
-  assert.equal(store.getSnapshot().check.status, 'unavailable', 'ready 入口也走前置判定');
-  store.actions.openDetail(upstreamRow, { error: { code: 'E_READ' } });
-  assert.equal(store.getSnapshot().check.status, 'unavailable', 'error 入口同样走前置判定');
+  // 有身份但没有本地版本的行也一样：openDetail 自己不判「能不能查」（那是渲染层与 runner 的事）。
+  const versioned = row({
+    name: 'versioned',
+    partition: 'installed',
+    rule: 'R6',
+    upstream: { sourceId: 'skillhub', owner: 'ake', slug: 'versioned' },
+    version: null,
+  });
+  store.actions.openDetail(versioned, { body: '正文' });
+  assert.equal(store.getSnapshot().detail.status, 'ready', 'ready 入口照旧');
+
+  const snapshot = store.getSnapshot();
+  assert.equal('check' in snapshot, false, '旧单槽 check 已从 state 删除（同一件事实不许两个真源）');
+  assert.deepEqual(snapshot.checks, {}, 'openDetail 不写检测缓存：答案是按 identity 常驻的，不是详情的属性');
+  assert.deepEqual(snapshot.checkRun, { id: 0, status: 'idle' }, '轮次令牌也不因开关详情而动');
 });
 
 test('K111 面包屑返回：detail 变 null 且不再请求任何路由', async () => {
@@ -634,98 +710,158 @@ test('K111 返回列表后页头与刷新都回来了，刷新仍走「关详情
   await new Promise((resolve) => setTimeout(resolve, 450));
 });
 
-test('没有 upstream ⇒ 打开时 check 为 null（不渲染版本区块），点一下也不发请求', async () => {
+test('K118 没有身份的行：点开详情零请求，「重新检查」也零请求', async () => {
   const calls = [];
   const { store, render } = mountPage(recordingApi(calls));
-  store.actions.openDetail(row({ name: 'hand-written' }));
-  store.actions.detailReady('filesystem#hand-written', { body: '正文', files: [], filesTruncated: false });
-  assert.equal(store.getSnapshot().check, null, '本地行没有结论，也就没有版本区块');
-  await checkPropOf(render())();
-  assert.equal(store.getSnapshot().check.status, 'unavailable', '万一被点到也只是判 unavailable');
-  assert.deepEqual(calls, [], '没有发出任何请求');
+  const opened = await openViaPage(render, store, 'ui-design');
+  assert.deepEqual(calls, ['skillDetail:ui-design'], '只有那一笔正文请求');
+  assert.deepEqual(store.getSnapshot().checks, {}, '没有身份就没有缓存条目');
+  // 版本区块整块不渲染，但万一被点到也不许发请求（升级前它会给个 unavailable 兜底结论）。
+  checkPropOf(render())(opened);
+  assert.deepEqual(calls, ['skillDetail:ui-design'], 'recheck 对没有身份的行直接返回');
 });
 
-test('有 upstream 没有本地版本 ⇒ 打开即 unavailable（按钮禁用），一个请求都不发', async () => {
+test('K118 有身份但没有本地版本：点开详情零请求，区块自己说「无法检查更新」', async () => {
   const calls = [];
-  const { store } = mountPage(recordingApi(calls));
-  store.actions.openDetail(row({ name: 'hand-written', upstream: { sourceId: 'skillhub', owner: 'ake', slug: 'dev-god' } }));
-  store.actions.detailReady('filesystem#hand-written', { body: '正文', files: [], filesTruncated: false });
-  const check = store.getSnapshot().check;
-  assert.equal(check.status, 'unavailable', '打开就判 unavailable（版本区块在，但没什么可比）');
-  assert.deepEqual(calls, [], '没有可比的版本，不发请求');
+  const { store, render } = mountPage(recordingApi(calls));
+  store.actions.ready(upstreamPayload({ version: null }));
+  await openViaPage(render, store, 'ui-design');
+  assert.deepEqual(calls, ['skillDetail:ui-design'], '没有可比的版本，一个版本请求都不发');
+  assert.deepEqual(store.getSnapshot().checks, {}, '不写缓存条目（文案由渲染层按 version === null 给）');
+  assert.equal(store.getSnapshot().checkRun.status, 'idle', '一轮都没开始');
 });
 
-test('有 upstream 且有本地版本 ⇒ 打开时 check 为 null（idle，等用户点）', async () => {
+test('K118 有身份但没有本地版本：「重新检查」也不发请求（installed-detail.md「更新检测与页头」）', async () => {
   const calls = [];
-  const { store } = mountPage(recordingApi(calls));
-  store.actions.openDetail(upstreamRow());
-  store.actions.detailReady('filesystem#ui-design', { body: '正文', files: [], filesTruncated: false });
-  assert.equal(store.getSnapshot().check, null, '没点之前没有结论');
-  assert.deepEqual(calls, [], '打开详情本身不查上游');
+  const { store, render } = mountPage(recordingApi(calls));
+  store.actions.ready(upstreamPayload({ version: null }));
+  const opened = await openViaPage(render, store, 'ui-design');
+  checkPropOf(render())(opened);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(calls, ['skillDetail:ui-design'],
+    '契约说的是「整块不发请求」：没有本地版本就没有可比的东西，点按钮也只落地');
+  assert.deepEqual(store.getSnapshot().checks, {}, '不写缓存条目');
 });
 
-test('版本检查：同版本 ⇒ upToDate（带 at），且只查一条 market/detail', async () => {
+test('K118 有身份也有版本：点开详情就查一次 market/versions（不再等用户点）', async () => {
   const calls = [];
-  const { store, render } = mountPage(recordingApi(calls, undefined, { version: '1.2.4' }));
+  const { store, render } = mountPage(recordingApi(calls));
   store.actions.ready(upstreamPayload());
-  store.actions.openDetail(upstreamRow());
-  store.actions.detailReady('filesystem#ui-design', { body: '正文', files: [], filesTruncated: false });
-  await checkPropOf(render())();
-  const check = store.getSnapshot().check;
-  assert.equal(check.status, 'upToDate', '字符串相等就是最新');
-  assert.equal(Number.isFinite(check.at), true, '记下检查时间');
-  assert.deepEqual(calls, ['marketDetail:skillhub/ake/ui-design'], '只查一次上游详情');
+  await openViaPage(render, store, 'ui-design');
+  assert.deepEqual(calls, ['skillDetail:ui-design', 'marketVersions:skillhub/ake/ui-design'],
+    '正文一笔 + 版本列表一笔，走的第 15 条路由');
+  const verdict = verdictIn(store, 'skillhub:ake:ui-design');
+  assert.ok(verdict !== null, '答案按 identity 落进缓存');
+  assert.equal(verdict.phase, 'ready', '答案到手就是 ready');
+  assert.equal(verdict.busy, false, '落地后不再 busy');
+  assert.equal(store.getSnapshot().checkRun.status, 'done', '一轮结束（页头等的就是它）');
 });
 
-test('版本检查：版本不同 ⇒ newer + latestVersion（不做大小比较）', async () => {
+test('K118 版本相同 ⇒ verdict ready 且 candidate 等于本地版本（只查一次上游）', async () => {
   const calls = [];
-  const { store, render } = mountPage(recordingApi(calls, undefined, { version: '9.9.9' }));
+  const { store, render } = mountPage(recordingApi(calls));
+  store.actions.ready(upstreamPayload());
+  const opened = await openViaPage(render, store, 'ui-design');
+  const verdict = verdictIn(store, 'skillhub:ake:ui-design');
+  assert.equal(verdict.candidate, '1.2.4', 'candidate 就是上游第一条');
+  assert.equal(verdict.candidate, opened.version, '等于本地版本 ⇒ 渲染层判「已是最新版本」');
+  assert.equal(Number.isFinite(verdict.at), true, '记下拿到答案的时刻（副行 HH:MM 用它）');
+
+  // 「重新检查」忽略 10 分钟窗口：刚问过的也能再问一次。
+  checkPropOf(render())(opened);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(calls.filter((call) => call.startsWith('marketVersions')).length, 2, '强制重查不看 TTL');
+});
+
+test('K118 版本不同 ⇒ candidate 是上游第一条（不做大小比较，clawhub 身份原样透传）', async () => {
+  const calls = [];
+  const versions = [
+    { version: '9.9.9', publishedAt: 1762396800000 },
+    { version: '1.2.4', publishedAt: 1761000000000 },
+  ];
+  const { store, render } = mountPage(recordingApi(calls, undefined, { versions }));
   store.actions.ready(upstreamPayload({ upstream: { sourceId: 'clawhub', owner: 'ake', slug: 'ui-design' } }));
-  store.actions.openDetail(upstreamRow({ upstream: { sourceId: 'clawhub', owner: 'ake', slug: 'ui-design' } }));
-  store.actions.detailReady('filesystem#ui-design', { body: '正文', files: [], filesTruncated: false });
-  await checkPropOf(render())();
-  const check = store.getSnapshot().check;
-  assert.equal(check.status, 'newer', '不同就是有新版本');
-  assert.equal(check.latestVersion, '9.9.9', '带上上游版本号');
-  assert.deepEqual(calls, ['marketDetail:clawhub/ake/ui-design'], 'clawhub 身份走 clawhub 范围');
+  await openViaPage(render, store, 'ui-design');
+  assert.deepEqual(calls, ['skillDetail:ui-design', 'marketVersions:clawhub/ake/ui-design'],
+    'clawhub 身份走 clawhub，不折成 skillhub');
+  const verdict = verdictIn(store, 'clawhub:ake:ui-design');
+  assert.equal(verdict.candidate, '9.9.9', 'candidate = versions[0].version，只比相等不排序');
+  assert.equal(verdict.total, 2, 'total 照抄上游条数');
+  assert.deepEqual(verdict.versions.map((entry) => entry.version), ['9.9.9', '1.2.4'], '列表原样保留（渲染层算窗口）');
 });
 
-test('版本检查：请求失败 ⇒ error（可以重试）', async () => {
-  const calls = [];
-  const { store, render } = mountPage(recordingApi(calls, undefined, { fails: true }));
-  store.actions.ready(upstreamPayload());
-  store.actions.openDetail(upstreamRow());
-  store.actions.detailReady('filesystem#ui-design', { body: '正文', files: [], filesTruncated: false });
-  await checkPropOf(render())();
-  assert.equal(store.getSnapshot().check.status, 'error', '抛错落到 error 态');
-  assert.deepEqual(calls, ['marketDetail:skillhub/ake/ui-design'], '失败也算查过一次');
+test('K118 上游失败：连接类码落 offline，其余落 failed；一行失败只影响自己', async () => {
+  const offlineCalls = [];
+  const offline = mountPage(recordingApi(offlineCalls, undefined, { versionsFail: true, versionsCode: 'E_SOURCE_UNAVAILABLE' }));
+  offline.store.actions.ready(upstreamPayload());
+  await openViaPage(offline.render, offline.store, 'ui-design');
+  const timedOut = verdictIn(offline.store, 'skillhub:ake:ui-design');
+  assert.equal(timedOut.phase, 'offline', 'E_SOURCE_UNAVAILABLE ⇒ offline（「无法连接安装源」）');
+  assert.equal(timedOut.reason, 'E_SOURCE_UNAVAILABLE', '原因码留给排查');
+  assert.equal(offline.store.getSnapshot().checkRun.status, 'done', '失败也结束这一轮（不会挂着转圈）');
+
+  const failedCalls = [];
+  const failed = mountPage(recordingApi(failedCalls, undefined, { versionsFail: true, versionsCode: 'E_BAD_QUERY' }));
+  failed.store.actions.ready(upstreamPayload());
+  await openViaPage(failed.render, failed.store, 'ui-design');
+  assert.equal(verdictIn(failed.store, 'skillhub:ake:ui-design').phase, 'failed', '非连接类码落 failed');
 });
 
-test('版本检查：查的过程中是 busy（按钮禁用、结论不清空）', async () => {
-  let release;
+test('K118 请求在飞时 busy 为真，且上一次的结论不被抹掉', async () => {
+  let release = () => {};
   const gate = new Promise((resolve) => { release = resolve; });
+  const calls = [];
   const api = {
-    list: async () => {},
+    list: async () => { calls.push('list'); },
     toggle: async () => {},
     toggleProvider: async () => {},
     skillDetail: async () => ({ body: 'text', files: [], filesTruncated: false }),
-    marketDetail: async () => {
+    marketVersions: async (arg) => {
+      calls.push(`marketVersions:${arg?.source}/${arg?.owner}/${arg?.slug}`);
       await gate;
-      return { item: { version: '1.2.4' } };
+      return { versions: [{ version: '1.2.4', publishedAt: null }], latest: '1.2.4', total: 1 };
     },
   };
   const { store, render } = mountPage(api);
   store.actions.ready(upstreamPayload());
-  store.actions.openDetail(upstreamRow());
-  store.actions.detailReady('filesystem#ui-design', { body: '正文', files: [], filesTruncated: false });
-  store.actions.setCheck('filesystem#ui-design', { status: 'upToDate', at: Date.now() });
-  const pending = checkPropOf(render())();
-  assert.equal(store.getSnapshot().check.busy, true, '请求在飞的时候 busy 为真');
-  assert.equal(store.getSnapshot().check.status, 'upToDate', '结论保留上一次的值');
+  store.actions.openDetail(upstreamRow(), { body: '正文', files: [], filesTruncated: false });
+  // 先放一份上一次的答案，再点「重新检查」：重查期间必须保留它（不闪空）。
+  store.actions.checkLanded([{ key: 'skillhub:ake:ui-design', phase: 'ready', candidate: '1.2.4', at: 1000 }]);
+  checkPropOf(render())(upstreamRow());
+  const running = verdictIn(store, 'skillhub:ake:ui-design');
+  assert.equal(running.busy, true, '请求在飞的时候 busy 为真');
+  assert.equal(running.candidate, '1.2.4', '结论保留上一次的值');
+  assert.deepEqual(calls, ['marketVersions:skillhub/ake/ui-design'], '重查只查这一行的 identity');
+
   release();
-  await pending;
-  assert.equal(store.getSnapshot().check.busy, false, '落地后 busy 收起');
-  assert.equal(store.getSnapshot().check.status, 'upToDate', '同版本仍是 upToDate');
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  const landed = verdictIn(store, 'skillhub:ake:ui-design');
+  assert.equal(landed.busy, false, '落地后 busy 收起');
+  assert.equal(landed.phase, 'ready', '同版本仍是 ready');
+});
+
+test('K118 同一 identity 装进两个目录：只发一次请求，结论按各自的 version 算', async () => {
+  const calls = [];
+  const { store, render } = mountPage(recordingApi(calls));
+  const upstream = { sourceId: 'skillhub', owner: 'ake', slug: 'ui-design' };
+  const first = row({ name: 'ui-design', partition: 'installed', rule: 'R7', upstream, version: '1.2.4' });
+  const second = row({ name: 'ui-design-copy', partition: 'installed', rule: 'R7', upstream, version: '1.0.0' });
+  store.actions.ready({
+    groups: [{ key: 'installed', skills: [first, second] }],
+    counts: { total: 2, disabled: 0, excluded: 0 },
+    complete: true,
+    diagnostics: [],
+    cwd: '/work',
+  });
+  await openViaPage(render, store, 'ui-design');
+  // 详情是整页替换：回到列表才能点到第二个目录。
+  store.actions.closeDetail();
+  await openViaPage(render, store, 'ui-design-copy');
+  assert.deepEqual(calls.filter((call) => call.startsWith('marketVersions')), ['marketVersions:skillhub/ake/ui-design'],
+    '两个目录共用一份答案：同 identity 只发一次');
+  const verdict = verdictIn(store, 'skillhub:ake:ui-design');
+  assert.equal(verdictOf(verdict, '1.2.4'), 'upToDate', '版本一致的那个目录判最新');
+  assert.equal(verdictOf(verdict, '1.0.0'), 'available', '版本落后的那个目录判可更新');
 });
 
 test('K111 市场页签不跟着改：页头与页签仍在，市场详情仍只替换网格', () => {
@@ -799,4 +935,153 @@ test('两个包 → 两块，按包名升序（不是 provider 序）', () => {
   const html = renderPage({ payload: payloadWithOrigins() });
   const blocks = [...html.matchAll(/data-skc-plugin-pkg="([^"]+)"/g)].map((match) => match[1]);
   assert.deepEqual(blocks, ['dsh-univer-office', 'zzz-other-pkg'], '包名升序');
+});
+
+/* ---------------------------- K119 · 页头四态（D4：一个状态位，宿主 .updatesNote 同形） ---------------------------- */
+
+/** Two market-installed rows: one behind the upstream, one already current. */
+function headerPayload() {
+  return {
+    groups: [{
+      key: 'installed',
+      skills: [
+        upstreamRow({ name: 'behind', version: '1.0.0' }),
+        upstreamRow({ name: 'current', version: '1.2.4', upstream: { sourceId: 'clawhub', owner: 'ake', slug: 'ui-design' } }),
+      ],
+    }],
+    counts: { total: 2, disabled: 0, excluded: 0 },
+    complete: true,
+    diagnostics: [],
+    cwd: '/work',
+  };
+}
+
+/**
+ * Render the page over a store that has already run one check round.
+ * @param {{verdicts?: object, finish?: boolean, payload?: object}} [setup] - cached answers,
+ *   whether the round is over, and the payload to render.
+ * @returns {string} markup.
+ */
+function renderHeader(setup = {}) {
+  const store = createStore();
+  store.actions.ready(setup.payload ?? headerPayload());
+  const entries = Object.entries(setup.verdicts ?? {});
+  if (entries.length > 0) {
+    store.actions.checkStart(entries.map(([key]) => key));
+    store.actions.checkLanded(entries.map(([key, verdict]) => ({ key, ...verdict })));
+  }
+  if (setup.finish !== false) store.actions.checkFinish();
+  const api = { list: async () => {}, toggle: async () => {}, toggleProvider: async () => {} };
+  return renderToStaticMarkup(createElement(modules.page.SkillsPage, { store, api, t }));
+}
+
+/** The status slot's markup, or null when the note is absent. */
+const noteMarkupOf = (html) => /<span class="skc_status"[^>]*>[^<]*<\/span>/.exec(html)?.[0] ?? null;
+
+test('K119 可更新（info）：一个技能落后 ⇒ 「1 个技能可更新」，tone=info', () => {
+  const html = renderHeader({
+    verdicts: {
+      'skillhub:ake:ui-design': { phase: 'ready', candidate: '2.0.0', at: 1000 },
+      'clawhub:ake:ui-design': { phase: 'ready', candidate: '1.2.4', at: 1000 },
+    },
+  });
+  const note = noteMarkupOf(html);
+  assert.ok(note !== null, '页头出现了更新提示');
+  assert.equal(note, `<span class="skc_status" data-tone="info">${t('status.updatesAvailable', { count: 1 })}</span>`,
+    '文案与 tone 逐字一致（只有落后的那一行算「可更新」）');
+});
+
+test('K119 部分失败（error）：没有可更新但有连不上 ⇒ 部分失败，tone=error', () => {
+  const html = renderHeader({
+    verdicts: {
+      'skillhub:ake:ui-design': { phase: 'offline', at: 1000 },
+      'clawhub:ake:ui-design': { phase: 'ready', candidate: '1.2.4', at: 1000 },
+    },
+  });
+  assert.equal(noteMarkupOf(html), `<span class="skc_status" data-tone="error">${t('status.updatesPartial')}</span>`,
+    '一行失败就报部分失败');
+  const failed = renderHeader({
+    verdicts: {
+      'skillhub:ake:ui-design': { phase: 'failed', at: 1000 },
+      'clawhub:ake:ui-design': { phase: 'ready', candidate: '1.2.4', at: 1000 },
+    },
+  });
+  assert.match(noteMarkupOf(failed) ?? '', /data-tone="error"/, 'failed 与 offline 同等对待');
+});
+
+test('K119 全部最新（无色）：没有 data-tone，就是 .skc_status 的 tertiary', () => {
+  const html = renderHeader({
+    verdicts: {
+      // 「behind」那一行装的是 1.0.0，答案也是 1.0.0 ⇒ 它也是最新（判据按各自 row.version）。
+      'skillhub:ake:ui-design': { phase: 'ready', candidate: '1.0.0', at: 1000 },
+      'clawhub:ake:ui-design': { phase: 'ready', candidate: '1.2.4', at: 1000 },
+    },
+  });
+  assert.equal(noteMarkupOf(html), `<span class="skc_status">${t('status.updatesNone')}</span>`,
+    '全最新时不带 tone（不加分隔符、不加图标）');
+});
+
+test('K119 skipped 不计入：既不报可更新也不报失败，全最新那句仍可能出口', () => {
+  const html = renderHeader({
+    verdicts: {
+      'skillhub:ake:ui-design': { phase: 'skipped', at: 1000 },
+      'clawhub:ake:ui-design': { phase: 'ready', candidate: '1.2.4', at: 1000 },
+    },
+  });
+  assert.equal(noteMarkupOf(html), `<span class="skc_status">${t('status.updatesNone')}</span>`,
+    'skipped 由那一行的区块自己说「无法检查更新」，页头不提');
+  const onlySkipped = renderHeader({
+    verdicts: {
+      'skillhub:ake:ui-design': { phase: 'skipped', at: 1000 },
+      'clawhub:ake:ui-design': { phase: 'skipped', at: 1000 },
+    },
+  });
+  assert.equal(noteMarkupOf(onlySkipped), null, '全是 skipped ⇒ 一句也不说（不是「全部最新」）');
+});
+
+test('K119 未 done 或没有检测对象：状态位不渲染', () => {
+  const running = renderHeader({
+    finish: false,
+    verdicts: { 'skillhub:ake:ui-design': { phase: 'ready', candidate: '2.0.0', at: 1000 } },
+  });
+  assert.equal(noteMarkupOf(running), null, '一轮没结束就说话是假话');
+
+  const noTargets = renderHeader({ payload: payload() });
+  assert.equal(noteMarkupOf(noTargets), null, '没有检测对象 ⇒ 不渲染');
+
+  const noVersion = renderHeader({
+    payload: {
+      groups: [{ key: 'installed', skills: [upstreamRow({ version: null })] }],
+      counts: { total: 1, disabled: 0, excluded: 0 },
+      complete: true,
+      diagnostics: [],
+      cwd: '/work',
+    },
+    verdicts: { 'skillhub:ake:ui-design': { phase: 'ready', candidate: '2.0.0', at: 1000 } },
+  });
+  assert.equal(noteMarkupOf(noVersion), null, '只有「有身份但没版本」的行 ⇒ 也不算有检测对象');
+});
+
+test('K119 优先级：可更新 > 部分失败 > 全部最新；状态位里只有这一句（K26 的计数已退场）', () => {
+  const html = renderHeader({
+    verdicts: {
+      'skillhub:ake:ui-design': { phase: 'ready', candidate: '2.0.0', at: 1000 },
+      'clawhub:ake:ui-design': { phase: 'offline', at: 1000 },
+    },
+  });
+  assert.match(noteMarkupOf(html) ?? '', /data-tone="info"/, '同时有可更新与失败时报「可更新」');
+  assert.ok(html.includes(t('status.updatesAvailable', { count: 1 })), '可更新那句在');
+  // 宿主页头只有这一句：计数已整句退场，状态位里不许再出现第二种文案。
+  assert.equal(html.includes('共 2 个技能'), false, '页头不渲染技能计数');
+  assert.equal(html.includes('个已停用'), false, '页头不渲染停用计数');
+  assert.equal((html.match(/<span class="skc_status"/g) ?? []).length, 1, '状态位只有一个 span');
+});
+
+test('K119 状态位是一个元素：.skc_status 是 12/18 tertiary，tone 直接挂在它身上', async () => {
+  const styles = await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8');
+  assert.match(styles, /\.skc_status\{[^}]*font-size: 12px; line-height: 18px/, '字阶成对（12/18）');
+  assert.match(styles, /\.skc_status\{[^}]*label-tertiary/, '无色态就是宿主 .updatesNote 的 tertiary');
+  assert.match(styles, /\.skc_status\[data-tone="info"\]\{[^}]*business-primary/, 'info 用 business-primary');
+  assert.match(styles, /\.skc_status\[data-tone="error"\]\{[^}]*error-primary/, 'error 用 error-primary');
+  assert.equal(styles.includes('skc_statusNote'), false, '第二个类已退役（一个元素一个类）');
 });

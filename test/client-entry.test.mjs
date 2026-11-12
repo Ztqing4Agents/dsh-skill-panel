@@ -240,7 +240,7 @@ test('真机同款扁平 translate：侧栏标题与首屏文案里没有未翻�
   const html = renderToStaticMarkup(createElement(page.component, { t, ...props }));
   const leftover = [...new Set(html.match(KEY_SHAPE) ?? [])];
   assert.deepEqual(leftover, [], `首屏 HTML 里没有未翻译的键名（发现：${leftover.join(', ')}）`);
-  for (const copy of ['共 3 个技能', '内置技能配置', '本地技能', '已安装技能', '技能市场', '添加技能', '刷新']) {
+  for (const copy of ['内置技能配置', '本地技能', '已安装技能', '技能市场', '添加技能', '刷新']) {
     assert.equal(html.includes(copy), true, `首屏出现文案「${copy}」`);
   }
 });

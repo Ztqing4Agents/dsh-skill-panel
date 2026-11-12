@@ -26,18 +26,25 @@ import { MarketPanel } from './market-panel.jsx';
 import { ListSkeleton } from './skeleton.jsx';
 import { PluginBlock, SkillRow } from './row.jsx';
 import {
+  CHECK_BUDGET_MS,
+  CHECK_TIMEOUT_MS,
   TAB_INSTALLED,
   TAB_MARKET,
+  checkPhaseOf,
   detailStateOf,
+  detectionTargets,
   groupEmptyKey,
+  headerUpdateNote,
+  identityOf,
+  needsCheck,
   reasonText,
   rowByKey,
   rowKey,
-  statusLine,
   switchMode,
   toGroups,
   toPluginBlocks,
 } from './model.js';
+import { reasonKeyOf } from './market-model.js';
 
 /** How long the refresh indicator stays up, so a fast reload does not flicker. */
 const MIN_INDICATOR_MS = 400;
@@ -47,6 +54,56 @@ const identityTranslate = (key) => key;
 
 /** Writes land before the frame paints; a string render has no DOM to write to. */
 const usePaintEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
+
+/**
+ * A timer that resolves to null, so a request and a budget can be raced without aborting
+ * the request: the browser has no way to cancel a fetch whose answer a later visit wants.
+ * @param {number} ms - how long to wait.
+ * @returns {Promise<null>} always null.
+ */
+function after(ms) {
+  return new Promise((resolve) => { setTimeout(() => resolve(null), ms); });
+}
+
+/**
+ * Run the body of one update check for one identity.
+ *
+ * The answer is reduced to what the cache stores: the first version is the candidate
+ * (newest first is the upstream's own order, never ours), and a list without a usable first
+ * row is a failure rather than an empty "up to date".
+ * @param {object} api - API client.
+ * @param {{key: string, source: string, owner: string, slug: string}} target - the identity.
+ * @returns {Promise<object>} one `checkLanded` entry.
+ */
+async function askVersions(api, target) {
+  try {
+    const data = await api.marketVersions({
+      source: target.source,
+      owner: target.owner,
+      slug: target.slug,
+    });
+    const versions = Array.isArray(data?.versions) ? data.versions : [];
+    const candidate = versions.length > 0 && typeof versions[0]?.version === 'string' ? versions[0].version : '';
+    return {
+      key: target.key,
+      phase: candidate === '' ? 'failed' : 'ready',
+      candidate: candidate === '' ? null : candidate,
+      latest: typeof data?.latest === 'string' ? data.latest : null,
+      versions,
+      total: Number.isInteger(data?.total) ? data.total : versions.length,
+      at: Date.now(),
+      reason: candidate === '' ? 'E_NO_VERSIONS' : null,
+    };
+  } catch (error) {
+    const code = typeof error?.code === 'string' ? error.code : '';
+    return {
+      key: target.key,
+      phase: checkPhaseOf(code),
+      at: Date.now(),
+      reason: code === '' ? 'E_UNKNOWN' : code,
+    };
+  }
+}
 
 /**
  * Render the skill center page.
@@ -111,6 +168,72 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
     }
   }, [api, store]);
 
+  /** One round is enough at a time: two of them would double every request. */
+  const checkInFlight = useRef(false);
+
+  /**
+   * Run one round of update checks, serially, inside the contract's budgets.
+   *
+   * One request at a time in row order, so a slow upstream cannot turn a visit into a burst;
+   * one identity once, because two directories holding the same skill compare their own
+   * versions against the same answer. A row that misses its 2s slice is marked skipped and
+   * the round moves on (the request keeps running - a late answer still lands in the cache),
+   * and once the round is past 8s the rest are skipped without a request at all.
+   * @param {{key: string, source: string, owner: string, slug: string}[]} targets - identities.
+   * @param {{force?: boolean}} [options] - `force` ignores the ten minute window.
+   * @returns {Promise<void>} resolves when the round is over.
+   */
+  const runCheck = useCallback(async (targets, options = {}) => {
+    const list = Array.isArray(targets) ? targets : [];
+    if (list.length === 0 || checkInFlight.current) return;
+    const snapshot = store.getSnapshot();
+    const now = Date.now();
+    const wanted = options.force === true
+      ? list
+      : list.filter((target) => needsCheck(snapshot.checks[target.key], now));
+    if (wanted.length === 0) return;
+    checkInFlight.current = true;
+    store.actions.checkStart(wanted.map((target) => target.key));
+    const deadline = Date.now() + CHECK_BUDGET_MS;
+    try {
+      for (const target of wanted) {
+        if (Date.now() >= deadline) {
+          store.actions.checkLanded([{
+            key: target.key, phase: 'skipped', at: Date.now(), reason: 'E_BUDGET',
+          }]);
+          continue;
+        }
+        const pending = askVersions(api, target);
+        const first = await Promise.race([pending, after(CHECK_TIMEOUT_MS)]);
+        if (first === null) {
+          store.actions.checkLanded([{
+            key: target.key, phase: 'skipped', at: Date.now(), reason: 'E_SOURCE_TIMEOUT',
+          }]);
+          void pending.then((entry) => store.actions.checkLanded([entry]));
+          continue;
+        }
+        store.actions.checkLanded([first]);
+      }
+    } finally {
+      store.actions.checkFinish();
+      checkInFlight.current = false;
+    }
+  }, [api, store]);
+
+  /**
+   * Ask about one row's identity, unless this session already has a fresh answer.
+   * @param {object} row - the row being opened.
+   * @returns {void}
+   */
+  const ensureCheck = useCallback((row) => {
+    const upstream = row?.upstream ?? null;
+    if (upstream === null || row?.symlink === true) return;
+    if (typeof row?.version !== 'string' || row.version === '') return;
+    const key = marketKeyOf(upstream);
+    if (!needsCheck(store.getSnapshot().checks[key], Date.now())) return;
+    void runCheck([{ key, source: upstream.sourceId, owner: upstream.owner, slug: upstream.slug }]);
+  }, [runCheck, store]);
+
   /**
    * Open one skill's detail: remember where the list was, then read its text.
    * @param {object} row - the row that was clicked.
@@ -135,11 +258,15 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
     if (first === null) {
       // Too slow to wait for: show the list's own loading state, reusing the request.
       store.actions.openDetail(row);
+      ensureCheck(row);
       void loadDetail(row, raw);
       return;
     }
     store.actions.openDetail(row, first.data);
-  }, [api, loadDetail, store]);
+    // Opening a detail is one of the four moments that check: this row only, and only when
+    // there is no fresh answer yet.
+    ensureCheck(row);
+  }, [api, ensureCheck, loadDetail, store]);
 
   const closeDetail = useCallback(() => {
     store.actions.closeDetail();
@@ -239,6 +366,81 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
     }
   }, [api, store, t]);
 
+  /** The identity whose update is in flight, so both buttons can show it and stay disabled. */
+  const [updatingKey, setUpdatingKey] = useState(null);
+  /** The version list's expander and the update dialog: view state of one open detail. */
+  const [expandedVersions, setExpandedVersions] = useState(false);
+  const [updateTarget, setUpdateTarget] = useState(null);
+
+  /**
+   * Overwrite the open skill with one upstream version, and fold the outcome back.
+   *
+   * Five endings, three of which only exist after the host touched the directory (restored /
+   * lost / unconfirmed): each one leaves the page in the state that disk is actually in, and
+   * a rescan follows the two where the list itself may have changed.
+   * @param {object} row - the row being updated.
+   * @param {string} to - the version to install.
+   * @returns {Promise<void>} resolves when the outcome has been drawn.
+   */
+  const runUpdate = useCallback(async (row, to) => {
+    const upstream = row?.upstream ?? null;
+    if (upstream === null || typeof row?.path !== 'string' || row.path === '') return;
+    if (typeof to !== 'string' || to === '') return;
+    const identity = marketKeyOf(upstream);
+    const key = rowKey(row);
+    setUpdatingKey(identity);
+    store.actions.pending(key);
+    try {
+      const result = await api.marketUpdate({
+        source: upstream.sourceId,
+        owner: upstream.owner,
+        slug: upstream.slug,
+        version: to,
+        name: row.name,
+        path: row.path,
+      });
+      const applied = typeof result?.version === 'string' && result.version !== '' ? result.version : to;
+      store.actions.updateApplied({ identity, name: row.name, path: row.path, version: applied });
+      store.actions.fail(key, '');
+      // The disk is new; the page still shows the old text, so it is read once more. Both
+      // follow-ups are best-effort: the directory already answers for itself.
+      void loadDetail(row);
+      void load('initial');
+    } catch (error) {
+      const code = typeof error?.code === 'string' ? error.code : 'E_UNKNOWN';
+      const from = typeof error?.data?.from === 'string'
+        ? error.data.from
+        : (typeof row.version === 'string' ? row.version : '');
+      const reason = error?.message ?? '';
+      if (code === 'E_UPDATE_LOST') {
+        // The directory is gone and the old copy waits in a backup: this skill is no longer
+        // installed, and saying so beats "try again".
+        store.actions.fail(key, t('detail.updateLost'));
+        store.actions.detailFailed(store.getSnapshot().detail?.key ?? key, { code: 'E_NOT_FOUND', message: reason });
+        void load('initial');
+      } else if (code === 'E_UPDATE_UNCONFIRMED') {
+        store.actions.fail(key, t('detail.updateUnknown'));
+        store.actions.checkLanded([{ key: identity, phase: 'failed', at: Date.now(), reason: code }]);
+        void load('initial');
+      } else if (code === 'E_UPDATE_RESTORED') {
+        store.actions.fail(key, t('detail.updateRolledBack', { version: from }));
+      } else if (code === 'E_ALREADY_UP_TO_DATE') {
+        store.actions.fail(key, '');
+        store.actions.checkLanded([{ key: identity, phase: 'ready', candidate: to, latest: to, at: Date.now() }]);
+      } else {
+        const explained = t(reasonKeyOf(code), {
+          source: t(`market.source.${upstream.sourceId}`),
+          name: row.name,
+          path: row.path,
+          reason,
+        });
+        store.actions.fail(key, `${t('detail.updateFailed', { version: to })} ${explained}`);
+      }
+    } finally {
+      setUpdatingKey(null);
+    }
+  }, [api, load, loadDetail, store, t]);
+
   // The provider page is a view of rows the list already holds: no request of its own.
   const pluginProvider = state.pluginDetail;
   const pluginBlock = pluginProvider === null
@@ -248,39 +450,38 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
   const detailKey = state.detail === null ? null : state.detail.key;
   const detailRow = detailKey === null ? null : rowByKey(state.payload, detailKey);
   const detailStatus = detailKey === null ? 'idle' : detailStateOf(state, detailKey);
+  // The detail's verdict is a read-only projection of the cache: the identity it belongs to
+  // outlives the page, and the same entry is read by the list's header as well.
+  const detailIdentity = detailRow === null ? '' : identityOf(detailRow.upstream);
+  const detailCheck = detailIdentity === '' ? null : (state.checks[detailIdentity] ?? null);
   const retryDetail = useCallback(() => {
     if (detailRow === null) return;
     void loadDetail(detailRow);
   }, [detailRow, loadDetail]);
 
-  // The one thing the detail page asks the network for. It compares two strings and nothing
-  // else: equal means up to date, different means the upstream has another version. No
-  // ordering - "newer" is not a judgement this panel can make, and pre-releases exist.
-  // Without source or without a local version there is nothing to compare, so no request.
-  const checkVersion = useCallback(async () => {
-    if (detailRow === null) return;
-    const key = rowKey(detailRow);
-    const up = detailRow.upstream ?? null;
-    const local = typeof detailRow.version === 'string' ? detailRow.version : '';
-    if (up === null || local === '') {
-      store.actions.setCheck(key, { status: 'unavailable' });
-      return;
-    }
-    store.actions.setCheck(key, { busy: true });
-    try {
-      const data = await api.marketDetail({
-        source: up.sourceId === 'clawhub' ? 'clawhub' : 'skillhub',
-        owner: up.owner,
-        slug: up.slug,
-      });
-      const latest = typeof data?.item?.version === 'string' ? data.item.version : '';
-      store.actions.setCheck(key, latest === ''
-        ? { status: 'unavailable' }
-        : { status: latest === local ? 'upToDate' : 'newer', latestVersion: latest, at: Date.now() });
-    } catch {
-      store.actions.setCheck(key, { status: 'error' });
-    }
-  }, [api, store, detailRow]);
+  // Another skill (or the list) means the expander and the dialog start closed: neither
+  // describes anything once the row underneath them changed.
+  useEffect(() => {
+    setExpandedVersions(false);
+    setUpdateTarget(null);
+  }, [detailKey]);
+
+  // "Check again" on the version block: this row's identity only, and it ignores the ten
+  // minute window - asking again is the whole point of the button. The comparison itself
+  // (two strings, equal or not, no ordering) happens where the verdict is drawn.
+  const recheckDetail = useCallback((row) => {
+    const upstream = row?.upstream ?? null;
+    if (upstream === null) return;
+    // Same guard as `ensureCheck`: with no version of its own there is nothing to compare,
+    // so the block sits on "cannot check" and asking the upstream would answer nothing new.
+    if (typeof row?.version !== 'string' || row.version === '') return;
+    void runCheck([{
+      key: marketKeyOf(upstream),
+      source: upstream.sourceId,
+      owner: upstream.owner,
+      slug: upstream.slug,
+    }], { force: true });
+  }, [runCheck]);
 
   // Two moves, both in a paint effect so neither is visible as a jump:
   //   entering the detail -> 0, because the page header is gone and the detail starts at the
@@ -320,6 +521,29 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
   const counts = state.payload?.counts;
   const excluded = Number.isInteger(counts?.excluded) ? counts.excluded : 0;
   const showsInstalled = state.tab === TAB_INSTALLED;
+  const installedRows = groups.find((group) => group.key === 'installed')?.skills ?? [];
+  // The header's update sentence is about the rows on screen, computed now: a row that was
+  // installed, deleted or hand-edited since the round changes the count without a request.
+  const updateNote = showsInstalled && state.payload !== null
+    ? headerUpdateNote(installedRows, state.checks, state.checkRun, t)
+    : null;
+
+  // One round per visit to the tab: every identity without a fresh answer, in row order.
+  // The guard is a ref, not the checks: a round that ran out of budget marks rows `skipped`
+  // (which are "needs asking" again), and an effect watching them would start the next
+  // round immediately, for ever.
+  const autoCheckDone = useRef(false);
+  useEffect(() => {
+    if (state.tab !== TAB_INSTALLED) {
+      autoCheckDone.current = false;
+      return;
+    }
+    if (state.payload === null || autoCheckDone.current) return;
+    // Another round is already asking; its answers re-render, and this one goes then.
+    if (checkInFlight.current) return;
+    autoCheckDone.current = true;
+    void runCheck(detectionTargets(installedRows));
+  }, [installedRows, runCheck, state.payload, state.tab]);
   // The host replaces the whole page header when a plugin's detail opens, and the installed
   // detail follows it: breadcrumb first, nothing above it. The market keeps its header and
   // swaps only the grid - that difference is deliberate (host parity is per page).
@@ -394,13 +618,19 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
               rows={state.rows}
               t={t}
               status={detailStatus}
-              check={state.check}
+              check={detailCheck}
+              updating={detailIdentity !== '' && updatingKey === detailIdentity}
               iconUrl={detailRow === null ? null : rowIconUrl(detailRow)}
               title={detailRow === null ? '' : rowTitleOf(detailRow, state.market)}
+              expanded={expandedVersions}
+              updateTarget={updateTarget}
               onBack={closeDetail}
               onRetry={retryDetail}
               onToggle={onToggle}
-              onCheck={checkVersion}
+              onCheck={recheckDetail}
+              onUpdate={runUpdate}
+              onExpand={setExpandedVersions}
+              onUpdatePrompt={setUpdateTarget}
             />
             )}
           </div>
@@ -439,9 +669,15 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
                   className={cn('toolbar')}
                   data-skc-header-part="toolbar"
                 >
-                  {showsInstalled && state.payload !== null
-                    ? <span className={cn('status')}>{statusLine(counts, t)}</span>
-                    : null}
+                  {/* The host's status slot holds this one sentence and nothing else: no count,
+                      no separator. `data-tone` is the only thing a state adds, and an empty
+                      round draws nothing at all - an answer set that does not exist yet cannot
+                      be summarised. */}
+                  {updateNote === null ? null : (
+                    <span className={cn('status')} data-tone={updateNote.tone ?? undefined}>
+                      {updateNote.text}
+                    </span>
+                  )}
                   <Tooltip
                     label={t('page.refresh')}
                     delayMs={500}
@@ -466,6 +702,9 @@ export function SkillsPage({ t = identityTranslate, store, api }) {
                         // list: closing it first is the same rule the market's reload follows.
                         store.actions.closeDetail();
                         void load('refresh');
+                        // Refresh is the user asking again, so it ignores the ten minute
+                        // window the tab entry respects.
+                        void runCheck(detectionTargets(installedRows), { force: true });
                       }}
                       icon={refreshing || marketBusy
                         ? <StateDot state="ongoing" size={13} />

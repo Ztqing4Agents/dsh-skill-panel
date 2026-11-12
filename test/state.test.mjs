@@ -692,13 +692,18 @@ test('插件页的滚动偏移单独记：rememberPluginScroll 与 rememberDetai
 
 /* ------------- 进技能页签即复位（本轮） ------------- */
 
-test('resetPage 清五个字段（detail / check / pluginDetail / 两级偏移），但不动 rows 与 payload', () => {
+test('resetPage 清四个字段（detail / pluginDetail / 两级偏移），但不动 rows、payload 与检测缓存', () => {
   const store = createStore();
   store.actions.ready(payload());
   store.actions.openPlugin('univer');
   store.actions.openDetail(builtinRow);
   store.actions.detailReady('univer#sheet', { body: '正文', files: [], filesTruncated: false });
-  store.actions.setCheck('univer#sheet', { status: 'upToDate', at: 1 });
+  // 检测答案是按 identity 常驻的会话缓存，不进 resetPage 的清理名单（U19 起没有单槽 check）。
+  store.actions.checkStart(['skillhub:ake:dev-god']);
+  store.actions.checkLanded([{
+    key: 'skillhub:ake:dev-god', phase: 'ready', candidate: '1.2.4', at: 1000,
+  }]);
+  store.actions.checkFinish();
   store.actions.rememberDetailScroll(300);
   store.actions.rememberPluginScroll(120);
   store.actions.fail('univer#sheet', '写不进去');
@@ -710,10 +715,123 @@ test('resetPage 清五个字段（detail / check / pluginDetail / 两级偏移�
   store.actions.resetPage();
   const after = store.getSnapshot();
   assert.equal(after.detail, null, 'detail 清空');
-  assert.equal(after.check, null, 'check 清空');
   assert.equal(after.pluginDetail, null, 'pluginDetail 清空');
   assert.equal(after.detailScrollTop, 0, '列表偏移清零');
   assert.equal(after.pluginScrollTop, 0, '插件页偏移清零');
+  assert.equal('check' in after, false, '旧单槽 check 已从 state 里删除（同一件事实不许两个真源）');
+  assert.equal(after.checks['skillhub:ake:dev-god'].candidate, '1.2.4', '检测缓存不被 resetPage 清掉');
+  assert.equal(after.checkRun.status, 'done', '轮次令牌也不受影响');
   assert.equal(after.rows.get('univer#sheet').reason, '写不进去', 'rows 不动（行内状态保留）');
   assert.equal(after.payload.groups.length, before.payload.groups.length, 'payload 不动');
+});
+
+/* --------------- K123 · updateApplied：一行换版本 + 该 identity 的结论就地翻成最新 --------------- */
+
+/** An installed payload holding two copies of one identity at two versions. */
+function twoCopiesPayload() {
+  const upstream = { sourceId: 'skillhub', owner: 'ake', slug: 'dev-god' };
+  return {
+    groups: [
+      { key: 'builtin', skills: [] },
+      { key: 'local', skills: [] },
+      {
+        key: 'installed',
+        skills: [
+          { name: 'dev-god', provider: 'filesystem', partition: 'installed', rule: 'R7', upstream, version: '1.0.0', enabled: true },
+          { name: 'dev-god-copy', provider: 'filesystem', partition: 'installed', rule: 'R7', upstream, version: '1.0.0', enabled: true },
+          { name: 'other', provider: 'filesystem', partition: 'installed', rule: 'R7', version: '1.0.0', enabled: true },
+        ],
+      },
+    ],
+    counts: { total: 3, disabled: 0, excluded: 0 },
+    complete: true,
+    diagnostics: [],
+    cwd: '/work',
+  };
+}
+
+test('K123 updateApplied：版本 Tag 变 to、卡面结论就地成「最新」、只动被更新的那个目录', () => {
+  const store = createStore();
+  store.actions.ready(twoCopiesPayload());
+  store.actions.checkLanded([{
+    key: 'skillhub:ake:dev-god',
+    phase: 'ready',
+    candidate: '2.0.0',
+    versions: [{ version: '2.0.0' }, { version: '1.0.0' }],
+    total: 2,
+    at: 1000,
+  }]);
+
+  store.actions.updateApplied({
+    identity: 'skillhub:ake:dev-god',
+    name: 'dev-god',
+    path: '/skills/dev-god/SKILL.md',
+    version: '2.0.0',
+  });
+
+  const snapshot = store.getSnapshot();
+  const rows = snapshot.payload.groups.find((group) => group.key === 'installed').skills;
+  assert.equal(rows[0].version, '2.0.0', '被更新的那一行版本变了（Tag 读的就是它）');
+  assert.equal(rows[1].version, '1.0.0', '同 identity 的另一个目录仍在自己那个版本上（按 name 收窄）');
+  assert.equal(rows[2].version, '1.0.0', '无关的行不动');
+
+  const verdict = snapshot.checks['skillhub:ake:dev-god'];
+  assert.equal(verdict.candidate, '2.0.0', '结论就地翻成 candidate = to（不再多花一次请求）');
+  assert.equal(verdict.phase, 'ready', '仍是 ready');
+  assert.equal(verdict.busy, false, '不残留 busy');
+  assert.equal(verdict.total, 2, '之前的 versions / total 留着（展开列表还要用）');
+  assert.equal(Number.isFinite(verdict.at), true, 'at 刷新成现在');
+
+  assert.equal(snapshot.notice.kind, 'update-ok', '成功走既有 toast 座位，kind 是 update-ok');
+  assert.equal(snapshot.notice.name, 'dev-god', 'toast 带名字');
+  assert.equal(snapshot.notice.version, '2.0.0', 'toast 带新版本');
+  assert.equal(snapshot.notice.path, '/skills/dev-god/SKILL.md', 'toast 带路径');
+  assert.equal(snapshot.market.installedDirty, false, '不置 installedDirty：重扫由页面显式触发（避免扫两遍）');
+});
+
+test('K123 updateApplied：同名同版本时不动 payload（不制造新快照），坏输入被忽略', () => {
+  const store = createStore();
+  store.actions.ready(twoCopiesPayload());
+  const before = store.getSnapshot().payload;
+  store.actions.updateApplied({ identity: 'skillhub:ake:dev-god', name: 'dev-god', version: '1.0.0' });
+  assert.equal(store.getSnapshot().payload, before, '版本没变就不重建 payload（同一个对象引用）');
+  assert.equal(store.getSnapshot().checks['skillhub:ake:dev-god'].candidate, '1.0.0', '结论仍就地更新');
+
+  const keep = store.getSnapshot();
+  store.actions.updateApplied({ identity: '', name: 'dev-god', version: '3.0.0' });
+  assert.equal(store.getSnapshot(), keep, 'identity 为空 ⇒ 整次调用忽略');
+  store.actions.updateApplied({ identity: 'skillhub:ake:dev-god', name: 'dev-god', version: '' });
+  assert.equal(store.getSnapshot(), keep, 'version 为空 ⇒ 整次调用忽略');
+});
+
+test('K123 checkStart / checkLanded / checkFinish：一轮的三步与幂等', () => {
+  const store = createStore();
+  assert.deepEqual(store.getSnapshot().checkRun, { id: 0, status: 'idle' }, '初始 idle');
+
+  store.actions.checkStart(['skillhub:ake:dev-god', 'clawhub:ake:ui-design', '']);
+  const started = store.getSnapshot();
+  assert.equal(started.checkRun.status, 'running', '开轮 ⇒ running');
+  assert.equal(started.checkRun.id, 1, '令牌自增');
+  assert.equal(started.checks['skillhub:ake:dev-god'].phase, 'running', '新条目是 running');
+  assert.equal(started.checks['skillhub:ake:dev-god'].busy, true, '目标行 busy');
+  assert.equal('' in started.checks, false, '空 identity 被过滤');
+
+  store.actions.checkLanded([
+    { key: 'skillhub:ake:dev-god', phase: 'ready', candidate: '2.0.0', at: 2000 },
+    null,
+  ]);
+  const landed = store.getSnapshot();
+  assert.equal(landed.checks['skillhub:ake:dev-god'].phase, 'ready', '答案落进缓存');
+  assert.equal(landed.checks['skillhub:ake:dev-god'].busy, false, '落地后 busy 收起');
+  assert.equal(landed.checks['clawhub:ake:ui-design'].phase, 'running', '还没答的那行仍是 running');
+
+  store.actions.checkFinish();
+  assert.equal(store.getSnapshot().checkRun.status, 'done', '结束 ⇒ done');
+  const after = store.getSnapshot();
+  store.actions.checkFinish();
+  assert.equal(store.getSnapshot(), after, 'checkFinish 幂等（不制造新快照）');
+
+  store.actions.checkStart(['skillhub:ake:dev-god']);
+  assert.equal(store.getSnapshot().checkRun.id, 2, '第二轮令牌继续自增');
+  assert.equal(store.getSnapshot().checks['skillhub:ake:dev-god'].candidate, '2.0.0', '已有答案在重查期间保留（不闪空）');
 });

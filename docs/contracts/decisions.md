@@ -18,7 +18,7 @@
 
 | # | PRD 原文 | 实际（逐字证据） | 处理 |
 | --- | --- | --- | --- |
-| B-1 | §3.3.1 状态文案 = `.status`，13px/20px | 页头状态文案在宿主是 `.updatesNote`：`color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px`；`.status` 只用于页内状态段（`partsEmpty` / `installChecking` / `unavailable`） | 采用 `.updatesNote` 的 12/18。文案本身按队长决策改为计数（`共 N 个技能`） |
+| B-1 | §3.3.1 状态文案 = `.status`，13px/20px | 页头状态文案在宿主是 `.updatesNote`：`color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px`；`.status` 只用于页内状态段（`partsEmpty` / `installChecking` / `unavailable`） | 采用 `.updatesNote` 的 12/18。**2026-11-12 U19 更正**：早期那句「按队长决策改计数（`共 N 个技能`）」作废——更新提示落地后，宿主同位只有一句更新提示、没有计数，故计数整句退场（`status.count`/`status.offSuffix` 一并删除），状态位与宿主 1:1 |
 | B-2 | §3.3.1 刷新中「14px 旋转指示」 | 宿主是 `StateDot state="ongoing" size={13}` 放在按钮 `icon` 位；14px 是 `.toggleProgress` 的**开关**占位（`--bundle-progress-size:14px`） | 刷新用 `StateDot`；开关 pending 用 14px 占位 + `StateDot`。保留 PRD 的「≥400ms、重复点击忽略」行为 |
 | B-3 | PRD §3.3.5 错误态文字 = `state-error-primary` | 宿主 `.failure{color:error}` 但内部 `<p>` 被 `.failure p` 覆盖成 `label-tertiary`；错误信号由 `StateDot state="error"` 承担，`role="alert"` | 照宿主：容器 error 色 + 文字 tertiary + 红色 StateDot。若用户要求文字也变红，改 1 条规则即可 |
 | B-4 | PRD §3.3.4 行 hover/active 底色 | 宿主行是链接（`.cardLink:hover` / `:active` 有底色反馈）；我们的行在 2026-11-09 前**不可点击**（Q6 + 队长决策） | **已安装行 U1 起可点**（进本地详情页，见 `docs/contracts/installed-detail.md`）：补 hover / `:active` / `:focus-visible` 三处可点证据，开关仍是行内**唯一独立动作位**；宿主 `.cardLink:hover` 的**确切色值没采到**，暂用市场卡同一个 `--dsw-alias-interactive-bg-hover`，标「待真机取色」（附录 Q） |
@@ -217,6 +217,17 @@
 | Q-4 | 余项：**px 未逐值采集** | 宿主详情页的类名是构建哈希、样式在另一份产物里，本轮只对齐结构与顺序（用户也只要「先这样」）；详情页的确切 px/色值与 `.cardLink:hover` 一样标「待真机取色」（`docs/contracts/visual.md` A.5）。下次若采到样式，按 `docs/reference/host-plugin-page.md` 头注「整份重采」，不在旧的 §7 上补值 |
 
 ---
+
+## 附录 R 更新检测对齐宿主（U19，2026-11-12）
+
+> 用户原话：「将更新检测也对齐宿主的机制，并补充更新功能」；二选一确认：检测＝**完整对齐宿主**（自动检测 + 页头提示 + 候选判据 + 详情页头「更新」按钮），动作＝**覆盖安装 + 失败回滚**（保留下载前的启用状态、失败保留原版本）。宿主机制采集自 `app.asar` 内 `dsh-client-ui-plugin-manager` 的 `client.js`（0.2.2-rc.1），映射表见 `.agents/work/wip/U19-update-check.md` 的 A.1；用例见 `docs/contracts/acceptance.md` 附录 D.7 的 K116–K125。
+
+| # | 事项 | 依据 / 处理 |
+| --- | --- | --- |
+| R-1 | 版本区块的「发布于 `{date}`」是**唯一**允许上屏的时间（「上次检查于 `{time}`」是同一轮新增的第二处，来自 `check.at`） | 它与 `docs/contracts/data-model.md` §3.8.1 不变式 3「卡片与详情不显示任何时间：`updatedAt` 只影响顺序」**不冲突**：那是**另一个字段**（市场条目的 `updatedAt`，只用于排序），而这里显示的是 `versions[].createdAt`（版本自身的发布时刻，上游给的真实事实），且只在**已安装详情的展开列表**里出现。不登记这句，下一个人会拿「不显示任何时间」来删它。口径：绝对日期 `YYYY-MM-DD`，不用相对时间（「3 天前」会随时间漂） |
+| R-2 | 候选版本 = **`versions[0]`**，判据沿用「只比相等、不排序」 | 宿主取「第一个可安装（声明 bundle 且不与宿主版本冲突）∧ 非弃用 ∧ 非预发布」的版本，那四个字段在技能包里**都不存在**（`_meta.json` 只有 `source/ownerId/slug/version/name/installedAt`，上游 `versions` 每条只有 `version/versionId/changelog/createdAt/securityReports`）。所以取「第一条」：`candidate === row.version ⇒ 已是最新`，否则「可更新到 {candidate}」。**代价如实登记**：若上游把预发布或降级版本排在首位，我们会显示「可更新到 x」并允许装——那是**上游的排序**，不是我们的判断；客户端不做任何版本排序或大小比较（预发布、日期式版本号都会骗人，`checkVersion` 的旧注释同理）。补正路径只有一条：上游给字段后改这一处判据 |
+| R-3 | 宿主的**四个分支整条删除**：`新版本需要更新 DSH` / `没有可直接安装的新版本` / `预发布`·`已弃用`·`需要 {peers}` 标签 / `安装源 {registry}` 一行 | ①「需要更新 DSH」要有 peer 依赖与宿主版本约束字段——技能包没有，写进代码就是永远绿的假覆盖率；②「没有可直接安装的新版本」要有 `bundle` 声明——技能能不能装由安装期的包闸判（`E_PACKAGE_INVALID`），检测期无条件可装；③ 预发布/弃用/peer 三个字段都没有，且**不拿版本号字符串猜预发布**（猜错就把可装的新版说成不可装）；④ 两个 `source` 都打同一个镜像 `api.skillhub.cn`，来源已在「来源信息 → 代码来源」显示，再列一行是同一句话说两遍。四项都是「插件包对一个宿主能不能装」的问题，技能包没有宿主要求、只有一个镜像、上游也不标预发布与弃用 |
+| R-4 | 覆盖安装承接看板 **M2**，M2 原「先移出再装」的两段式被否 | 那个中间窗口会留下「已移出、未装成」的坏态；`rename` 的两次原子交换（旧目录 → `.skc-backup-*`、暂存 → 目标）没有这个窗口，失败路径见 `docs/contracts/market.md` §7.11。M6（卸载与版本回退）仍不做 |
 
 ## 验收
 

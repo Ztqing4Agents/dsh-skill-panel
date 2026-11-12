@@ -91,11 +91,18 @@ function props(setup = {}) {
     status,
     iconUrl: null,
     title: setup.title ?? 'UI 设计规范',
-    onBack: () => {},
+    onBack: setup.onBack ?? (() => {}),
     onRetry: () => {},
     onToggle: () => {},
     check: setup.check ?? null,
-    onCheck: () => {},
+    onCheck: setup.onCheck ?? (() => {}),
+    // 更新相关的四个 prop 都是页面给的：组件本身无 hook（改动会把 44 条用例一起挂掉）。
+    updating: setup.updating ?? false,
+    expanded: setup.expanded ?? false,
+    updateTarget: setup.updateTarget ?? null,
+    onUpdate: setup.onUpdate ?? (() => {}),
+    onExpand: setup.onExpand ?? (() => {}),
+    onUpdatePrompt: setup.onUpdatePrompt ?? (() => {}),
   };
 }
 
@@ -593,8 +600,8 @@ test('H1 盒后顺序：标签 → 事实表 → 文件 → 来源信息（后�
 
 /* ---------------------- 版本区块 / 来源信息两行 / 查看仓库（本轮） ---------------------- */
 
-/** The key the component uses to decide whether a verdict belongs to this row. */
-const CHECK_KEY = 'filesystem#dev-god';
+/** The identity the component keys a verdict by: `source:owner:slug`, never the row key. */
+const CHECK_KEY = 'skillhub:ake:dev-god';
 /** A fixed timestamp: the card prints HH:MM in the reader's zone, so the test formats it the same way. */
 const CHECKED_AT = Date.UTC(2026, 10, 10, 6, 5);
 /**
@@ -614,6 +621,34 @@ function checkButtonOf(setup) {
 /** The same instant formatted with the implementation's own options (24-hour, no seconds). */
 const checkedAtText = (at) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 
+/** A local calendar day as the version list prints it (`YYYY-MM-DD`). */
+const dateTextFor = (at) => {
+  const date = new Date(at);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+
+/**
+ * A cached verdict in the `ready` phase, as `checkLanded` stores it.
+ * @param {{candidate?: string, versions?: object[], total?: number, at?: number}} [over]
+ *   - the answer's first row and the list behind the expander.
+ * @returns {object} the verdict.
+ */
+function readyVerdict(over = {}) {
+  const candidate = over.candidate ?? '1.2.4';
+  const versions = over.versions ?? [{ version: candidate, publishedAt: CHECKED_AT }];
+  return {
+    key: CHECK_KEY,
+    phase: 'ready',
+    busy: false,
+    candidate,
+    latest: candidate,
+    versions,
+    total: over.total ?? versions.length,
+    at: over.at ?? CHECKED_AT,
+    reason: null,
+  };
+}
+
 test('版本区块：标题 + 重新检查，位置在事实表之后、来源信息之前', () => {
   const html = render({ row: marketRow() });
   const box = html.indexOf('class="skc_detailBodyBox"');
@@ -628,48 +663,68 @@ test('版本区块：标题 + 重新检查，位置在事实表之后、来源�
   assert.ok(/class="skc_detailVersionHead"/.test(html), '表头是一个 detailVersionHead');
 });
 
-test('版本区块空闲态：写「尚未检查更新」，没有时间戳也没有 ✓', () => {
+test('K120 无答案 ⇒ checking：卡面「正在检查…」，没有 ✓、没有时间戳', () => {
   const html = render({ row: marketRow() });
-  assert.ok(html.includes(t('detail.checkIdle')), '卡内文案是 detail.checkIdle');
+  assert.ok(html.includes(t('detail.checking')), '挂载即 checking（一轮检测紧跟着就发）');
+  assert.equal(html.includes(t('detail.checkIdle')), false, '旧「尚未检查更新」已退役');
   assert.equal(html.includes(t('detail.checkedAt', { time: '9' }).slice(0, 4)), false, '没有「上次检查于」');
   assert.equal(html.includes('skc_detailVersionMark'), false, '没有 ✓ 圆底');
+  assert.match(html, /data-skc-version-face="checking"/, '钩子报 checking');
 });
 
-test('版本区块 upToDate：✓ 圆底 + 已是最新版本 + 上次检查于 HH:MM（24 小时制）', () => {
-  const html = render({ row: marketRow(), check: { key: CHECK_KEY, status: 'upToDate', at: CHECKED_AT } });
+test('K120 一致 ⇒ upToDate：✓ 圆底 + 已是最新版本 + 上次检查于 HH:MM（24 小时制）', () => {
+  const html = render({ row: marketRow(), check: readyVerdict({ candidate: '1.2.4' }) });
   assert.ok(html.includes(t('detail.upToDate')), '卡内文案是 detail.upToDate');
   assert.ok(html.includes('class="skc_detailVersionMark"'), '有 ✓ 圆底');
   const shown = checkedAtText(CHECKED_AT);
   assert.match(shown, /^\d{2}:\d{2}$/, '时间是 24 小时制 HH:MM');
   assert.ok(html.includes(t('detail.checkedAt', { time: shown })), `显示「上次检查于 ${shown}」`);
+  assert.match(html, /data-skc-version-face="upToDate"/, '钩子报 upToDate');
 });
 
-test('版本区块 newer：写「有新版本 {version}」，不画 ✓', () => {
-  const html = render({ row: marketRow(), check: { key: CHECK_KEY, status: 'newer', latestVersion: '9.9.9', at: CHECKED_AT } });
-  assert.ok(html.includes(t('detail.newerVersion', { version: '9.9.9' })), '卡内文案带上游版本号');
+test('K120 不一致 ⇒ available：写「可更新到 {candidate}」，不画 ✓，带副行时间', () => {
+  const html = render({ row: marketRow(), check: readyVerdict({ candidate: '9.9.9' }) });
+  assert.ok(html.includes(t('detail.newerVersion', { version: '9.9.9' })), '卡内文案带上游第一条的版本号');
   assert.equal(html.includes('class="skc_detailVersionMark"'), false, '有新版本时不画 ✓（不是「最新」）');
   assert.ok(html.includes(t('detail.checkedAt', { time: checkedAtText(CHECKED_AT) })), '仍然显示检查时间');
+  assert.match(html, /data-skc-version-face="available"/, '钩子报 available');
 });
 
-test('版本区块 error：写「检查失败，请重试」，按钮仍可点', () => {
-  const html = render({ row: marketRow(), check: { key: CHECK_KEY, status: 'error', at: CHECKED_AT } });
-  assert.ok(html.includes(t('detail.checkFailed')), '卡内文案是 detail.checkFailed');
+test('K120 连不上安装源 ⇒ offline：写「无法连接安装源」，按钮回到「重新检查」可点', () => {
+  const setup = { row: marketRow(), check: { key: CHECK_KEY, phase: 'offline', at: CHECKED_AT } };
+  const html = render(setup);
+  assert.ok(html.includes(t('detail.checkOffline')), '卡内文案是 detail.checkOffline');
   assert.ok(html.includes(`>${t('detail.checkAgain')}</button>`), '按钮回到「重新检查」');
-  assert.equal(/<button[^>]*disabled=""[^>]*>[^<]*重新检查/.test(html), false, '失败后可以再点');
+  assert.equal(checkButtonOf(setup).props.disabled, false, '失败后可以再点');
+  assert.equal(html.includes('skc_detailVersionMark'), false, '失败态没有 ✓');
+  assert.equal(html.includes(t('detail.checkedAt', { time: checkedAtText(CHECKED_AT) })), false, '失败态没有副行时间');
+  assert.match(html, /data-skc-version-face="offline"/, '钩子报 offline');
 });
 
-test('版本区块 unavailable：按钮禁用（没有来源或没有版本就没什么可查）', () => {
-  const setup = { row: marketRow(), check: { key: CHECK_KEY, status: 'unavailable' } };
-  assert.ok(render(setup).includes(t('detail.checkUnavailable')), '卡内文案是 detail.checkUnavailable');
+test('K120 形状不符 / 预算截断 ⇒ failed：写「无法检查更新」', () => {
+  for (const phase of ['failed', 'skipped']) {
+    const setup = { row: marketRow(), check: { key: CHECK_KEY, phase, at: CHECKED_AT } };
+    const html = render(setup);
+    assert.ok(html.includes(t('detail.checkFailed')), `${phase} 落 detail.checkFailed`);
+    assert.match(html, /data-skc-version-face="failed"/, `${phase} 的钩子是 failed`);
+  }
+});
+
+test('K120 无本地版本 ⇒ 整块落 failed（无法检查更新），按钮可点', () => {
+  const setup = { row: marketRow({ version: null }), check: null };
+  const html = render(setup);
+  assert.ok(html.includes(t('detail.sectionVersion')), '有身份就有区块（与有无版本无关）');
+  assert.ok(html.includes(t('detail.checkFailed')), '没有本地版本就没有可比的东西');
+  assert.match(html, /data-skc-version-face="failed"/, '钩子报 failed');
   const button = checkButtonOf(setup);
   assert.equal(button.props.children, t('detail.checkAgain'), '按钮文字仍是「重新检查」');
-  assert.equal(button.props.disabled, true, '按钮是 disabled');
+  assert.equal(button.props.disabled, false, '按钮可点（点了也不发请求，由页面的前置判定守）');
 });
 
-test('版本区块 busy：按钮「正在检查…」并禁用，卡内保留上次结论', () => {
+test('K120 重查中 busy：按钮「正在检查…」并禁用，卡内保留上次结论', () => {
   const setup = {
     row: marketRow(),
-    check: { key: CHECK_KEY, status: 'upToDate', at: CHECKED_AT, busy: true },
+    check: { ...readyVerdict({ candidate: '1.2.4' }), busy: true },
   };
   const button = checkButtonOf(setup);
   assert.equal(button.props.children, t('detail.checking'), '按钮文案变 detail.checking');
@@ -677,10 +732,14 @@ test('版本区块 busy：按钮「正在检查…」并禁用，卡内保留上
   assert.ok(render(setup).includes(t('detail.upToDate')), '卡内仍是上一次的结论（不清空）');
 });
 
-test('版本区块不串台：结论的 key 不是这一行就不画', () => {
-  const html = render({ row: marketRow(), check: { key: 'filesystem#other-skill', status: 'upToDate', at: CHECKED_AT } });
-  assert.ok(html.includes(t('detail.checkIdle')), '别人的结论不落到这一页');
+test('K120 不串台：答案的 key 不是这一行的 identity 就不画', () => {
+  const html = render({
+    row: marketRow(),
+    check: { key: 'skillhub:ake:other-skill', phase: 'ready', candidate: '1.2.4', at: CHECKED_AT },
+  });
+  assert.ok(html.includes(t('detail.checking')), '别人的答案不落到这一页（回到 checking）');
   assert.equal(html.includes(t('detail.upToDate')), false, '没有「已是最新版本」');
+  assert.equal(html.includes(t('detail.newerVersion', { version: '1.2.4' })), false, '也没有「可更新到」');
 });
 
 test('查看仓库：href 逐字等于路由给的 repoUrl，target=_blank + rel noopener', () => {
@@ -863,12 +922,22 @@ test('版本区块只有市场装才渲染；upstream 为空时页面里连表�
   }
 });
 
-test('市场装无版本：版本区块仍在，卡内写「无法检查更新」且按钮禁用', () => {
-  const html = render({ row: marketRow({ version: null }), check: { key: 'filesystem#dev-god', status: 'unavailable' } });
-  assert.ok(html.includes('class="skc_detailVersionHead"'), '版本区块在（有 upstream）');
-  assert.ok(html.includes(t('detail.checkUnavailable')), '卡内文案是 detail.checkUnavailable');
-  const button = checkButtonOf({ row: marketRow({ version: null }), check: { key: 'filesystem#dev-god', status: 'unavailable' } });
-  assert.equal(button.props.disabled, true, '按钮禁用');
+test('K120 软链行整块不渲染：有身份也不出现版本区块与检查按钮（硬约束 5）', () => {
+  // R4 行（软链 + 市场身份）在缓存里也可能有答案，但区块一次都不许画：软链只读，
+  // 覆盖安装会写穿到链接目标，所以连「可更新」都不该提。
+  const symlinked = marketRow({
+    symlink: true,
+    path: null,
+    realPath: '/Users/me/Skills/dev-god/SKILL.md',
+    writable: false,
+    readonlyReason: 'symlink',
+  });
+  const html = render({ row: symlinked, check: readyVerdict({ candidate: '9.9.9' }) });
+  assert.equal(html.includes(`<h4 class="skc_marketSectionTitle">${t('detail.sectionVersion')}</h4>`), false, '没有「版本」区块');
+  assert.equal(html.includes('class="skc_detailVersionHead"'), false, '连表头都没有');
+  assert.equal(html.includes(t('detail.checkAgain')), false, '没有「重新检查」');
+  assert.equal(html.includes('data-skc-version-face='), false, '连状态钩子都不挂');
+  assert.equal(html.includes(t('detail.newerVersion', { version: '9.9.9' })), false, '更不会说「可更新到」');
 });
 
 /* ------------- 「调用名」区块：宿主「包含的组件」行样式（本轮） ------------- */
@@ -913,3 +982,302 @@ test('描述为空时标题组只有标题 + 调用名行（不渲染空描述�
 });
 
 
+
+
+/* --------------------------- K121 · 展开列表（D6，只在 available 态出现） --------------------------- */
+
+/**
+ * Every element reachable from a rendered tree, following **all** props (not just
+ * `children`): the modal's buttons live in its `footer` prop, which a children-only walk
+ * never sees.
+ * @param {import('react').ReactNode} node - element, array, or text.
+ * @param {object[]} [found] - accumulator.
+ * @returns {object[]} the elements.
+ */
+function deepElements(node, found = []) {
+  if (node === null || node === undefined || typeof node !== 'object') return found;
+  if (Array.isArray(node)) {
+    for (const child of node) deepElements(child, found);
+    return found;
+  }
+  found.push(node);
+  for (const value of Object.values(node.props ?? {})) deepElements(value, found);
+  return found;
+}
+
+/** A version list with the installed version in the middle of it. */
+const VERSION_LIST = [
+  { version: '3.0.0', publishedAt: Date.UTC(2026, 10, 1) },
+  { version: '2.5.0', publishedAt: Date.UTC(2026, 9, 1) },
+  { version: '2.0.0', publishedAt: null },
+  { version: '1.2.4', publishedAt: Date.UTC(2026, 8, 1) },
+  { version: '1.0.0', publishedAt: Date.UTC(2026, 7, 1) },
+  { version: '0.9.0', publishedAt: Date.UTC(2026, 6, 1) },
+];
+
+/** The expander button element (the only one carrying `aria-expanded`). */
+function expanderOf(setup) {
+  const tree = modules.installedDetail.InstalledDetail(props(setup));
+  const found = deepElements(tree).filter((element) => element.props?.['aria-expanded'] !== undefined);
+  assert.equal(found.length, 1, '版本区块里恰好一个展开器');
+  return found[0];
+}
+
+test('K121 收起态：只出现「N 个新版本」，不出现列表', () => {
+  const setup = {
+    row: marketRow(),
+    check: readyVerdict({ candidate: '3.0.0', versions: VERSION_LIST, total: 6 }),
+  };
+  const html = render(setup);
+  assert.ok(html.includes(t('detail.newVersionCount', { count: 3 })), '当前版本之前有 3 条 ⇒ 3 个新版本');
+  assert.equal(html.includes('skc_detailVersionList'), false, '收起态没有列表');
+  assert.equal(expanderOf(setup).props['aria-expanded'], false, 'aria-expanded=false');
+});
+
+test('K121 展开态：≤5 行、只有候选行有「更新到 v」、当前行挂「已安装」、日期是 YYYY-MM-DD', () => {
+  const setup = {
+    row: marketRow(),
+    expanded: true,
+    check: readyVerdict({ candidate: '3.0.0', versions: VERSION_LIST, total: 6 }),
+  };
+  const html = render(setup);
+  assert.ok(html.includes('<ul class="skc_detailVersionList">'), '展开后是一个 ul');
+  assert.equal([...html.matchAll(/<li class="skc_detailVersionItem">/g)].length, 5,
+    '5 行版本（当前版本排第 4，所以窗口里没有「另有 N 个」尾行）');
+  assert.equal(expanderOf(setup).props['aria-expanded'], true, 'aria-expanded=true');
+  assert.ok(html.includes(t('detail.collapse')), '展开态按钮文字是「收起」');
+
+  // 只有第一条（候选）有更新按钮，且写的是它自己的版本号。
+  assert.equal(html.includes(`>${t('detail.updateTo', { version: '3.0.0' })}</button>`), true, '候选行有「更新到 3.0.0」');
+  assert.equal(html.includes(t('detail.updateTo', { version: '2.5.0' })), false, '中间版本没有按钮（判不了能不能装）');
+  assert.equal(html.includes(t('detail.updateTo', { version: '2.0.0' })), false, '同上');
+
+  // 当前版本那一行挂 Installed Tag（复用市场卡片那枚）。
+  const current = /<li class="skc_detailVersionItem">[\s\S]*?v1\.2\.4[\s\S]*?<\/li>/.exec(html);
+  assert.ok(current !== null, '当前版本那一行在列表里');
+  assert.ok(current[0].includes(t('market.installed')), '当前行右侧是「已安装」');
+  assert.equal(current[0].includes(t('detail.updateTo', { version: '1.2.4' })), false, '当前行没有更新按钮');
+
+  // 日期按本地日历日格式化，不是相对时间。
+  assert.ok(html.includes(t('detail.publishedAt', { date: dateTextFor(Date.UTC(2026, 10, 1)) })),
+    '日期是 YYYY-MM-DD');
+  assert.equal(/\d+ (?:天|小时)前/.test(html), false, '没有相对时间');
+  assert.equal(html.includes(t('detail.moreNewVersions', { count: 0 })), false, '没有窗口外的条目就不画尾行');
+});
+
+test('K121 超过 5 行时，尾行是「另有 N 个比已安装版本新的版本未列出」', () => {
+  const versions = ['9.0.0', '8.0.0', '7.0.0', '6.0.0', '5.0.0', '4.0.0', '3.0.0', '2.0.0', '1.2.4', '1.0.0']
+    .map((version) => ({ version, publishedAt: null }));
+  const html = render({
+    row: marketRow(),
+    expanded: true,
+    check: readyVerdict({ candidate: '9.0.0', versions, total: 10 }),
+  });
+  assert.equal([...html.matchAll(/<li class="skc_detailVersionItem">/g)].length, 6, '5 行版本 + 1 行尾行');
+  assert.ok(html.includes(t('detail.collapse')), '展开态按钮是「收起」');
+  assert.ok(html.includes(t('detail.moreNewVersions', { count: 3 })), '另有 3 个（当前版本之前 8 条，打印 5 行）');
+  assert.equal(html.includes(t('detail.updateTo', { version: '5.0.0' })), false, '窗口边缘的行也没有按钮');
+  assert.equal(html.includes('查看全部'), false, '不做「查看全部」/分页');
+});
+
+test('K121 不显示 changelog；publishedAt 为 null 时不画日期', () => {
+  const html = render({
+    row: marketRow(),
+    expanded: true,
+    check: readyVerdict({
+      candidate: '2.0.0',
+      versions: [
+        { version: '2.0.0', publishedAt: null, changelog: 'New version' },
+        { version: '1.2.4', publishedAt: null },
+      ],
+      total: 2,
+    }),
+  });
+  assert.equal(html.includes('New version'), false, '上游的 changelog 不上屏');
+  assert.equal(html.includes('发布于'), false, '没有日期就不画「发布于」');
+});
+
+test('K121 非 available 态即使 expanded 为真也不画列表', () => {
+  for (const [why, check] of [
+    ['最新', readyVerdict({ candidate: '1.2.4' })],
+    ['连不上', { key: CHECK_KEY, phase: 'offline', at: CHECKED_AT }],
+    ['失败', { key: CHECK_KEY, phase: 'failed', at: CHECKED_AT }],
+  ]) {
+    const html = render({ row: marketRow(), expanded: true, check });
+    assert.equal(html.includes('skc_detailVersionList'), false, `${why} ⇒ 没有列表`);
+  }
+});
+
+/* ----------------------- K122 · 更新按钮与确认弹窗（D7） ----------------------- */
+
+/** Every button-shaped element in the tree, including the modal's footer. */
+function buttonsOf(setup) {
+  return deepElements(modules.installedDetail.InstalledDetail(props(setup)))
+    .filter((element) => element.props?.children !== undefined && typeof element.type === 'function');
+}
+
+/** The update button element, when it is rendered (outside any dialog). */
+function updateButtonOf(setup) {
+  return deepElements(modules.installedDetail.InstalledDetail(props(setup)))
+    .find((element) => element.props?.children === t('detail.update')
+      || element.props?.children === t('detail.updating')) ?? null;
+}
+
+/** The confirmation dialog element, if it is rendered. */
+function confirmOf(setup) {
+  return deepElements(modules.installedDetail.InstalledDetail(props(setup)))
+    .find((element) => typeof element.type === 'function'
+      && element.props?.to !== undefined
+      && typeof element.props?.onConfirm === 'function') ?? null;
+}
+
+/** The dialog's own buttons, by calling the dialog component (it has no hooks). */
+function dialogButtonsOf(setup) {
+  const dialog = confirmOf(setup);
+  assert.ok(dialog !== null, '弹窗已渲染');
+  return deepElements(dialog.type(dialog.props))
+    .filter((element) => element.type !== undefined && typeof element.props?.children === 'string');
+}
+
+test('K122 更新按钮只在 available 态出现（其它态不渲染，不是 disabled）', () => {
+  const available = { row: marketRow(), check: readyVerdict({ candidate: '2.0.0' }) };
+  const button = updateButtonOf(available);
+  assert.ok(button !== null, 'available 态有更新按钮');
+  assert.equal(button.props.disabled, false, '空闲时可点');
+  assert.equal(available.row.version, '1.2.4', '判据是 candidate 与这一行自己的版本比');
+
+  for (const [why, check] of [
+    ['最新', readyVerdict({ candidate: '1.2.4' })],
+    ['连不上', { key: CHECK_KEY, phase: 'offline', at: CHECKED_AT }],
+    ['失败', { key: CHECK_KEY, phase: 'failed', at: CHECKED_AT }],
+    ['检查中', null],
+  ]) {
+    assert.equal(updateButtonOf({ row: marketRow(), check }), null, `${why} ⇒ 没有更新按钮（不是 disabled）`);
+  }
+});
+
+test('K122 动作组顺序：更新 → 卸载（占位、disabled）→ 开关', () => {
+  const tree = modules.installedDetail.InstalledDetail(props({
+    row: marketRow(), check: readyVerdict({ candidate: '2.0.0' }),
+  }));
+  const actions = deepElements(tree).find((element) => element.props?.className === 'skc_detailActions');
+  assert.ok(actions !== undefined, '有动作组');
+  const labelled = deepElements(actions.props.children).filter((element) => element.props !== undefined);
+  const indexOfLabel = (label) => labelled.findIndex((element) => element.props.children === label
+    || element.props.label === label);
+  const update = indexOfLabel(t('detail.update'));
+  const uninstall = indexOfLabel(t('detail.uninstall'));
+  const toggle = labelled.findIndex((element) => element.props.onToggle !== undefined);
+  assert.equal(update >= 0, true, '第一个位置是更新');
+  assert.equal(uninstall > update, true, '卸载在更新之后');
+  assert.equal(toggle > uninstall, true, '开关在最后');
+  const uninstallButton = labelled.find((element) => element.props.children === t('detail.uninstall'));
+  assert.equal(uninstallButton.props.disabled, true, '卸载是占位（disabled）');
+  assert.equal(uninstallButton.props.onClick, undefined, '占位没有 handler');
+});
+
+test('K122 更新进行中：按钮文案「正在更新」并禁用', () => {
+  const setup = { row: marketRow(), updating: true, check: readyVerdict({ candidate: '2.0.0' }) };
+  const button = updateButtonOf(setup);
+  assert.equal(button.props.children, t('detail.updating'), '文案是 detail.updating');
+  assert.equal(button.props.disabled, true, '进行中禁用');
+});
+
+test('K122 确认弹窗：role=dialog + aria-modal、标题「更新 {name}」、正文含 from → to、事实三行、无第三方信任提示', () => {
+  const setup = {
+    row: marketRow(),
+    title: '编程大神',
+    updateTarget: '2.0.0',
+    check: readyVerdict({ candidate: '2.0.0' }),
+  };
+  const html = render(setup);
+  assert.match(html, /<div role="dialog" aria-modal="true" aria-label="[^"]*" class="skc_marketDialog">/, '角色与 aria 是宿主的');
+  assert.ok(html.includes(t('detail.updateTitle', { name: '编程大神' })), '标题用可见标题，不是 kebab 名');
+  assert.ok(html.includes(t('detail.updateBody', { from: '1.2.4', to: '2.0.0' })), '正文写清 {from} → {to}');
+  for (const key of ['market.factSource', 'market.factVersion', 'market.factInstallTo']) {
+    assert.ok(html.includes(t(key)), `事实区有 ${key}`);
+  }
+  assert.ok(html.includes('1.2.4 → 2.0.0'), '版本那一行是「旧 → 新」');
+  assert.equal(html.includes(t('market.confirmTrust')), false, '不设第三方信任提示（第一次装的语）');
+  assert.equal(/type="checkbox"/.test(html), false, '不设勾选框');
+});
+
+test('K122 取消 = 零请求：只回调 onUpdatePrompt(null)，onUpdate 一次都不调', () => {
+  const calls = [];
+  const setup = {
+    row: marketRow(),
+    updateTarget: '2.0.0',
+    check: readyVerdict({ candidate: '2.0.0' }),
+    onUpdatePrompt: (value) => calls.push(`prompt:${String(value)}`),
+    onUpdate: (row, version) => calls.push(`update:${row.name}@${version}`),
+  };
+  const cancel = dialogButtonsOf(setup).find((element) => element.props.children === t('market.confirmCancel'));
+  assert.ok(cancel !== undefined, '弹窗里有「取消」');
+  cancel.props.onClick();
+  assert.deepEqual(calls, ['prompt:null'], '取消只关弹窗');
+});
+
+test('K122 确认：先收起弹窗，再带着目标版本调 onUpdate', () => {
+  const calls = [];
+  const setup = {
+    row: marketRow(),
+    updateTarget: '2.0.0',
+    check: readyVerdict({ candidate: '2.0.0' }),
+    onUpdatePrompt: (value) => calls.push(`prompt:${String(value)}`),
+    onUpdate: (row, version) => calls.push(`update:${row.name}@${version}`),
+  };
+  const confirm = dialogButtonsOf(setup).find((element) => element.props.children === t('detail.update'));
+  assert.ok(confirm !== undefined, '弹窗里有「更新」');
+  assert.equal(confirm.props.autoFocus, true, '确认键拿到焦点（宿主的 Modal 契约）');
+  confirm.props.onClick();
+  assert.deepEqual(calls, ['prompt:null', 'update:dev-god@2.0.0'], '先收起，再更新到目标版本');
+});
+
+test('K122 展开列表里那一枚「更新到 v」也走同一个弹窗入口', () => {
+  const calls = [];
+  const tree = modules.installedDetail.InstalledDetail(props({
+    row: marketRow(),
+    expanded: true,
+    check: readyVerdict({ candidate: '3.0.0', versions: VERSION_LIST, total: 6 }),
+    onUpdatePrompt: (value) => calls.push(`prompt:${String(value)}`),
+  }));
+  const offered = deepElements(tree)
+    .find((element) => element.props?.children === t('detail.updateTo', { version: '3.0.0' })
+      && typeof element.props?.onClick === 'function');
+  assert.ok(offered !== undefined, '候选行那枚按钮在');
+  offered.props.onClick();
+  assert.deepEqual(calls, ['prompt:3.0.0'], '点它只是打开弹窗（不直接发请求）');
+});
+
+test('K122 软链行：有身份、有结论、本地也有版本，动作组里仍不出现「更新」（KI-3 回归）', () => {
+  // 为什么挂在 K122 而不是 K120：这一条的主体是**按钮在不在**（写入口的可见性），
+  // 「版本区块整块不渲染」那半句只是顺带确认 K120 已有的结论，不另造编号。
+  //
+  // 场景来自真机没验到的那个窄口子：同一 identity 的另一份目录（非软链）拿到 available
+  // 结论后，这份软链行会读到**同一份缓存**。按钮条件因此必须自己再挡一次 symlink，
+  // 否则界面会给出一个必被 409 E_SYMLINK_READONLY 拒掉的写入口（硬约束 5 的第三层还在，
+  // 但「看着能点、点了没反应」是硬约束 9 明令禁止的）。
+  const linked = marketRow({
+    symlink: true,
+    path: null,
+    realPath: '/Users/me/Skills/dev-god/SKILL.md',
+    writable: false,
+    readonlyReason: 'symlink',
+  });
+  const verdict = readyVerdict({ candidate: '2.0.0' });
+  assert.equal(linked.version, '1.2.4', '这一行本身有版本（所以不是「没版本」挡住的）');
+
+  assert.equal(updateButtonOf({ row: linked, check: verdict }), null, '软链行没有「更新」按钮');
+  const html = render({ row: linked, check: verdict });
+  assert.equal(html.includes('data-skc-version-face='), false, '版本区块整块不渲染（硬约束 5 / D1）');
+  assert.equal(html.includes(t('detail.checkAgain')), false, '连「重新检查」也没有');
+  assert.equal(html.includes(t('detail.newerVersion', { version: '2.0.0' })), false, '也不提「可更新到」');
+  assert.ok(html.includes(t('detail.uninstall')), '动作组本身还在（不是整组被吞掉）');
+
+  // 对照组：同一份数据只把 symlink 换成 false ⇒ 按钮出现且可点。
+  // 没有这一半，上面「找不到按钮」也可能只是选择器写错了。
+  const button = updateButtonOf({ row: marketRow(), check: verdict });
+  assert.ok(button !== null, '非软链行（同数据）有「更新」按钮');
+  assert.equal(button.props.children, t('detail.update'), '文案是「更新」');
+  assert.equal(button.props.disabled, false, '空闲时可点');
+});

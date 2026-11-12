@@ -62,7 +62,7 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | **K23** | 分区顺序与空态 | 三个 `skc_group` 的标题顺序 = 内置/本地/已安装；空分区仍渲染区标题 + `group.*Empty` 文案 | L3 |
 | **K24** | 加载/错误态 | `status='loading'` ⇒ 4 个 `skc_skeletonBar` 且存在 `正在读取技能…`；`status='error'` ⇒ `role="alert"` + 重试按钮 | L3 |
 | **K25** | 页签 | `SegmentedTabs` 渲染两个 `role="tab"`，默认选中「已安装」；切到市场 ⇒ 只渲染 `market.placeholder`，工具栏 `hidden` | L3 |
-| **K26** | 计数文案 | `statusLine({total:5,disabled:1}) === '共 5 个技能，1 个已停用'`；`{total:5,disabled:0} === '共 5 个技能'` | L1 |
+| **K26** | 页头不渲染计数 | 页头状态位只承载更新提示（宿主 `.updatesNote` 同位也只有这一句）：没有检测对象时 `.skc_status` 不渲染；渲染时只有一个 `<span>`、HTML 里不出现「共 N 个技能」「个已停用」 | L3 · `test/view-page.test.mjs` |
 | **K27** | 不硬编码中文 | `scripts/check-i18n.mjs`：`src/client/**` 与 `lib/**` 的 CJK 计数为 0；`zh.json`/`en.json` 键集相等；`panel.label` 存在 | 门禁 |
 
 ### D.4 验收口径（A 组：通过标准，每条都能现场执行）
@@ -177,12 +177,31 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | **K112** | 第 12 条路由的围栏与出参（U1） | 假 deps + 六种入参（正常 / 软链 / 内置行 / 未知名 / 坏名 / 带多余 `path` 参数） | `ROUTES.detail === '/api/dsh-skill-center/detail'` 且 `Object.keys(ROUTES).length === 12`；`GET` 正常 ⇒ 200 `{name,path,size,truncated,body,files,filesTruncated}`，`body` 已去 frontmatter、`files` 含 `SKILL.md` 且路径是相对路径；软链行 `path` = `realPath`；内置行 200 且 `body === null`、`files === null`（**不是错误**）；未知名 404 `E_NOT_FOUND`；坏名 400 `E_BAD_NAME`（且**不触盘**）；`?name=x&path=/etc/passwd` 的 `path` 被忽略（结果与只带 `name` 逐字相同）；非 loopback 403、`POST` 405；256 KiB 以上的文件 `truncated === true` 且 `size` 是原大小；目录里点文件 / `node_modules` / 软链不算条目，超 200 条 `filesTruncated === true`；两个标志都**上屏**——`truncated:true` ⇒ 正文下出现 `detail.truncated`、`filesTruncated:true` ⇒ 文件列表后出现 `detail.filesTruncated`（`files` 为空时文件段整段不渲染、那句也不出现） | L2 · `test/routes.test.mjs` |
 | **K113** | 正文渲染与兜底：两页共用一段实现（U1） | `installed-detail` 三态 + `markdown.jsx` | `status='loading'` ⇒ `detail.loading`；`status='error'` ⇒ `role="alert"` + 重试按钮（点它重新发一次请求）；`body === null` ⇒ `detail.noBody`（**不是**错误样式、没有重试）；正文非空 ⇒ `MarkdownText`（`markdown.jsx` 的 `MarkdownBlock`）且它的兜底段落是纯文本；`MarkdownText` 必须收到 `labels`（`code.{copyLabel,copiedLabel,toolbarLabels:{codeLabel,wrapLabel,unwrapLabel}}` + `footnotes`，6 个 `markdown.*` 键、按 `t` 记忆化）——缺了它宿主渲染围栏代码块时抛 `TypeError`，整篇正文回落成纯文本（含市场详情的上游概述）；**含围栏代码块的正文也必须走 `MarkdownText`**（宿主的代码块渲染读 `labels.code`，`MarkdownBlock` 不传 `labels` 会让整段回落成纯文本——真机 2026-11-10 复现）；`market-detail.jsx` 不再自己定义 boundary 类，两处 `import` 自同一个 `markdown.jsx` | L3 · `test/*.test.mjs` 的新增用例（QA 落地）+ `test/market-view.test.mjs` |
 | **K114** | `Row.version` 透出与条件渲染（U1） | `scan`/`classify` 夹具 + 三版头 | `_meta.json` 的 `version` 是 1–64 字符的字符串 ⇒ `row.version` 原样；缺失 / 非字符串 / 空串 / 超 64 字符 ⇒ `null`；registry 胜出的行恒 `null`；`version` 不进 `classifySkill`（同一夹具加不加版本，`partition`/`rule` 完全相同）；头里有值画 Tag、无值**整块不渲染**（不出现「未知」） | L1/L3 · `test/scan.test.mjs` + `test/classify.test.mjs` + 详情页用例（QA 新增） |
-| **K115** | 契约自洽门禁（U1） | 仓库文本 | `docs/contracts/routes.md` §3.3 头注说十二条、两张路由表合计 12 行（#1–#4 与 #14 + 市场七条）、有 #14 行与 §3.3.3，且 §3.7 头注的条数与共用 `guard()` 的名单跟表格一致（U1 加了 #14 之后这半句也必须带上它）；`docs/contracts/decisions.md` 有附录 Q；`docs/reference/host-plugin-page.md` 仍**没有**详情页读数（采集副本未补写）；`docs/contracts/visual.md` A.5 有 `.skc_cardOpen` 与「待真机取色」；`test/bundle-contract.test.mjs` 上限是 **150000**；`npm run check:i18n` 报 **151** 键 | 门禁 · `test/market-gates.test.mjs` + `test/bundle-contract.test.mjs` + `npm run check` |
+| **K115** | 契约自洽门禁（U1） | 仓库文本 | `docs/contracts/routes.md` §3.3 头注说十四条、两张路由表合计 14 行（#1–#4 与 #14 + 市场九条，含 #15 `market/versions` 与 #16 `market/update`）、有 #14 行与 §3.3.3 §3.7.7，§8.6 有 `E_NOT_MARKET_INSTALLED`/`E_ALREADY_UP_TO_DATE`/`E_UPDATE_RESTORED`/`E_UPDATE_LOST`/`E_UPDATE_UNCONFIRMED` 五个新码，且 §3.7 头注的条数与共用 `guard()` 的名单跟表格一致；`docs/contracts/decisions.md` 有附录 Q 与附录 R（R-1 发布于上屏 / R-2 候选判据 / R-3 宿主四分支删除）；`docs/reference/host-plugin-page.md` 仍**没有**详情页读数（采集副本未补写）；`docs/contracts/visual.md` A.5 有 `.skc_cardOpen` 与「待真机取色」；`test/bundle-contract.test.mjs` 上限已抬到 **165000**（U19 实测产物 **160041 B**，余 4906）；`npm run check:i18n` 报 **165** 键（U19：+18 −2，页头计数再退 2） | 门禁 · `test/market-gates.test.mjs` + `test/bundle-contract.test.mjs` + `npm run check` |
 
 
 **红绿口径**：K28–K115 全部绿（**K33 / K58 / K60 / K80 已退役、号不复用**；K94–K109 的落点见上表末十六行）。编号是**增量**——K101–K104 为 U13、K105–K108 为 M10、K109 为 U14，接在前一个之后、未重排也未复用。**改值不改号**：U8、U13、M10、U14–U18 都只是就地改写原有的那条断言（K29/K35/K36/K37/K38/K42/K45/K55/K89/K93 与 K40/K45/K61/K72/K98），编号不动，**现行判据只以测试文件为准**（本表不复述断言细节，写在这里就会与代码打架）。**不进 `npm test` 的三条**是 K50 / K51 / K109（像素命中、真实上游、滚动容器与几何），由 agent 驱动无头浏览器在隔离 `DSH_HOME` 上验。用例总数与通过率**不写在这里**（每加一条就漂）；产物体积上限也不是 K 号，它是门禁（`test/bundle-contract.test.mjs`）。
 
 ---
+
+### D.7 更新检测与覆盖安装用例编号（K116–K125）
+
+「已安装」页签的自动更新检测与详情页的「更新」动作（覆盖安装 + 失败回滚）。设计见 `.agents/work/wip/U19-update-design.md`，规范见 `docs/contracts/routes.md` §3.7.7 §8.6、`docs/contracts/market.md` §7.10 §7.11 与 `docs/contracts/installed-detail.md`。K116 接 K115 往后排、全仓库唯一；**K33 / K58 / K60 / K80 已退役、号不复用**。
+
+| 编号 | 目标 | 断言 | 层 |
+| --- | --- | --- | --- |
+| **K116** | `versions()` 适配器（§7.10） | 只打 `GET …/versions?namespace=`（SkillHub 的 namespace 就是 owner ⇒ 0 额外请求；ClawHub 首次那次 `keyword=` 解析照跑、之后命中缓存）；`publishedAt` 由 `createdAt` 归一（不可解析 ⇒ `null`，绝不补 0 / now）；`total` 是上游原始条数、`versions` 保留前 50 条；新在前**不重排**；`changelog`/`versionId`/`securityReports` 不出现在出参；`body.versions` 不是数组 ⇒ `E_SOURCE_BAD_RESPONSE`；两源同一实现 | L1 · `test/market-sources.test.mjs` |
+| **K117** | `market/versions` 路由（§3.7.1 #15） | `ROUTES.marketVersions` 路径逐字；`source` 必填、传 `all` ⇒ `400 E_BAD_QUERY`、坏 `owner`/`slug` ⇒ `400`；正常 ⇒ 200 + `{source, owner, slug, namespace, latest, versions, total}`；上游 502/503/504 透传；非 loopback 403、`POST` 405 | L2 · `test/market-routes.test.mjs` |
+| **K118** | 检测对象、缓存与预算 | `detectionTargets` 只收「`upstream !== null` ∧ `symlink !== true` ∧ `version` 非空」；同 identity 去重；`needsCheck` 的 TTL = 600000、`skipped` 下次必重试；一轮串行（并发恒 1）；单行 2s / 整轮 8s ⇒ 截断行落 `skipped`；一行 5xx 只让该行 `offline`、其余照落；刷新与「重新检查」忽略 TTL；同一 identity 多目录只发一次请求 | L1 · `test/model.test.mjs` |
+| **K119** | 页头四态（D4） | `.skc_status` 里**一个** `<span>`（宿主同位只有这一句，`data-tone` 只做 info/error 换色）；可更新（`info`）/ 部分失败（`error`）/ 全最新（无色）/ 未 done 与**无检测对象**时不渲染；优先级 1>3>2；状态位里不出现计数文案（K26） | L3 · `test/view-page.test.mjs` |
+| **K120** | 版本区块五态（D5） | 挂载即 `detail.checking` 且按钮禁用；一致 ⇒ `detail.upToDate` + `.skc_detailVersionMark` + 副行 `detail.checkedAt`；不一致 ⇒ `detail.newerVersion`；`E_SOURCE_*` ⇒ `detail.checkOffline`；形状不符 / 无本地版本 ⇒ `detail.checkFailed` 且**不发请求**；重查中保留上次主文案；软链行整块不渲染 | L3 · `test/view-installed-detail.test.mjs` |
+| **K121** | 展开列表（D6） | `count` = 当前版本之前的条数（不在列表时 = `total`）；最多 5 行 + 尾行 `detail.moreNewVersions`；**只有候选行**有 `detail.updateTo`；当前行挂 `market.installed`；`detail.publishedAt` 是 `YYYY-MM-DD`；不出现 changelog | L3 · 同上 |
+| **K122** | 更新按钮与确认弹窗（D7） | 非「不一致」态**不渲染**更新按钮（不是 disabled）；动作组顺序 更新 → 卸载 → 开关；弹窗 `role="dialog"` + `aria-modal`、标题 `detail.updateTitle`、正文含 `{from}`/`{to}`、事实区三行、取消**零请求**且回「不一致」 | L3 · 同上 |
+| **K123** | 更新成功与启用状态往返（D8/D13） | 成功后版本 Tag = `{to}`、卡面「已是最新版本」、展开器收起、正文重拉一次、列表后台重扫一次（两件事失败不报错）；停用 → 更新 → 新版 `SKILL.md` 仍停用、开关仍关；启用同理；CRLF/BOM 样本按 `lib/frontmatter.js` 保真 | L1/L2 · `test/market-install.test.mjs` + `test/model.test.mjs` |
+| **K124** | 回滚四路与不变式（D9–D12/D14） | 暂存失败 ⇒ `SKILL.md`/`_meta.json`/台账逐字节等于更新前、无 `.skc-update-*`；交换失败回滚成功 ⇒ `E_UPDATE_RESTORED` 且旧版本完整；回滚也失败 ⇒ `E_UPDATE_LOST` 且目录不在、`.skc-backup-*` 保留；台账失败 ⇒ `E_UPDATE_UNCONFIRMED` 且目录是**新版本**；软链 409 `E_SYMLINK_READONLY`、身份不符 409 `E_NOT_MARKET_INSTALLED`、同版本 409 `E_ALREADY_UP_TO_DATE`、坏 path 409 `E_STALE_PATH`，四种都字节零改动 | L2 · `test/market-install.test.mjs` + `test/market-routes.test.mjs` |
+| **K125** | 门禁同步（D15） | `Object.keys(ROUTES).length === 14`；§3.3 说十四条、§3.7.1 九条、§8.6 五个新码在表；`check:i18n` 报 **165** 且 zh/en 键集相等；`check:client` 逐字节；产物 ≤ **165000** B（实测 **160041 B**）；`check:docs`/`check:board` 0 warn | 门禁 · `test/market-gates.test.mjs` + `test/bundle-contract.test.mjs` |
+
+**D16（真机）不新增 K 号**：端到端（装旧版 → 页头出「N 个技能可更新」→ 更新 → Tag/卡面/停用状态都对 → 断网时区块说「无法连接安装源」而已安装列表照常）按 K50 / K51 / K109 的先例留在真机抽查、不进 `npm test`。
 
 ### D.6 已安装行图标与标题用例编号（K62–K74）
 

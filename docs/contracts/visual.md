@@ -110,8 +110,13 @@
 }
 .skc_toolbar[hidden]{ display: none }
 
-/* 状态文案：宿主页头用的是 .updatesNote（12/18 tertiary），不是 .status（13/20）——见附录 B-1 */
+/* 状态文案：宿主页头用的是 .updatesNote（12/18 tertiary），不是 .status（13/20）——见附录 B-1。
+   宿主这一格只有一个元素、一句话（更新提示，没有计数）：.skc_status 逐条等于它（不含 display/flex 之类的盒模型改造） */
 .skc_status{ color: var(--dsw-alias-label-tertiary); margin: 0; font-size: 12px; line-height: 18px }
+/* 同一元素的三种颜色：无色态就是上面的 tertiary，只有 info/error 换色。
+   info 取 business-primary（宿主那条提示的蓝），error 取 error-primary（与 .skc_detailDanger 同一个令牌）；零新增色值 */
+.skc_status[data-tone="info"]{ color: var(--dsw-alias-state-business-primary) }
+.skc_status[data-tone="error"]{ color: var(--dsw-alias-state-error-primary) }
 
 /* 按钮尺寸：宿主 .addButton / .addPrimary / .addMore 共用 */
 .skc_addButton, .skc_addPrimary, .skc_addMore{
@@ -217,6 +222,9 @@ min-width: 58px; height: 28px; display: inline-flex; position: relative }
 .skc_detailVersionText{ display: flex; flex-direction: column; gap: 2px; min-width: 0 }
 /* 卡内结论 14/22（与描述同阶）；时间那行沿用 .skc_marketScope */
 .skc_detailVersionTitle{ margin: 0; font-size: 14px; line-height: 22px }
+/* 展开列表（U19）：行配方取自 .skc_marketFiles li（.5px 分隔、6px 内边距、13/20）；日期仍用 .skc_marketScope（12/18 tertiary），按钮复用 Button size=sm */
+.skc_detailVersionList{ display: flex; flex-direction: column; margin: 8px 0 0; padding: 0; list-style: none }
+.skc_detailVersionItem{ display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: .5px solid var(--dsw-alias-border-l2); padding: 6px 0; font-size: 13px; line-height: 20px }
 /* 「查看仓库」是页内普通链接（不是点击层）：右下角、13/20 tertiary、hover 变主色 */
 .skc_detailRepoLink{ align-self: flex-end; display: inline-flex; align-items: center; gap: 4px; color: var(--dsw-alias-label-tertiary); font-size: 13px; line-height: 20px; text-decoration: none }
 @media (hover: hover){ .skc_detailRepoLink:hover{ color: var(--dsw-alias-label-primary) } }
@@ -243,8 +251,7 @@ font-size: 13px; line-height: 20px; display: inline-flex;
 ```
 
 > **行可点（U1 起）**：已安装行点标题即进本地详情页，实现只有上一条 `.skc_cardOpen::after` + `.skc_cardEnd{z-index:1}`（见 `AGENTS.md` 硬约束 9 与 `docs/contracts/installed-detail.md`）；不要 `<a href>`、不要第二个可点区域。行高恒 64px（48 图标 + 8×2 padding）。
-> 宿主 `.cardLink:hover` 的**确切色值我们没采到**（`docs/reference/host-plugin-page.md` §5 只记「有底色反馈」）⇒ 暂用市场卡同一个 `--dsw-alias-interactive-bg-hover`，**待真机取色**（`docs/contracts/decisions.md` 附录 Q）。
-> 市场卡片**复用** `.skc_cardIcon`（48×48 同一条规则），其声明一字不改——改它会让「已安装」页签 11 行同时回归。来源品牌图标**不是**头像色板的第七组：它是 `src/client/market-marks.jsx` 里两段 `data:image/png;base64` 位图（16×16 显示），只在市场卡片上出现，「已安装」页签不渲染它，也不参与 `avatar.js` 的散列。
+> 宿主 `.cardLink:hover` 的**确切色值我们没采到**（`docs/reference/host-plugin-page.md` §5 只记「有底色反馈」）⇒ 暂用市场卡同一个 `--dsw-alias-interactive-bg-hover`，**待真机取色**（`docs/contracts/decisions.md` 附录 Q）。 > 市场卡片**复用** `.skc_cardIcon`（48×48 同一条规则），其声明一字不改——改它会让「已安装」页签 11 行同时回归。来源品牌图标**不是**头像色板的第七组：它是 `src/client/market-marks.jsx` 里两段 `data:image/png;base64` 位图（16×16 显示），只在市场卡片上出现，「已安装」页签不渲染它，也不参与 `avatar.js` 的散列。
 
 头像的两种颜色**不走样式表常量，走行内自定义属性**：`row.jsx` 渲染
 `<span class="skc_cardIcon" style="--skc-avatar-bg:…;--skc-avatar-ink:…">首字母</span>`，
@@ -370,7 +377,7 @@ font-size: 13px; line-height: 20px; display: inline-flex;
 | 大标题 | 20px / 28px / 500 | `.skc_pageTitle` |
 | 副标题 | 13px / 20px / `label-secondary` | `.skc_pageIntro` |
 | ⓘ | 20×20 盒，图标 11px，与副标题 gap 4px | `.skc_infoButton` |
-| 状态文案 | **12px / 18px** / `label-tertiary` | `.skc_status`（= 宿主 `.updatesNote`） |
+| 状态文案 | **12px / 18px** / `label-tertiary`；有更新 `business-primary`、失败 `error-primary` | `.skc_status[data-tone]`（= 宿主 `.updatesNote`，页头只有这一句） |
 | 刷新按钮 | 高 32px，padding 0 12px，13px/20px，`radius-md` | `.skc_addButton` |
 | 页签总高 | **34px** = 30px tab + 2px×2（`SegmentedTabs size="sm"`） | `SHELL` `._tabs_1lga9_1[data-size=sm]` |
 | 页签文字 | 14px / 20px，选中 500（sm 档） | `._tab_1lga9_1` |
@@ -387,8 +394,5 @@ font-size: 13px; line-height: 20px; display: inline-flex;
 | 行内失败原因 | 12px / 18px / error 色 / `pre-wrap` | `.skc_reason` |
 | **市场页** | 筛选栏 / 网格 / 卡片 / 详情 / 确认弹窗的刻度 | 见 `docs/contracts/market.md` 附录 F（本表不重复维护市场行） |
 
-> **固定尺寸的盒子必须显式写 `box-sizing: border-box`**（宿主那套 CSS 是逐条声明的，没有全局 reset）。
-> 2026-11-09 真机验收量到过 50×50 / 行高 66px：`.skc_cardIcon` 带 0.5px 边框、又是 content-box，盒子被撑大了 2px。
-> 该规则现在**逐字回归宿主原件**（边框回来、圆角用 `radius-lg`），所以 `box-sizing: border-box` 比以往更必要：
-> 少了它，48px 会立刻变成 50px、行高 66px
-> （锚点：`src/client/styles.js` 的 `.skc_cardIcon`，回归见 `test/styles.test.mjs`）。
+> **固定尺寸的盒子必须显式写 `box-sizing: border-box`**（宿主那套 CSS 是逐条声明的，没有全局 reset）。2026-11-09 真机验收量到过 50×50 / 行高 66px：`.skc_cardIcon` 带 0.5px 边框、又是 content-box，盒子被撑大了 2px。
+> 该规则现在**逐字回归宿主原件**（边框回来、圆角用 `radius-lg`），所以 `box-sizing: border-box` 比以往更必要：少了它，48px 会立刻变成 50px、行高 66px（锚点：`src/client/styles.js` 的 `.skc_cardIcon`，回归见 `test/styles.test.mjs`）。

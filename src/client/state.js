@@ -15,7 +15,7 @@
  * card reads "installed" only after the install route answered.
  */
 import { MARKET_DEFAULT_SOURCE, marketKeyOf } from './market-model.js';
-import { rowKey, TAB_INSTALLED } from './model.js';
+import { identityOf, rowKey, TAB_INSTALLED } from './model.js';
 
 /**
  * @typedef {Object} PageState
@@ -28,6 +28,8 @@ import { rowKey, TAB_INSTALLED } from './model.js';
  * @property {{key: string, status: 'loading'|'ready'|'error', data: object|null, code: string|null}|null} detail
  *   the installed tab's detail view: one skill's key plus the text route's three states
  * @property {number} detailScrollTop                list offset remembered when the detail opened
+ * @property {Record<string, object>} checks         update verdicts by upstream identity
+ * @property {{id: number, status: string}} checkRun the current round's token and progress
  * @property {object} market                        the market sub-state (see `initialMarket`)
  */
 
@@ -94,9 +96,12 @@ function initialState() {
     // lands where the provider page was.
     pluginDetail: null,
     pluginScrollTop: 0,
-    // The manual update check of the open detail: {key, busy, status, latestVersion, at}.
-    // One skill at a time, so a plain object keyed by the detail's key is enough.
-    check: null,
+    // The update checks, one entry per upstream identity (`source:owner:slug`). A session
+    // cache, not an open detail's property: it survives leaving the tab and closing the
+    // detail, because the answer belongs to the identity and re-asking costs a request.
+    checks: {},
+    // The current round: `id` bumps per round, `status` is what the header waits for.
+    checkRun: { id: 0, status: 'idle' },
     market: initialMarket(),
   };
 }
@@ -276,11 +281,6 @@ export function createStore() {
      */
     openDetail: (row, data) => {
       const key = rowKey(row);
-      // Only a market install gets the version block at all, so a local or built-in row needs no
-      // verdict. With a source but no version of its own there is still nothing to compare, and
-      // that is the one case the block shows "cannot check".
-      const up = row?.upstream ?? null;
-      const noVersion = typeof row?.version !== 'string' || row.version === '';
       // With the text already read (the page waits up to 150 ms for it) the detail opens on its
       // final state, so nothing below the body has to move once it renders.
       const text = data === undefined
@@ -288,12 +288,9 @@ export function createStore() {
         : (data?.error === undefined
           ? { key, status: 'ready', data: data ?? null, code: null }
           : { key, status: 'error', data: null, code: data.error?.code ?? null });
-      set({
-        detail: text,
-        check: up !== null && noVersion
-          ? { key, busy: false, status: 'unavailable', latestVersion: null, at: null }
-          : null,
-      });
+      // No check state is touched here: the verdicts are keyed by upstream identity and
+      // outlive the detail, and the page kicks the one `ensure` this open needs.
+      set({ detail: text });
     },
     /**
      * Remember where the list was, read with the rows still on screen (the detail view
@@ -343,7 +340,7 @@ export function createStore() {
      */
     closeDetail: () => {
       if (state.detail === null) return;
-      set({ detail: null, check: null });
+      set({ detail: null });
     },
     /**
      * Open one builtin provider's page.
@@ -359,7 +356,7 @@ export function createStore() {
      * @returns {void}
      */
     resetPage: () => {
-      set({ detail: null, check: null, pluginDetail: null, detailScrollTop: 0, pluginScrollTop: 0 });
+      set({ detail: null, pluginDetail: null, detailScrollTop: 0, pluginScrollTop: 0 });
     },
     /** Leave the plugin page, back to the list (or to whatever is below it). @returns {void} */
     closePlugin: () => {
@@ -375,29 +372,123 @@ export function createStore() {
       set({ pluginScrollTop: Number.isFinite(top) && top > 0 ? top : 0 });
     },
     /**
-     * Patch the open detail's update check. The key is checked, not assumed: a slow answer for
-     * a skill the user already closed must not land on the next one. A patch without `busy`
-     * keeps the previous verdict, so the card stays on the last answer while the button spins.
-     * @param {string} key - identity key of the detail's row.
-     * @param {{busy?: boolean, status?: string, latestVersion?: string|null, at?: number|null}} patch - fields to change.
+     * A round of update checks started: every target shows its spinner, and the round token
+     * moves so the header knows a new answer set is coming. An identity that already has an
+     * answer keeps it - the block must not blank out while it re-asks.
+     * @param {string[]} identities - the keys this round covers.
      * @returns {void}
      */
-    setCheck: (key, patch) => {
-      if (state.detail === null || state.detail.key !== key) return;
-      const prev = state.check !== null && state.check.key === key ? state.check : null;
-      set({
-        check: {
+    checkStart: (identities) => {
+      const list = Array.isArray(identities) ? identities.filter((key) => typeof key === 'string' && key !== '') : [];
+      if (list.length === 0) return;
+      const checks = { ...state.checks };
+      for (const key of list) {
+        const previous = checks[key] ?? null;
+        checks[key] = previous === null
+          ? {
+            key, phase: 'running', busy: true, candidate: null, latest: null, versions: [], total: 0, at: null, reason: null,
+          }
+          : { ...previous, busy: true };
+      }
+      set({ checks, checkRun: { id: state.checkRun.id + 1, status: 'running' } });
+    },
+    /**
+     * Answers landed. Merged by identity, never by "who is open": a slow answer for a skill
+     * the user already left still belongs to that skill's cache, and the verdict drawn from
+     * it is recomputed against whichever row asks.
+     * @param {{key: string, phase?: string, candidate?: string|null, latest?: string|null,
+     *   versions?: object[], total?: number, at?: number|null, reason?: string|null}[]} entries -
+     *   one entry per identity.
+     * @returns {void}
+     */
+    checkLanded: (entries) => {
+      const list = Array.isArray(entries) ? entries : [];
+      const checks = { ...state.checks };
+      let touched = false;
+      for (const entry of list) {
+        const key = typeof entry?.key === 'string' ? entry.key : '';
+        if (key === '') continue;
+        const next = {
           key,
-          status: 'idle',
-          latestVersion: null,
-          at: null,
-          ...prev,
-          ...patch,
-          // Read from the patch only: a settled patch says nothing about `busy`, and letting
-          // prev.busy win would leave the button spinning after every answer.
-          busy: patch?.busy === true,
+          phase: 'failed',
+          busy: false,
+          candidate: null,
+          latest: null,
+          total: 0,
+          at: checks[key]?.at ?? null,
+          reason: null,
+          ...entry,
+        };
+        // The readers (the version window and the date line) drop unusable rows themselves,
+        // so the cache stores the list as the route reported it.
+        next.versions = Array.isArray(next.versions) ? next.versions : [];
+        checks[key] = next;
+        touched = true;
+      }
+      if (touched) set({ checks });
+    },
+    /**
+     * The round is over. Idempotent, and it only moves the status: a late answer from an
+     * older round lands in `checks` without reopening or closing the header's sentence.
+     * @returns {void}
+     */
+    checkFinish: () => {
+      if (state.checkRun.status === 'done') return;
+      set({ checkRun: { ...state.checkRun, status: 'done' } });
+    },
+    /**
+     * An update landed: the row's version becomes the version that was installed, and that
+     * identity's verdict becomes "this is the latest" without another round trip.
+     *
+     * `name` narrows the patch to the directory that was updated: the same identity may be
+     * installed twice, and the other copy is still at its own version.
+     * @param {{identity: string, name: string, path?: string, version: string}} applied -
+     *   what the route reported.
+     * @returns {void}
+     */
+    updateApplied: (applied) => {
+      const identity = typeof applied?.identity === 'string' ? applied.identity : '';
+      const name = typeof applied?.name === 'string' ? applied.name : '';
+      const version = typeof applied?.version === 'string' && applied.version !== '' ? applied.version : null;
+      if (identity === '' || version === null) return;
+      const at = Date.now();
+      const checks = {
+        ...state.checks,
+        [identity]: {
+          key: identity,
+          phase: 'ready',
+          busy: false,
+          candidate: version,
+          latest: version,
+          versions: state.checks[identity]?.versions ?? [],
+          total: state.checks[identity]?.total ?? 0,
+          at,
+          reason: null,
         },
-      });
+      };
+      // The success notice rides on the same update: one event, one entry in the store. The
+      // toast seat is the one `install-ok` already uses, so it is visible after leaving the page.
+      seq += 1;
+      const patch = {
+        checks,
+        notice: { kind: 'update-ok', name, path: applied?.path ?? '', version, code: '', message: '', seq },
+      };
+      const payload = state.payload;
+      if (payload !== null && payload !== undefined) {
+        let changed = false;
+        const groups = (Array.isArray(payload.groups) ? payload.groups : []).map((group) => ({
+          ...group,
+          skills: (Array.isArray(group.skills) ? group.skills : []).map((row) => {
+            if (identityOf(row?.upstream) !== identity) return row;
+            if (name !== '' && row.name !== name) return row;
+            if (row.version === version) return row;
+            changed = true;
+            return { ...row, version };
+          }),
+        }));
+        if (changed) patch.payload = { ...payload, groups };
+      }
+      set(patch);
     },
 
     /* ------------------------------------------------------------------ market */

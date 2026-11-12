@@ -1,9 +1,9 @@
 # 已安装详情页（内嵌：本地事实 + 当场读盘的正文）
 
 > 类型：规范
-> 读者：改「已安装」页签详情页（`src/client/installed-detail.jsx`）、它的第 12 条路由或它那 23 个文案键的人
+> 读者：改「已安装」页签的详情页（`src/client/installed-detail.jsx`）、它的第 12 条路由、更新检测 / 覆盖安装的前端口径或它那 36 个文案键的人
 > 真源：`src/client/installed-detail.jsx`、`src/client/state.js` 的 `detail`、`lib/routes.js` 的 detail 路由与 `lib/scan.js` 的 `readSkillContent`
-> 更新触发：改区块顺序、状态机、返回口径、读盘围栏或这 23 个键时，本文件与 `docs/contracts/routes.md` §3.3.3 一起改
+> 更新触发：改区块顺序、检测状态机、返回口径、更新动作或这 36 个键时，本文件与 `docs/contracts/routes.md` §3.3.3 §3.7.7、`docs/contracts/market.md` §7.11 一起改
 > 规模上限：400
 
 `docs/contracts/client.md` §3.9.2 只留指针（那张表已到 400 行档位）。点击边界见 `AGENTS.md` 硬约束 9，刻度见 `docs/contracts/visual.md` A.5。
@@ -24,7 +24,7 @@
 - 身份与版本（`upstream` / `version` / `name`）来自列表里的 `Row`：打开详情**不重扫列表、不重拉 `list`**。**整页以宿主为准**：分区 Tag、软链 Tag、技能文件/真实位置/提供者/只读原因那张事实表都不渲染（宿主没有这些块）；软链只读只靠头部的「软链·只读」标记说明，`no-file` 行不解释原因——这两条是有意的。
 - 正文与文件清单来自第 12 条路由 `GET /api/dsh-skill-center/detail?name=<kebab>` → `SkillContent{name,path,size,truncated,body,files,filesTruncated}`；围栏见 `docs/contracts/routes.md` §3.3.3。
 - `body === null` 是「这条没有可读文件」（内置行）⇒ `detail.noBody` 文案，**不是错误**；`files === null` 时文件段整段不渲染。
-- `Row.version` 是展示字段（`_meta.json` 的 `version`，0 次新增磁盘读），**不进任何判据**；为空时版本 Tag 整块不渲染，不写「未知」。
+- `Row.version` 是展示字段（`_meta.json` 的 `version`，0 次新增磁盘读）：它**只做两件事**——画版本 Tag、与候选版本做**严格相等**比对（§更新检测）；不排序、不比较大小、不参与分区判据。为空时版本 Tag 整块不渲染，不写「未知」，且该行的版本区块落「无法检查更新」。
 
 ## 页面结构（自上而下）
 
@@ -33,11 +33,11 @@
 | # | 区块 | 内容 |
 | --- | --- | --- |
 | 1 | 面包屑 | `detail.back`（值「技能」/`Skills`，与宿主的 `crumbRoot` 同义），唯一返回入口（`.skc_marketCrumb` 配方） |
-| 2 | 头行 | `.skc_detailTop`（`space-between` + `align-items:center`）：左 `IconTile` 加 **`.skc_detailIcon`**（**49×49**，宿主详情页的值；列表行仍是 48）；右侧 `.skc_detailActions`（`gap:16`）= **卸载占位按钮 + 开关**。卸载 = `Button variant="outline" size="sm" className=detailDanger disabled title=detail.uninstallSoon` + `IconTrashOutlineRegular size={13}` + 文案 `detail.uninstall`，**没有 onClick**（真实卸载见看板 M6；可见的不可点，与 `＋ 添加技能` 的 C-3 同一处置）。开关：`switchMode(row)` 非空 → `EnableSwitch`；软链行 → `ReadonlyTag`；其余不渲染 |
+| 2 | 头行 | `.skc_detailTop`（`space-between` + `align-items:center`）：左 `IconTile` 加 **`.skc_detailIcon`**（**49×49**，宿主详情页的值；列表行仍是 48）；右侧 `.skc_detailActions`（`gap:16`）= **更新按钮（仅「可更新」态渲染）+ 卸载占位按钮 + 开关**——顺序固定，与宿主插件详情页的动作组一致。卸载 = `Button variant="outline" size="sm" className=detailDanger disabled title=detail.uninstallSoon` + `IconTrashOutlineRegular size={13}` + 文案 `detail.uninstall`，**没有 onClick**（真实卸载见看板 M6；可见的不可点，与 `＋ 添加技能` 的 C-3 同一处置）。开关：`switchMode(row)` 非空 → `EnableSwitch`；软链行 → `ReadonlyTag`；其余不渲染 |
 | 3 | 标题组 | `.skc_detailIntro`（图标下方纵向，`gap:8`；到图标行 20 = 列 gap 32 − 12）——**三段，顺序固定**：① 标题行 `.skc_marketTitleRow`：标题 `h3.skc_marketDetailTitle`（20/28/500）+ 版本 Tag（复用 `market.metaVersion` = `v{version}`，有值才画）；② **调用名行** `.skc_detailAuthor`（作者行那条刻度：**12/18 tertiary mono**，纯文本块）：`<code>{kebab 名}</code>`，**只有文字、没有复制按钮**——所以行高就是 18（不再被 22 高的按钮撑到 22），intro 三段总高 = 28 + 8 + 18 + 8 + 22 = **84**，文字级间距 ≈13/13，正好落到宿主的 13.0/12.5（这是去掉按钮的附带收益）；③ 描述（**`.skc_marketDetailDesc` 14/22 不截断**，空串整块不渲染）。**作者行不再显示**——`upstream` 仍供「代码来源 / 版本检查 / 查看仓库」用，只是不露在人眼前 |
 | 4 | 失效原因（可选） | `reason` 非空时一行 `.skc_reason`（`role="alert"`），紧跟在标题组之后 |
 | 5 | 正文盒 | **紧跟描述**，**前面没有区块标题**（宿主也是描述下面直接是 README，`market.detailOverview` 只给市场详情用）：`.skc_detailBodyBox`（`max-height:60vh; padding:12px 0; overflow-y:auto`，宿主 1440×920 实测 552px = 60vh；**上下各一条 0.5px 发丝线、左右无、圆角 0**——宿主就是这样，颜色取标签主色 5% 以随主题翻转；不加 `tabindex`、不拦 `wheel`）。**三态与空态都在盒内就地呈现**：`loading` → 一行 `detail.loading`；`error` → 一行 `detail.error` + 「重试」按钮；`ready` 但无正文 → 一行 `detail.noBody`；`ready` 有正文 → `MarkdownBlock`（必须传 `labels`：6 个 `markdown.*`，缺了它宿主渲染代码围栏时抛错、整段回落纯文本）；`truncated === true` 时正文**下方**再加一行 `detail.truncated` |
-| 6 | 版本（**条件块：仅 `row.upstream !== null`，即市场装的技能**） | 本地技能（手工装 / 软链指向的技能目录 / 内置）**整块不渲染**——宿主对本地插件就没有这块，不再显示「无法检查更新」。块内：`detail.sectionVersion` 标题 + 右侧小按钮（`detail.checkAgain` / `detail.checking`，检查中禁用）；下面是圆角卡：`upToDate` 显示 ✓ 圆底 + `detail.upToDate` + `detail.checkedAt`（`HH:MM`）；`newer` 显示 `detail.newerVersion`（带上游版本号）+ `detail.checkedAt`；其余四态在卡内各一行文案（见「检查更新」）。**`unavailable` 只剩「有 upstream 但没有本地 version」这一条路径** |
+| 6 | 版本（**条件块：`row.upstream !== null` 且 `symlink !== true`**） | 手工装 / 软链（含 R4 这种「有身份但落在软链上」的行）/ 内置技能**整块不渲染**。块内：`detail.sectionVersion` 标题 + 右侧小按钮（`detail.checkAgain` / `detail.checking`）；下面圆角卡里恒为**一行主文案 + 一条副行**，五态见「版本区块五态与展开列表」；「可更新」态在卡下多一个展开器与 `.skc_detailVersionList` |
 | 7 | 来源信息（**1–2 行，恒渲染**） | `detail.sectionSource` 标题 + 复用事实表样式（`.skc_marketFacts`，左 label / 右值、`.5px` 分隔线）。**调用名那一行已移出**（见上一条区块）。**第一行** `detail.factCodeSource`：四种取值（都在客户端由 `Row` 拼，纯字符串）——①`upstream !== null` ⇒ `owner/slug@version`（无 version 就 `owner/slug`）；②`upstream === null` 且 `row.symlink === true` ⇒ `link:` + `realPath` 的目录（`realPath` 是 `<dir>/SKILL.md`，取 dirname，与宿主那条 `link:/Users/…` 同形状）；③`upstream === null` 且非软链、`row.path` 有值 ⇒ `path` 的目录；④`row.path === null`（内置 / provider-store 行）⇒ 文案 `detail.sourceBuiltin`（「内置」/`Built-in`），**不用等宽**。前三种值等宽。**第二行** `detail.factVersion`：`row.version`（等宽），仅 version 非空渲染——本地技能大概率没有 version，**这一行整行不渲染是允许的**（宿主那台有 `0.1.0` 是因为它是 npm 包）。**整块恒渲染**：市场装两行（代码来源 / 当前版本）、本地技能一行（代码来源，`link:` 或目录）、内置行一行（代码来源＝「内置」）；标题仍叫「来源信息」 |
 | 8 | 查看仓库 | 仅详情出参带 `repoUrl` 时（= 有 upstream 身份）：右下角 `<a href={data.repoUrl} target="_blank" rel="noopener noreferrer">` + `detail.viewRepo` + 外链图标；13/20 tertiary、hover 变主色。**URL 由宿主拼好**（`https://skillhub.cn/skills/<owner>/<slug>`，见 `docs/contracts/routes.md` §3.3.3）：浏览器半部不造上游 URL、不发请求（硬约束 13）。**详情页内的普通链接**，不属于「整区可点」（硬约束 9），`target=_blank` 只有这一处 |
 | 9 | 失效态 | 按 `detail.key` 在 `payload` 里取不到行 ⇒ 只渲染面包屑 + `error.E_NOT_FOUND` 一行，不抛异常 |
@@ -81,6 +81,9 @@
 ```text
 store.detail = null | {key, status: 'loading'|'ready'|'error', data, code}
 store.detailScrollTop = number      // 打开详情前记下的 .skc_pageBody 偏移
+store.checks  = { [identity]: {key, phase, busy, candidate, latest, versions, total, at, reason}}
+                                     // identity = `${sourceId}:${owner}:${slug}`（marketKeyOf(upstream)）；会话缓存，跨页签/跨详情存活
+store.checkRun = {id: number, status: 'idle'|'running'|'done'}   // 一轮自动检测的令牌与进度
 ```
 
 | action | 做什么 |
@@ -93,41 +96,112 @@ store.detailScrollTop = number      // 打开详情前记下的 .skc_pageBody �
 
 **打开详情先取正文、最多等 150 ms**：点行（或插件页里的行）后页面先发 `skillDetail`，用 `Promise.race` 与 150 ms 计时器比速度——数据先到就 `openDetail(row, data)`，详情**首帧就是终态**；超时才 `openDetail(row)` 走上面那条 `loading` 路径，并把同一笔在飞的请求交给 `loadDetail(row, inFlight)` 复用（不发第二遍）。取数失败同样立刻带着 `error` 进详情，不让用户白等。理由是去抖：`loading` 占位（一行 `detail.loading`）与实体正文高度不同，先画占位再换正文会把正文盒下面的**包含的技能 / 版本 / 来源信息**整体下推（QA 实测 50px、`LayoutShift` 0.0074–0.0122）。**不给行加 `onPointerDown` 之类的旁路**：每行仍只有一个 `onClick`（硬约束 9）。
 | `rememberDetailScroll(top)` | 只记 `detailScrollTop`（打开前调一次，此时行还在屏幕上） |
+| `checkStart(identities)` | 每个 identity 的条目置 `busy: true`（缺条目则建 `phase:'running'`），`checkRun = {id: ++n, status:'running'}` |
+| `checkLanded(entries)` | 按 identity 合并 `{phase, candidate, latest, versions, total, at, reason}` 并置 `busy:false`；**不校验当前详情是谁**——晚到的答案属于它的 identity |
+| `checkFinish()` | `checkRun.status = 'done'`（幂等；只改 status，不改 id） |
+| `updateApplied({identity, name, path, version})` | 把 `rows`/`payload` 里该 identity 的行的 `version` 换成 `{to}`，该 identity 的 verdict 置 `{phase:'ready', candidate: version, at: now, busy:false}`；**不置 `installedDirty`**——后台重扫由页面在成功后**显式触发一次**（`load('refresh')`），避免「dirty effect + 显式重扫」各扫一遍 |
 
 - **打开时把滚动归零**：`detailKey !== null` 的 paint effect 写 `scrollTop = 0`——页头一撤，沿用列表那个偏移会让详情从中间开始。
 - 返回：`closeDetail()` + 同一个 paint effect 把 `detailScrollTop` 写回 `.skc_pageBody`，**不重拉 `list`**。
 - **详情打开时页签不可见**，所以不存在「切页签」这条路径（`detail` 仍留在 store 里，返回后回到列表与页签，数据不丢）。
 - **详情打开时刷新按钮不可见**，所以「页头刷新 = 关详情 + 重扫」这条路径**不可达**；返回列表后再刷新即可（`load('refresh')` 仍只在列表态执行）。
-- **检查更新**（新区块，手动触发，不自动发请求）：状态记在 store 的 `check = {key, busy, status, latestVersion, at}`，**按 `detail.key` 归属**——`openDetail` 与 `closeDetail` 都清空，晚到的答案按 key 丢弃。
-  - **前置判定**：`openDetail(row)` 时就判一次——`upstream === null` ⇒ `check = null`（**没有区块，不判 `unavailable`**）；`upstream` 非空但 `row.version` 为空 ⇒ `{status:'unavailable'}`（唯一可达的 `unavailable`，按钮禁用、**不发请求**）；两者都齐 ⇒ `null`（= `idle`，按钮可点）。
-  - 判据：点按钮后同一套判据再守一次（`unavailable` ⇒ 直接落地、不起请求）；可比就调 `api.marketDetail({source, owner, slug})`（`clawhub` 原样传，其余按 `skillhub`）。
-  - 上游没给 `version` ⇒ `unavailable`；**相等 ⇒ `upToDate`；不等 ⇒ `newer`**——只比相等，**不排序**（不判「谁的版本更高」：预发布、日期式版本号都会骗人，宿主也只报「不同」）。
-  - 请求抛错 ⇒ `error`（按钮可重试）。
-  - 五态：`idle`（`detail.checkIdle`）/ `loading`（按钮 `detail.checking` 且禁用，**卡内保留上一次结论**）/ `upToDate` / `newer` / `unavailable`（`detail.checkUnavailable`，**按钮禁用**）/ `error`（`detail.checkFailed`）。`at` 用 `Date.now()`，显示时格式化成 `HH:MM`。
+- **更新检测**（自动，见下节）：结论记在 `store.checks`（按 `source:owner:slug`），**不再**有按 `detail.key` 归属的单槽——同一技能可以被装进多个目录，结论是「按目录算」的，缓存是「按身份存」的。
 - **不支持 Esc**（与市场详情一致：加全局 keydown 会让两个详情页行为分叉）。
 - 开关：详情头里就是行内那一个 `EnableSwitch`，读同一份 `state.rows`；失败原因 `.skc_reason` 照旧显示在头下。
 
-## 文案（`locale/*.json`，单层扁平点号键，23 个）
+## 更新检测与页头
 
-`detail.{back,loading,error,retry,noBody,truncated,filesTruncated,uninstall,uninstallSoon}`、版本与底部四个键组 `detail.{sectionVersion,checkAgain,checking,checkIdle,upToDate,checkedAt,newerVersion,checkUnavailable,checkFailed,factCodeSource,factVersion,viewRepo}`（`detail.back` = 「技能」/`Skills`，头部的面包屑根）、`detail.{sectionSource,sourceBuiltin}`（来源信息标题、「内置」）。
+**检测对象**（`detectionTargets(rows)`，纯函数，按 identity 去重）：`installed` 分区里同时满足三条的行——`upstream !== null`、`symlink !== true`、`version` 非空。手工装 / 软链 / 内置行**一次请求都不发**；`upstream` 有而 `version` 空的行**整块不发请求**、直接落「无法检查更新」。
 
-复用而不造同义词：`row.{enable,disable,applying,symlinkReadonly,symlinkTitle}`、`market.{detailOverview,detailFiles,factSource}` + `market.source.*`、`error.E_NOT_FOUND`。另加 6 个 `markdown.*`（`codeCopy`/`codeCopied`/`codePlain`/`codeWrap`/`codeUnwrap`/`footnotes`）：它们不是本页文案，而是宿主 `MarkdownText` 的**代码围栏与脚注 chrome**，`labels` 缺了它宿主读 `labels.code.copyLabel` 直接抛错、整篇正文回落成纯文本，所以两个详情页共用这一段。全字典 117 → 136 → 142 → 144 → 156 → 148 → 149 → **151**（`check-i18n` 口径：149 个扁平键 + `meta` 两项；`detail.callName` 因区块改名「包含的技能」而零引用，已删）。`detail.filesTruncated` 与 `market.detailFiles` 不再上屏（文件清单已删），键留着。版本 Tag 不新增键：复用 `market.metaVersion`（`v{version}`）；作者行已不显示，`market.metaAuthor` 不再被本页读取。
+| 触发 | 查哪些 | 忽略 10 分钟缓存 |
+| --- | --- | --- |
+| 进「已安装」页签且 `payload !== null` | 所有「需要查」的 identity（缺条目 ∨ `phase === 'skipped'` ∨ `now - at >= 600000`） | 否 |
+| 打开详情 | 那一行的 identity（没查过才查） | 否 |
+| 页头「刷新」（`load('refresh')`） | 全部目标 | **是** |
+| 「重新检查」（版本区块按钮） | 那一行的 identity | **是** |
+
+- **串行**：整轮并发恒 1，按 `installed` 分区行序；同一 identity 只发一次请求，多个目录装同一技能共用一份答案（**比对在渲染层按各自的 `row.version` 算**）。
+- **预算**：单行 **2s**、整轮 **8s**。单行超时 ⇒ 该行记 `skipped`、队列继续（请求不取消）；整轮超 8s ⇒ 剩下的行直接记 `skipped`、不再发请求。`skipped` 的迟到答案仍会落地（`checks` 是缓存，不是状态锁）。
+- **失败隔离**：一行失败只影响自己（`offline` / `failed`），其余行照常落答案，整轮不中止。
+- **令牌**：`checkRun.id` 每轮自增；晚到的旧轮答案只写自己的 identity，不改 `checkRun`。
+
+**页头四态**：`.skc_status` 里**只有一个 `<span>`**（宿主 `.updatesNote` 同位只有这一句，**页头不渲染任何计数**；`data-tone` 只在 info/error 时出现）。
+
+| 态 | 条件 | 文案键 | tone |
+| --- | --- | --- | --- |
+| 可更新 | 本轮 `done` ∧ 至少一行「可更新」 | `status.updatesAvailable` | `info` |
+| 部分失败 | `done` ∧ 无「可更新」∧ 至少一行 `offline`/`failed` | `status.updatesPartial` | `error` |
+| 全部最新 | `done` ∧ 无「可更新」∧ 无 `offline`/`failed` ∧ 至少一条有答案 | `status.updatesNone` | 无 |
+| 检查中 / 无对象 | 本轮未 `done`，或**没有任何检测对象** | **不渲染这个 `<span>`** | —— |
+
+优先级 **可更新 > 部分失败 > 全部最新**；`skipped` 两边都不算（既不算失败也不计入页头，由那一行的区块自己说「无法检查更新」）。
+
+## 版本区块五态与展开列表
+
+渲染条件是 `row.upstream !== null && row.symlink !== true`（软链整块不渲染）。卡内恒定「一行主文案 + 一条副行」：
+
+| 态 | 主文案 | 副行 | 卡内其它 |
+| --- | --- | --- | --- |
+| `checking`（无答案且 `busy`） | `detail.checking` | 无 | 按钮禁用 + 灰点 |
+| 一致（候选 === `row.version`） | `detail.upToDate` | `detail.checkedAt`（`at` 格式化 `HH:MM`） | `.skc_detailVersionMark` ✓ 圆底 |
+| 不一致 | `detail.newerVersion`（`可更新到 {candidate}`） | 同上 | 展开器 + 列表 |
+| 上游不可达（`offline`） | `detail.checkOffline` | 无 | 无 |
+| 形状不符 / 无本地版本 / 预算截断（`failed`/`skipped`） | `detail.checkFailed` | 无 | 无 |
+| 有上次答案且 `busy`（重查中 / 更新中） | **保留上次主文案**（不闪空） | 保留上次 `at` | 按钮转 `detail.checking` / `detail.updating`，禁用 |
+
+**候选判据**：`candidate = versions[0].version`；`candidate === row.version ⇒ 一致`，否则「可更新到 {candidate}」。**只比相等，不排序、不过滤预发布**（预发布、日期式版本号都会骗人）；代价登记在 `docs/contracts/decisions.md` 附录 R-2。
+
+**展开列表**（只在「不一致」态出现，`.skc_detailVersionList` + `.skc_detailVersionItem`）：展开器收起态 `detail.newVersionCount`（`{count} 个新版本`）、展开态 `detail.collapse`；每行 `v{version}` + `detail.publishedAt`（`publishedAt` 格式化成 `YYYY-MM-DD`），当前版本那一行右侧挂 `market.installed` Tag；**只有第一条（候选）有 `detail.updateTo` 按钮**，其余行纯文本（中间版本能不能装判不了，给按钮就是替上游承诺）。`count` = `versions` 里排在当前 `row.version` 之前的条数，当前版本不在列表里时 `count = total`。最多列 **5 行**，超出显示尾行 `detail.moreNewVersions`。**不显示 changelog**（实测全是 `New version` 这类占位）。
+
+## 更新动作、确认弹窗与五个结局
+
+- **按钮**：`.skc_detailActions` 里顺序固定「更新 → 卸载（占位、disabled）→ 开关」；更新按钮**只在「不一致」态渲染**（其它态不出现，不是 disabled），`variant="outline" size="sm"` + `IconRefreshOutlineRegular size={13}`；进行中文案 `detail.updating` + `StateDot`，与开关同时禁用。
+- **确认弹窗**：复用 `market-confirm.jsx` 的座位（`Modal`，`role="dialog"` + `aria-modal`）：标题 `detail.updateTitle`（`更新 {name}`）、正文 `detail.updateBody`、事实区三行（`market.factSource` / `market.factVersion` = `{from} → {to}` / `market.factInstallTo`）、按钮 `market.confirmCancel` + `detail.update`（`autoFocus`）。**没有第三方信任提示、没有勾选框**；取消零请求，弹窗开合是组件局部 `useState`（**不新增 store 字段**：确认只是「不一致」态上的一个可见子态）。
+- **请求**：`api.marketUpdate({source, owner, slug, version, name, path})`——`path` 就是这一行的 `row.path`（硬约束 6 的「先认路径再写」）。
+
+| 结局 | 服务端 | 落点 |
+| --- | --- | --- |
+| 成功 | `200` | 版本 Tag → `{to}`、卡面 →「已是最新版本」、展开器收起、`notice` toast（`detail.updateOk`）、正文重拉一次、列表后台重扫一次（两件事失败不报错） |
+| 无法更新到 | `422` / `502` / `503` / `504` / `500 E_INSTALL_IO` | 卡面回「不一致」+ `.skc_reason` 行（`detail.updateFailed` + `reasonKeyOf(code)`） |
+| 已恢复到 | `500 E_UPDATE_RESTORED` | 卡面回「不一致」+ `.skc_reason` 行（`detail.updateRolledBack`，带 `from`）；可再点更新（幂等） |
+| 技能未安装 | `500 E_UPDATE_LOST` | `detailFailed(key, {code:'E_NOT_FOUND'})`（现有 action）+ `detail.updateLost` 行 + 触发重扫 |
+| 无法确认 | `500 E_UPDATE_UNCONFIRMED` | 该 identity 的 verdict → `phase:'failed'`（卡面「无法检查更新」）+ `detail.updateUnknown` 行 + 触发重扫 |
+
+成功**不关详情**（宿主也不关）：先就地刷 Tag，再后台重扫 + 重拉正文。这与「页头刷新 = 先关详情」不冲突——刷新是列表态的动作，更新成功是详情态的动作。
+
+## 状态机
+
+| 态 | 进入 | 出去 |
+| --- | --- | --- |
+| 无条目（= 未查过） | 目标行还没被查过 | 一轮检测 / 详情 `ensure` ⇒ `running` |
+| `running` | 请求在飞 | 成功 ⇒ 一致 / 不一致；`E_SOURCE_*` ⇒ `offline`；形状不符或上游无版本 ⇒ `failed`；超预算 ⇒ `skipped` |
+| 一致 / 不一致 | 拿到 `candidate` | 「重新检查」/ 刷新 ⇒ `running`（保留上次答案）；「不一致」可开弹窗 |
+| `offline` / `failed` / `skipped` | 见上 | 「重新检查」/ 刷新 ⇒ `running`（`skipped` 下次进页签就自动重试） |
+| 更新中 | 弹窗确认 | 五个结局（上表）；成功后再查仍可能回到「不一致」（上游又发了新版） |
+
+弹窗**不是**状态：它只是「不一致」上的可见子态，取消即回「不一致」——store 里不许出现两个能互相覆盖的结论字段。
+
+## 文案（`locale/*.json`，单层扁平点号键，本页 36 个）
+
+`detail.{back,loading,error,retry,noBody,truncated,filesTruncated,uninstall,uninstallSoon}`、版本与底部键组 `detail.{sectionVersion,checkAgain,checking,upToDate,checkedAt,newerVersion,checkOffline,checkFailed,factCodeSource,factVersion,viewRepo}`、`detail.{sectionSource,sourceBuiltin}`（`detail.back` = 「技能」/`Skills`，头部的面包屑根）、更新（U19 新增 9 个）`detail.{update,updating,updateTitle,updateBody,updateOk,updateFailed,updateRolledBack,updateLost,updateUnknown}`、版本列表（U19 新增 6 个）`detail.{newVersionCount,collapse,moreNewVersions,updateTo,publishedAt}`。**退役 2 个**：`detail.checkIdle`（自动检测后「尚未检查」不再是可见态）与 `detail.checkUnavailable`（语义被 `detail.checkFailed` 吸收，`upstream` 有而 `version` 空的行现在也落它）。**改文案不改键 2 个**：`detail.newerVersion` → 「可更新到 {version}」、`detail.checkFailed` → 「无法检查更新」。
+
+复用而不造同义词：`row.{enable,disable,applying,symlinkReadonly,symlinkTitle}`、`market.{detailOverview,detailFiles,factSource}` + `market.source.*`、`error.E_NOT_FOUND`。另加 6 个 `markdown.*`（`codeCopy`/`codeCopied`/`codePlain`/`codeWrap`/`codeUnwrap`/`footnotes`）：它们不是本页文案，而是宿主 `MarkdownText` 的**代码围栏与脚注 chrome**，`labels` 缺了它宿主读 `labels.code.copyLabel` 直接抛错、整篇正文回落成纯文本，所以两个详情页共用这一段。全字典 117 → 136 → 142 → 144 → 156 → 148 → 149 → 151 → 167 → **165**（U19：新增 18 键〔本页 15 + 页头的 3 个 `status.updates*`，后者见 `docs/contracts/client.md` §8.3〕、退役 4 键〔`detail.checkUnavailable`/`detail.checkIdle` + 页头计数退役的 `status.count`/`status.offSuffix`〕、改文案 2 键；`check-i18n` 口径 = 163 个扁平键 + `meta` 两项）。`detail.filesTruncated` 与 `market.detailFiles` 不再上屏（文件清单已删），键留着。版本 Tag 不新增键：复用 `market.metaVersion`（`v{version}`）；作者行已不显示，`market.metaAuthor` 不再被本页读取。
 
 ## 点击边界
 
 - 行可点只用 `AGENTS.md` 硬约束 9 的那一个手段：标题 `<button class="skc_cardTitle skc_cardOpen">` 的 `::after{inset:0}` 铺满整行 + `.skc_cardEnd{z-index:1}` 浮起；`<li>` 上不加 `onClick` / `role` / `tabIndex`，也不加 `<a>` 与第二可点区域。
 - 可点的行才给 hover / active 底色（hover 只在 `@media (hover:hover)`，`:active` 是触屏唯一可靠证据），键盘走 `:focus-visible::after`；**不加 chevron、不加「点开详情」文案**。
-- 详情页内部的面包屑、开关、重新检查是普通按钮，不开第二套点击层（复制入口已全部去掉）。
+- 详情页内部的面包屑、开关、重新检查、**更新**与展开列表里那一枚「更新到 {version}」都是普通按钮，不开第二套点击层（复制入口已全部去掉）；展开列表的其它行是纯文本，**没有**点击层、没有 hover——不可点就不给反馈（硬约束 9）。
 - 本页与插件页都**没有**复制入口：调用名与等宽名是可选中的纯文本，复制靠系统选区——不写 clipboard、不放按钮、不留播报位。
 
 ## 不做
 
-卸载与重装：**头部有一个 disabled 的「卸载」占位按钮**（可见的不可点，无 onClick、无写路由），真实卸载见看板 M6，重装见 M2、检查更新与「已是最新版本」（M6）、`查看仓库 ↗`（`_meta.json` 里没有仓库地址）、收藏入口（按 L-5 不做，后端保留）、编辑正文 / 重命名 / 移动（写侧只改一行 frontmatter，见 `docs/contracts/routes.md` §3.4）。
+卸载与版本回退仍是看板 M6：头部那个 disabled 的「卸载」占位按钮原样留着（可见的不可点、无 onClick、无写路由）。**覆盖安装已由 U19 落地**（看板 M2 由它承接），所以「重装」不再是这里的事；`查看仓库 ↗`（`_meta.json` 里没有仓库地址）、收藏入口（按 L-5 不做，后端保留）、编辑正文 / 重命名 / 移动（写侧只改一行 frontmatter，见 `docs/contracts/routes.md` §3.4）都不变。版本列表只给候选行按钮，历史行纯文本——**不做回退**。
 
 ---
 
 ## 验收
 
-- `npm run check:client` 逐字节通过；`npm run check:i18n` 报 **144** 键且 zh/en 键集一致、`lib/**` 与 `src/client/**` 无 CJK。
-- K110–K115（`docs/contracts/acceptance.md` 附录 D.5 尾部）逐条绿。
+- `npm run check:client` 逐字节通过；`npm run check:i18n` 报 **165** 键且 zh/en 键集一致、`lib/**` 与 `src/client/**` 无 CJK；产物 ≤ **165000** B（U19 实测 160041 B）。
+- K110–K115（`docs/contracts/acceptance.md` 附录 D.5）与 U19 的 K116–K125（同文件附录 D.7）逐条绿。
 - 真机三项：面包屑返回落点与打开前一致、40 KB 正文可滚且 Markdown 正常、触屏 `:active` 有底色。

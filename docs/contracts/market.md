@@ -3,7 +3,7 @@
 > 类型：规范
 > 读者：加改市场源适配器、上游调用、归一化、安装取包形状，或改市场页视觉刻度的人
 > 真源：`lib/market/` 下的十一个模块与 `src/client/` 下 `market-` 前缀的文件的实际导出
-> 更新触发：加删源适配器、改上游调用/归一化/安装取包形状，或改市场刻度时，同步改 §7 / 附录 F / 附录 G
+> 更新触发：加删源适配器、改上游调用/归一化/安装取包形状/覆盖安装算法，或改市场刻度时，同步改 §7 / 附录 F / 附录 G
 > 规模上限：400
 
 本文只写市场面（Host 的 `lib/market/**` 与 Client 的 `market-*` 组件）的契约。路由表、安装链路的分阶段与失败码在 `docs/contracts/routes.md` §3.7；类型与纯函数总览在 `docs/contracts/data-model.md` §3.8；调用顺序在 `docs/contracts/flows.md` §4.5 §4.6。
@@ -37,6 +37,9 @@
  * @property {(ref: ItemRef, io: UpstreamIo) => Promise<MarketDetail>} detail
  * @property {(ref: ItemRef, io: UpstreamIo) => Promise<SourcePlan>} plan
  * @property {(plan: SourcePlan, path: string, io: UpstreamIo) => Promise<Buffer>} fetchFile
+ * @property {(ref: ItemRef, io: UpstreamIo) => Promise<{namespace: string, latest: string|null,
+ *   versions: {version: string, publishedAt: number|null}[], total: number}>} versions
+ *   // 版本列表（新的在前、不排序不过滤、保留前 50 条）；**不是可选能力**，两源都必有。见 §7.10
  * @property {(io: UpstreamIo, options: {now: () => number, refresh?: boolean}) => Promise<{items: Category[]}>} [categories]
  * @property {(io: UpstreamIo, options: {now: () => number, refresh?: boolean}) => Promise<{counts: Record<string, number|null>, total: number|null, ok: boolean}>} [counts]
  * @property {(refs: {owner: string, slug: string}[], io: UpstreamIo, options: {now?: () => number}) =>
@@ -199,6 +202,67 @@ ClawHub 的**目录、详情、安装包**三条链路都由 SkillHub 的镜像�
 3. **计数按 scope 算、缓存按 `sourceParam` 存**（`all` 用空串）：三个 scope 的同一个分类计数天然不同（`ai-agent` → 23,193 / 10,145 / 13,048），共用一份必然有一处是假数字。
 4. **任何让结果集合变化的输入（scope / category / sort / keyword）都必须清 `cursor` 与 `items`**：游标只有页码，不带筛选签名；跨筛选复用属于客户端 bug。
 
+### 7.10 版本列表 `versions(ref, io)`
+
+- 端点 `GET /api/v1/skills/<slug>/versions?namespace=<ns>[&source=clawhub]`，`ORIGIN` 仍是唯一出口；`namespace` 由 `resolveRef` 给（SkillHub 的 owner 就是它，零额外请求；ClawHub 首次仍要那一次 `keyword=<slug>` 双匹配，之后命中 `namespaceCache`），不猜前缀。
+- **不缓存**（与 `latestVersion` 同档）：服务端缓存会让「重新检查」在一个 TTL 内说谎，而那正是用户点它的理由；10 分钟窗口在客户端（`docs/contracts/client.md` §3.10）。
+- 归一在适配器内：只留 `{version, publishedAt}`（`publishedAt` = 上游 `createdAt`，过 `timestampOrNull`，不可解析 ⇒ `null`，**绝不补 0、也绝不补 now**）；`version` 不是非空字符串的条目丢弃，同一版本号出现两次保留第一次；保留前 **50** 条（`VERSIONS_LIMIT`），`total` 记上游本次返回的原始条数；`latest` = 首条版本，一条都没有时为 `null`。`changelog`/`versionId`/`securityReports` **不下发**（changelog 实测全是 `New version` 这类占位，上屏是噪声）。
+- **不排序、不过滤**：上游新的在前就照发；预发布、降级、日期式版本号一条不筛——候选判据是客户端的「第一条」（`docs/contracts/installed-detail.md`），Host 半部不做任何版本比较。
+- 形状：`Array.isArray(body.versions)` 不成立 ⇒ `502 E_SOURCE_BAD_RESPONSE`；上游 404（技能已下架）走 `io` 的既有映射，不新增码。类型见 `docs/contracts/data-model.md` §3.8.1；路由见 `docs/contracts/routes.md` §3.7.1 #15。
+
+### 7.11 覆盖安装：启用状态搬运、原子交换与回滚
+
+实现在 `lib/market/install.js` 的 **`update(ref, target)`**：与 `install()` 同文件、**同一张锁表**（`source:owner:slug` 的 `Set` + `MAX_CONCURRENT_INSTALLS = 2`），复用 `writePackageFile` / `writeMeta` / `verifyLanded` / `fetchVerified` / `syncDirectory` 与 `pathExists`。**不新建模块**——少一个文件就少一处会漂移的实现。路由层的前置校验 P0–P7 见 `docs/contracts/routes.md` §3.7.7。
+
+| 阶段 | 动作 | 失败 → 码 |
+| --- | --- | --- |
+| U1 计划 | `source.plan({owner, slug, version})`：定版本 + 清单；空清单 / 无 `SKILL.md` 拒；包里自带 `_meta.json` 的版本与请求不符即拒（同安装 S2） | `502/503/504` 透传 / `422 E_PACKAGE_INVALID` |
+| U2 预取 + 声明名 | 只下 `SKILL.md`，比 `size`/`sha256`；`parseFrontmatter.name` **必须 `isSkillName` 且逐字等于现有目录名 `name`** | `502 E_DOWNLOAD_FAILED` / `422 E_PACKAGE_INVALID` / `422 E_SKILL_NAME_INVALID`（`data.declaredName`） |
+| U3 暂存 | `mkdir(.skc-update-<pid>-<rand6>)`（**点开头** ⇒ `scan.js` 跳过），逐文件 `writePackageFile`（4 并发，拒绝重复路径与逃逸） | `422 E_PACKAGE_INVALID` / `500 E_INSTALL_IO` |
+| U4 元数据 | `writeMeta`：`{source, ownerId, slug, version: to, name, installedAt}`；包自带 `_meta.json` 的原文留 `_meta.upstream.json` | `500 E_INSTALL_IO` |
+| U5 启用状态搬运 | 读旧 `<target>/SKILL.md` 字节 → `parseFrontmatter().disableModelInvocation`（缺 = `false` = 启用）→ 对**新包 `SKILL.md` 字节**调 `setDisableModelInvocation(bytes, disabled)`、取其 `.next` 写回暂存目录（`changed === false` 时不写） | `500 E_INSTALL_IO`（读旧文件失败也算，此时目标未动） |
+| U6 交换前回读 | 读暂存 `SKILL.md`：`name === name` ∧ `disableModelInvocation === 旧值`；读 `_meta.json`：`source`/`ownerId`/`slug`/`version` 逐字相等 | `500 E_INSTALL_IO` |
+| U7 原子交换 | ① `rename(target, .skc-backup-<pid>-<rand6>)` ② `rename(temp, target)` ③ `syncDirectory(skillsRoot)`（best-effort） | ①`500 E_INSTALL_IO`（rename 失败 = 未发生）②`500 E_UPDATE_RESTORED`（回滚成功）/ `500 E_UPDATE_LOST`（回滚也失败） |
+| U8 落位回读 | `verifyLanded(target, name, sourceId)`：`SKILL.md` 声明的 name、`_meta.json` 的 `source` | 回滚成功 `500 E_UPDATE_RESTORED` / 失败 `500 E_UPDATE_LOST` |
+| U9 台账 | `store.append({source, owner, slug, name, version: to, files, bytes})`（同名覆盖，**不回滚目录**） | `500 E_UPDATE_UNCONFIRMED` |
+| U10 收尾 | `rm(backup, {recursive: true, force: true})`；失败只记日志，不影响成功 | —— |
+
+**U5 为什么必须走 `lib/frontmatter.js`**：启用状态是**旧文件的一行**，要落到**新文件的字节**上。`setDisableModelInvocation` 是新文件唯一合法的改写口（`AGENTS.md` 硬约束 7）；它保真的是**新文件自己的** CRLF/BOM 与行尾注释，旧文件的行尾不会被搬过来（那个形状属于上游）。读旧值用只读的 `parseFrontmatter`（含块标量），写新值用字节手术——两套规则各管一侧（`docs/contracts/data-model.md` §3.2.4）。
+
+**U7 为什么是两次 rename 而不是「先删再装」**：同目录内 `rename` 是原子的，交换窗口里磁盘上永远存在一个完整目录（旧的或新的）；「先 `rm` 再 `rename`」会留一个「什么都不在」的窗口，进程一死就是丢技能（M2 原设想的「先移出再装」被否就是这个原因，见 `docs/contracts/decisions.md` 附录 R-3）。
+
+四条回滚路径（磁盘最终状态逐条写清，客户端按码分三种落点）：
+
+| # | 失败点 | 磁盘最终状态 | 码 |
+| --- | --- | --- | --- |
+| R1 | **暂存阶段**：U1–U6 任一步 | 目标目录**一个字节没动**（旧版本完整）；`.skc-update-*` 已删；台账未写 | `422` / `502` / `503` / `504` / `500 E_INSTALL_IO` |
+| R2 | **交换中途**：U7① 失败 | rename 原子失败 = 未发生 ⇒ 旧版本仍在 `<name>`；暂存已删 | `500 E_INSTALL_IO` |
+| R3 | **交换中途**：U7② 失败且回滚成功 | `rename(backup, target)` 回来 ⇒ 旧版本完整；暂存（新版本）已删 | `500 E_UPDATE_RESTORED` |
+| R4 | **交换中途 / 落位回读**：回滚也失败（U7② 或 U8） | `<name>` **不存在**；旧版本完整躺在 `.skc-backup-*`（**保留**，它是唯一副本，`message` 报路径）；暂存已删 | `500 E_UPDATE_LOST` |
+| R5 | **落位回读**：U8 失败且回滚成功 | 删掉新目录 + `rename(backup, target)` ⇒ 旧版本完整 | `500 E_UPDATE_RESTORED` |
+| R6 | **台账**：U9 失败 | `<name>` 是**新版本完整**（已回读通过）；台账仍是旧的；`.skc-backup-*` **保留**（用户还能手动找回旧版） | `500 E_UPDATE_UNCONFIRMED` |
+
+R2 与 R3 的分界就是「有没有动过磁盘」：动手之前失败一律 `E_INSTALL_IO`（与安装同一语义），动过之后必须报「回滚了」或「丢了」，不许再用 `E_INSTALL_IO` 糊过去——客户端要按这三个码分三种落点（`docs/contracts/installed-detail.md`）。
+
+三条不变式（任何失败都要满足）：
+
+```text
+成功 ⇔ <name>/SKILL.md 声明 name == <name>
+      ∧ <name>/_meta.json 的 {source,ownerId,slug,version} 逐字等于请求与 to
+      ∧ 该 SKILL.md 的 disable-model-invocation == 更新前旧文件的取值
+      ∧ 台账有 {source,owner,slug,name,version: to} ∧ ∄ .skc-update-* ∧ ∄ .skc-backup-*
+
+失败(未丢) ⇔ <name>/ 是旧版本完整（SKILL.md / _meta.json / 其余文件逐字节等于更新前）
+          ∧ ∄ .skc-update-* ∧ 台账与更新前逐字节相同
+
+失败(已丢/未确认) ⇔ 只能以 E_UPDATE_LOST（目录不在、备份在盘上）或
+                  E_UPDATE_UNCONFIRMED（新版本完整、台账旧）报出，二者都不是半成品
+```
+
+**任何失败后磁盘上要么旧版本完整、要么明确报「未安装」，不许半成品**：① 落位前磁盘上唯一的痕迹是点开头的 `.skc-update-*`（扫描层看不见，列表里不会出现半个技能）；② 交换只用两次 `rename`；③ `finally` 必删暂存，备份只在 R4/R6 两种「它是唯一副本」的情形保留。
+
+**已知窗口（不做自动恢复）**：进程恰好在 U7① 与 U7② 之间被杀，会留下「`<name>` 不存在 + `.skc-backup-*` 在盘上」——扫描结果是「这个技能没装」，用户从市场重装即可；备份**不自动回灌**（那种逻辑一旦误判就会把用户刚装的新版盖掉）。
+
 ## 附录 F 市场视觉刻度
 
 市场样式全部落在 `src/client/styles.js` 的 `skc_market*` 类里，取值逐字取自宿主插件市场的 `DiscoverSection` 规则体（宿主类名是构建哈希，只作证据，不进选择器）；**三处例外**（搜索框容器 / 搜索框 / 框内清除按钮）取自 `dsh-market` 的 `SearchInput`，每行都标了理由。市场**不新增任何颜色字面量**。
@@ -274,8 +338,8 @@ Host 半部（`lib/market/`，纯 node ESM，无构建）：
 | `lib/market/sources/index.js` | 源注册表（`SOURCES` / `getSource` / `descriptors` / `descriptorsOf`）与 `makeMarketDeps`（装配 io / store / installer，供 `index.js` 注入路由） |
 | `lib/market/sources/skillhub.js` | SkillHub 的**配置**：身份（owner 即 namespace）、SkillHub 行归一化、图标事实（一次 detail）、`caps`、`counts: true`；另有 `resetSkillhubIconCache` / `resetCategoryCache` / `resetCountCache` 三个转发 |
 | `lib/market/sources/clawhub.js` | ClawHub 的**配置**：身份（`upstream_owner_login`）、镜像行归一化、`namespace` 解析（`keyword=<slug>` 双匹配）、图标事实（同一次查询）、`caps`；HTTP 那半在 `mirror.js` |
-| `lib/market/sources/mirror.js` | 市场面唯一的 HTTP 实现：`createMirrorAdapter(config)`（列表 / 详情 / 清单 / 单文件 / 分类 / 计数 / 图标缓存），只连 `api.skillhub.cn`；两个适配器都是它的配置 |
-| `lib/market/install.js` | 安装编排：解析名字 → 冲突检测 → 临时目录 → 逐文件校验写入 → 原子 rename → 台账 → 失败清理（唯一 `rm -rf` 处） |
+| `lib/market/sources/mirror.js` | 市场面唯一的 HTTP 实现：`createMirrorAdapter(config)`（列表 / 详情 / 清单 / 单文件 / **版本列表** / 分类 / 计数 / 图标缓存），只连 `api.skillhub.cn`；两个适配器都是它的配置 |
+| `lib/market/install.js` | 安装**与覆盖安装**编排：`install()` = 解析名字 → 冲突检测 → 临时目录 → 逐文件校验写入 → 原子 rename → 台账 → 失败清理（唯一 `rm -rf` 处）；`update()` = 同样的管道 + 启用状态搬运 + 两次 rename 交换 + 回滚（§7.11），两者共用同一张锁表 |
 | `lib/market/store.js` | 自有台账 `$DSH_HOME/dsh-skill-center/installed.json` 的读/写（临时文件 + fsync + rename；损坏降级为空；形状与 `lib/ledger.js` 的 `own-record` 兼容）；`writeAtomic(file, text, tempPrefix)` 供收藏复用 |
 | `lib/market/favorites.js` | 自有收藏集合 `$DSH_HOME/dsh-skill-center/favorites.json` 的读/写（复用 `store.js` 的 `writeAtomic`；进程内串行化；损坏降级为空；上限 500；幂等不写盘） |
 

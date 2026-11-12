@@ -334,3 +334,147 @@ test('K95 折叠丢行不改末页判定：坏行只少一张卡，不缩页、�
   assert.equal(page.total, 240, '上游总数原样透传（不因为丢行而变小）');
   assert.notEqual(page.next, null, '满页且没到总数 ⇒ 还有下一页（丢掉的行不是末页信号）');
 });
+
+/* ------------------------- K116 · versions()：两个源共用同一份实现 ------------------------- */
+
+/**
+ * A fake mirror that answers the ClawHub lookup page and the versions endpoint.
+ * @param {{rows?: object[], body?: object, versionsFail?: boolean}} [options] - fixtures.
+ * @returns {{io: object, urls: URL[]}} the client and its request log.
+ */
+function versionsIo(options = {}) {
+  const urls = [];
+  const io = {
+    /**
+     * Answer whichever mirror endpoint was asked for.
+     * @param {URL|string} url - request URL.
+     * @returns {Promise<object>} the body.
+     */
+    async getJson(url) {
+      const parsed = new URL(String(url));
+      urls.push(parsed);
+      if (options.versionsFail === true) throw new Error('mirror down');
+      if (parsed.pathname === '/api/skills') {
+        return { data: { skills: options.rows ?? [mirrorRow('dev-god')], total: 1 } };
+      }
+      return options.body ?? {
+        namespace: 'ake',
+        slug: 'dev-god',
+        source: 'skillhub',
+        versions: [
+          { version: '1.2.4', versionId: 9, changelog: 'New version', createdAt: 1762396800000, securityReports: [] },
+          { version: '1.2.2', versionId: 8, changelog: 'New version', createdAt: 1761000000000, securityReports: [] },
+        ],
+      };
+    },
+    /**
+     * The mirror is not a byte host for versions.
+     * @returns {Promise<never>} always throws.
+     */
+    async getBytes() {
+      throw new Error('the mirror is not a package host');
+    },
+  };
+  return { io, urls };
+}
+
+test('K116 SkillHub：只打 /versions?namespace=，出参只剩 version + publishedAt，新在前不重排', async () => {
+  const { io, urls } = versionsIo();
+  const answer = await skillhubSource.versions({ owner: 'ake', slug: 'dev-god' }, io);
+  assert.equal(urls.length, 1, 'SkillHub 的 owner 就是 namespace ⇒ 零额外请求');
+  const url = urls[0];
+  assert.equal(url.origin, 'https://api.skillhub.cn', '唯一出口是镜像主机（硬约束 13）');
+  assert.equal(url.pathname, '/api/v1/skills/dev-god/versions', '版本端点');
+  assert.equal(url.searchParams.get('namespace'), 'ake', 'namespace 由 resolveRef 解析（这里是 owner 本身）');
+  assert.equal(url.searchParams.has('source'), false, 'SkillHub 不传 source（适配器的 source 是 null）');
+  assert.deepEqual(answer.versions, [
+    { version: '1.2.4', publishedAt: 1762396800000 },
+    { version: '1.2.2', publishedAt: 1761000000000 },
+  ], '顺序照上游；changelog / versionId / securityReports 不下发');
+  assert.equal(answer.latest, '1.2.4', 'latest = versions[0].version');
+  assert.equal(answer.total, 2, 'total 是上游返回的条数');
+  assert.equal(answer.namespace, 'ake', 'namespace 回显，供排查');
+});
+
+test('K116 ClawHub：先一次 keyword= 双匹配拿到 namespace，再带 source=clawhub 取版本', async () => {
+  // 镜像行必须 slug 与 upstream_owner_login 双匹配，否则 mirrorLookup 报「不再列出」。
+  const { io, urls } = versionsIo({
+    rows: [mirrorRow('find-skills', { upstream_owner_login: 'indiv-guipi', namespace: { handle: 'indiv-guipi' } })],
+  });
+  const answer = await clawhubSource.versions({ owner: 'indiv-guipi', slug: 'find-skills' }, io);
+  const lookup = urls.find((url) => url.pathname === '/api/skills');
+  const versions = urls.find((url) => url.pathname.endsWith('/versions'));
+  assert.ok(lookup !== undefined && versions !== undefined, '两次请求：一次解析、一次取版本');
+  assert.equal(lookup.searchParams.get('keyword'), 'find-skills', 'namespace 不能猜，用 keyword 查一次');
+  assert.equal(lookup.searchParams.get('source'), 'clawhub', '只查 ClawHub 目录');
+  assert.equal(versions.searchParams.get('source'), 'clawhub', '版本端点也带 source=clawhub');
+  assert.equal(answer.namespace, 'indiv-guipi', 'namespace 来自镜像行的 handle，不是前缀推断');
+});
+
+test('K116 形状归一：坏的 createdAt ⇒ null（不补 0、不补 now），非字符串版本与重复版本被丢', async () => {
+  const { io } = versionsIo({
+    body: {
+      versions: [
+        { version: '2.0.0', createdAt: 'not-a-date' },
+        { version: '1.9.0' },
+        { version: '', createdAt: 1762396800000 },
+        { version: 42, createdAt: 1762396800000 },
+        { version: '1.9.0', createdAt: 1761000000000 },
+        null,
+        { version: '1.8.0', createdAt: 1760000000000 },
+      ],
+    },
+  });
+  const answer = await skillhubSource.versions({ owner: 'ake', slug: 'dev-god' }, io);
+  assert.deepEqual(answer.versions, [
+    { version: '2.0.0', publishedAt: null },
+    { version: '1.9.0', publishedAt: null },
+    { version: '1.8.0', publishedAt: 1760000000000 },
+  ], '坏日期保持 null；空版本 / 数字版本 / 对象被丢；重复版本保留第一次');
+  assert.equal(answer.total, 7, 'total 记上游原始条数（丢过行也照记）');
+  assert.equal(answer.latest, '2.0.0', 'latest 是留下来以后的第一条');
+});
+
+test('K116 50 条上限：versions 保留前 50，total 记原始条数', async () => {
+  const many = Array.from({ length: 60 }, (unused, index) => ({
+    version: `1.0.${60 - index}`, createdAt: 1762396800000 - index * 1000,
+  }));
+  const { io } = versionsIo({ body: { versions: many } });
+  const answer = await skillhubSource.versions({ owner: 'ake', slug: 'dev-god' }, io);
+  assert.equal(answer.versions.length, 50, '只留前 50 条');
+  assert.equal(answer.versions[0].version, '1.0.60', '仍是最新在前');
+  assert.equal(answer.versions[49].version, '1.0.11', '第 50 条是上游第 50 条');
+  assert.equal(answer.total, 60, 'total 不受展示上限影响（「另有 N 个」靠它）');
+});
+
+test('K116 versions 不是数组 ⇒ 502 E_SOURCE_BAD_RESPONSE；空数组 ⇒ latest null', async () => {
+  for (const body of [{ versions: 'nope' }, {}, { versions: null }]) {
+    const { io } = versionsIo({ body });
+    await assert.rejects(
+      () => skillhubSource.versions({ owner: 'ake', slug: 'dev-god' }, io),
+      (error) => error.code === 'E_SOURCE_BAD_RESPONSE',
+      `versions=${JSON.stringify(body.versions)} ⇒ E_SOURCE_BAD_RESPONSE`,
+    );
+  }
+  const { io: empty } = versionsIo({ body: { versions: [] } });
+  const answer = await skillhubSource.versions({ owner: 'ake', slug: 'dev-god' }, empty);
+  assert.equal(answer.latest, null, '一条都没有时 latest 是 null（不是空串）');
+  assert.deepEqual(answer.versions, [], '列表是空的');
+  assert.equal(answer.total, 0, 'total 是 0');
+});
+
+test('K116 两源同一实现：适配器上都挂着 versions（不是可选能力），上游失败照实往上抛', async () => {
+  for (const source of [skillhubSource, clawhubSource]) {
+    assert.equal(typeof source.versions, 'function', `${source.id} 有 versions（与 icons 不同，它不是 caps）`);
+  }
+  // 网络失败原样往上抛（由路由归一成 503/504），不在这里被吞成空列表。
+  const { io } = versionsIo({ versionsFail: true });
+  await assert.rejects(() => skillhubSource.versions({ owner: 'ake', slug: 'dev-god' }, io), '镜像挂了就是 reject，不是空答案');
+  // ClawHub 的解析失败有明确的码：镜像不再列出这个技能 ⇒ E_SOURCE_BAD_RESPONSE。
+  const { io: missing } = versionsIo({ rows: [] });
+  await assert.rejects(
+    () => clawhubSource.versions({ owner: 'indiv-guipi', slug: 'find-skills' }, missing),
+    (error) => error.code === 'E_SOURCE_BAD_RESPONSE',
+    '解析阶段的失败带码往上抛',
+  );
+});

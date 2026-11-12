@@ -172,7 +172,7 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 | `marketFavoritesLoaded(list,ok)` | 数组 + 布尔 | 只在 `bootstrap` 写一次：数组转 `{[id]:true}`，`ok` 进 `favoritesOk`；**U5 起是纯读侧**（写侧三个 action 已撤，见 `docs/contracts/decisions.md` 附录 L） |
 | `marketSetScroll(top)` / `marketClearInstalledDirty()` | number / —— | 记滚动位置 / 清脏 |
 
-`notice` 复用既有字段：`refresh-failed` 与 `install-ok`（副行给安装路径），由 `toast.jsx` 按 `kind` 选文案，5 秒后 `dismissNotice(seq)`；U5 起没有第三种 `kind`（收藏写侧已撤，见 `docs/contracts/decisions.md` 附录 L）。
+`notice` 复用既有字段，`kind` 现有**三种**：`refresh-failed`（刷新失败，带 `code`/`message`）、`install-ok`（副行给安装路径）、`update-ok`（U19 新增：更新成功的结局文案，副行给 `{from} → {to}` 与路径）；由 `toast.jsx` 按 `kind` 选文案与图标，5 秒后 `dismissNotice(seq)`。收藏写侧仍没有入口（`docs/contracts/decisions.md` 附录 L），所以**没有**第四种 `kind`。
 
 `marketPageAppended` 的入参仍是**数组**（设计文档写的是单源形状）：现在是「一源一项」，留着数组是为了将来真要同屏多源时不必改签名；语义（写游标、合并、翻页计数）不变。
 
@@ -186,6 +186,7 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 | `marketInstalled()` | `GET market/installed` | 形状 `{items, readable}` |
 | `marketInstall({source,owner,slug,version})` | `POST market/install` | body 只有身份，**没有 path/files** |
 | `marketIcons({items})` | `POST market/icons` | `items` 是 **`{source,owner,slug}`** 数组（每源 ≤12、合计 **≤24**，一批可混两源）；出参 `{icons:{[key]: url|null}}`；失败静默 |
+| `marketVersions({source,owner,slug})` / `marketUpdate({source,owner,slug,version,name,path})` | `GET market/versions` / `POST market/update` | 前者出参 `{namespace, latest, versions, total}`（新的在前、≤50 条）；后者 body 带 `path`（硬约束 6 的「先认路径再写」），出参 `from` 是更新前版本，失败按 `422/502/503/504` 与 `E_UPDATE_RESTORED`/`E_UPDATE_LOST`/`E_UPDATE_UNCONFIRMED` 分三种落点（`docs/contracts/installed-detail.md`） |
 
 全部走既有 `request()`：文档相对 URL + 信封解包 + `ApiError{code, message, data}`（`data` 是信封里的 `data`，安装失败时用来取冲突路径与声明名）。安装永不自动重试。
 
@@ -220,7 +221,7 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 ---
 
 ## 3.10 已安装详情页
-组件树、`detail` 三态、返回与失败口径、23 个文案键见 `docs/contracts/installed-detail.md`（本节只留指针：§3.9 已到 400 行档位）。
+组件树、`detail` 三态、返回与失败口径、五个更新结局与 36 个文案键见 `docs/contracts/installed-detail.md`（本节只留指针：§3.9 已到 400 行档位）。「已安装」页签的**自动检测**（进页签串行查一轮、单行 2s / 整轮 8s、按 `source:owner:slug` 去重、会话内 10 分钟缓存、失败只影响那一行）与**页头更新提示四态**（可更新 `info` / 部分失败 `error` / 全部最新无色 / 检查中与无检测对象不渲染；宿主同位只有这一句、没有计数，所以 `.skc_status` 里就是一个 `<span>`、`data-tone` 只做 info/error 换色）的规范句同在 `docs/contracts/installed-detail.md` §「更新检测与页头」；键数见 §8.3（165）。
 
 ## 8.2 命名约定
 
@@ -245,7 +246,7 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 - **文件形状：单层扁平点号键**（`"panel.label": "技能"`），**不是**嵌套对象（`{"panel":{"label":…}}`）。
   依据是宿主实现：`ctx.locale` 的 `lookup(ns,key)` 是 `locales.get(locale)?.[key]` ——**字面量属性查找**，
   找不到就 `?? key` 回落成键名；它不做点号路径遍历。嵌套字典在真机上的表现是**整页显示原始键名**
-  （`page.title` / `group.builtin` / `status.count`…）。
+  （`page.title` / `group.builtin` / `status.updatesAvailable`…）。
 - **唯一允许的嵌套是顶层 `meta` 块**（`{"meta":{"title":…,"description":…}}`）：它不进运行时字典，
   只给宿主的插件列表读（`dsh-app-boot` 的 `readPluginMeta` → `dictionariesOf` 读 `parsed.meta.title`）。
   `src/client/index.jsx` 注册前用 `uiDictionary()` 滤掉 `meta`，因此运行时字典里**只有字符串**；
@@ -254,7 +255,7 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 - `client/src/**` 与 `lib/**` **不得出现 CJK 字面量**（`check:i18n` 强制）；界面文案一律 `t('key')`。
 - 占位符用 `{name}`（宿主同款：`t('partToggle', { name: title })`）。
 - 入口标题**只允许**通过 `panel.label` 表达：改名 = 改 `locale/*.json` 的 `panel.label` + `meta.title`，代码零改动（这是「不硬编码中文」的可验收形态）。两处都要改的理由：`meta.title` 是插件列表里的显示名（`PROF/*/locale/zh.json` 四家都是 `{meta:{title,description}}`），`panel.label` 是侧栏行标题。`check-i18n` 会校验两者都存在。
-- 市场面沿用两族键：`market.*`（61 个 → **65 个**）与 `error.E_*`（11 个 → **13 个**）；已安装详情页再加 23 个 `detail.*`（键表见 `docs/contracts/installed-detail.md` 的「文案」一节），外加 6 个 `markdown.*`（宿主 `MarkdownText` 的代码围栏与脚注 chrome，缺了它就整段回落成纯文本），全字典 111 → 117 → 136 → 142 → 144 → 156 → 148 → 149 → 150 → 151 → 153 → 151 → 154 → **151**（复制入口全部去掉，连带删掉 `detail.copy` / `detail.copied` / `plugin.copyCommand` 三个键；插件页剩 `plugin.countRunning`（「共 N 个 · M 运行中」，贴着区块标题）与 `plugin.running` / `plugin.stopped`（行尾状态），`plugin.skillsCount` 仍给列表块用）；**`market.placeholder` 已删除**（市场页签不再是占位文案）。下表有几行把同族的新键合并成一行，这是为了守住 400 行上限（`check-docs` 的 R11），键与值逐条列出、语义不变。
+- 市场面沿用两族键：`market.*`（61 个 → **65 个**）与 `error.E_*`（11 个 → **13 个**）；已安装详情页再加 36 个 `detail.*`（键表见 `docs/contracts/installed-detail.md` 的「文案」一节），外加 6 个 `markdown.*`（宿主 `MarkdownText` 的代码围栏与脚注 chrome，缺了它就整段回落成纯文本），全字典 111 → 117 → 136 → 142 → 144 → 156 → 148 → 149 → 150 → 151 → 153 → 151 → 154 → 151 → 167 → **165**（U19 更新检测：新增 18 键、退役 2 键〔`detail.checkUnavailable`/`detail.checkIdle`〕、改文案不改键 2 个〔`detail.newerVersion`/`detail.checkFailed`〕；页头计数退场再退役 2 键〔`status.count`/`status.offSuffix`〕——宿主同位只有一句更新提示；逐条见 `docs/contracts/installed-detail.md` 的「文案」一节）（复制入口全部去掉，连带删掉 `detail.copy` / `detail.copied` / `plugin.copyCommand` 三个键；插件页剩 `plugin.countRunning`（「共 N 个 · M 运行中」，贴着区块标题）与 `plugin.running` / `plugin.stopped`（行尾状态），`plugin.skillsCount` 仍给列表块用）；**`market.placeholder` 已删除**（市场页签不再是占位文案）。下表有几行把同族的新键合并成一行，这是为了守住 400 行上限（`check-docs` 的 R11），键与值逐条列出、语义不变。
 - 键表（P0 全集 + 市场轮；`zh` 值逐字来自 `PRD` §3.3.5 与本设计）：
 
 | key | zh |
@@ -281,8 +282,7 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 | `group.localEmpty` | 还没有本地技能。把技能目录放进 ~/.dsh/skills/ 就会出现。 |
 | `group.installedEmpty` | 还没有从市场安装技能。 |
 | `footer.excluded` | 另有 {count} 个技能位于项目级或其他目录，首版不展示 |
-| `status.count` | 共 {total} 个技能 |
-| `status.offSuffix` | ，{count} 个已停用 |
+| `status.updatesAvailable` / `status.updatesPartial` / `status.updatesNone` | {count} 个技能可更新 ／ 部分技能检查更新失败 ／ 所有技能均为最新版本 |
 | `market.sectionLabel` | 技能市场 |
 | `market.searchLabel` | 搜索技能 |
 | `market.searchPlaceholder` | 搜索技能… |
@@ -376,11 +376,10 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 
 ## 8.4 时间与其他
 
-- 日志与 `health` 里的时间一律 **ISO 8601 UTC**（`new Date().toISOString()`）；**界面上不显示任何时间**（首版无版本检查、无「上次刷新」）。
+- 日志与 `health` 里的时间一律 **ISO 8601 UTC**（`new Date().toISOString()`）；**界面上不显示任何时间**，只有两个例外：已安装详情的版本区块的「上次检查于 `HH:MM`」与展开列表的「发布于 `YYYY-MM-DD`」（`docs/contracts/installed-detail.md`，登记在 `docs/contracts/decisions.md` 附录 R-1）。
 - 市场条目的 `updatedAt` **客户端不读**：三种排序都由路由按 `sort` 在各源内完成，浏览器侧不二次排序；卡片与详情都不显示任何时间（不写「3 天前」、不写日期）；市场列表的 `total` 也不上屏。
 - 布尔：YAML 侧接受 `true/false/yes/no/on/off/1/0`（大小写不敏感，宿主同文法，`EX/dsh-skill-filesystem/README.md`「Skill format」）；**写回只用 `true`/`false`**。
-- 数字：`counts` 全部是整数，缺失按 0（不做 `undefined` 透出）。
-- 日志：`ctx.logger.warn(error)` 记录，**不把路径之外的敏感内容打进日志**。
+- 数字：`counts` 全部是整数，缺失按 0（不做 `undefined` 透出）。日志：`ctx.logger.warn(error)` 记录，**不把路径之外的敏感内容打进日志**。
 
 ---
 
@@ -388,8 +387,7 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 
 尺寸与颜色字面量只允许出现在 `src/client/styles.js`（样式）与 `src/client/avatar.js`（6 组头像色板，含 `rgba()` 半透明底与实色字；全仓库仅此两处色值）；其它组件文件不得写颜色/尺寸（`size={11|13}` 这类图标尺寸除外）。
 市场样式同样只进 `styles.js`（类名 `skc_market*`，取值逐条来自 `docs/contracts/market.md` 附录 F）；**市场不新增任何颜色字面量**，也不改 `.skc_cardIcon` 的任何一条声明。上游图标用的 `.skc_marketIconImg` 只有四条声明（`width/height:100%`、`object-fit:contain`、`display:block`、`border-radius:calc(var(--dsw-radius-lg) - .5px)` 同心内圆角），不含色值；`contain` 是因为上游图标尺寸从 256×64 的横版 logo 到 1024×1024 都有，`cover` 会把横版裁成怪形状。
-分类 chip 的数量位用 `.skc_marketChipCount`（`margin-left:4px`、12px/18px、`var(--dsw-alias-label-secondary)`），**不改 chip 的高度与点击面积**，也不新增色值。
-锚点：`test/styles.test.mjs`；把刻度搬进组件时那条用例先红。
+分类 chip 的数量位用 `.skc_marketChipCount`（`margin-left:4px`、12px/18px、`var(--dsw-alias-label-secondary)`），**不改 chip 的高度与点击面积**，也不新增色值。锚点：`test/styles.test.mjs`；把刻度搬进组件时那条用例先红。
 
 ---
 

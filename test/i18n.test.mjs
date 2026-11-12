@@ -119,7 +119,7 @@ test('设计 §8.3 键表要求的每一个键都在（按名字断言，不按�
     'tabs.label', 'tabs.installed', 'tabs.market',
     'group.builtin', 'group.local', 'group.installed',
     'group.builtinEmpty', 'group.localEmpty', 'group.installedEmpty',
-    'footer.excluded', 'status.count', 'status.offSuffix',
+    'footer.excluded',
     // 市场面：本轮用真市场替换了 `market.placeholder` 占位键。下面这批键名是 locale/zh.json
     // 的实际键（不是设计稿里的示意名），覆盖面板/筛选/卡片/详情/确认/空态/失败态各一处。
     'market.sectionLabel', 'market.searchLabel', 'market.searchPlaceholder', 'market.clearSearch',
