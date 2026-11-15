@@ -157,7 +157,7 @@
 .skc_card{ border-radius: var(--dsw-radius-xl); min-width: 0; margin: 0 -8px; position: relative }
 /* 可点的行才给底色：hover 只在真有悬停的设备上，:active 是触屏唯一的可靠证据 */
 @media (hover: hover){ .skc_card:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
-.skc_card:active{ background: var(--dsw-alias-interactive-bg-hover) }
+.skc_card:active{ background: var(--dsw-alias-interactive-bg-active) }
 .skc_cardHead{ align-items: center; gap: 14px; padding: 8px; display: flex }
 /* .cardIcon —— 容器逐字回归 [PM-CSS]（边框、圆角、尺寸、盒模型都是宿主的）；
    `background` / `background-clip` / `color` / `font-*` 是本插件新增的**内容层**： 底与字色由行内 `--skc-avatar-bg` / `--skc-avatar-ink` 传入（见 A.5 下方注）， 两个 fallback 供骨架态与缺值兜底。`background-clip: padding-box` 不可省： 宿主边框是半透明的（`.5px` `border-l3`），不裁到 padding box 就会被粉彩底盖掉 */
@@ -251,7 +251,7 @@ font-size: 13px; line-height: 20px; display: inline-flex;
 ```
 
 > **行可点（U1 起）**：已安装行点标题即进本地详情页，实现只有上一条 `.skc_cardOpen::after` + `.skc_cardEnd{z-index:1}`（见 `AGENTS.md` 硬约束 9 与 `docs/contracts/installed-detail.md`）；不要 `<a href>`、不要第二个可点区域。行高恒 64px（48 图标 + 8×2 padding）。
-> **行底色的取色已落实（2026-11-15，宿主 `0.2.2-rc.3`；读数见 `docs/reference/host-plugin-page.md` §5）**：宿主用的是两个**令牌**、不是字面量——`@media (hover: hover)` 下 `.cardLink:hover` 取 `--dsw-alias-interactive-bg-hover`（亮 `rgba(38, 49, 72, .06)` = `#2631480f`，暗 `rgba(255, 255, 255, .08)` = `#ffffff14`），`.cardLink:active` 取 `--dsw-alias-interactive-bg-active`（亮 `rgba(38, 49, 72, .1)` = `#2631481a`，暗 `rgba(255, 255, 255, .14)` = `#ffffff24`）。**hover 与我们现用的是同一个令牌**（A.5 上一条 `.skc_card:hover` 的写法因此无需改动，原「待真机取色」到此关闭）；**`:active` 我们没有跟随**——`.skc_card:active` 仍绑 hover 令牌，按下瞬间比宿主浅一档，属已登记偏离（`docs/contracts/decisions.md` 附录 Q 的 Q-5），改它只动那一行的令牌名。
+> **行底色的取色已落实（2026-11-15，宿主 `0.2.2-rc.3`；读数见 `docs/reference/host-plugin-page.md` §5）**：宿主用的是两个**令牌**、不是字面量——`@media (hover: hover)` 下 `.cardLink:hover` 取 `--dsw-alias-interactive-bg-hover`（亮 `rgba(38, 49, 72, .06)` = `#2631480f`，暗 `rgba(255, 255, 255, .08)` = `#ffffff14`），`.cardLink:active` 取 `--dsw-alias-interactive-bg-active`（亮 `rgba(38, 49, 72, .1)` = `#2631481a`，暗 `rgba(255, 255, 255, .14)` = `#ffffff24`）。**两个态都按用户 2026-11-15 裁决跟改了**：`.skc_card:hover` 用 hover 令牌（与宿主同一个），`.skc_card:active` 用 **active** 令牌（按下比悬停深一档），与宿主两条规则逐条对应；原「待真机取色」到此关闭（`docs/contracts/decisions.md` 附录 Q 的 Q-5）。
 > 市场卡片**复用** `.skc_cardIcon`（48×48 同一条规则），其声明一字不改——改它会让「已安装」页签 11 行同时回归。来源品牌图标**不是**头像色板的第七组：它是 `src/client/market-marks.jsx` 里两段 `data:image/png;base64` 位图（16×16 显示），只在市场卡片上出现，「已安装」页签不渲染它，也不参与 `avatar.js` 的散列。
 
 头像的两种颜色**不走样式表常量，走行内自定义属性**：`row.jsx` 渲染

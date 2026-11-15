@@ -319,7 +319,9 @@ test('K110 行的 hover 只在真有悬停的设备上，:active 与 :focus-visi
   assert.equal(/\.skc_card:hover/.test(outside), false, '媒体查询之外没有第二处 .skc_card:hover');
 
   const active = ruleBody(css, '.skc_card:active');
-  assert.match(active, /background:\s*var\(--dsw-alias-interactive-bg-hover\)/, ':active 是触屏唯一可靠的按下证据');
+  // 两个态是两个令牌，不是一个色的上下调：hover 用 hover、active 用 active（宿主也是这么分的，
+  // 用户 2026-11-15 裁决跟改）。绑定写错方向就红——回退成 hover 令牌同样红。
+  assert.match(active, /background:\s*var\(--dsw-alias-interactive-bg-active\)/, ':active 是触屏唯一可靠的按下证据，用宿主的 active 令牌（按下比悬停深一档）');
 
   assert.ok(css.includes('.skc_cardOpen:focus-visible{'), '键盘焦点先摘掉按钮原生描边');
   const ring = ruleBody(css, '.skc_cardOpen:focus-visible::after');

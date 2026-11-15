@@ -112,7 +112,7 @@ font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary);
 .skc_cards{ flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; display: flex }
 .skc_card{ border-radius: var(--dsw-radius-xl); min-width: 0; margin: 0 -8px; position: relative }
 @media (hover: hover){ .skc_card:hover{ background: var(--dsw-alias-interactive-bg-hover) } }
-.skc_card:active{ background: var(--dsw-alias-interactive-bg-hover) }
+.skc_card:active{ background: var(--dsw-alias-interactive-bg-active) }
 .skc_cardHead{ align-items: center; gap: 14px; padding: 8px; display: flex }
 .skc_cardIcon{
 box-sizing: border-box;
