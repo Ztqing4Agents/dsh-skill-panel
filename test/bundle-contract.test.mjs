@@ -53,16 +53,19 @@ test('产物只 require 平台 seed 模块（浏览器里其它模块一律解�
   assert.deepEqual(outside, [], `产物没有 import 平台 seed 之外的模块（越界：${outside.join(', ')}）`);
 });
 
-test('产物是宿主认识的 __ModuleLoader__.load 形状，且 id 与包名一致', async () => {
+test('产物是宿主认识的 __ModuleLoader__.load 形状，且 id 与 scoped 包名一致', async () => {
   const text = await bundle();
+  const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'));
   assert.equal(text.includes('window.__ModuleLoader__.load('), true, '产物由 __ModuleLoader__ 装载');
-  assert.match(text, /id:\s*"dsh-skill-panel"/, 'loader id 是包名');
+  assert.equal(text.includes(`id: ${JSON.stringify(pkg.name)},`), true, 'loader id 从包名派生：宿主按包名建浏览器模块行、装载后按同一 id 认模块');
   assert.match(text, /factory:\s*\(require\)\s*=>/, 'loader 收到一个 require 工厂');
   assert.equal(text.includes('dsh-skill-panel/client.css'), true, '样式注入钩子随产物一起进包');
 });
 
 test('package.json 的客户端契约字段齐全', async () => {
   const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'));
+  assert.equal(pkg.name, '@ztqing4agents/dsh-skill-panel', '发布身份是 scoped 包名（内部 id 仍是短名，两者不是一回事）');
+  assert.equal(pkg.publishConfig?.access, 'public', 'scoped 包默认 restricted，缺 access:public 发布报 E402');
   assert.equal(pkg.exports['./client'], './client.js', 'exports["./client"] 必须是字符串 "./client.js"');
   assert.equal(pkg.dsh.client.platform, 'web', 'dsh.client.platform 必须是 web');
   assert.equal(Array.isArray(pkg.dsh.client.inject), true, 'dsh.client.inject 是数组（预取依赖）');

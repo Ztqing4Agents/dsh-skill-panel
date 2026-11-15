@@ -42,7 +42,7 @@
 ```jsonc
 // package.json（节选；完整形态以文件本身为准）
 {
-  "name": "dsh-skill-panel",
+  "name": "@ztqing4agents/dsh-skill-panel",
   "type": "module",
   "main": "index.js",                       // Host 半部入口（ESM，无构建）
   "exports": {
@@ -84,12 +84,12 @@
 # Client 半部负责侧栏「技能」行与主区全局页。这一条只是让包可被 profile 选中。
 - insert:
     - id: dsh-skill-panel
-      name: dsh-skill-panel
+      name: '@ztqing4agents/dsh-skill-panel'
 ```
 
 依据：`PROF/dsh-hidder/cordis.patch.yml`（单行 `insert`）、`PROF/@linxin666/dsh-client-ui-skill-explorer/cordis.patch.yml`、`PROF/@michengai/dsh-skills-manager/cordis.patch.yml`、`PROF/@montersy123/dsh-skill-market/cordis.patch.yml` —— 四份文件都是「一个 `insert` 一个 id/name」的形状。
 
-**部署侧（不属于包内容，装的时候才做）**：`~/.dsh/profiles/desktop/package.json` 加 `"dsh-skill-panel": "link:/path/to/dsh-skill-panel"`、`dsh.profile.bundles` 插入 `"dsh-skill-panel"`、`node_modules` 建相对软链。bundle 列表**只在启动时读**，改完必须重启 DSH（项目记忆「DSH 插件开发」条已记录同一坑）。
+**部署侧（不属于包内容，装的时候才做）**：`~/.dsh/profiles/desktop/package.json` 加 `"@ztqing4agents/dsh-skill-panel": "link:/path/to/dsh-skill-panel"`、`dsh.profile.bundles` 插入 `"@ztqing4agents/dsh-skill-panel"`、`node_modules/@ztqing4agents/dsh-skill-panel` 建相对软链。bundle 列表**只在启动时读**，改完必须重启 DSH（项目记忆「DSH 插件开发」条已记录同一坑）。
 
 #### 1.2.3 侧栏入口 + 全局页的注册方式（与宿主「插件」页同构）
 
@@ -145,7 +145,7 @@ react, react/jsx-runtime, react-dom, react-dom/client, @deepseek-ai/cordis, zod,
 
 #### 1.2.5 接线相关的硬事实（不照做就会白屏）
 
-1. client bundle 必须自己调用 `window.__ModuleLoader__.load({ id, factory })`，且 `id` 与包名一致；否则宿主报 `bundle … loaded without registering "<id>" via __ModuleLoader__.load`（`EX/dsh-client-modules/lib/client.js`）。`PROF/dsh-hidder/client.js`、`PROF/@michengai/dsh-skills-manager/lib/client.js`、`EX/dsh-client-ui-plugin-manager/lib/client.js` 三处都是这个形状。
+1. client bundle 必须自己调用 `window.__ModuleLoader__.load({ id, factory })`，且 `id` 与 **scoped** 包名一致；否则宿主报 `bundle … loaded without registering "<id>" via __ModuleLoader__.load`（`EX/dsh-client-modules/lib/client.js`）。`PROF/dsh-hidder/client.js`、`PROF/@michengai/dsh-skills-manager/lib/client.js`、`EX/dsh-client-ui-plugin-manager/lib/client.js` 三处都是这个形状。
 2. 样式**自己注入**为 `<style data-plugin-css="dsh-skill-panel/client.css">`，并按同一选择器去重（宿主同款：`PluginManagerPage.module.css` 的 loader 用 `tag.dataset.pluginCss = tagId`）。`HIDDER/docs/reference/settings-ui.md` §9 把 `style[data-plugin-css=…]` 列为可健康检查的稳定钩子。
 3. 路由 URL 必须**文档相对**（`api/dsh-skill-panel/list`，没有前导 `/`）：GUI 用 `<base href="./">`，子路径部署下根绝对路径会逃出前缀。`PROF/@linxin666/dsh-client-ui-skill-explorer/lib/types/client/api.d.ts` 的注释 + 其 `EX/dsh-client-ui-skill-explorer/lib/client.js` 的 `API` 常量就是这套写法（issue #1707 的现场记录）。
 
@@ -177,7 +177,7 @@ const result = await esbuild.build({
   minify: false,                 // 保持可读：报错栈要能落回源码行
   write: false,
 });
-// 外壳：window.__ModuleLoader__.load({ id: '@…/dsh-skill-panel', factory: (require) => { … } })
+// 外壳：window.__ModuleLoader__.load({ id: "@ztqing4agents/dsh-skill-panel", factory: (require) => { … } })
 ```
 
 为什么 `external` 用通配 `@deepseek-ai/*` 而不是逐个列：seed 与 graph 的解析在运行时完成，打包期把它们留在 `require(...)` 里就是唯一正确做法；漏列一个会让 esbuild 试图内联宿主的私有实现。

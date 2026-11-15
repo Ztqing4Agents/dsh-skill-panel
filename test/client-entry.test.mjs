@@ -30,8 +30,8 @@ before(async () => {
 });
 
 test('注册的座位与顺序常量与设计一致', () => {
-  assert.equal(entry.NS, 'dsh-skill-panel', '命名空间就是包名');
-  assert.equal(entry.PANEL_ID, 'dsh-skill-panel', '面板 id 与包名同值');
+  assert.equal(entry.NS, 'dsh-skill-panel', '命名空间是内部短 id（与面板 id、路由前缀同源），不等于 scoped 包名');
+  assert.equal(entry.PANEL_ID, 'dsh-skill-panel', '面板 id 是内部短 id（与路由前缀、状态目录、patch 的 insert[].id 同源），不等于 scoped 包名');
   assert.equal(entry.PANEL_ORDER, 40, '侧栏行位置是 40');
 });
 

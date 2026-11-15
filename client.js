@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-	id: "dsh-skill-panel",
+	id: "@ztqing4agents/dsh-skill-panel",
 	factory: (require) => {
 		var module = { exports: {} };
 		var exports = module.exports;

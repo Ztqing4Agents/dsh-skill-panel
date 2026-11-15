@@ -82,6 +82,7 @@ npm test             # node --test test/（测试由 QA 维护）
     `routes.md` §3.3「十六条 exact 路由」与 §3.7「市场面 N 条」——改措辞或改键数须与 `locale/`、`ROUTES` 同轮改，否则红。
 16. **契约文档 400 行满档**：加行须同轮合并同族短行；`check-docs` 的 R11 比 `wc -l` 多 1，要 0 warn 就 ≤399。
     引用「尚未创建」的仓库路径不能加反引号（R8 会校验存在）；文档里不许引 `.agents/work/` 下的瞬态产物（R13；不入库，必然腐化）——工作现场入口 `BOARD.md` 与 `BOARD-archive.md` 除外。
+17. **npm 包名（scoped `@ztqing4agents/dsh-skill-panel`）≠ 插件内部 id（短名 `dsh-skill-panel`）**：cordis `name`、16 条 `/api/dsh-skill-panel/*`、`NS`/`PANEL_ID`/`STYLE_ID`、`$DSH_HOME/dsh-skill-panel/`、patch 的 `insert[].id` 一律不动，只有 `client.js` 的装载 id 跟包名（宿主强制，`check-client` 守 `id == pkg.name`）——别「顺手统一」成一处。
 
 ## 四处容易踩的真机坑
 

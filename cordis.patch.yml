@@ -1,6 +1,8 @@
 # Bundle layer for dsh-skill-panel. The Host half serves /api/dsh-skill-panel/*;
 # the Client half renders the sidebar entry and the global page. This one row only
 # makes the package selectable as a profile bundle.
+# `id` 是内部短名（与路由前缀、状态目录同源），`name` 是模块 specifier = 包名（scoped）。
+# 少了 name 那对引号，`@` 开头的裸标量不是合法 YAML，profile 会直接起不来。
 - insert:
     - id: dsh-skill-panel
-      name: dsh-skill-panel
+      name: '@ztqing4agents/dsh-skill-panel'

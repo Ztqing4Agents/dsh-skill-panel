@@ -49,7 +49,7 @@ function fakeContext() {
 }
 
 test('插件自报的名字与必需服务与设计一致', () => {
-  assert.equal(name, 'dsh-skill-panel', '插件名就是包名');
+  assert.equal(name, 'dsh-skill-panel', '插件名是内部短 id（与路由前缀、状态目录、patch 的 insert[].id 同源），不等于 scoped 包名');
   assert.deepEqual(inject, ['webServer', 'skills', 'sessions'], '必需服务是 webServer/skills/sessions');
 });
 

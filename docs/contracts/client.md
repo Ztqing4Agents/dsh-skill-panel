@@ -253,7 +253,7 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 
 | 对象 | 规则 | 例 |
 | --- | --- | --- |
-| 面板 id | 与包名同值，全局唯一 | `dsh-skill-panel` |
+| 面板 id | 内部短 id（与路由前缀、状态目录、patch 的 `insert[].id` 同源），不等于 scoped 包名 | `dsh-skill-panel` |
 | 路由前缀 | `/api/dsh-skill-panel/*`（服务端带前导 `/`；客户端用**文档相对** `api/dsh-skill-panel/*`） | —— |
 | 分区 key | `builtin` / `local` / `installed`（**机器值**，永不本地化） | `group.local` |
 | CSS 类 | `skc_` 前缀 + camelCase；局部自定义属性 `--skc-*` | `skc_cardHead`、`--skc-page-inset` |

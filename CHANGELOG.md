@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-15
+
+### Changed
+
+- 发布身份迁到 npm 的 **`@ztqing4agents/dsh-skill-panel`**（`publishConfig.access: public`，scoped 包不显式声明就发不出去）：从这一版起按这个包名安装。**npm 上同名的 `dsh-skill-panel` 是别人的包**（另一位作者，与本插件无关），装的时候别认错。
+- **内部名字一个都没变**，五处原样：16 条路由前缀 `/api/dsh-skill-panel/*`、面板 id 与命名空间（`NS` / `PANEL_ID`）、样式注入钩子 `style[data-plugin-css="dsh-skill-panel/client.css"]`、自有状态目录 `$DSH_HOME/dsh-skill-panel/`（收藏 / 安装台账 / 插件开关）、patch 的 `insert[].id`。所以**老数据自动沿用，不要 `mv` 任何目录，也没有任何迁移步骤**。
+- 变的只是**安装身份**：profile 里 `dependencies` 的键与 `dsh.profile.bundles` 的条目跟着包名走（`@ztqing4agents/dsh-skill-panel`）、`node_modules` 下的目录名随之变成 scoped 那一段、以及 `client.js` 的装载 id 变成 `@ztqing4agents/dsh-skill-panel`（宿主按包名给模块建行、装载后按同一 id 认模块，这一处不跟包名就报 `loaded without registering`，整页 web boot 失败）。
+- 升级就三步：`dsh plugin --profile <name> remove dsh-skill-panel` → `dsh plugin --profile <name> add @ztqing4agents/dsh-skill-panel` → 重启 DSH。**别让两个包同时挂着**：它们会注册同一批 16 条 exact 路由，后挂的那个直接抛 `webserver: duplicate exact route`；而且两个包内部 id 相同，插件页的开关与卸载只认一个，点了到底是谁说不清。
+
 ## [1.0.0] - 2026-11-13
 
 ### Added
