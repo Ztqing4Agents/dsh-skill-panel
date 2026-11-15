@@ -33,7 +33,7 @@
 | # | 区块 | 内容 |
 | --- | --- | --- |
 | 1 | 面包屑 | `detail.back`（值「技能」/`Skills`，与宿主的 `crumbRoot` 同义），唯一返回入口（`.skc_marketCrumb` 配方） |
-| 2 | 头行 | `.skc_detailTop`（`space-between` + `align-items:center`）：左 `IconTile` 加 **`.skc_detailIcon`**（**49×49**，宿主详情页的值；列表行仍是 48）；右侧 `.skc_detailActions`（`gap:16`）= **更新按钮（仅「可更新」态渲染）+ 卸载 + 开关**——顺序固定，与宿主插件详情页的动作组一致（宿主同一个词：`uninstall`）。**卸载**（U20 起可用，文案键仍是 `detail.uninstall`）= `Button variant="outline" size="sm" className=detailDanger` + `IconTrashOutlineRegular size={13}` + 文案「卸载」/`Uninstall`，两层可见性照抄宿主：外层**条件渲染**（`deletable(row)` 为 true 才渲染），内层 `disabled`（卸载请求在飞 ⇒ 动作组三枚一起禁用）。开关：`switchMode(row)` 非空 → `EnableSwitch`；软链行 → `ReadonlyTag`；其余不渲染 |
+| 2 | 头行 | `.skc_detailTop`（`space-between` + `align-items:center`）：左 `IconTile` 加 **`.skc_detailIcon`**（**49×49**，宿主详情页的值；列表行仍是 48）；右侧 `.skc_detailActions`（`gap:16`）= **更新按钮（仅「可更新」态渲染）+ 卸载 + 开关**——顺序固定，与宿主插件详情页的动作组一致（宿主同一个词：`uninstall`）。**卸载**（可用，文案键仍是 `detail.uninstall`）= `Button variant="outline" size="sm" className=detailDanger` + `IconTrashOutlineRegular size={13}` + 文案「卸载」/`Uninstall`，两层可见性照抄宿主：外层**条件渲染**（`deletable(row)` 为 true 才渲染），内层 `disabled`（卸载请求在飞 ⇒ 动作组三枚一起禁用）。开关：`switchMode(row)` 非空 → `EnableSwitch`；软链行 → `ReadonlyTag`；其余不渲染 |
 | 3 | 标题组 | `.skc_detailIntro`（图标下方纵向，`gap:8`；到图标行 20 = 列 gap 32 − 12）——**三段，顺序固定**：① 标题行 `.skc_marketTitleRow`：标题 `h3.skc_marketDetailTitle`（20/28/500）+ 版本 Tag（复用 `market.metaVersion` = `v{version}`，有值才画）；② **调用名行** `.skc_detailAuthor`（作者行那条刻度：**12/18 tertiary mono**，纯文本块）：`<code>{kebab 名}</code>`，**只有文字、没有复制按钮**——所以行高就是 18（不再被 22 高的按钮撑到 22），intro 三段总高 = 28 + 8 + 18 + 8 + 22 = **84**，文字级间距 ≈13/13，正好落到宿主的 13.0/12.5（这是去掉按钮的附带收益）；③ 描述（**`.skc_marketDetailDesc` 14/22 不截断**，空串整块不渲染）。**作者行不再显示**——`upstream` 仍供「代码来源 / 版本检查 / 查看仓库」用，只是不露在人眼前 |
 | 4 | 失效原因（可选） | `reason` 非空时一行 `.skc_reason`（`role="alert"`），紧跟在标题组之后 |
 | 5 | 正文盒 | **紧跟描述**，**前面没有区块标题**（宿主也是描述下面直接是 README，`market.detailOverview` 只给市场详情用）：`.skc_detailBodyBox`（`max-height:60vh; padding:12px 0; overflow-y:auto`，宿主 1440×920 实测 552px = 60vh；**上下各一条 0.5px 发丝线、左右无、圆角 0**——宿主就是这样，颜色取标签主色 5% 以随主题翻转；不加 `tabindex`、不拦 `wheel`）。**三态与空态都在盒内就地呈现**：`loading` → 一行 `detail.loading`；`error` → 一行 `detail.error` + 「重试」按钮；`ready` 但无正文 → 一行 `detail.noBody`；`ready` 有正文 → `MarkdownBlock`（必须传 `labels`：6 个 `markdown.*`，缺了它宿主渲染代码围栏时抛错、整段回落纯文本）；`truncated === true` 时正文**下方**再加一行 `detail.truncated` |
@@ -44,7 +44,7 @@
 
 顺序一句话：**面包屑 → 头行（49 图标 + 卸载占位 + 开关 / 软链只读）→ 标题行（标题+版本）→ 调用名行（kebab，可选中的纯文本）→ 描述 → [reason] → 正文盒 → [版本（仅市场装的技能）] → 来源信息（代码来源 / 当前版本）→ 查看仓库**。正文紧跟描述，其余技术区全在盒下；盒内滚正文，盒外跟页面滚。技能页**不再有「包含的技能」这一节**（调用名已升到标题下那一行）；同一套组件式行样式仍由插件页复用来列它包含的技能。
 
-**文件清单已整块删除**（U1e）：宿主详情页没有文件清单，底部的技术区是「版本 / 来源信息 / 查看仓库」。`market.detailFiles` 与 `detail.filesTruncated` 两个键**留着**——市场详情仍用前者，后者留给以后真需要时；本页不再渲染它们。
+**本页没有文件清单**：宿主详情页也没有，底部的技术区是「版本 / 来源信息 / 查看仓库」。`market.detailFiles` 与 `detail.filesTruncated` 两个键**留着**——市场详情仍用前者，后者留给以后真需要时；本页不再渲染它们。
 
 区块骨架逐字复用 `.skc_marketDetail*` 族（**详情族，两个页签共用**，不改名）。已安装详情新增刻度共 23 条，规则体只有一处真源：`docs/contracts/visual.md` A.5（`.skc_detailPage` / `.skc_detailDrag` / `.skc_detailIcon` / `.skc_detailTop` / `.skc_detailActions` / `.skc_detailIntro` / `.skc_detailAuthor` / `.skc_detailDanger` / `.skc_detailBodyBox` / `.skc_detailVersionHead` / `.skc_detailVersionCard` / `.skc_detailVersionRow` / `.skc_detailVersionMark` / `.skc_detailVersionText` / `.skc_detailVersionTitle` / `.skc_detailRepoLink` / `.skc_detailBody`）＋调用名区块 5 条（`.skc_callRow` / `.skc_callIcon` / `.skc_callBody` / `.skc_callName` / `.skc_callDesc`），实现逐字相同，在 `src/client/styles.js`。
 
@@ -185,9 +185,9 @@ store.checkRun = {id: number, status: 'idle'|'running'|'done'}   // 一轮自动
 
 ## 文案（`locale/*.json`，单层扁平点号键，本页 35 个）
 
-本页另有 4 个 `delete.{title,body,confirm,factDir}`（U20 的卸载确认弹窗；键族新开，不计入上面那 35 个 `detail.*`）。**用户可见词汇统一是「卸载」**（宿主详情头那枚按钮就是 `uninstall`，用户真机对照后要求同词；键名不改——`delete.*` 是内部标识）：`delete.title`「卸载「{name}」？」/ `delete.body`「卸载后这个技能的文件会被永久移除，本机不再加载它。」/ `delete.confirm`「卸载」/ `delete.factDir`「目录」。`delete.factDir` 只给那一行路径事实当标签，**不复用** `market.factInstallTo`——本页要显示的是**将被删掉的那个目录**，「安装到」在卸载语境里是错的。`detail.{back,loading,error,retry,noBody,truncated,filesTruncated,uninstall}`（U20 退役 `detail.uninstallSoon`：卸载已可用，按钮不再需要 title 说明；`detail.uninstall` 的值改成「卸载」/`Uninstall`，**键不动**）、版本与底部键组 `detail.{sectionVersion,checkAgain,checking,upToDate,checkedAt,newerVersion,checkOffline,checkFailed,factCodeSource,factVersion,viewRepo}`、`detail.{sectionSource,sourceBuiltin}`（`detail.back` = 「技能」/`Skills`，头部的面包屑根）、更新（U19 新增 9 个）`detail.{update,updating,updateTitle,updateBody,updateOk,updateFailed,updateRolledBack,updateLost,updateUnknown}`、版本列表（U19 新增 6 个）`detail.{newVersionCount,collapse,moreNewVersions,updateTo,publishedAt}`。**退役 2 个**：`detail.checkIdle`（自动检测后「尚未检查」不再是可见态）与 `detail.checkUnavailable`（语义被 `detail.checkFailed` 吸收，`upstream` 有而 `version` 空的行现在也落它）。**改文案不改键 2 个**：`detail.newerVersion` → 「可更新到 {version}」、`detail.checkFailed` → 「无法检查更新」。
+本页另有 4 个 `delete.{title,body,confirm,factDir}`（卸载确认弹窗用的键族，不计入上面那 35 个 `detail.*`）。**用户可见词汇统一是「卸载」**（宿主详情头那枚按钮就是 `uninstall`，用户真机对照后要求同词；键名不改——`delete.*` 是内部标识）：`delete.title`「卸载「{name}」？」/ `delete.body`「卸载后这个技能的文件会被永久移除，本机不再加载它。」/ `delete.confirm`「卸载」/ `delete.factDir`「目录」。`delete.factDir` 只给那一行路径事实当标签，**不复用** `market.factInstallTo`——本页要显示的是**将被删掉的那个目录**，「安装到」在卸载语境里是错的。`detail.{back,loading,error,retry,noBody,truncated,filesTruncated,uninstall}`（`detail.uninstallSoon` 已退役：卸载可用，按钮不再需要 title 说明；`detail.uninstall` 的值改成「卸载」/`Uninstall`，**键不动**）、版本与底部键组 `detail.{sectionVersion,checkAgain,checking,upToDate,checkedAt,newerVersion,checkOffline,checkFailed,factCodeSource,factVersion,viewRepo}`、`detail.{sectionSource,sourceBuiltin}`（`detail.back` = 「技能」/`Skills`，头部的面包屑根）、更新（9 个）`detail.{update,updating,updateTitle,updateBody,updateOk,updateFailed,updateRolledBack,updateLost,updateUnknown}`、版本列表（6 个）`detail.{newVersionCount,collapse,moreNewVersions,updateTo,publishedAt}`。**退役 2 个**：`detail.checkIdle`（自动检测后「尚未检查」不再是可见态）与 `detail.checkUnavailable`（语义被 `detail.checkFailed` 吸收，`upstream` 有而 `version` 空的行现在也落它）。**改文案不改键 2 个**：`detail.newerVersion` → 「可更新到 {version}」、`detail.checkFailed` → 「无法检查更新」。
 
-复用而不造同义词：`row.{enable,disable,applying,symlinkReadonly,symlinkTitle}`、`market.{detailOverview,detailFiles,factSource}` + `market.source.*`、`error.E_NOT_FOUND`。另加 6 个 `markdown.*`（`codeCopy`/`codeCopied`/`codePlain`/`codeWrap`/`codeUnwrap`/`footnotes`）：它们不是本页文案，而是宿主 `MarkdownText` 的**代码围栏与脚注 chrome**，`labels` 缺了它宿主读 `labels.code.copyLabel` 直接抛错、整篇正文回落成纯文本，所以两个详情页共用这一段。全字典 117 → 136 → 142 → 144 → 156 → 148 → 149 → 151 → 167 → **165**（U19：新增 18 键〔本页 15 + 页头的 3 个 `status.updates*`，后者见 `docs/contracts/client.md` §8.3〕、退役 4 键〔`detail.checkUnavailable`/`detail.checkIdle` + 页头计数退役的 `status.count`/`status.offSuffix`〕、改文案 2 键；`check-i18n` 口径 = 163 个扁平键 + `meta` 两项）。`detail.filesTruncated` 与 `market.detailFiles` 不再上屏（文件清单已删），键留着。版本 Tag 不新增键：复用 `market.metaVersion`（`v{version}`）；作者行已不显示，`market.metaAuthor` 不再被本页读取。
+复用而不造同义词：`row.{enable,disable,applying,symlinkReadonly,symlinkTitle}`、`market.{detailOverview,detailFiles,factSource}` + `market.source.*`、`error.E_NOT_FOUND`。另加 6 个 `markdown.*`（`codeCopy`/`codeCopied`/`codePlain`/`codeWrap`/`codeUnwrap`/`footnotes`）：它们不是本页文案，而是宿主 `MarkdownText` 的**代码围栏与脚注 chrome**，`labels` 缺了它宿主读 `labels.code.copyLabel` 直接抛错、整篇正文回落成纯文本，所以两个详情页共用这一段。全字典现为 **197** 键（`check-i18n` 口径 = 195 个扁平键 + `meta` 两项，分族见 `docs/contracts/client.md` §8.3）。本页与页头相关的退役键：`detail.checkUnavailable`、`detail.checkIdle`、`status.count`、`status.offSuffix`——都不会再回来。`detail.filesTruncated` 与 `market.detailFiles` 不再上屏（文件清单已删），键留着。版本 Tag 不新增键：复用 `market.metaVersion`（`v{version}`）；作者行已不显示，`market.metaAuthor` 不再被本页读取。
 
 ## 点击边界
 
@@ -196,7 +196,7 @@ store.checkRun = {id: number, status: 'idle'|'running'|'done'}   // 一轮自动
 - 详情页内部的面包屑、开关、重新检查、**更新**、**卸载**（含它的确认弹窗两枚按钮）与展开列表里那一枚「更新到 {version}」都是普通按钮，不开第二套点击层（复制入口已全部去掉）；展开列表的其它行是纯文本，**没有**点击层、没有 hover——不可点就不给反馈（硬约束 9）。
 - 本页与插件页都**没有**复制入口：调用名与等宽名是可选中的纯文本，复制靠系统选区——不写 clipboard、不放按钮、不留播报位。
 
-## 卸载技能（U20）
+## 卸载技能
 
 入口只有详情页头动作组第 2 位（`deletable(row)` 为 false 的行走不到这里：软链行该位是 `ReadonlyTag`，内置行没有动作位，`path === null` 与 `readonlyReason !== null` 同理）。点它开 `DeleteConfirm`（`skill-dialogs.jsx`，规范见 `docs/contracts/client.md` §3.9.7）：标题 `delete.title`「卸载「{name}」？」、正文 `delete.body`「卸载后这个技能的文件会被永久移除，本机不再加载它。」、**一行路径事实**（`delete.factDir`「目录」 + 要删的**目录**，与「来源信息 → 代码来源」同一次 `dirname` 推导；不复用 `market.factInstallTo`，理由见「文案」一节）、`market.confirmCancel` + `delete.confirm`（`.skc_detailDanger` 同族红）。**没有勾选框、没有信任提示**；点卸载**先关弹窗再发请求**（宿主 `confirm()` 同序），取消零请求。
 
@@ -210,12 +210,12 @@ store.checkRun = {id: number, status: 'idle'|'running'|'done'}   // 一轮自动
 
 ## 不做
 
-版本回退仍是看板 M6（U20 只吃掉了它的「卸载」部分）：卸载已可用，回退仍没有入口。**覆盖安装已由 U19 落地**（看板 M2 由它承接），所以「重装」不再是这里的事；`查看仓库 ↗`（`_meta.json` 里没有仓库地址）、收藏入口（按 L-5 不做，后端保留）、编辑正文 / 重命名 / 移动（写侧只改一行 frontmatter，见 `docs/contracts/routes.md` §3.4）都不变。版本列表只给候选行按钮，历史行纯文本——**不做回退**。
+版本回退仍是看板 M6 的活口：卸载可用，回退没有入口。覆盖安装走后端的更新链路（本页只给「更新」按钮），所以「重装」不是这里的事；`查看仓库 ↗`（`_meta.json` 里没有仓库地址）、收藏入口（按 L-5 不做，后端保留）、编辑正文 / 重命名 / 移动（写侧只改一行 frontmatter，见 `docs/contracts/routes.md` §3.4）都没有入口。版本列表只给候选行按钮，历史行纯文本——**不做回退**。
 
 ---
 
 ## 验收
 
 - `npm run check:client` 逐字节通过；`npm run check:i18n` 报 **197** 键且 zh/en 键集一致、`lib/**` 与 `src/client/**` 无 CJK；产物 ≤ **180000** B（当前实测见 `npm run check:client` 输出；上限 180000 由用户预授权，K115 行与本文件同值）。
-- K110–K115（`docs/contracts/acceptance.md` 附录 D.5）、U19 的 K116–K125（附录 D.7）与 U20 的 K126–K136（附录 D.8）逐条绿。
+- K110–K115（`docs/contracts/acceptance.md` 附录 D.5）、K116–K125（附录 D.7）与 K126–K136（附录 D.8）逐条绿。
 - 真机三项：面包屑返回落点与打开前一致、40 KB 正文可滚且 Markdown 正常、触屏 `:active` 有底色。

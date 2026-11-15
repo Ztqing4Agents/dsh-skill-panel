@@ -23,7 +23,7 @@
  * @property {boolean} paged        list/search 能返回下一页
  * @property {boolean} categories   有稳定分类表
  * @property {'files'|'zip'} package 取包形态：逐文件下载，还是整包 zip
- *   （当前两源都是 'files'：ClawHub 的整包 zip 分支于 U7 退役（实现模块一并删除），
+ *   （当前两源都是 'files'：整包 zip 分支已不存在（实现模块一并删除），
  *   联合类型保留，是为了「将来加一个真 zip 源」时这份契约仍然成立）
  */
 
@@ -66,7 +66,7 @@
 | 游标形状 | `{page: number}`（1 起） | 同上（三档共用 `query.js` 的 `pageOf`） | 同上 |
 | `detail` | `GET /api/v1/skills/<slug>?namespace=&version=` + 清单 + `SKILL.md`（**身份按行判定**，与 scope 无关；见 §7.9） | 同左（`namespace` = 行的 `namespace.handle`） | 同左，`namespace` 由一次 `keyword=<slug>` 的列表查询按 `slug`+`upstream_owner_login` 双匹配解析（**不猜前缀**；评分也用那一行补，见 §7.8） |
 | `plan` / `fetchFile` | `GET …/files?namespace=&version=` + `GET …/file?path=`（302 → COS，见 §3.7.3 第 4 条） | 同左 | 同左（version 由镜像 detail 解析；清单无 `SKILL.md` ⇒ `E_PACKAGE_INVALID`） |
-| `categories` | `GET /api/v1/categories`（不带 `source`），滤 `pay-skill`，10 分钟内存缓存 | 同一张表 | 同一张表（U8 起 `caps.categories = true`） |
+| `categories` | `GET /api/v1/categories`（不带 `source`），滤 `pay-skill`，10 分钟内存缓存 | 同一张表 | 同一张表（`caps.categories` 恒 `true`） |
 | `caps` | `{search:true, paged:true, categories:true, package:'files'}` | 同左 | 同左 |
 | `total` | `data.total`（实测 224,219） | `data.total`（实测 160,838） | `data.total`（实测 63,381） |
 | 图标 | `iconUrl`：实测前 100 条约 **八成**有图（COS 的 `/skill-icons/uploads/…` 与 `cloudcache.tencent-cloud.com` 的 `other_external_resource/…` **两者都是该技能自己的图**），其余为空 ⇒ **绝对 `https:` 即接受，不做 host/path 白名单**；列表阶段直接带出 | **镜像列表行的 `iconUrl`（cloudcache 的绝对 `https:`，与 SkillHub 同一判据）**；`icons()` 只服务已安装行（§7.5） |
@@ -90,7 +90,7 @@ sort 映射（`sort` 四个值，路由层已白名单化；**默认仍是 `reco
 
 **`paged` 的分裂不特殊处理**：clawhub 的 list 与 search **都能翻页**（镜像同一端点），统一由「本次 `next` 是否为 `null`」表达；客户端只问一句「还有 next 吗」，不读 `caps.paged`。
 
-**三个 scope 都有分类表**（同一张：**12 类**——上游 `/api/v1/categories` 给 13 个 key，商业档 `pay-skill` 被 `HIDDEN_CATEGORIES` 滤掉；表本身不带 `source`），计数按 scope 各自算；`caps.categories` 恒 `true`，chips 行恒渲染（U8 之前 ClawHub 那一档没有类别，用户问的就是这句）。
+**三个 scope 都有分类表**（同一张：**12 类**——上游 `/api/v1/categories` 给 13 个 key，商业档 `pay-skill` 被 `HIDDEN_CATEGORIES` 滤掉；表本身不带 `source`），计数按 scope 各自算；`caps.categories` 恒 `true`，chips 行恒渲染（三个 scope 都如此）。
 
 **声明名为什么是硬约束**：安装目录名取包内 `SKILL.md` 的 `name`，而宿主的技能加载器用 `SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/`（`EX/dsh-skill/lib/index.js`，与 `lib/names.js` 的 `isSkillName` 同一文法）判定一个目录能不能成为技能。声明 `Design` 的包即使被强行写进 `skills/`，宿主也不会加载它——所以 `422 E_SKILL_NAME_INVALID` 是**对齐宿主**，不是保守：改名或用 slug 顶替只会产出一个"看得见、永远不生效"的目录。
 
@@ -106,7 +106,7 @@ sort 映射（`sort` 四个值，路由层已白名单化；**默认仍是 `reco
 
 **自定义源不做**：`SOURCES` 只收本仓库内置的适配器，没有「用户填一个源地址」的入口——浏览器半部不直连上游（`AGENTS.md` 硬约束 13），origin 由 `lib/market/upstream.js` 固定。加一个源的代价必须停在「仓库里加一个文件 + 一行注册」，而不是运行时可配置项：后者会把白名单、错误码、图标与详情链路全部变成需要用户自己保证的东西。
 
-页面骨架、卡片渲染、合并逻辑、安装流程、路由**一行都不用改**：来源筛选项由 `market/bootstrap` 返回的 `sources[]`（三个 scope）渲染，`caps.categories` 恒 `true`，包形态由 `caps.package` 决定（当前两源都是 `files`；`zip` 分支已于 U7 退役，`install.js` 只走清单那条路）。
+页面骨架、卡片渲染、合并逻辑、安装流程、路由**一行都不用改**：来源筛选项由 `market/bootstrap` 返回的 `sources[]`（三个 scope）渲染，`caps.categories` 恒 `true`，包形态由 `caps.package` 决定（两源都只给 `files` 形态，`install.js` 只走清单那条路）。
 
 ### 7.4 归一化字段表与「缺 = null」不变式
 
@@ -119,7 +119,7 @@ sort 映射（`sort` 四个值，路由层已白名单化；**默认仍是 `reco
 | `owner` | 上游 | SkillHub `namespace.handle`（实测含下划线）／ClawHub **镜像行的 `upstream_owner_login`**（原生 handle；缺则剥 `clawhub_` 前缀，剥不出来整条丢弃，见 §7.8） |
 | `slug` | 上游 | 两源的 `slug`；ClawHub 为空即**丢弃该条**（拼不出身份就装不上） |
 | `displayName` | 上游 | `name`／`displayName`；缺则回落 `slug`，再缺为空串 |
-| `iconUrl` | 上游 / 本地算 | 两种合法形态：① **绝对 `https:`**（可解析即接受，不做 host/path 白名单；`http:`、相对路径与非字符串归 `null`）；② `null`。`null` 与**加载失败**都是「回落首字母头像」，破图由浏览器侧 `onError` 兜住。`lucide:` 与 `/api/v1/skill-icons/<hash>` 两种形态随 `clawhub.ai` 于 U7 退场 |
+| `iconUrl` | 上游 / 本地算 | 两种合法形态：① **绝对 `https:`**（可解析即接受，不做 host/path 白名单；`http:`、相对路径与非字符串归 `null`）；② `null`。`null` 与**加载失败**都是「回落首字母头像」，破图由浏览器侧 `onError` 兜住。`lucide:` 与 `/api/v1/skill-icons/<hash>` 两种形态不存在（随 `clawhub.ai` 一起退场） |
 | `summary` | 上游 | 折叠成一行、≤ 400 字符（超长截断） |
 | `author` | 上游 | 三级回落：`publisher.name/displayName` → `namespace.displayName` → `owner` |
 | `version` | 上游 | **缺失如实为 `null`**。ClawHub 卡片用列表行的 `version` 过 `versionLike()`（像 id 的串 ⇒ `null`）；**卡片 / 详情 / 安装三处都取镜像口径**，代价是可能滞后上游真最新（`decisions.md` 附录 N 的 N-10） |
@@ -131,7 +131,7 @@ sort 映射（`sort` 四个值，路由层已白名单化；**默认仍是 `reco
 | `category` | 上游 | 两源都有：SkillHub 自带；ClawHub 来自镜像（详情端点没有，由适配器那次覆盖补上，见 §7.8） |
 | `packageKind` | 本地算 | 来自 `caps.package`，决定详情页「文件」从哪来 |
 
-`MarketDetail`（`market/detail` 的 `data`）：`item`（上表）、`overview`（`stripFrontmatter(SKILL.md)` 的正文，≤ 8000 字符；正文为空时回落 `summary`）、`declaredName`（`parseFrontmatter(SKILL.md).name`，不合规也原样给出）、`nameValid`（`isSkillName(declaredName)`）、`installTo`（`nameValid ? join(skillsRoot, declaredName) : skillsRoot`，由路由补，适配器不碰磁盘）、`files[{path, size}]`（按清单顺序，`sha256` 不下发）、`filesComplete`（`files` 形态恒 `true`；zip 读不全的 `false` 分支于 U7 随 zip 读取模块退役，客户端的既有分支保留不动）。
+`MarketDetail`（`market/detail` 的 `data`）：`item`（上表）、`overview`（`stripFrontmatter(SKILL.md)` 的正文，≤ 8000 字符；正文为空时回落 `summary`）、`declaredName`（`parseFrontmatter(SKILL.md).name`，不合规也原样给出）、`nameValid`（`isSkillName(declaredName)`）、`installTo`（`nameValid ? join(skillsRoot, declaredName) : skillsRoot`，由路由补，适配器不碰磁盘）、`files[{path, size}]`（按清单顺序，`sha256` 不下发）、`filesComplete`（`files` 形态恒 `true`；zip 读不全的 `false` 分支不存在（zip 读取模块已随之一并删除），客户端的既有分支保留不动）。
 
 `SourcePage`（`list`/`search` 的返回）：`{items: MarketItem[], next: string|null, total: number|null}`。`next` 是 `encodeCursor()` 产出的不透明串，客户端原样回传。
 
@@ -152,7 +152,7 @@ sort 映射（`sort` 四个值，路由层已白名单化；**默认仍是 `reco
 1. **随列表拿**：两个源的列表条目都自带 `iconUrl`（SkillHub 是 COS/cloudcache 的绝对 `https`，ClawHub 是镜像同样是绝对 `https`），直接用，零额外请求。
 2. **已安装行按身份查**：已安装行手上只有 `_meta.json` 的身份（`Row.upstream`），没有市场列表载荷，所以 `POST /market/icons` 是它唯一的补图通道：SkillHub 每条一次 detail（`namespace=<owner>`，实测 0.26s），ClawHub 每条一次 `keyword=<slug>` 的列表查询（按 `slug` + `upstream_owner_login` 双匹配取那一行）。并发 6、整批 6s、单条 5s、正向 10min / 负向 60s 缓存，键 `<sourceId>:<owner>:<slug>`；失败只让该条 `null`，**绝不抛**。
 
-**没有第三段**：U7 之后两张图标代理路由（`market/lucide` #10 与 `market/clawhub-icon` #12）与它们的上游 `clawhub.ai` 一起退场——镜像给的是可直连的绝对 `https`，`<img>` 能画，不需要本机转发。
+**没有第三段**：两张图标代理路由（`market/lucide` #10 与 `market/clawhub-icon` #12）与它们的上游 `clawhub.ai` 都已不存在——镜像给的是可直连的绝对 `https`，`<img>` 能画，不需要本机转发。
 
 ### 7.7 收藏（本地书签）
 
@@ -160,7 +160,7 @@ sort 映射（`sort` 四个值，路由层已白名单化；**默认仍是 `reco
 
 **读侧只有一处**：`market/bootstrap` 的 `favorites` 与 `favoritesOk`。**不新增 GET**——收藏是全局集合，而 `bootstrap` 正是「全局一次」的那条，同一往返拿齐、首帧书签就对；新开一条只读端点，等于为「bootstrap 挂了还能读收藏」这一个代价多一份 `guard()` / 错误码 / 测试，却不减少任何一次往返。`bootstrap` 失败时书签态未知，由 #13 的权威回包自愈（点一下无论方向，响应里的 `favorites` 就是真值，且 `toggle` 幂等）。`bootstrap?refresh=1` **不清**收藏（收藏不是缓存）。
 
-**两条同名不同源**：卡片上的「收藏 N」是上游 `stars`（别人收藏了多少），你自己的书签（**U5 起卡片上没有入口**，见 `docs/contracts/decisions.md` 附录 L；这份集合与写路由原样保留）。界面**不合并、不互相修正**，数字段的 `aria-label` 说清它是上游收藏数——否则「我收藏了它为什么显示 0」是一定的投诉。
+**两条同名不同源**：卡片上的「收藏 N」是上游 `stars`（别人收藏了多少），你自己的书签（**卡片上没有入口**，见 `docs/contracts/decisions.md` 附录 L；这份集合与写路由原样保留）。界面**不合并、不互相修正**，数字段的 `aria-label` 说清它是上游收藏数——否则「我收藏了它为什么显示 0」是一定的投诉。
 
 **降级 / 上限 / 幂等 / 并发**：文件**缺失** ⇒ 空集 + `readable:true`（全新安装没写过这个文件，**缺失 ≠ 损坏**，`favoritesOk` 的唯一语义是「书签可能丢了」）；**只有**解析失败或不可读（非 JSON、顶层非对象、`favorites` 非数组、EACCES/EISDIR…）才 `readable:false`，此时 `bootstrap` 照常 `200`（`favoritesOk:false`），**绝不让市场页失败**；读侧逐条丢弃「不是 `sourceId:owner:slug` 三元组或超过 200 字符」的条目与重复项，手改坏了只丢坏行；上限 **500**，满时新增 `409 E_FAVORITE_FULL`，取消永远允许；与现状一致的写入不落盘（幂等）；写盘复用 `store.js` 的 `writeAtomic`（临时文件 + fsync + rename，临时名带 `favorites` 前缀），进程内一条 Promise 链把读-改-写串行化。跨进程并发不处理：与 `install.js` 一样按「本机单宿主」设计。路由细节见 `docs/contracts/routes.md` §3.7.6。
 
@@ -181,7 +181,7 @@ ClawHub 的**目录、详情、安装包**三条链路都由 SkillHub 的镜像�
 3. **`score` 只有列表有**：镜像 detail 的 `stats` 是 `{comments, downloads, installs, stars, versions}`。详情页的 `score` 用第 2 条那次查询的同一行补上（0 额外请求）；事实表不显示评分。
 4. **`version` 三处同源**：卡片用列表行的版本、详情用 detail 的版本、安装用 `plan()` 解析的版本，全部来自镜像。代价是可能**滞后上游真最新**（`decisions.md` 附录 N 的 N-10）；一致性优先于新鲜度。
 
-**U8 补上了这一半**：ClawHub 也有分类与计数——`bootstrap?source=<scope>` 只算被问的那一档（14 次请求，与今天同一价钱），缓存按 `sourceParam` 分开（§7.9 第 3 条）；切 scope 才补算，首屏成本零回归。
+**ClawHub 的分类与计数走同一条路**：`bootstrap?source=<scope>` 只算被问的那一档（14 次请求，与今天同一价钱），缓存按 `sourceParam` 分开（§7.9 第 3 条）；切 scope 才补算，首屏成本零回归。
 
 **「不限 API Key」过滤不做**（站点有，用户明确排除，也不预留占位 UI；理由见 `docs/contracts/decisions.md` 附录 O-6）。
 
@@ -229,7 +229,7 @@ ClawHub 的**目录、详情、安装包**三条链路都由 SkillHub 的镜像�
 
 **U5 为什么必须走 `lib/frontmatter.js`**：启用状态是**旧文件的一行**，要落到**新文件的字节**上。`setDisableModelInvocation` 是新文件唯一合法的改写口（`AGENTS.md` 硬约束 7）；它保真的是**新文件自己的** CRLF/BOM 与行尾注释，旧文件的行尾不会被搬过来（那个形状属于上游）。读旧值用只读的 `parseFrontmatter`（含块标量），写新值用字节手术——两套规则各管一侧（`docs/contracts/data-model.md` §3.2.4）。
 
-**U7 为什么是两次 rename 而不是「先删再装」**：同目录内 `rename` 是原子的，交换窗口里磁盘上永远存在一个完整目录（旧的或新的）；「先 `rm` 再 `rename`」会留一个「什么都不在」的窗口，进程一死就是丢技能（M2 原设想的「先移出再装」被否就是这个原因，见 `docs/contracts/decisions.md` 附录 R-3）。
+**U7 为什么是两次 rename 而不是「先删再装」**：同目录内 `rename` 是原子的，交换窗口里磁盘上永远存在一个完整目录（旧的或新的）；「先 `rm` 再 `rename`」会留一个「什么都不在」的窗口，进程一死就是丢技能（「先移出再装」那一版被否掉就是这个原因，见 `docs/contracts/decisions.md` 附录 R-3）。
 
 四条回滚路径（磁盘最终状态逐条写清，客户端按码分三种落点）：
 
@@ -279,8 +279,8 @@ R2 与 R3 的分界就是「有没有动过磁盘」：动手之前失败一律 
 | `.skc_marketSelectTrailing` | `margin-left:-8px` | `.marketButton` 的同一条负边距，**只给排序菜单**：ghost 按钮不画盒子，两个菜单之间的空隙会被读成 `gap 8 + 排序菜单自己的 10px 内边距 = 18px`，正好是搜索框那一段（它画边框，读作 8px）的两倍；详见 `docs/contracts/decisions.md` 附录 K K-4 |
 | `.skc_marketChips` | `flex-wrap:wrap; align-items:center; gap:6px; display:flex` | `.categories` |
 | `.skc_marketScope` | `color:var(--dsw-alias-label-tertiary); margin:0; font-size:13px; line-height:20px` | `.muted` |
-| `.skc_marketMore` | `align-self:center` | **新刻度**：列表页脚（「没有更多了」与「加载失败，点此重试」两处 `<p>`），取自面板里那两处的既有实现——U10 之前一直没登记 |
-| `.skc_marketLoadMore` | `align-items:center; justify-content:center; gap:6px; padding-top:8px; display:flex; color:var(--dsw-alias-label-tertiary); font-size:12px; line-height:18px` | **新刻度**：列表底部的「正在加载更多」一行（圆点 + 文案）。U10 之前它是工具栏的第 4 个子元素，出现时把搜索框挤窄 21px（13px 圆点 + 8px gap）——真机量到空态 739px、无圆点 760px |
+| `.skc_marketMore` | `align-self:center` | **新刻度**：列表页脚（「没有更多了」与「加载失败，点此重试」两处 `<p>`），取自面板里那两处的既有实现 |
+| `.skc_marketLoadMore` | `align-items:center; justify-content:center; gap:6px; padding-top:8px; display:flex; color:var(--dsw-alias-label-tertiary); font-size:12px; line-height:18px` | **新刻度**：列表底部的「正在加载更多」一行（圆点 + 文案）。它在列表里、不在工具栏里，出现时不再挤窄搜索框——真机量到空态 739px、无圆点 760px（差的 21px 就是 13px 圆点 + 8px gap） |
 | `.skc_marketNotice` | `border-radius:var(--dsw-radius-md); background:var(--dsw-alias-state-warn-tertiary); align-items:flex-start; gap:8px; margin:0; padding:10px 12px; font-size:12px; line-height:18px; display:flex` | `.notice` |
 | `.skc_marketGrid` | `display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px; margin:0; padding:0; list-style:none` | **新刻度** |
 | `.skc_marketCard` | `border-radius:var(--dsw-radius-xl); align-items:stretch; gap:8px; padding:14px; display:flex; flex-direction:column; position:relative; min-width:0` + hover `background:var(--dsw-alias-interactive-bg-hover)` | `.card`（**无边框**）；column 下必须 `stretch`——`flex-start` 会让骨架条形段与描述收缩包裹 |
@@ -290,7 +290,7 @@ R2 与 R3 的分界就是「有没有动过磁盘」：动手之前失败一律 
 | `.skc_marketCardOpen:focus-visible` | `outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset:2px` | `.cardOpen:focus-visible` |
 | `.skc_marketDesc` | `margin:0; color:var(--dsw-alias-label-tertiary); -webkit-line-clamp:3; -webkit-box-orient:vertical; display:-webkit-box; overflow:hidden; font-size:13px; line-height:20px` | `.description`。**上边距必须归零**：它是 `<p>`，UA 默认 `margin:1em`（13px 字号下上下各 13px）曾让整块读起来发松，而表里其它 `<p>`（`.skc_marketMeta` / `.skc_marketStats` / `.skc_reason`）与 `<ul>`（`.skc_marketTags` / `.skc_marketFiles`）都写了自己归零。上下都归零之后，描述与上下两块的间距完全由 `gap` 决定（卡内三处都是 8px），空摘要的卡也一样 |
 | `.skc_marketMeta` / `FileSize` | `color:var(--dsw-alias-label-tertiary); margin:0; text-overflow:ellipsis; white-space:nowrap; overflow:hidden; font-size:12px; line-height:18px` | `.meta`。作者行**单行省略**：`@owner/slug` 可到 129 字符，允许换行会让头部从 48px 长到 66px、卡片高度随 owner 长度抖动 |
-| `.skc_marketCardEnd` | `z-index:1; flex:none; align-items:center; gap:8px; display:inline-flex; position:relative` | `.cardEnd`（`z-index:1` 让安装按钮浮在点击层之上，**不可省**；U5 起它坐在**头部右侧**，原来的 `align-self:flex-end` 随底行一起作废） |
+| `.skc_marketCardEnd` | `z-index:1; flex:none; align-items:center; gap:8px; display:inline-flex; position:relative` | `.cardEnd`（`z-index:1` 让安装按钮浮在点击层之上，**不可省**；它坐在**头部右侧**，`align-self:flex-end` 那一版不存在） |
 | `.skc_marketEmpty` / `EmptyTitle` | `text-align:center; flex-direction:column; align-items:center; gap:8px; padding:64px 0; display:flex` / `margin:8px 0 0; font-size:14px; font-weight:500; line-height:20px` | `.empty` / `.emptyTitle` |
 | `.skc_marketError` / `Failure` / `More` | `color:var(--dsw-alias-state-error-primary); align-items:center; gap:6px; margin:0; font-size:13px; line-height:20px; display:inline-flex` / `align-items:center; gap:10px; display:flex` / `align-self:center` | `.error` / `.failure` / `.more` |
 | `.skc_marketDetail` / `Crumb` / `CrumbIcon` | `flex-direction:column; gap:32px; display:flex`（**单一来源**：区块之间 32 由父级 gap 给，区块自己 `margin:0`） / `color:var(--dsw-alias-label-tertiary); font:inherit; cursor:pointer; background:0 0; border:0; align-self:flex-start; align-items:center; gap:6px; padding:0; font-size:12.5px; display:inline-flex` / `transform:rotate(90deg)` | `.detail` / `.crumb` / `.crumbIcon` |
@@ -311,7 +311,7 @@ R2 与 R3 的分界就是「有没有动过磁盘」：动手之前失败一律 
 | `.skc_marketTags` / `Tag` | `flex-wrap:wrap; gap:6px; min-width:0; margin:0; padding:0; display:flex; list-style:none` / `border:.5px solid var(--dsw-alias-border-l2); border-radius:var(--dsw-radius-sm); color:var(--dsw-alias-label-tertiary); max-width:100%; padding:1px 6px; font-size:11px; line-height:16px; white-space:nowrap; text-overflow:ellipsis; overflow:hidden` | **新刻度** ⑫（19px 描边 chip；与 `.skc_roTag` 同档字号、不同材质） |
 | `.skc_marketSkeletonTag` | `border-radius:var(--dsw-radius-sm); width:48px; height:19px`；底色复用既有 `.skc_skeletonFill` | **新刻度** ⑬（与真件同盒 48×19） |
 
-**新刻度共十二条在用**（编号只增不复用；**⑨ 已退役**——U5 按用户决定撤掉了卡片上的收藏按钮，见 `docs/contracts/decisions.md` 附录 L）：① 网格 `minmax(280px, 1fr)` + `gap:12px`（960px 内容宽正好 3 列、<600px 一行 1 列）；② 卡片竖向排布、`padding` 8 → 14、`align-items:stretch`（column 下 `flex-start` 会让骨架条形段与描述收缩包裹）；**③ 头部行 `.skc_marketHead`**（`align-items:center; gap:12px`，`nowrap` 是 flex 默认——安装四态文案变宽只让标题收缩成省略号，动作位永不换行；原「动作靠右下」随底行作废）；④ 骨架占位 `SkeletonChip` 64×26；⑤ 骨架占位 `SkeletonAction` 64×24（④⑤ 都对齐 `Button size="sm"`，骨架与真件同宽同高）；⑥ 安装 toast 副行 `ToastHint` 12/18 secondary（与元信息行同刻度）；⑦ 三段 `marketStats`：三格轨道恒为 `repeat(3, minmax(0,72px))`、左对齐、`tabular-nums`、**槽位顺序 评分·下载·收藏**，缺值的格留空——**三格固定宽度是三段在任何两张卡上落到同一 x 的唯一办法**，`tabular-nums` 让 `1` 与 `8` 同宽；⑧`.skc_marketSourceMark` 16×16 品牌位图 + `radius-sm`（与标题 14/20 同一视觉重量，再大就抢标题）；⑩`.skc_marketSkeletonStat` 56×12 + `radius-xs`（与真件三段同节奏）；**⑪** `.skc_marketBody` 的 `gap` 是 **8px**，与 `.skc_marketCard` 的 `gap` 同值：卡内三处间距因此**全为 8px**，且各只有一个来源——**① 头→描述** 来自卡片 `gap`，**② 描述→标签**、**③ 标签→三段** 来自正文 `gap`；与 ② 的卡片 `padding` 14px 是不同用途的值，别互相套。描述自身是 **13/20**（20 本来就在字阶上——标题 14/20），三行描述盒 **60px**，`margin: 0`（UA `1em` 必须归零）。实测口径（真机 `getBoundingClientRect`）：`head.bottom → body.top` = 8、`desc.bottom → tags.top` = 8、`tags.bottom → stats.top` = 8，卡高 **197px**；**⑫** `.skc_marketTags`/`Tag` 19px 描边 chip（`border-l2` 令牌，零色值；单条 `max-width:100%` + 省略，长 topic 撑不宽卡片）；**⑬** `.skc_marketSkeletonTag` 48×19（与真件同盒）。骨架/副行/图形/标签类只在市场页出现，**不碰已安装页签的任何既有类**；`.skc_marketDesc` 由 1 行改 3 行是**改值**（见上表那一行），不算新刻度。
+**新刻度共十二条在用**（编号只增不复用；**⑨ 空缺不复用**——卡片上没有收藏按钮（按用户决定撤除），见 `docs/contracts/decisions.md` 附录 L）：① 网格 `minmax(280px, 1fr)` + `gap:12px`（960px 内容宽正好 3 列、<600px 一行 1 列）；② 卡片竖向排布、`padding` 8 → 14、`align-items:stretch`（column 下 `flex-start` 会让骨架条形段与描述收缩包裹）；**③ 头部行 `.skc_marketHead`**（`align-items:center; gap:12px`，`nowrap` 是 flex 默认——安装四态文案变宽只让标题收缩成省略号，动作位永不换行；原「动作靠右下」随底行作废）；④ 骨架占位 `SkeletonChip` 64×26；⑤ 骨架占位 `SkeletonAction` 64×24（④⑤ 都对齐 `Button size="sm"`，骨架与真件同宽同高）；⑥ 安装 toast 副行 `ToastHint` 12/18 secondary（与元信息行同刻度）；⑦ 三段 `marketStats`：三格轨道恒为 `repeat(3, minmax(0,72px))`、左对齐、`tabular-nums`、**槽位顺序 评分·下载·收藏**，缺值的格留空——**三格固定宽度是三段在任何两张卡上落到同一 x 的唯一办法**，`tabular-nums` 让 `1` 与 `8` 同宽；⑧`.skc_marketSourceMark` 16×16 品牌位图 + `radius-sm`（与标题 14/20 同一视觉重量，再大就抢标题）；⑩`.skc_marketSkeletonStat` 56×12 + `radius-xs`（与真件三段同节奏）；**⑪** `.skc_marketBody` 的 `gap` 是 **8px**，与 `.skc_marketCard` 的 `gap` 同值：卡内三处间距因此**全为 8px**，且各只有一个来源——**① 头→描述** 来自卡片 `gap`，**② 描述→标签**、**③ 标签→三段** 来自正文 `gap`；与 ② 的卡片 `padding` 14px 是不同用途的值，别互相套。描述自身是 **13/20**（20 本来就在字阶上——标题 14/20），三行描述盒 **60px**，`margin: 0`（UA `1em` 必须归零）。实测口径（真机 `getBoundingClientRect`）：`head.bottom → body.top` = 8、`desc.bottom → tags.top` = 8、`tags.bottom → stats.top` = 8，卡高 **197px**；**⑫** `.skc_marketTags`/`Tag` 19px 描边 chip（`border-l2` 令牌，零色值；单条 `max-width:100%` + 省略，长 topic 撑不宽卡片）；**⑬** `.skc_marketSkeletonTag` 48×19（与真件同盒）。骨架/副行/图形/标签类只在市场页出现，**不碰已安装页签的任何既有类**；`.skc_marketDesc` 由 1 行改 3 行是**改值**（见上表那一行），不算新刻度。
 
 三条不可协商的纪律：
 
@@ -321,7 +321,7 @@ R2 与 R3 的分界就是「有没有动过磁盘」：动手之前失败一律 
 
 卡片**无描边**：描边只出现在头像框上；卡面靠 `radius-xl` + hover 底色表达可点性（依据见 `docs/contracts/decisions.md` 附录 E）。
 
-**头像位的两种内容**：`iconUrl !== null` 时头像盒里渲染 `<img src={iconUrl}>`——占满盒子（`width:100%; height:100%`）、`object-fit:contain`（图标常带透明边或非正方形，`cover` 会裁掉形状）、圆角 `calc(var(--dsw-radius-lg) - .5px)` 即落在 0.5px 描边**内侧**（与既有 `background-clip:padding-box` 是同一套几何，改错会在描边处露出 1px 白边）；`iconUrl === null` 与**图片加载失败**（`onError`，按 URL 记录、不重试）都回落 `avatar.js` 的首字母头像。两种内容共用同一个 48×48 盒子，切换**不改变**行高、节距与网格列宽——「有图标」只是换盒内内容，不新增容器。两个源的 `iconUrl` 都是上游的绝对 `https` 图片，走同一个 `<img>`；`lucide:` 与 `/skill-icons/…` 两种旧形态随 `clawhub.ai` 与两条代理路由于 U7 退场，图标不再需要本机转发或额外着色逻辑。
+**头像位的两种内容**：`iconUrl !== null` 时头像盒里渲染 `<img src={iconUrl}>`——占满盒子（`width:100%; height:100%`）、`object-fit:contain`（图标常带透明边或非正方形，`cover` 会裁掉形状）、圆角 `calc(var(--dsw-radius-lg) - .5px)` 即落在 0.5px 描边**内侧**（与既有 `background-clip:padding-box` 是同一套几何，改错会在描边处露出 1px 白边）；`iconUrl === null` 与**图片加载失败**（`onError`，按 URL 记录、不重试）都回落 `avatar.js` 的首字母头像。两种内容共用同一个 48×48 盒子，切换**不改变**行高、节距与网格列宽——「有图标」只是换盒内内容，不新增容器。两个源的 `iconUrl` 都是上游的绝对 `https` 图片，走同一个 `<img>`；`lucide:` 与 `/skill-icons/…` 两种旧形态不存在（随 `clawhub.ai` 与两条代理路由一起退场），图标不再需要本机转发或额外着色逻辑。
 
 ---
 

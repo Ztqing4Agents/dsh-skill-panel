@@ -9,7 +9,7 @@
 2026-11-09 从原单文件契约拆出（`git show a8141eb:docs/system_design.md`），编号 A.1–A.9 保持原值。**编号 A.1–A.9 保持原值**——`test/styles.test.mjs`、`test/view-skeleton.test.mjs` 的头注按 `A.x` 锚定本文件。市场页的刻度不在本文件：`A.10` 空着不用，市场刻度（筛选栏 / 网格 / 卡片 / 详情 / 确认弹窗）统一放在 `docs/contracts/market.md` 附录 F（本文件行数上限所致）。
 
 > **唯一允许的取值来源**：`--dsw-*` 令牌 + 宿主 primitive 组件。本文件里的 px 是**字号/行高/尺寸刻度**（DSH 没有 typography token，见 `HIDDER/docs/reference/settings-ui.md` §6），不是颜色。
-> 所有规则体逐字来自 `[PM-CSS]`（`EX/dsh-client-ui-plugin-manager/lib/client.js` 内 `PluginManagerPage.module.css` 的 `css` 字符串）或 `SHELL/index-lh_YM6sT.css`，只把类名前缀换成 `skc_`、把局部变量换成 `--skc-*`。**不允许在别处再声明同名 `--dsw-*` 变量。**
+> 所有规则体逐字来自 `[PM-CSS]`（`EX/dsh-client-ui-plugin-manager/lib/client.js` 内 `PluginManagerPage.module.css` 的 `css` 字符串）或 `SHELL/index-CSAdOBx6.css`，只把类名前缀换成 `skc_`、把局部变量换成 `--skc-*`。**不允许在别处再声明同名 `--dsw-*` 变量。**
 
 ## A.1 页面外壳
 
@@ -126,7 +126,7 @@
 .skc_addPrimary{ border-top-right-radius: 0; border-bottom-right-radius: 0 }
 .skc_addMore{ border-left: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary-foreground) 30%, transparent); border-top-left-radius: 0; border-bottom-left-radius: 0; width: 32px; padding: 0 }
 
-/* 添加菜单（U22，逐字取宿主 `.addMenu` / `.addMenu [role=menuitem]` / `.addMenuItem` / `.addMenuDescription`；数值见 A.9） */
+/* 添加菜单（逐字取宿主 `.addMenu` / `.addMenu [role=menuitem]` / `.addMenuItem` / `.addMenuDescription`；数值见 A.9） */
 .skc_addMenu{ width: 320px; max-width: calc(100vw - 48px) }
 .skc_addMenu [role='menuitem']{ height: 72px; box-sizing: border-box; gap: 10px; padding: 6px 12px }
 .skc_addMenuItem{ display: flex; flex-direction: column; gap: 2px; white-space: normal }
@@ -222,7 +222,7 @@ min-width: 58px; height: 28px; display: inline-flex; position: relative }
 .skc_detailVersionText{ display: flex; flex-direction: column; gap: 2px; min-width: 0 }
 /* 卡内结论 14/22（与描述同阶）；时间那行沿用 .skc_marketScope */
 .skc_detailVersionTitle{ margin: 0; font-size: 14px; line-height: 22px }
-/* 展开列表（U19）：行配方取自 .skc_marketFiles li（.5px 分隔、6px 内边距、13/20）；日期仍用 .skc_marketScope（12/18 tertiary），按钮复用 Button size=sm */
+/* 展开列表：行配方取自 .skc_marketFiles li（.5px 分隔、6px 内边距、13/20）；日期仍用 .skc_marketScope（12/18 tertiary），按钮复用 Button size=sm */
 .skc_detailVersionList{ display: flex; flex-direction: column; margin: 8px 0 0; padding: 0; list-style: none }
 .skc_detailVersionItem{ display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: .5px solid var(--dsw-alias-border-l2); padding: 6px 0; font-size: 13px; line-height: 20px }
 /* 「查看仓库」是页内普通链接（不是点击层）：右下角、13/20 tertiary、hover 变主色 */
@@ -250,7 +250,7 @@ font-size: 13px; line-height: 20px; display: inline-flex;
 .skc_detailBody{ font-size: 13px; line-height: 20px }
 ```
 
-> **行可点（U1 起）**：已安装行点标题即进本地详情页，实现只有上一条 `.skc_cardOpen::after` + `.skc_cardEnd{z-index:1}`（见 `AGENTS.md` 硬约束 9 与 `docs/contracts/installed-detail.md`）；不要 `<a href>`、不要第二个可点区域。行高恒 64px（48 图标 + 8×2 padding）。
+> **行可点**：已安装行点标题即进本地详情页，实现只有上一条 `.skc_cardOpen::after` + `.skc_cardEnd{z-index:1}`（见 `AGENTS.md` 硬约束 9 与 `docs/contracts/installed-detail.md`）；不要 `<a href>`、不要第二个可点区域。行高恒 64px（48 图标 + 8×2 padding）。
 > **行底色的取色已落实（2026-11-15，宿主 `0.2.2-rc.3`；读数见 `docs/reference/host-plugin-page.md` §5）**：宿主用的是两个**令牌**、不是字面量——`@media (hover: hover)` 下 `.cardLink:hover` 取 `--dsw-alias-interactive-bg-hover`（亮 `rgba(38, 49, 72, .06)` = `#2631480f`，暗 `rgba(255, 255, 255, .08)` = `#ffffff14`），`.cardLink:active` 取 `--dsw-alias-interactive-bg-active`（亮 `rgba(38, 49, 72, .1)` = `#2631481a`，暗 `rgba(255, 255, 255, .14)` = `#ffffff24`）。**两个态都按用户 2026-11-15 裁决跟改了**：`.skc_card:hover` 用 hover 令牌（与宿主同一个），`.skc_card:active` 用 **active** 令牌（按下比悬停深一档），与宿主两条规则逐条对应；原「待真机取色」到此关闭（`docs/contracts/decisions.md` 附录 Q 的 Q-5）。
 > 市场卡片**复用** `.skc_cardIcon`（48×48 同一条规则），其声明一字不改——改它会让「已安装」页签 11 行同时回归。来源品牌图标**不是**头像色板的第七组：它是 `src/client/market-marks.jsx` 里两段 `data:image/png;base64` 位图（16×16 显示），只在市场卡片上出现，「已安装」页签不渲染它，也不参与 `avatar.js` 的散列。
 

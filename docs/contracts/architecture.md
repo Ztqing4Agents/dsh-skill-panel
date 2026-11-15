@@ -71,7 +71,7 @@
 
 - **`exports["./client"]` 是硬契约**：宿主按 `clientExportOf(pkgName, pkg.exports)` 取它，缺失即 `client-modules: <pkg> declares dsh.client but exports no "./client" bundle`（`EX/dsh-client-modules/lib/index.js`）。只接受字符串，或 `{ default: string }`；不接受 `{import, require}` 之外的嵌套形态。
 - **`dsh.client` 的合法字段**只有四个：`platform`（必填字符串）、`inject`（字符串数组）、`external`（字符串数组）、`immediately`（布尔）。多写/类型错会在扫描时抛错（`parseDshClient`，`EX/dsh-client-modules/lib/index.js`）。
-- `immediately: true` 的语义是**启动时预取该 bundle**（`SHELL/index-BgUyXZcc.js` 的 `prefetchImmediateTier()`：`manifest.plugins.filter(e => e.immediately).map(e => this.modules.prefetch(e.id))`），不是「立即 apply」。我们取 `true`，与 `PROF/dsh-hidder/package.json`、`PROF/@montersy123/dsh-skill-market/package.json` 一致（首屏侧栏行不等一个网络瀑布）。
+- `immediately: true` 的语义是**启动时预取该 bundle**（`SHELL/index-Ciz7DZxv.js` 的 `prefetchImmediateTier()`：`manifest.plugins.filter(e => e.immediately).map(e => this.modules.prefetch(e.id))`），不是「立即 apply」。我们取 `true`，与 `PROF/dsh-hidder/package.json`、`PROF/@montersy123/dsh-skill-market/package.json` 一致（首屏侧栏行不等一个网络瀑布）。
 - `inject` 只影响 **bundle 加载顺序**（boot graph 让被请求者排在消费者之前，`EX/dsh-client-modules/lib/index.js` 的 `graphRow`/排序注释）。真正的座位等待由 `ctx.slots.inject(...)` 完成（见 1.2.3），所以 `inject` 写少了也不会崩，写多了只是多拉几个已在图里的包。这里只列我们真正依赖的三个。
 - **Host 半部不需要 `dsh.client`，Client 半部不需要 `main`**：`main`/`exports["."]` 给 Host（cordis 加载 ESM 插件），`exports["./client"]` 给浏览器。
 
@@ -139,7 +139,7 @@ react, react/jsx-runtime, react-dom, react-dom/client, @deepseek-ai/cordis, zod,
 @deepseek-ai/dsh-client-ui-dockkit
 ```
 
-依据：`SHELL/index-BgUyXZcc.js` 里 `function YZ(){return{react:…,"react/jsx-runtime":…,…,"@deepseek-ai/dsh-client-ui-dockkit":…}}`（宿主传给 `__ModuleLoader__.create` 的 seed map）。
+依据：`SHELL/index-Ciz7DZxv.js` 里那个 `return{react:…,"react/jsx-runtime":…,…,"@deepseek-ai/dsh-client-ui-dockkit":…}` 的 seed 工厂（宿主传给 `__ModuleLoader__.create` 的 map；压缩名每版都换，按 `dsh-client-ui-dockkit` 搜就能命中）。
 
 因此：**客户端代码只允许 `require` 上面 11 个**（我们实际用 `react`、`react/jsx-runtime`、`@deepseek-ai/dsh-client-ui-primitives`），其它一律走 `ctx.*` 服务或 `fetch` 自己的路由。市场半部不引入任何新的 `require`：一切都是本插件自己的路由，网络能力全在 Host 侧（`lib/market/upstream.js` 用 `node:https`），详见 `docs/contracts/market.md` §7。
 
@@ -276,7 +276,7 @@ ledger.readAll() ─────────────────┘   （R5�
 | 侧栏行图标 | `IconSkillOutlineRegular` | `{size}` |
 | ⓘ / 刷新 / 箭头 / 软链标记 / 警告 | `IconInfoOutlineRegular`(11)、`IconRefreshOutlineRegular`(13)、`IconChevronDownOutlineRegular`、`IconLinkOutlineRegular`、`IconWarningOutlineRegular` | `{size, "aria-hidden"?}` |
 
-依据：`EX/dsh-client-ui-plugin-manager/lib/client.js`（SegmentedTabs / Switch / Button / Tooltip / StateDot / Toast 的真实调用点，见 §3.3 各条引注）；导出名在 `SHELL/index-BgUyXZcc.js` 中存在（如 `IconSkillOutlineRegular`、`IconLinkOutlineRegular`、`StateDot`、`Toast`）。
+依据：`EX/dsh-client-ui-plugin-manager/lib/client.js`（SegmentedTabs / Switch / Button / Tooltip / StateDot / Toast 的真实调用点，见 §3.3 各条引注）；导出名在 `SHELL/index-Ciz7DZxv.js` 中存在（如 `IconSkillOutlineRegular`、`IconLinkOutlineRegular`、`StateDot`、`Toast`）。
 
 行图标（`.skc_cardIcon`）**不取 primitives**：它是首字母头像（技能名首字母 + 按名字散列的粉彩色块），
 色板与散列在 `src/client/avatar.js`，刻度见 `docs/contracts/visual.md` A.5 / A.9。
@@ -316,8 +316,8 @@ ledger.readAll() ─────────────────┘   （R5�
 | `lib/registry.js` | `snapshotRegistry(ctx.skills, cwd)` + `rankOfSummary(summary)`（= 先按 `source`/`provider` 映射成 level，再调 `classify.rankOf(level)`；映射表见 1.4.3）；summary 的 `resourceBase.path` 由 `lib/classify.js` 的 `buildRow` 透出成 `Row.originPath`（内置块靠它算包名，纯展示，不参与判据） |
 | `lib/classify.js` | **纯函数核心**：`rankOf(level)`、`classifySkill(input)`、`mergeCatalog({scanned, registry, ledger})`、`buildGroups()` |
 | `lib/provider-toggles.js` | 自有存储 `$DSH_HOME/dsh-skill-panel/provider-toggles.json`：`deserialize`/`serialize`/`read`/`setEnabled`（原子写、损坏降级）。同族的另一份自有存储是 `lib/market/store.js` 的安装台账（形状与 `writeAtomic` 见 `docs/contracts/routes.md` §3.7.4） |
-| `lib/routes.js` | `makeRoutes(ctx, deps) → WebRoute[]`：`list` / `toggle` / `provider-toggle` / `health` / `detail` / `add` / `remove` 七条本地面 exact 路由 + 市场面 **9 条**（批量图标 `market/icons`、本地收藏写 `market/favorite`、版本列表 `market/versions` 与覆盖安装 `market/update` 在内；两条图片端点已于 U7 退场）+ 围栏 + 身份校验 |
-| `lib/local/`（本地写入面，U20/U21） | `errors.js`（`LOCAL_STATUS` 四个新码 + `asLocalError` 归一）、`rules.js`（纯判据：`expandHome` / `skillNameOf` / `shadowOf` / `LOCAL_LIMITS` / `checkPlan` / **`classifyAddSpec`**（`spec` → path 或 github，U21）/ **`locateSkillDir`**（克隆后定位源目录），见 `docs/contracts/data-model.md` §3.2.6）、**`git.js`**（唯一的子进程出口：`cloneRepo` 走 `execFile` + `--depth 1 --single-branch [--branch <ref>] --no-recurse-submodules`；**env 自建、不带父环境**（`PATH`/`HOME`/可选 `TMPDIR` + `LC_ALL=C`/`GIT_TERMINAL_PROMPT=0`/空 `GIT_ASKPASS`·`SSH_ASKPASS`/`SSH_ASKPASS_REQUIRE=never`/`GCM_INTERACTIVE=never` + `GIT_CONFIG_COUNT|KEY_0|VALUE_0` 表达 `credential.helper=''`，共 11–12 键）；输出 ≤16384、60s 超时 + SIGKILL、诊断不落日志也不过 `message`）、`copy.js`（复制管线：`.skc-install-*` 临时目录 → 逐文件复制 → 目录 fsync → 占位 `mkdir` + `rename`）、`index.js`（`createLocalSkills({skillsRoot, dshHome, store, withWriteLock, rescan, copy?, git?})` → `{add, remove}`，守卫 S0–S12 / D0–D9 与 U21 的 G0–G12 在 `docs/contracts/routes.md` §3.3.4；**`copy` 与 `git` 都可注入**——缺省用 `copy.js` 的真实实现，前者只为让 S10「落位失败」与 S11「回读名不一致」在 node 里造得出失败点、后者让「无 git / 超时 / 404 / 定位多候选」在 L2 里造得出来；两者都**不改变守卫顺序与错误码**）。**它不弹自己的锁**：`withWriteLock` 由 `createInstaller` 提供（同一张锁表，见 `docs/contracts/decisions.md` 附录 S-8） |
+| `lib/routes.js` | `makeRoutes(ctx, deps) → WebRoute[]`：`list` / `toggle` / `provider-toggle` / `health` / `detail` / `add` / `remove` 七条本地面 exact 路由 + 市场面 **9 条**（批量图标 `market/icons`、本地收藏写 `market/favorite`、版本列表 `market/versions` 与覆盖安装 `market/update` 在内；两条图片端点已不存在）+ 围栏 + 身份校验 |
+| `lib/local/`（本地写入面） | `errors.js`（`LOCAL_STATUS` 四个新码 + `asLocalError` 归一）、`rules.js`（纯判据：`expandHome` / `skillNameOf` / `shadowOf` / `LOCAL_LIMITS` / `checkPlan` / **`classifyAddSpec`**（`spec` → path 或 github）/ **`locateSkillDir`**（克隆后定位源目录），见 `docs/contracts/data-model.md` §3.2.6）、**`git.js`**（唯一的子进程出口：`cloneRepo` 走 `execFile` + `--depth 1 --single-branch [--branch <ref>] --no-recurse-submodules`；**env 自建、不带父环境**（`PATH`/`HOME`/可选 `TMPDIR` + `LC_ALL=C`/`GIT_TERMINAL_PROMPT=0`/空 `GIT_ASKPASS`·`SSH_ASKPASS`/`SSH_ASKPASS_REQUIRE=never`/`GCM_INTERACTIVE=never` + `GIT_CONFIG_COUNT|KEY_0|VALUE_0` 表达 `credential.helper=''`，共 11–12 键）；输出 ≤16384、60s 超时 + SIGKILL、诊断不落日志也不过 `message`）、`copy.js`（复制管线：`.skc-install-*` 临时目录 → 逐文件复制 → 目录 fsync → 占位 `mkdir` + `rename`）、`index.js`（`createLocalSkills({skillsRoot, dshHome, store, withWriteLock, rescan, copy?, git?})` → `{add, remove}`，守卫 S0–S12 / D0–D9 / G0–G12 在 `docs/contracts/routes.md` §3.3.4；**`copy` 与 `git` 都可注入**——缺省用 `copy.js` 的真实实现，前者只为让 S10「落位失败」与 S11「回读名不一致」在 node 里造得出失败点、后者让「无 git / 超时 / 404 / 定位多候选」在 L2 里造得出来；两者都**不改变守卫顺序与错误码**）。**它不弹自己的锁**：`withWriteLock` 由 `createInstaller` 提供（同一张锁表，见 `docs/contracts/decisions.md` 附录 S-8） |
 | `lib/market/`（市场面） | 源适配器、上游客户端、安装**与覆盖安装**链路、两份自有存储（台账 / 收藏），共 11 个文件；本表不展开，逐个职责见 `docs/contracts/market.md` 附录 G |
 
 ### 2.3 Client 半部源码（`src/client/`，ESM + JSX，esbuild 打包）
@@ -335,7 +335,7 @@ ledger.readAll() ─────────────────┘   （R5�
 | `src/client/header-scroll.js` | `attachHeader(bar)`（克隆量测 + 观测）+ **纯函数** `interpolateParts(parts, offset)` |
 | `src/client/styles.js` | 单一 CSS 字符串（`docs/contracts/visual.md` 的全文）+ `injectStyles()`（按 `data-plugin-css` 去重） |
 | `src/client/toast.jsx` | `shell.overlay` 占位者：渲染刷新失败 toast（primitives `Toast`），离开页面后仍可见 |
-| `src/client/skill-dialogs.jsx` | 已安装页签的两个弹窗（U20）：`AddSkillDialog`（一条路径输入 + 三态 + 就地报因）与 `DeleteConfirm`（标题 + 正文 + 一行路径事实）；座位与 `market-confirm.jsx` 同一套 `Modal`，规范见 `docs/contracts/client.md` §3.9.7 |
+| `src/client/skill-dialogs.jsx` | 已安装页签的两个弹窗：`AddSkillDialog`（一条路径输入 + 三态 + 就地报因）与 `DeleteConfirm`（标题 + 正文 + 一行路径事实）；座位与 `market-confirm.jsx` 同一套 `Modal`，规范见 `docs/contracts/client.md` §3.9.7 |
 | `src/client/` 下的 `market-*` 文件 | 市场页的纯函数模块与 6 个组件（列表 / 筛选 / 卡片 / 详情 / 骨架 / 确认）加图形单元（品牌位图与三段字形）；职责见 `docs/contracts/market.md` 附录 G。`installed-detail.jsx`（已安装详情页）与 `markdown.jsx`（两页共用的正文渲染 + 兜底）见 `docs/contracts/installed-detail.md` |
 
 ### 2.4 构建与门禁脚本（`scripts/`）
@@ -387,7 +387,7 @@ react-dom                              ^18.2.0
 
 依据：`PROF/@michengai/dsh-skills-manager/package.json` 与 `PROF/@linxin666/dsh-client-ui-skill-explorer/package.json` 的 peer 集合（我们只取真正用到的子集），版本区间取本机实测可用的 `0.2.2-rc.1` 系列。
 
-市场面同样**不新增任何 dependency / devDependency**：`node:https`、`node:crypto`、`node:fs/promises` 都是 node 内置；U7 之后没有 zip 读取器（zip 读取模块随 `package:'zip'` 一起退役）。
+市场面同样**不新增任何 dependency / devDependency**：`node:https`、`node:crypto`、`node:fs/promises` 都是 node 内置；没有 zip 读取器（`package:'zip'` 那条路已不存在）。
 
 ---
 

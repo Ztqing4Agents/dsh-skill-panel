@@ -227,7 +227,7 @@ rankOf(level: string): number       // 1.4.3 表；未知 → 600（不是 Infin
 | 内置 + 用户根同名 | 由 `mergeCatalog` 的 rank 裁决：bundled(600) 与 user-dsh(400) 同名时 **400 胜**，显示为本地/已安装行；runtime(250) 与 user-dsh(400) 同名时 250 胜，显示为内置行 |
 | 「内置判定永远胜出」与「rank 小者胜」互斥 | **以 rank 为准**。理由：G1 的承诺是「面板显示的必须就是模型实际拿到的那一条」；若强制内置胜出，bundled(600) 会盖掉 rank 更小、模型真正拿到的 user-dsh(400) 条目，直接违背 G1。runtime(250) 的存在使两句在多数场景一致，只有 bundled 会冲突。已作为待用户拍板项 Q-B 登记 |
 | R5 与 R8 相悖（有前缀但台账记为 local） | `ledgerHit` 在序 5 先命中 ⇒ `installed` |
-| 同名只显示一次 | `mergeCatalog` 的 `groups` 内每个 `name` 出现一次。U20 的「影子」判据不问这里：`excluded` 的赢家根本不在 `groups` 里，所以添加侧改用 `lib/local/rules.js` 的 `shadowOf`（见 §3.2.6） |
+| 同名只显示一次 | `mergeCatalog` 的 `groups` 内每个 `name` 出现一次。「影子」判据不问这里：`excluded` 的赢家根本不在 `groups` 里，所以添加侧改用 `lib/local/rules.js` 的 `shadowOf`（见 §3.2.6） |
 
 #### 3.2.3 `lib/classify.js` 的合并函数
 
@@ -292,7 +292,7 @@ groupEmptyKey(key: 'builtin'|'local'|'installed'): string             // 'group.
 interpolateParts(parts: PartGeometry[], offset: number): Frame[]      // 纯几何插值，无 DOM
 ```
 
-#### 3.2.6 `lib/local/rules.js`（添加/删除的判据，U20）
+#### 3.2.6 `lib/local/rules.js`（添加/删除的判据）
 
 ```js
 expandHome(value: string): string|null     // '~' 与 '~/…' 按 homedir() 展开；展开后非绝对 / 含 NUL / 超 MAX_PATH_CHARS（1024）⇒ null
@@ -328,7 +328,7 @@ locateSkillDir(root: string, subdir: string|null): {dir: string}   // ① 给了
   "downloads": 11340092,             // 上游；缺失 null（**绝不补 0**）
   "saves": 99, "score": 100000, "tags": ["代码生成", "Bug 修复"],   // 上游 stars/score（缺失 null，绝不补 0）/ subCategories.name 前 3（≤3 条、单条 ≤24 字符、保留大小写、**缺 = []**）
   "updatedAt": 1794205858796,        // 上游；epoch 毫秒，只用于排序，**不上屏**
-  "category": "dev-programming", "packageKind": "files"   // 上游（两源都有，U8 起 ClawHub 也有分类）/ 本地算：当前两源恒 'files'（'zip' 已于 U7 退役）
+  "category": "dev-programming", "packageKind": "files"   // 上游（两源都有分类）/ 本地算：当前两源恒 'files'（没有任何 zip 形态）
 }
 ```
 
@@ -341,7 +341,7 @@ locateSkillDir(root: string, subdir: string|null): {dir: string}   // ① 给了
   "declaredName": "dev-god", "nameValid": true, // parseFrontmatter(SKILL.md).name（不合规也原样给出）/ isSkillName(declaredName)
   "installTo": "/Users/…/.dsh/skills/dev-god", // nameValid ? join(skillsRoot, declaredName) : skillsRoot
   "files": [{ "path": "SKILL.md", "size": 7953 }], // 清单顺序；sha256 不下发
-  "filesComplete": true                        // 'files' 形态恒 true（zip 读不全的 false 分支已于 U7 退役）
+  "filesComplete": true                        // 'files' 形态恒 true（'files' 逐文件校验，没有读不全这条分支）
 }
 ```
 
@@ -358,7 +358,7 @@ locateSkillDir(root: string, subdir: string|null): {dir: string}   // ① 给了
 1. 每个字段都存在，不出现 `undefined`；上游没给的一律 `null`，`downloads`、`saves`、`score` 不补 `0`、`version` 不补 `'latest'`、`category` 不补 `''`、**`tags` 是 `[]` 不是 `null`**。
 2. `id` 全仓库唯一；同一 `id` 出现两次时保留第一次出现的那条（浏览器侧 `mergeBatches` 负责）；`installTo` 在 `nameValid === false` 时等于 `skillsRoot` 本身（不吃掉最后一级目录名），界面据此显示「不能安装」。`overview` 不含 frontmatter 分隔行与 `name:`/`description:` 头字段。
 3. 卡片与详情**不显示任何时间**：`updatedAt` 只影响顺序。**唯一例外**：已安装详情的版本展开列表显示 `publishedAt`（上游 `createdAt`，格式化成 `YYYY-MM-DD`）——不同字段、不同页面，登记在 `docs/contracts/decisions.md` 附录 R-1。
-4. `iconUrl` 只有两种合法形态：① 绝对 `https:`（可解析即接受，**不做 host/path 白名单**——两个图床都是逐技能真图）；② `null`。`http:`、相对路径、空值与非字符串归 `null`；`null` 与**加载失败**都是「回落首字母头像」，破图由浏览器侧 `onError` 兜住。`lucide:FileText` 与 `/api/v1/skill-icons/<64hex>` 两种旧形态随 `clawhub.ai` 与两条代理路由于 U7 退场。
+4. `iconUrl` 只有两种合法形态：① 绝对 `https:`（可解析即接受，**不做 host/path 白名单**——两个图床都是逐技能真图）；② `null`。`http:`、相对路径、空值与非字符串归 `null`；`null` 与**加载失败**都是「回落首字母头像」，破图由浏览器侧 `onError` 兜住。`lucide:FileText` 与 `/api/v1/skill-icons/<64hex>` 两种旧形态不存在（随 `clawhub.ai` 与两条代理路由一起退场）。
 
 #### 3.8.2 `lib/market/normalize.js` 与 `mergeBatches` 的纯函数契约
 
