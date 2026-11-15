@@ -87,16 +87,33 @@ const textOf = (f) => {
 const text = { get: textOf, has: (f) => existsSync(join(ROOT, f)) };
 const lines = (f) => textOf(f).split('\n');
 
+/** Every file under `dir` whose name ends with `suffix`, as repo-relative paths. */
+function walkFiles(dir, suffix, out = []) {
+  if (!existsSync(dir)) return out;
+  for (const entry of readdirSync(dir)) {
+    const abs = join(dir, entry);
+    const st = statSync(abs);
+    if (st.isDirectory()) walkFiles(abs, suffix, out);
+    else if (entry.endsWith(suffix)) out.push(relativePath(abs));
+  }
+  return out;
+}
+
 /** Test modules cite contracts in their header comments — those anchors must hold too. */
 const testModules = (() => {
   try {
-    const out = execFileSync('git', ['-C', ROOT, 'ls-files', '-z', '--', 'test'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    // `--others --exclude-standard` matches `listMarkdown`: a test that is written but not
+    // committed yet still counts as a case's landing, so R14 does not go red on the work of
+    // the very change that adds it.
+    const out = execFileSync('git', ['-C', ROOT, 'ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', 'test'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
     // Same rule as `listMarkdown`: git keeps listing a file deleted from the worktree until
     // the deletion is committed, and reading it here would crash the gate instead of
     // reporting on the tree that actually exists.
     return out.split('\0').filter((f) => f.endsWith('.mjs')).filter((f) => existsSync(join(ROOT, f)));
   } catch {
-    return [];
+    // A tree without git — the gate's own self-tests, or an exported copy — still has its
+    // test files on disk. Walk them so the anchor and case checks can run there too.
+    return walkFiles(join(ROOT, 'test'), '.mjs').sort();
   }
 })();
 const headings = (f) => lines(f).flatMap((l) => {
@@ -336,6 +353,84 @@ for (const f of allDocs) {
       red('R13', `${f}:${i + 1}: 引用不入库的瞬态产物 → ${hit[0]}（工作现场入口只有 .agents/work/BOARD.md 与 BOARD-archive.md）`);
     }
   });
+}
+
+/* ------------------------ R14 every acceptance case row lands on a test title */
+
+/**
+ * `docs/contracts/acceptance.md` numbers its cases (`| **K123** | …`) and a test title
+ * repeats the number (`test('K123 …')`). Nothing enforced that link until 2026-11-15:
+ * six cases had quietly lost their landing, and only a manual audit found them.
+ *
+ * Only the case-table rows are read, so ranges (`K28–K61`), group references (`附录 D.7`)
+ * and prose mentions elsewhere (`AGENTS.md`, `decisions.md`, `README.md`) never reach this
+ * rule — a plain "every K\d+ in the text needs a test" check would red on its own table of
+ * contents.
+ *
+ * What it cannot do: tell whether the test behind a number asserts the right thing (a
+ * title keeps a number while the case moves elsewhere and this stays green), and it reads
+ * no assertion bodies at all. It also does not invent a landing for a case that has none:
+ * those sit in EXEMPT_CASES with the reason, and the exemption expires by itself — the
+ * moment a test title carries the number, the exemption turns red and must be deleted.
+ */
+const EXEMPT_CASES = new Map([
+  // 退役：编号不复用（acceptance 各行的「已退役」登记了为什么消失）。
+  ['K33', 'retired 2026-11-09 — the zip reader went away with the `files` mirror; the number is not reused'],
+  ['K58', 'retired 2026-11-09 — the Lucide icon proxy went away with clawhub; the number is not reused'],
+  ['K60', 'retired 2026-11-09 — the clawhub icon proxy went away with the mirror; the number is not reused'],
+  ['K80', 'retired 2026-11-09 — the favorite toggle withdrew from the card; the number is not reused'],
+  // 真机抽查：几何与真实上游要真浏览器，acceptance 三行都写着「不进 npm test」。
+  ['K50', 'real-machine spot check — pixel-level hit plus the live upstream, not in `npm test`'],
+  ['K51', 'real-machine spot check — installs a real skill end to end against the live upstream'],
+  ['K109', 'real-machine spot check — the three-line description geometry at 1320×940'],
+  // 实现仍在、自动化缺一个注入点：竞态在纯 node 里稳定复现不了（看板 V2 补 seam）。
+  ['K14', 'no automated landing yet — the fingerprint re-check is a race; delete this line once V2 adds the seam'],
+]);
+
+if (text.has('docs/contracts/acceptance.md')) {
+  const CASES = 'docs/contracts/acceptance.md';
+  const CASES_ROW = /^\|\s*\*\*(K\d+)\*\*/;
+  const rows = new Map();
+  lines(CASES).forEach((line, i) => {
+    const hit = CASES_ROW.exec(line);
+    if (hit !== null) rows.set(hit[1], i + 1);
+  });
+  /** K number → the first test module whose title leads with it. */
+  const landed = new Map();
+  for (const file of testModules) {
+    let source;
+    try {
+      source = textOf(file);
+    } catch {
+      continue;
+    }
+    for (const title of source.matchAll(/\b(?:test|it|describe)\(\s*['"`]([^'"`]*)['"`]/g)) {
+      // Only the number that *leads* the title is a landing (`K6 / A1 …`, `K25/K28 …`).
+      // A title that merely mentions another case — or a self-test that fabricates one —
+      // must not read as that case's landing, or the exemption list would look stale.
+      const lead = /^K\d+(?:\s*\/\s*K\d+)*/.exec(title[1].trim());
+      if (lead === null) continue;
+      for (const hit of lead[0].matchAll(/K(\d+)/g)) {
+        const id = `K${hit[1]}`;
+        if (!landed.has(id)) landed.set(id, file);
+      }
+    }
+  }
+  for (const [id, at] of rows) {
+    if (landed.has(id) || EXEMPT_CASES.has(id)) continue;
+    red('R14', `${CASES}:${at}: 用例 ${id} 没有测试落点（没有任何 test() 标题带这个号，也不在豁免集里）`);
+  }
+  for (const [id, reason] of EXEMPT_CASES) {
+    if (!rows.has(id)) {
+      red('R14', `${CASES}: 豁免集里的 ${id} 在 acceptance 没有用例行——删掉这条豁免，或把用例行补回来`);
+    } else if (landed.has(id)) {
+      red('R14', `${CASES}: 豁免已失效——${id} 已经有测试落点（${landed.get(id)}），删掉豁免集里那一行（当初的理由：${reason}）`);
+    }
+  }
+  for (const [id, file] of landed) {
+    if (rows.has(id) || EXEMPT_CASES.has(id)) continue;
+    red('R14', `${file}: 测试标题里的 ${id} 在 ${CASES} 没有对应的用例行（编号只在用例表里发）`);
+  }
 }
 
 /* ------------------------------------------------------------------- report */

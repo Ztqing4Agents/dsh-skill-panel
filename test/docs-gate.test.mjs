@@ -255,6 +255,91 @@ test('R13 放行工作现场：AGENTS 的看板行、BOARD-archive 与裸目录�
   }
 });
 
+/* ---------------------------------------------------------------- R14 fixtures */
+
+/** A cases table the R14 cases below can grow: one numbered row per entry. */
+const CASES_DOC = (rows) => `# 验收
+
+> 类型：规范
+> 读者：验收人
+> 真源：npm test
+> 更新触发：改用例编号时同步改本节
+> 规模上限：400
+
+## 验收口径
+
+| # | 目标 | 断言 | 层 |
+| --- | --- | --- | --- |
+${rows.map((row) => `| ${row} |`).join('\n')}
+`;
+
+/** One case-table row, in the shape the gate anchors: `| **K1** | … |`. */
+const caseRow = (id) => `**${id}** | 某事 | 断言 | L1`;
+
+/** A test module whose titles carry the given numbers. */
+const titles = (...ids) => ids.map((id) => `test('${id} 某事', () => {});\n`).join('');
+
+/**
+ * The numbers the gate exempts (retired / real-machine / K14). The gate also asserts that
+ * every exempt number still has a case row, so a fixture that models an acceptance file
+ * has to carry these rows too — that is the invariant, not fixture noise.
+ */
+const EXEMPT_ROWS = ['K33', 'K58', 'K60', 'K80', 'K50', 'K51', 'K109', 'K14'].map((id) => caseRow(id));
+
+test('R14 用例挂载：acceptance 的 K 行在测试标题里查不到就红，并点名号与该行的行号', async () => {
+  const { dir, cleanup } = await tree({
+    ...BASELINE,
+    'docs/contracts/acceptance.md': CASES_DOC([...EXEMPT_ROWS, caseRow('K1'), caseRow('K2'), caseRow('K3')]),
+    'test/case-a.test.mjs': titles('K1', 'K3'),
+  });
+  try {
+    const { status, out } = runGate(dir);
+    assert.equal(status, 1, out);
+    assert.match(out, /R14 docs\/contracts\/acceptance\.md:\d+: 用例 K2 没有测试落点/, out);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('R14 编号双向：测试标题里出现 acceptance 没有的 K 号也要红', async () => {
+  const { dir, cleanup } = await tree({
+    ...BASELINE,
+    'docs/contracts/acceptance.md': CASES_DOC([...EXEMPT_ROWS, caseRow('K1')]),
+    'test/case-b.test.mjs': titles('K1', 'K9'),
+  });
+  try {
+    const { status, out } = runGate(dir);
+    assert.equal(status, 1, out);
+    assert.match(out, /R14 test\/case-b\.test\.mjs: 测试标题里的 K9 在 docs\/contracts\/acceptance\.md 没有对应的用例行/, out);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('R14 豁免会自己失效：K14 缺落点时绿，标题一带上 K14 就红', async () => {
+  const exempt = {
+    ...BASELINE,
+    'docs/contracts/acceptance.md': CASES_DOC([...EXEMPT_ROWS, caseRow('K1'), caseRow('K14')]),
+    'test/case-c.test.mjs': titles('K1'),
+  };
+  const first = await tree(exempt);
+  try {
+    const { status, out } = runGate(first.dir);
+    assert.equal(status, 0, out);
+  } finally {
+    await first.cleanup();
+  }
+
+  const landed = await tree({ ...exempt, 'test/case-c.test.mjs': titles('K1', 'K14') });
+  try {
+    const { status, out } = runGate(landed.dir);
+    assert.equal(status, 1, out);
+    assert.match(out, /R14 docs\/contracts\/acceptance\.md: 豁免已失效——K14 已经有测试落点/, out);
+  } finally {
+    await landed.cleanup();
+  }
+});
+
 test('R9 零行号：file:line 与「第 N 行」都必须红', async () => {
   for (const sentence of ['实现在 `lib/classify.js:12` 里。', '见 §3.2.4 的第 5 行。']) {
     const { dir, cleanup } = await tree({ ...BASELINE, 'docs/contracts/example.md': CONTRACT.replace('条款正文。', sentence) });
