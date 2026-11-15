@@ -159,7 +159,7 @@ test('目录不是可读目录时映射成 E_NOT_WRITABLE', async () => {
   }
 });
 
-test('写入后回读一致：解析出的字段等于目标值', async () => {
+test('K13 写入后回读一致：解析出的字段等于目标值', async () => {
   const tree = await customTree({ 'verify-skill': skillFile({ name: 'verify-skill', extra: ['disable-model-invocation: false'] }) });
   try {
     const file = join(tree.skillsRoot, 'verify-skill', 'SKILL.md');
@@ -239,7 +239,7 @@ test('文件不可读时映射成 E_WRITE_FAILED，且原文件字节不变', as
   }
 });
 
-test('目录不可写时落盘失败映射成 E_WRITE_FAILED，原文件与目录内容都不变', async () => {
+test('K13 目录不可写时落盘失败映射成 E_WRITE_FAILED，原文件与目录内容都不变', async () => {
   const tree = await customTree({ 'readonly-dir': skillFile({ name: 'readonly-dir' }) });
   try {
     const dir = join(tree.skillsRoot, 'readonly-dir');

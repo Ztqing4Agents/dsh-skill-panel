@@ -91,7 +91,7 @@ const EXPECTED = [
   ['dev-expert-pro', 'installed', 'R8', 'medium', false],
 ];
 
-test('A1 五条真机样本在 fixture 树上 5/5 命中三分区', async (t) => {
+test('K6 / A1 五条真机样本在 fixture 树上 5/5 命中三分区', async (t) => {
   const tree = await sampleTree();
   try {
     t.diagnostic(`fixture tree: ${tree.skillsRoot}`);
@@ -110,7 +110,7 @@ test('A1 五条真机样本在 fixture 树上 5/5 命中三分区', async (t) =>
   }
 });
 
-test('A1 五条样本的判定与机器无关：临时目录里的 fixture 树给出同样的 5/5', async (t) => {
+test('K6 / A1 五条样本的判定与机器无关：临时目录里的 fixture 树给出同样的 5/5', async (t) => {
   const tree = await sampleTree();
   try {
     // 这一步同时证明「结果只取决于树里的字节」：树在 mkdtemp 出来的临时目录里，

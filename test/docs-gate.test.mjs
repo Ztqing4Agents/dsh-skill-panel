@@ -220,6 +220,41 @@ test('R8 引用可达：反引号里的仓库路径不存在必须红', async ()
   }
 });
 
+test('R13 禁引瞬态产物：docs 里指向 .agents/work/{scratch,wip} 的文件必须红', async () => {
+  for (const [path, base, ref] of [
+    ['docs/contracts/example.md', CONTRACT, '.agents/work/scratch/host-detail-metrics.md'],
+    ['docs/reference/example.md', REFERENCE, '.agents/work/wip/u19-update-design.md'],
+  ]) {
+    const { dir, cleanup } = await tree({ ...BASELINE, [path]: `${base}\n读数见 \`${ref}\`。\n` });
+    try {
+      const { status, out } = runGate(dir);
+      assert.equal(status, 1, out);
+      // 报错必须点名文件与命中片段，否则拿到红也定位不到那一行。
+      assert.ok(
+        out.split('\n').some((row) => row.includes(`R13 ${path}:`) && row.includes(`→ ${ref}`)),
+        `R13 要点名文件与命中片段：\n${out}`,
+      );
+    } finally {
+      await cleanup();
+    }
+  }
+});
+
+test('R13 放行工作现场：AGENTS 的看板行、BOARD-archive 与裸目录名都不红', async () => {
+  const { dir, cleanup } = await tree({
+    ...BASELINE,
+    // AGENTS.md 的两处合法指路：命令块里的目录名本身 + 文档地图里的看板入口。
+    'AGENTS.md': '# AGENTS\n\n```bash\nnpm run check:board  # 无 .agents/work/ 时跳过\n```\n\n| 看板 | `.agents/work/BOARD.md` | 不入库 |\n',
+    'docs/contracts/example.md': `${CONTRACT}\n归档见 \`.agents/work/BOARD-archive.md\`。\n`,
+  });
+  try {
+    const { status, out } = runGate(dir);
+    assert.equal(status, 0, out);
+  } finally {
+    await cleanup();
+  }
+});
+
 test('R9 零行号：file:line 与「第 N 行」都必须红', async () => {
   for (const sentence of ['实现在 `lib/classify.js:12` 里。', '见 §3.2.4 的第 5 行。']) {
     const { dir, cleanup } = await tree({ ...BASELINE, 'docs/contracts/example.md': CONTRACT.replace('条款正文。', sentence) });

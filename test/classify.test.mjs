@@ -44,7 +44,7 @@ function registry(name, rank, overrides = {}) {
   return { name, description: `${name} from registry`, provider: 'filesystem', rank, ...overrides };
 }
 
-test('rankOf 复刻官方根优先级表 100/200/250/300/400/500/600', () => {
+test('K4 rankOf 复刻官方根优先级表 100/200/250/300/400/500/600', () => {
   assert.equal(rankOf('project-dsh'), 100, 'project-dsh 的 rank 是 100');
   assert.equal(rankOf('project-agents'), 200, 'project-agents 的 rank 是 200');
   assert.equal(rankOf('runtime'), 250, 'runtime provider 的 rank 是 250');
@@ -54,7 +54,7 @@ test('rankOf 复刻官方根优先级表 100/200/250/300/400/500/600', () => {
   assert.equal(rankOf('bundled'), 600, 'bundled 根的 rank 是 600');
 });
 
-test('rankOf 对未知档位回落 600，而不是 Infinity 或 NaN', () => {
+test('K4 rankOf 对未知档位回落 600，而不是 Infinity 或 NaN', () => {
   assert.equal(rankOf('third-party'), 600, '未知档位回落 600');
   assert.equal(rankOf(undefined), 600, '缺省档位回落 600');
   assert.equal(Number.isNaN(rankOf('x')), false, '回落值不是 NaN');

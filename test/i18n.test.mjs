@@ -97,7 +97,7 @@ function sources(dir, out = []) {
   return out;
 }
 
-test('zh.json 与 en.json 的键集完全一致', async () => {
+test('K27 zh.json 与 en.json 的键集完全一致', async () => {
   const zh = await readDictionary('zh');
   const en = await readDictionary('en');
   const zhKeys = flatten(zh).sort();
@@ -179,7 +179,7 @@ test('三处必需键都存在且非空', async () => {
   }
 });
 
-test('入口键 panel.label 存在，中文取值是「技能」', async () => {
+test('K27 入口键 panel.label 存在，中文取值是「技能」', async () => {
   const zh = await readDictionary('zh');
   const en = await readDictionary('en');
   assert.equal(valueAt(zh, 'panel.label'), '技能', '中文入口名是「技能」');
@@ -206,7 +206,7 @@ test('英文词典里没有残留中文', async () => {
   assert.deepEqual(offending, [], 'en.json 的所有取值都不含 CJK 字符');
 });
 
-test('lib/ 与 src/client/ 里没有任何 CJK 字面量', () => {
+test('K27 lib/ 与 src/client/ 里没有任何 CJK 字面量', () => {
   const problems = [];
   for (const dir of ['lib', 'src/client']) {
     for (const file of sources(join(ROOT, dir))) {

@@ -8,13 +8,13 @@ import test from 'node:test';
 
 import { identityKey, isAbsoluteSkillFile, isSafeRelativePath, isSkillName, isWithin } from '../lib/names.js';
 
-test('isSkillName 接受宿主的 kebab-case 文法', () => {
+test('K1 isSkillName 接受宿主的 kebab-case 文法', () => {
   for (const name of ['dev-docs-standards', 'a1', 'ui-design', 'dev-expert-pro']) {
     assert.equal(isSkillName(name), true, `"${name}" 是合法技能名`);
   }
 });
 
-test('isSkillName 拒绝单段为空、大写、空格与空串', () => {
+test('K1 isSkillName 拒绝单段为空、大写、空格与空串', () => {
   for (const name of ['-a', 'a-', 'a--b', 'A', '', 'a b', 'a_b', '技能']) {
     assert.equal(isSkillName(name), false, `"${name}" 不是合法技能名`);
   }

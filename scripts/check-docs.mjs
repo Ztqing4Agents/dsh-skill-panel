@@ -313,6 +313,31 @@ for (const [f, limit] of declaredLimit) {
   if (n > limit) warn('R11', `${f}: ${n} lines (>${limit} declared) —— 合并/迁出/拆分，别删边缘条件`);
 }
 
+/* -------------------------- R13 no pointers at the local-only .agents/work/ drafts */
+
+/**
+ * `.agents/work/` is in `.gitignore`: the wip notes and the scratch readings live only on the
+ * machine that wrote them. Citing one from a repo doc hands the next reader a link that is
+ * already dead for anyone who cloned the repo — and the evidence behind a contract clause has
+ * to be reproducible from the truth source that clause names, not from a scratch file that may
+ * be deleted tomorrow.
+ *
+ * The board itself is the exception: AGENTS.md has to tell an agent where the progress board
+ * is, so `.agents/work/BOARD.md` and `BOARD-archive.md` stay legal — they are the workplace
+ * entry, not a draft. Everything else under `.agents/work/` is transient.
+ */
+const AGENTS_WORK_REF = /\.agents\/work\/([A-Za-z0-9._-]+)(?:\/[^\s`)\]）"'>，。；、]*)?/g;
+const WORKPLACE_ENTRIES = new Set(['BOARD.md', 'BOARD-archive.md']);
+
+for (const f of allDocs) {
+  lines(f).forEach((line, i) => {
+    for (const hit of line.matchAll(AGENTS_WORK_REF)) {
+      if (WORKPLACE_ENTRIES.has(hit[1])) continue;
+      red('R13', `${f}:${i + 1}: 引用不入库的瞬态产物 → ${hit[0]}（工作现场入口只有 .agents/work/BOARD.md 与 BOARD-archive.md）`);
+    }
+  });
+}
+
 /* ------------------------------------------------------------------- report */
 
 const label = (e) => `  ${e.id} ${e.msg}`;
