@@ -3,6 +3,24 @@
  *
  * Contract: AGENTS.md hard rule 4 (skc_ prefix, no `--dsw-*` declarations, no host
  * hashed class names) and docs/contracts/visual.md.
+ *
+ * Counting rules — the numbers below are pinned by the K136 / K148 cases, and a class or
+ * a rule added anywhere else is invisible to them, so the number moves in the same round
+ * as the thing it counts:
+ *
+ *   skc_ class names in the stylesheet   137
+ *   per-hook rule counts                 .skc_addGroup 1 / .skc_addPrimary 3 /
+ *                                        .skc_addMore 2 / .skc_detailDanger 2
+ *   the four addMenu readings            K148: 320 / calc(100vw - 48px) / 72 /
+ *                                        gap 2 / 12·18 with -webkit-line-clamp:2
+ *
+ * Pin a shorthand in full and fence it: `/margin: 0/` also matches `margin: 0 0 4px`, so
+ * every component of a value is written out and the pattern ends in `(?!\d)`. A paired
+ * type scale (`font-size` plus `line-height`) goes into one regex — split across two
+ * assertions, a rule can drift by half a step and still satisfy both.
+ *
+ * `node --test` stops at the first failing `assert` inside a case, so a case with six
+ * assertions proves one thing per run: fix one, run it again, read the next layer.
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';

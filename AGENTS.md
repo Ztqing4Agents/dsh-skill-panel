@@ -55,7 +55,8 @@ npm test             # node --test test/（测试由 QA 维护）
 ## 硬约束（改错就是返工）
 
 1. **不要手改 `client.js`**：它由 `npm run build` 生成，`npm run check:client` 会逐字节比对。
-   改了源码必须重新 build 并提交产物，否则真机装的还是旧代码。
+   改了源码必须重新 build 并提交产物，否则真机装的还是旧代码。`src/client/styles.js` 的 CSS 是模板字符串，
+   **注释里不能出现反引号**；`src/client/**` 的注释只留「为什么不能改」——注释同样吃 180000 B 的产物预算。
 2. **不要在 `lib/**` 或 `src/client/**` 写中文**（注释也不行）：`check:i18n` 直接 exit 1。
    界面文案一律进 `locale/*.json`，代码里只出现键名。
 3. **入口名只在 `locale/*.json` 里改**（`panel.label` + `meta.title`），代码零改动。
@@ -71,14 +72,16 @@ npm test             # node --test test/（测试由 QA 维护）
    三处都**不许**做成 `<a href>`、不许加第二个可点区域、不许用 JS 拦冒泡代替层级；行 hover/active 只出现在可点的行上，不许出现「看着能点、点了没反应」。
 10. **不写别人的存储**：`~/.dsh/skills-manager/state.json`、`skill-market/*`、`.skills-lock.json` 只读。
 11. **Client 半部 `inject` 与 `ctx.*` 严格对齐**：读到未声明的服务会抛 `cannot get property "X" without inject`，
-    后果是**整页 web boot 失败**（不是单个面板不显示），宿主还会把 entry 打成 `disabled: true`。
-    `ctx.effect` 是核心能力、不要写进 inject；`test/client-entry.test.mjs` 用严格 Proxy ctx 加载真实 `client.js` 守这条。
-    当前声明是 `['slots', 'locale', 'uiWorkspace']`——`uiWorkspace` 只为「让 Agent 创建技能」那一项调 `startSession`，**读它之前必须在 inject 里**，否则整页挂。
-12. **`locale/*.json` 必须是单层扁平点号键**：`ctx.locale` 只做字面量查找，嵌套字典会让整页显示
-    `page.title` 这种原始键名（真机踩过一次）。唯一例外是顶层 `meta` 块（只给宿主插件列表读，
-    改成扁平键会让插件名掉回包名）。`check:i18n` 与 `test/i18n.test.mjs` 双向守，细节见 `docs/contracts/client.md` §8.3。
+    后果是**整页 web boot 失败**（不是单个面板不显示），宿主还会把 entry 打成 `disabled: true`。`ctx.effect` 是核心能力、不要写进 inject；
+    当前声明 `['slots', 'locale', 'uiWorkspace']`，`uiWorkspace` 只为「让 Agent 创建技能」调 `startSession`——**读它之前必须在 inject 里**，`test/client-entry.test.mjs` 用严格 Proxy ctx 守这条。
+12. **`locale/*.json` 必须是单层扁平点号键**：`ctx.locale` 只做字面量查找，嵌套字典会让整页显示 `page.title` 这种原始键名（真机踩过）；
+    唯一例外是顶层 `meta` 块（只给宿主插件列表读，改平会让插件名掉回包名）。`check:i18n` 与 `test/i18n.test.mjs` 双向守，见 `docs/contracts/client.md` §8.3。
 13. **浏览器半部不直连上游**：单上游 `api.skillhub.cn`（三个 scope）一律走 Host 代理（`lib/market/upstream.js` 是唯一出口）；`src/client/**` 里出现 `fetch('https://api.skillhub.cn…')` 即返工。
 14. **安装只写清单里的文件**：不执行包内脚本、不跟随包内符号链接、不写包外路径；任一步失败必须删掉 `.skc-install-*` 临时目录，`skills/<name>` 与自有台账要么都有、要么都没有（唯一例外：台账写失败时目录保留并报 `E_INSTALL_IO`，见 `docs/contracts/routes.md` §3.7）。`files` 形态下**空清单 / 无 `SKILL.md` / 路径不安全**三态一律 `E_PACKAGE_INVALID`——镜像单源之后这是唯一的包闸。
+15. **`docs/contracts/acceptance.md` 的体积与键数门禁不回读、必须手改**：K115 正则还钉死 `installed-detail.md`(3 处)、`client.md`(2 处 `detail.*`)、
+    `routes.md` §3.3「十六条 exact 路由」与 §3.7「市场面 N 条」——改措辞或改键数须与 `locale/`、`ROUTES` 同轮改，否则红。
+16. **契约文档 400 行满档**：加行须同轮合并同族短行；`check-docs` 的 R11 比 `wc -l` 多 1，要 0 warn 就 ≤399。
+    引用「尚未创建」的仓库路径不能加反引号（R8 会校验存在）；文档里不许引 `.agents/work/` 下的瞬态产物（R13；不入库，必然腐化）——工作现场入口 `BOARD.md` 与 `BOARD-archive.md` 除外。
 
 ## 四处容易踩的真机坑
 

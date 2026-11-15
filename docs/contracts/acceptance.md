@@ -292,4 +292,23 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 10. **添加 2000 条目的上限边界**（U20 P1-6）：造一个 2001 条目的源目录 ⇒ `422 E_PACKAGE_INVALID` 且 `skills/<name>` 不存在、`.skc-install-*` 不存在、台账逐字节未变；造恰好 2000 条 ⇒ 成功（上限是「≤2000」）。同样的边界各量一次单文件 8 MiB 与总计 64 MiB。**结果：通过（2026-11-12）**：2001 条目 ⇒ `422 E_PACKAGE_INVALID` 且 `∄ skills/<name>` / `∄ .skc-install-*` / 台账逐字节未变；恰好 2000 ⇒ `200` 并落盘。同族边界同轮量过：单文件恰好 8 MiB 成功、8 MiB+1 字节 `422`；总量恰好 64 MiB 成功、64 MiB+1 `422`（两者都是零残留）。
 11. **真 repo 克隆 / 多候选 / 无 git 环境**（U21）。**结果：通过（2026-11-12/13，隔离实例 + CDP，17/17）**，覆盖如下三条：① 一个把技能放在**子目录**的仓库（`anthropics/skills#path:skills/pdf`）走完整链路——按钮文案 `添加 → 正在添加… → 正在从 GitHub 取仓库… → 完成`、结局屏显示 `github.com/anthropics/skills@main`、副本里**没有 `.git`**、克隆目录已删、台账 `repo`/`ref`/`commit` 有值；② **多候选**：同一仓库不带 `#path:` ⇒ 20 个 `SKILL.md`，错误行 + **前 10 条候选按钮**（按路径排序）+「另有 10 个未列出」，`add` 请求计数仍是 **1**；点一条后输入改写成 `github:anthropics/skills#path:skills/academy-guide` 且**不发第二次请求**，再手动提交能真装上（落位 `skills/academy-guide/SKILL.md`、台账 `source=github`）；③ **无 git 环境**（`PATH` 指空目录）⇒ `500 E_GIT_MISSING` + 中文文案 + **零残留目录**。**未覆盖、只有 L2 的那一支**：「**仓库根目录直接放 `SKILL.md`**」——探了 `anthropics/skills`（20 个）、`obra/superpowers`（15）、`simonw/skills`（4）、`steipete/agent-scripts`（54）、`davepoon/buildwithclaude`（423），**没有一个把 `SKILL.md` 放在仓库根**，所以这条分支**没有真机样本**，只由 `test/local-git.test.mjs` 的 **K143** 用真实目录树钉（点名子目录 / 根 / 单命中 / 多命中 / 深度 4 / 软链）。
 
+### 真机采集手法：上面那些条目怎么复现
+
+上面每一条都只能由真实浏览器量出来；下面四组是「照着做就能量到」的最小集，每组点名的都是踩过的坑，别按直觉换做法。
+
+1. **起一个隔离实例，把插件真的装进去。** `ELECTRON_RUN_AS_NODE=1` 跑 App 内的 `app.asar/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js web --no-open --port 0`，stdout 打印带 token 的 URL——运行中 GUI 的 token 是进程级随机值，推不出来，所以验收一律起自己的实例。
+   - 自建 `DSH_HOME`：`profiles/<p>/package.json` 写 `dsh.profile.bundles`，`node_modules/<插件>` 软链**主仓**——`npm test` 覆盖的 `client.js` 就是主仓产物，软链别处等于量了另一份代码。
+   - `link:` 样本放 profile 目录内；放 `/tmp` 会报 `ERR_MODULE_NOT_FOUND`（相对 `link:` 按 profile 解析）。
+   - 要验「内置技能」区块，把 `dsh-univer-office` 也写进 `dsh.profile.bundles` 并软链进 `node_modules/`，否则整页只有一个「这个部署没有内置技能」；宿主「已安装插件」分区只在 `profiles/web` 存在时才渲染。
+2. **量帧、量色。** 逐帧窗口常只有 ~120ms：在页面内用 `requestAnimationFrame` 采样（CDP 轮询会漏帧），且首行读数常落在触发之前，要等第一帧变化再取。
+   - 宿主启动弹窗会压住整页（遮罩吃掉 `elementFromPoint`）：按文案 / `aria-label` 点到 `[role="dialog"]` 归零再开始，否则截图发灰、点到空处。
+   - 自建 CDP 驱动时 `launch` 的 `hideScrollbars` 必须显式给 `false`（默认隐藏会把滚动条沟槽抹平，宽度差就没了）；`documentElement` 的底色是透明的，判深色要往上找第一个非透明祖先。
+3. **量几何与滚动距离。** 刷新的滚动落点实测只有 300 或 228（列表变短被夹），只能断言「不为 0 且不大于原值」；测「重取抖动」按「首次卡片集合变化」切窗，别按时间切。
+   - 判内容有没有动用**文档坐标** `rect.top + scrollTop`，不用视口坐标。
+   - 盒高要按档位断言。`.skc_callRow` 是 content-box：首行 74/61，其后每行多出一条 `.5px` 顶边框，量到 74.5/61.5——量「档」先减 `borderTopWidth`；空描述那一档用同宽克隆删掉 `.skc_callDesc` 再量。
+   - 多行截断别断言 computed `display`（Blink 把 `-webkit-box` 序列化成 `flow-root`）：验 `scrollHeight > clientHeight` **且**盒高 ∈ {1,2,3}×`lineHeight`。
+4. **数「真卡」、认 L3 与真机各自能验到哪。** 市场页的字符串渲染里数真卡按 `data-skc-market-id`，别按 `skc_marketCard`（骨架与尾部卡复用同类名）。
+   - `src/client/header-scroll.js` 的 PARTS 查询必须对「part 缺失」容错（`null` 就 `continue`）：`.skc_toolbar` 只在「已安装」页签渲染，L3 字符串渲染跑不到那段逻辑。
+   - 「让 Agent 创建技能」真机只验到「会话区切到创造模式草稿 + 输入区出现」（`data-agent-preset` / `data-preset` 在真机上是空的、屏幕文字里没有 `cordis`），别指望验到更多。
+
 **K75–K85 的红绿**：除 K80（已退役）外全部进 `npm test`（K75–K78 与 K82 为 L1/L2，K79 与 K83–K84 含渲染半边，K81 与 K85 为门禁），没有一条靠真机抽查；真机口径见上面第 8 条。

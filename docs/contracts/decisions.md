@@ -284,6 +284,15 @@
 | U-1 | **第二项复用宿主的 Creator 草稿（`agentPreset:'cordis'`），不自己造创建流程** | 「让 Agent 创建技能」在宿主里不是弹一个我们自己的对话框，而是**导航到会话区并开一个 cordis 预设的草稿**——宿主已经拥有「创造模式」的全部 UI、预设装载与草稿管理。我们复刻一个只会更差：拿不到预设、拿不到草稿恢复、还得自己维护第二套入口。所以直接调同一个服务同一个参数，用户点完之后看到的与在宿主「插件」页点那一项**完全一致**（同一个 Creator 草稿）。代价是我们依赖 `uiWorkspace`（见 U-2）。**不做**的事：不新建会话（`undefined` 就是「复用当前草稿」）、不传自己的 `agentPreset`、不改 `clearPreviousDraft`（`false` 保证用户没提交的草稿不丢） |
 | U-2 | **为调它把 `uiWorkspace` 加进 `inject`，并给出降级口径** | 硬约束 11 的守法是「**声明后再读**」，不是绕过：`src/client/index.jsx` 的 `inject` 加 `uiWorkspace`（宿主 `dsh-client-ui-workspace` 提供）。**为什么这条服务是安全的**：workspace UI 是宿主两半的共同底座（桌面与 web 都装，会话区本身就是它），不是可选插件——真机上它一定在。即便如此仍按「可能缺席」写，且降级是**两层**：`ready = typeof uiWorkspace?.startSession === 'function'`，在**菜单打开前判一次**（不是每次点击再算）——① 读 `ctx.uiWorkspace` 本身抛错 ⇒ 当作没有（`ready=false`）；② 点击时 `startSession` 抛错 ⇒ **吞掉并返回 false**。`ready` 为假时该行 `disabled`、副行切 `add.createWithAgentOff`「当前部署没有创造模式」；两种情况都**不抛错、不冒泡、不把整页转成错误态**——硬约束 11 的失败后果是整页 web boot 失败，这里必须兜住（一个菜单行不许把面板带下来）。** knowingly 简化**：宿主那行有 4 态副行（`createPluginChecking` / `Unavailable` / `Missing`），我们不做——省 4 个键与体积，代价是禁用时不解释原因 |
 
+## 附录 V 官方列表投稿硬闸（awesome-dsh-plugin，2026-11-15）
+
+> 我们已在官方列表里（条目 `data/plugins/Ztqing4Agents__dsh-skill-panel.yml`，PR `awesome-dsh-plugin#14772` 已合并）。本节只登记**平台侧的硬闸**：下一次改条目、加条目或改仓库元信息时，违反任意一条都会被官方自动检查打红，而失败原因通常只回一句泛泛的 `Submission gate`。
+
+| # | 事项 | 硬闸 |
+| --- | --- | --- |
+| V-1 | 条目文件名与字段 | 只投 `data/plugins/<owner>__<repo>.yml`——文件名由 `slugFor(url)` 定死，不能自定；字段只有 `url` / `name` / `category` / `description.{en,zh}` / `icon` / `tarball`，多一个字段即红，且 `description.en` **必须单行**（换行会被 YAML 解析成多行而判不合格）；`icon` 只收 **GitHub 托管的位图**，截图放自己仓库的 `screenshots.json` 里，不给外链图床 |
+| V-2 | 仓库侧资格与扫批节奏 | 仓库要有 `dsh.bundle` manifest + `dsh-plugin` topic + **建满 1 天**（年龄闸未满时条目不会转绿）；官方 `regate` 每 6 小时重跑一次，达标后自动转绿，**不必重开 PR**、也不必人工催办 |
+
 
 ## 验收
 

@@ -24,6 +24,14 @@
  *   MarkdownText    div carrying the raw text (no markdown pipeline in node)
  *   fileSizeText    the host's byte-count formatter, transcribed verbatim
  *
+ * Anything the panel imports has to exist here first: a missing export fails the whole
+ * L3 batch with `No matching export`, not just the case that needed it. The pieces that
+ * turn that on are `MenuItemButton`, the two icons U22 added
+ * (`IconDownloadOutlineRegular` / `IconAgentPresetOutlineRegular`), and `Menu` in its
+ * children form — the add menu passes `children` rows plus `listClassName` on the card,
+ * so a stub that only accepted an `items` array would paint an empty menu instead of
+ * failing loudly.
+ *
  * Two deviations from the real package are deliberate and required by SSR:
  * `Modal` renders in place instead of through `createPortal(document.body)`, and
  * `Menu` never portals. Everything else is shape-faithful: this stub proves
