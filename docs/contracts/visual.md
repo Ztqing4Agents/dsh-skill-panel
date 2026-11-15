@@ -193,7 +193,7 @@ min-width: 58px; height: 28px; display: inline-flex; position: relative }
 }
 
 /* 详情族（.skc_marketDetail / Crumb / DetailHead / DetailTitle / DetailSection / SectionTitle / Facts / Files）的语义是「详情页骨架，两个页签共用」，**不改名**；
-   已安装详情只补这些。 以下刻度全部对照宿主「插件详情页」真机读数（1440×920、DPR 1，见 `docs/reference/host-plugin-page.md` §7 与 `.agents/work/scratch/host-detail-metrics.md`） */
+   已安装详情只补这些。 以下刻度全部对照宿主「插件详情页」真机读数（1440×920、DPR 1，见 `docs/reference/host-plugin-page.md` §7；宿主升级后按该文件 §1 的采集环境整份重采） */
 /* 整页替换时 pageBody 里只有这一个详情容器；空条只承载窗口拖动（页头没了这段不能丢），高度 = 页头预留的同一顶部内边距 + darwin 安全区，进出详情头部不跳；拖动区挂整块会吃掉选择与点击 */
 .skc_detailPage{ display: flex; flex-direction: column; min-width: 0 }
 .skc_detailDrag{ flex: none; height: var(--skc-page-top-inset) }

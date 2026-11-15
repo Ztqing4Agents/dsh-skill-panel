@@ -221,7 +221,7 @@
 
 ## 附录 R 更新检测对齐宿主（U19，2026-11-12）
 
-> 用户原话：「将更新检测也对齐宿主的机制，并补充更新功能」；二选一确认：检测＝**完整对齐宿主**（自动检测 + 页头提示 + 候选判据 + 详情页头「更新」按钮），动作＝**覆盖安装 + 失败回滚**（保留下载前的启用状态、失败保留原版本）。宿主机制采集自 `app.asar` 内 `dsh-client-ui-plugin-manager` 的 `client.js`（0.2.2-rc.1），映射表见 `.agents/work/wip/U19-update-check.md` 的 A.1；用例见 `docs/contracts/acceptance.md` 附录 D.7 的 K116–K125。
+> 用户原话：「将更新检测也对齐宿主的机制，并补充更新功能」；二选一确认：检测＝**完整对齐宿主**（自动检测 + 页头提示 + 候选判据 + 详情页头「更新」按钮），动作＝**覆盖安装 + 失败回滚**（保留下载前的启用状态、失败保留原版本）。宿主机制采集自 `app.asar` 内 `dsh-client-ui-plugin-manager` 的 `client.js`（0.2.2-rc.1），映射表即本附录的 R-1–R-4；用例见 `docs/contracts/acceptance.md` 附录 D.7 的 K116–K125。
 
 | # | 事项 | 依据 / 处理 |
 | --- | --- | --- |
@@ -232,7 +232,7 @@
 
 ## 附录 S 添加技能与卸载技能（U20，2026-11-12）
 
-> 用户原话：「完善功能，删除技能以及添加技能的功能，与宿主对齐」。宿主的「添加插件」与「卸载」两条流程逐行采集自 `app.asar` 内 `dsh-client-ui-plugin-manager` 的 `client.js`（0.2.2-rc.1）与其 `PluginManagerPage.tsx` 渲染侧，坐标见 PRD `.agents/work/wip/U20-add-remove-skill.md` 附录 A；用例见 `docs/contracts/acceptance.md` 附录 D.8 的 K126–K136。**附录 Q-3 那句「真实卸载仍是看板 M6」由本轮作废**：M6 的「卸载」部分已被 U20 吃掉，剩下的「版本回退」仍留在板上。
+> 用户原话：「完善功能，删除技能以及添加技能的功能，与宿主对齐」。宿主的「添加插件」与「卸载」两条流程逐行采集自 `app.asar` 内 `dsh-client-ui-plugin-manager` 的 `client.js`（0.2.2-rc.1）与其 `PluginManagerPage.tsx` 渲染侧，坐标见 `git show a8141eb:docs/PRD.md` 附录 A，宿主侧读数见 `docs/reference/host-plugin-page.md` §8；用例见 `docs/contracts/acceptance.md` 附录 D.8 的 K126–K136。**附录 Q-3 那句「真实卸载仍是看板 M6」由本轮作废**：M6 的「卸载」部分已被 U20 吃掉，剩下的「版本回退」仍留在板上。
 
 | # | 事项 | 依据 / 处理 |
 | --- | --- | --- |
@@ -272,7 +272,7 @@
 | T-11 | **相对路径与裸 `o/r` 归 `E_GIT_SPEC_INVALID`，不新建码** | 分类器接管后，`E_BAD_PATH` 只覆盖「**看起来是路径**（`/` 或 `~` 开头）却不合法」（含 NUL / 展开后超 1024 / 展开后仍非绝对）。`rel/path`、`./x`、`../x`、`o/r`、`github.com/o/r`（无 scheme）一律落 `E_GIT_SPEC_INVALID`——它的文案「认不出这个输入：请填本机目录或 GitHub 链接」对这几类都更有用，而 `E_BAD_PATH` 那句「需要以 / 或 ~ 开头」会把一个想填 GitHub 链接的人引向错的方向。落地：`lib/local/rules.js` 的 `classifyAddSpec` 尾部兜底就是它；`docs/contracts/routes.md` §8.1 的 `E_BAD_PATH` 行与 §3.3.4 的 S1/G1 措辞已同步（D.9 的 K138 钉的就是这次收窄） |
 | T-12 | **git 形态不另取 `local:<name>` 那把锁**：`S8` 的 key 用 `github:<owner>/<repo>` | 克隆开始的那一刻**还不知道技能叫什么**（名字要等 G4 定位 + S5 取名才有），拿不到 `local:<name>`；嵌套两把锁会同时占掉全局 2 个名额里的两个，让并发的 path 形态 `add` 无谓吃 `429 E_INSTALL_BUSY`。同名并发仍由 **S6（重扫后同名即拒）+ `landSkill` 的 `mkdir` claim（`EEXIST` ⇒ 409）** 兜住——两道闸都在落位前，不依赖锁。切子目录不改锁：同一仓库不并行克隆两次 |
 | T-13 | **`locateSkillDir` 放在 `rules.js`，但它是 `async` 且会读盘** | 它要 `lstat` / `readdir` 才能探测，同步做不了。这里「纯」的定义收紧为：**无时钟、无网络、不写盘、只读**（对比 `classifyAddSpec`：连 I/O 都没有）。放在 `rules.js` 是为了让「一份输入怎么变成一棵树里的一个目录」这两步挨着，而不是把它塞进 `git.js`（那会与子进程混在一起）。`docs/contracts/data-model.md` §3.2.6 的注已按此改写，测试用真目录或注入的假目录均可 |
-| T-14 | **7 条 git 错误文案按体积预案①压短**（`add.fetching` 等新键不动） | 设计 §12 预估客户端增量 ≈ +4.4 KB、会顶穿**当时的上限 175000**；预案①（错误句压到 ≤60 汉字、把「为什么」挪进 `add.description`）执行后产物 **174755 B / 175000**（U21 当时的上限；U22 抬到 **180000**，1.0.0 改名后实测 **177491 B**，余 2509——以 K115 为准）。代价是文案比 PRD §10.1 草拟的短（例如 `E_GIT_SPEC_INVALID` 由「…请填本机目录的完整路径（以 / 或 ~ 开头），或 GitHub 链接（https://github.com/owner/repo 或 github:owner/repo）」压成「认不出这个输入：请填本机目录或 GitHub 链接」）。**`docs/contracts/client.md` §8.3 已按 `locale/zh.json` 实测值回填**，以此为准；U21 收口时键数 **193**（U22 的添加菜单再加 4 键 ⇒ **197**，见附录 U），没有为省体积退役任何键 |
+| T-14 | **7 条 git 错误文案按体积预案①压短**（`add.fetching` 等新键不动） | 设计 §12 预估客户端增量 ≈ +4.4 KB、会顶穿**当时的上限 175000**；预案①（错误句压到 ≤60 汉字、把「为什么」挪进 `add.description`）执行后产物 **174755 B / 175000**（U21 当时的上限；U22 抬到 **180000**，此后每次改动的实测以 `npm run check:client` 输出为准，上限见 K115）。代价是文案比 PRD §10.1 草拟的短（例如 `E_GIT_SPEC_INVALID` 由「…请填本机目录的完整路径（以 / 或 ~ 开头），或 GitHub 链接（https://github.com/owner/repo 或 github:owner/repo）」压成「认不出这个输入：请填本机目录或 GitHub 链接」）。**`docs/contracts/client.md` §8.3 已按 `locale/zh.json` 实测值回填**，以此为准；U21 收口时键数 **193**（U22 的添加菜单再加 4 键 ⇒ **197**，见附录 U），没有为省体积退役任何键 |
 
 | T-15 | **`E_ADD_AMBIGUOUS_SKILL` 的 `data` 必须带 `owner`/`repo`**（U21 缺陷 P1 的裁决） | `locateSkillDir` 只看克隆目录，天然不知道仓库是谁，它给的 detail 只有 `{candidates, candidateTotal}`；客户端要拼 `github:<o>/<r>#path:<sub>` 就必须知道 owner/repo，于是这一支在真机上表现为「弹窗只显示一句话、画不出候选按钮」。裁决：**由编排层补齐**——`lib/local/index.js` 的 `addFromGithub` 在 G4 只对 `E_ADD_AMBIGUOUS_SKILL` 重新包一层 `localError(..., { ...error.detail, owner, repo })`（取入参原样大小写），其余码原样透出、`E_ADD_NOT_SKILL_DIR` 的 detail 仍是 null。`locateSkillDir` 与码表、`LOCAL_STATUS`、`src/**` 都不动。契约落点：`docs/contracts/acceptance.md` 附录 D.9 的 K143 与真机第 11 条② |
 ## 附录 U 添加菜单两项（U22，2026-11-13）

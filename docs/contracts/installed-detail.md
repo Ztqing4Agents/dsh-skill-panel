@@ -216,6 +216,6 @@ store.checkRun = {id: number, status: 'idle'|'running'|'done'}   // 一轮自动
 
 ## 验收
 
-- `npm run check:client` 逐字节通过；`npm run check:i18n` 报 **197** 键且 zh/en 键集一致、`lib/**` 与 `src/client/**` 无 CJK；产物 ≤ **180000** B（1.0.0 实测 **177491 B**，U20 时为 177498 B；上限 180000 由用户预授权，K115 行与本文件同值）。
+- `npm run check:client` 逐字节通过；`npm run check:i18n` 报 **197** 键且 zh/en 键集一致、`lib/**` 与 `src/client/**` 无 CJK；产物 ≤ **180000** B（当前实测见 `npm run check:client` 输出；上限 180000 由用户预授权，K115 行与本文件同值）。
 - K110–K115（`docs/contracts/acceptance.md` 附录 D.5）、U19 的 K116–K125（附录 D.7）与 U20 的 K126–K136（附录 D.8）逐条绿。
 - 真机三项：面包屑返回落点与打开前一致、40 KB 正文可滚且 Markdown 正常、触屏 `:active` 有底色。

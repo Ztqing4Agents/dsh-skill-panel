@@ -133,7 +133,7 @@ grep -ac InstallDialog            "$A"   # 安装弹窗（本文 8.2）：rc.3 =
 
 ## 7 插件详情页（采集 2026-11-10，二次采集；五次采集按 rc.3 源码整份复核）
 
-> 采集环境（二次采集）：`app.asar` 内 `dsh/lib/bin.js` + `ELECTRON_RUN_AS_NODE` 起 `dsh web --no-open --port 0`，隔离 `DSH_HOME`；视口 **1440×920**、`Emulation.setDeviceMetricsOverride` 强制 **DPR 1**（像素与 CSS px 一一对应）。读数用 `getComputedStyle` + `getBoundingClientRect`，深色用 `Emulation.setEmulatedMedia` 切换后同一元素再读。原始读数在 `.agents/work/scratch/host-detail-metrics.md`。
+> 采集环境（二次采集）：`app.asar` 内 `dsh/lib/bin.js` + `ELECTRON_RUN_AS_NODE` 起 `dsh web --no-open --port 0`，隔离 `DSH_HOME`；视口 **1440×920**、`Emulation.setDeviceMetricsOverride` 强制 **DPR 1**（像素与 CSS px 一一对应）。读数用 `getComputedStyle` + `getBoundingClientRect`，深色用 `Emulation.setEmulatedMedia` 切换后同一元素再读。宿主升级后按 1 节的采集环境整份重采。
 > 目标文件：`PM/lib/client.js`（`@deepseek-ai/dsh-client-ui-plugin-manager` 的客户端产物），rc.3 实测 **357 239 B**（二次采集时同一文件在 `0.2.2-rc.1` 上是 438 450 B；两次都是 node 读 asar 的字节数，**不要用 grep 搜中文**，理由见 1 节的警告）。rc.3 起详情页的 markdown 正文由 primitives 的 `DetailDocument` 渲染，刻度落在 `SHELL/` 的 CSS 里。
 > 五次采集的读数有两套来源：**声明值**（`PM/PluginManagerPage.module.css` 与 `SHELL/` 的 CSS，逐字）与**真机值**（二次采集的 `getComputedStyle`，标注「真机」）。两者不冲突时以声明值为准。
 
