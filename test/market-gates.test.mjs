@@ -681,12 +681,16 @@ test('K115 decisions 附录 Q：宿主确有插件详情页，上一轮判「没
   assert.match(appendix, /px 未逐值采集|px/, 'Q-4 明确 px 没采');
 });
 
-test('K115 host-plugin-page.md §7：只写真采到的结构与键值，一个 px 都不许编', async () => {
+test('K115 host-plugin-page.md §7：真源三件套齐全，且每条尺寸读数都带得出处形状', async () => {
   const file = join(ROOT, 'docs', 'reference', 'host-plugin-page.md');
   const text = await readFile(file, 'utf8');
   assert.match(text, /采集日期：2026-11-08/, '§1–§6 的原始采集日期不变（不在旧值上打补丁）');
   assert.match(text, /二次采集：§7/, '头注登记了 §7 的二次采集');
-  const section = sectionOf(text, '## 7 ', undefined);
+  // 切片必须一直切到 §8：旧版的终点是 `undefined`，于是只切到 `### 7.1 ` 之前——§7 的读数长在
+  // 7.1–7.6，断言只看了引言块，任何人往子节里编一个 px 都抓不到（2026-11-15 看板 D5 收口）。
+  const section = sectionOf(text, '## 7 ', '## 8 ');
+  assert.ok(section.includes('### 7.6'), '切片覆盖到 7.6（不是只切到 7.1 之前）');
+  assert.ok(section.includes('### 7.8'), '切片覆盖到 7.8，本节的复刻口径与采集坑也在内');
   // 真源三件套：包路径、locale 键值、区块顺序。少一样都说明这节在凭记忆写。
   assert.match(section, /@deepseek-ai\/dsh-client-ui-plugin-manager/, '§7 给出宿主产物里的包路径');
   assert.match(section, /438[\s ]?450/, '§7 给出实测字节数');
@@ -699,13 +703,45 @@ test('K115 host-plugin-page.md §7：只写真采到的结构与键值，一个 
   assert.match(section, /node 读 asar/, '§7 写明采集方式是 node 读 asar');
   assert.match(text, /grep[^\n]*假阴性|假阴性/, '全文有 grep 假阴性的警告');
   assert.match(text, /一律用 node 读 asar/, '§1 的警告给了替代做法');
-  // 不许编尺寸：本节没有任何 px / rem / 宽高字面量。
-  const sizes = section.match(/\d+(?:\.\d+)?\s*(?:px|rem|em)\b/g) ?? [];
-  assert.deepEqual(sizes, [], `§7 里没有任何尺寸字面量（实测 ${JSON.stringify(sizes)}）`);
-  assert.match(section, /px 一个都没有|不写任何尺寸/, '§7 自己声明不写尺寸');
-  // 也不许把我们的实现细节写成宿主读数（那是「照着实现补写」）。
+  // 「带出处形状」之所以有意义，是因为 §7 头注先把两套来源写清了：声明值逐字抄自 `PM/` 与 `SHELL/`
+  // 的 CSS，真机值来自二次采集的 getComputedStyle。没有这层头注，下面那条规则就只是排版习惯。
+  assert.match(section, /声明值/, '§7 头注声明了「声明值」这一路来源');
+  assert.match(section, /真机值/, '§7 头注声明了「真机值」这一路来源');
+  assert.match(section, /PM\//, '声明值点名了 PM/ 出处');
+  assert.match(section, /SHELL\//, '声明值点名了 SHELL/ 出处');
+  // ---- D5 判据：§7（含 7.1–7.8）里每一个尺寸/刻度字面量都要指得到宿主出处，不许凭空写数 ----
+  // 要求：凡有 px / rem / em 字面量的行，必须带得出「出处的形状」之一——
+  //   ① `真机`：这一行是真机 getComputedStyle 读数；
+  //   ② CSS 声明：行内反引号里有一段逐字抄来的声明，如 `padding: 0 10px`、
+  //      `detailHead { margin: 32px 0 0 }`（选择器块比裸声明更强，同样算）；
+  //   ③ `--dsw-*` 令牌：值由令牌表给出，正文只写令牌名；
+  //   ④ 字阶三元组：反引号里就是宿主 `font` 简写那一形，`20px / 28px / 500`、`13px/20px/400`。
+  // 抓得到：一行只丢一个数（`| 页签 | 高 34px |`）；既无真机标记也无声明/令牌/字阶的读数；
+  //        往 §7 塞新读数却不写它抄自哪；以及把本断言的切片改回「只看引言块」（上面两条会红）。
+  // 抓不到：把凭空数字伪装成一条声明（`height: 27px`）或一次「真机」标注——判它是真是假要回读
+  //        asar（§1 那五条命令 + node 逐字节读），那是采集复核的活，不是文档门禁能做的。
+  // 读数也不许悄悄消失：行数掉下去说明有人为了过门禁在删证据（现 26 行）。
+  const SIZE = /\d+(?:\.\d+)?\s*(?:px|rem|em)\b/;
+  const SHAPES = [
+    ['真机', (line) => /真机/.test(line)],
+    ['CSS声明', (line, spans) => spans.some((span) => /(?:^|[;{]\s*)[-a-z]+\s*:\s*[^;{}]+/i.test(span))],
+    ['令牌', (line, spans) => spans.some((span) => /^--[a-z0-9-]+$/i.test(span))],
+    ['字阶', (line, spans) => spans.some((span) => /^[\d.]+px\s*\/\s*[\d.]+px(?:\s*\/\s*\d+)?$/.test(span))],
+  ];
+  const sizeLines = section.split('\n').map((line) => line.trim()).filter((line) => SIZE.test(line));
+  const orphan = sizeLines.filter((line) => {
+    const spans = [...line.matchAll(/`([^`]+)`/g)].map((match) => match[1].trim());
+    return !SHAPES.some(([, has]) => has(line, spans));
+  });
+  assert.deepEqual(orphan, [],
+    `§7 里每条尺寸读数都要带出处形状（真机 / CSS 声明 / --dsw-* 令牌 / 字阶），这几行没有：${JSON.stringify(orphan)}`);
+  assert.ok(sizeLines.length >= 20, `§7 的尺寸读数不该悄悄消失（现 ${sizeLines.length} 行，期望 ≥20）`);
+  // 也不许把我们的实现细节写成宿主读数（那是「照着实现补写」）。范围收在读数区（§7 到 7.6）：
+  // 7.7 是「复刻口径不在本文」的指针、7.8 是采集坑，按设计会点我们的类名（`.skc_detail*`、
+  // `.skc_page`），那不是宿主读数。
+  const readings = sectionOf(text, '## 7 ', '### 7.7 ');
   for (const word of ['skc_detail', 'skc_marketDetail', 'MAX_TEXT_BYTES']) {
-    assert.equal(section.includes(word), false, `§7 里没有我们的实现词汇「${word}」`);
+    assert.equal(readings.includes(word), false, `§7 的读数区里没有我们的实现词汇「${word}」`);
   }
 });
 
