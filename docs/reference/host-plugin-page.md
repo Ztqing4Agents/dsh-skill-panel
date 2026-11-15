@@ -117,6 +117,7 @@ grep -ac InstallDialog            "$A"   # 安装弹窗（本文 8.2）：rc.3 =
 - **行本身是链接**：`li.card.cardLink` 带 `position: relative`，标题按钮用 `::after { inset: 0 }` 铺满整张卡当点击面，尾部控件单独 `z-index: 1` 浮在上层。
   - 按下：`.cardLink:active` → `--dsw-alias-interactive-bg-active`（亮 `rgba(38, 49, 72, 0.1)` / 暗 `rgba(255, 255, 255, 0.14)`）。
   - 悬停：`@media (hover: hover)` 里 `.cardLink:hover` → `--dsw-alias-interactive-bg-hover`（亮 `rgba(38, 49, 72, 0.06)` = `#2631480f` / 暗 `rgba(255, 255, 255, 0.08)` = `#ffffff14`）。**两个态是两个不同令牌**，不是同一个色上下调。
+  - 可用下限：`--dsw-alias-interactive-bg-active` 自 `0.1.5-rc.3` 起就在 theme 包里，`0.2.0-rc.2` / `0.2.1-rc.1` / `0.2.2-rc.1` 与 rc.3 的值完全一致（亮 `#2631481a` / 暗 `#ffffff24`），`:hover` 同；宿主 `@deepseek-ai/dsh` 与这批 `dsh-client-ui-*` 包版本锁步。
   - 焦点：`.cardOpen:focus-visible::after` 用 `--dsw-focus-ring-color` 画环、`outline-offset: 2px`；`.cardOpen` 自己 `outline: none`。
 - **页头收拢**（`header-scroll.ts`）：页面滚动时页头不换布局，只做几何插值。`measure()` 把页头克隆一份、打 `data-measuring` 塞进滚动容器里量出「静止」与「收拢」两套盒，再给 `title` / `intro` / `toolbar` / `tabs` 四段写 `--plugin-part-x/-y/-width`；滚动时按 `scrollTop` 对每段 `translate` + `width` 插值，`intro` 过了行程用 `clipPath: inset(N% 0 0)` 收掉并置 `inert`。`data-compact` 在 `scrollTop >= 行程` 时出现，`data-scrolled` 在 `> 0` 时出现；`--plugin-header-paint-height` 给吸顶层的实底高度。窗口变化、字体加载完、页头内容变化都会重测。
 - **状态句**（`.updatesNote`）：只有「已安装」页签有它，三态文案取自 locale（`updatesAvailable`「{count} 个插件可更新」带 **计数**、`updatesNone`「所有插件均为最新版本」、`updatesFailed`「部分插件检查更新失败」）；**任一检测还在 `checking` 时整句返回 `undefined`（不渲染）**，没有「保持上一轮」这一说。
