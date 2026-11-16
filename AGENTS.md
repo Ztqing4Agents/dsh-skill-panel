@@ -12,6 +12,7 @@ npm run check:docs   # 文档门禁：白名单/头注/章节/锚点/引用/零�
 npm run check:board  # 看板格式与依据锚点（无 .agents/work/ 时跳过）
 npm run check        # 上面四个
 npm test             # node --test test/（测试由 QA 维护）
+npm publish --//registry.npmjs.org/:_authToken=<token>   # 账号 2FA 绑的是通行密钥，CLI 的 --otp 只吃 TOTP；发布必须用勾了 "Bypass two-factor authentication" 的 granular token（一次性传参），token 不进仓库、不进对话
 ```
 
 ## 文档地图
@@ -94,6 +95,5 @@ npm test             # node --test test/（测试由 QA 维护）
 ## 改完自检
 
 ```bash
-node scripts/build-client.mjs && node scripts/check-client.mjs && node scripts/check-i18n.mjs \
-  && node scripts/check-docs.mjs && node scripts/check-board.mjs && node --check index.js && node --check client.js && node --check lib/*.js
+node scripts/build-client.mjs && node scripts/check-client.mjs && node scripts/check-i18n.mjs && node scripts/check-docs.mjs && node scripts/check-board.mjs && node --check index.js && node --check client.js && node --check lib/*.js
 ```

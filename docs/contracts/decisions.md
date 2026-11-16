@@ -292,6 +292,7 @@
 | --- | --- | --- |
 | V-1 | 条目文件名与字段 | 只投 `data/plugins/<owner>__<repo>.yml`——文件名由 `slugFor(url)` 定死，不能自定；字段只有 `url` / `name` / `category` / `description.{en,zh}` / `icon` / `tarball`，多一个字段即红，且 `description.en` **必须单行**（换行会被 YAML 解析成多行而判不合格）；`icon` 只收 **GitHub 托管的位图**，截图放自己仓库的 `screenshots.json` 里，不给外链图床 |
 | V-2 | 仓库侧资格与扫批节奏 | 仓库要有 `dsh.bundle` manifest + `dsh-plugin` topic + **建满 1 天**（年龄闸未满时条目不会转绿）；官方 `regate` 每 6 小时重跑一次，达标后自动转绿，**不必重开 PR**、也不必人工催办 |
+| V-3 | 条目页 ≠ 进索引 | `awesome-dsh-plugin.com/p/<owner>/<repo>/` 返回 200 只证明 `data/plugins/<owner>__<repo>.yml` 存在；能否被 DSH「发现」页签搜到，取决于该条目是否被探针登记到 npm 包（页面缺 Stars / Downloads / npm 名那一行＝未登记），未登记条目**静默不进 `index.json`、无报错**。验证：对 `index.json` 加 `?cb=$(date +%s)` 绕缓存后在 JSON 里搜包名；四个常见索引里 `cdn.dsh.so/market/index.json` 是 npm 侧聚合、收录最快 |
 
 
 ## 验收
