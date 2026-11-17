@@ -4,7 +4,7 @@
   "type": "module",
   "description": "DSH skill panel: tell built-in, local, and market-installed skills apart at a glance, and switch each one on or off.",
   "icon": "assets/icon.svg",
-  "license": "BSD-3-Clause",
+  "license": "MIT",
   "author": {
     "name": "Ztqing"
   },

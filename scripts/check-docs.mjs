@@ -3,7 +3,7 @@
  * Documentation gate for this repo.
  *
  * Contract: docs/contracts/*.md (head notes, required sections), docs/reference/*.md
- * (freshness), CHANGELOG.md (Keep a Changelog shape), AGENTS.md / README.md (size).
+ * (freshness), CHANGELOG.md (Keep a Changelog shape), AGENTS.md / README.md + README.en.md (size).
  *
  * Red = structure missing / contradiction / dangling reference. Warn = size, freshness.
  * The gate never rewrites anything; it only reads.
@@ -25,7 +25,7 @@ const ROOT = resolve(valueOf('--root') ?? process.cwd());
 const QUIET = flag('--quiet');
 
 /** Files that may carry a `类型:` head note. Everything else in the whitelist is exempt. */
-const HEADLESS = new Set(['AGENTS.md', 'README.md', 'CHANGELOG.md']);
+const HEADLESS = new Set(['AGENTS.md', 'README.md', 'README.en.md', 'CHANGELOG.md']);
 const LIMITS = { 契约: 300, 规范: 400, 参考: 600 };
 const CATEGORIES = new Set(['Added', 'Changed', 'Deprecated', 'Removed', 'Fixed', 'Security']);
 const VERSION_HEADING = /^## \[\d+\.\d+\.\d+\] - \d{4}-\d{2}-\d{2}( \[YANKED\])?$/;
@@ -123,13 +123,13 @@ const headings = (f) => lines(f).flatMap((l) => {
 
 /* -------------------------------------------------------------- R1 whitelist */
 
-const ALLOW_EXACT = new Set(['AGENTS.md', 'README.md', 'CHANGELOG.md']);
+const ALLOW_EXACT = new Set(['AGENTS.md', 'README.md', 'README.en.md', 'CHANGELOG.md']);
 const ALLOW_PREFIX = ['docs/contracts/', 'docs/reference/'];
 const allowed = (f) => ALLOW_EXACT.has(f) || ALLOW_PREFIX.some((p) => f.startsWith(p));
 
 for (const f of files) {
   if (!allowed(f)) {
-    red('R1', `${f}: not on the doc whitelist (allowed: AGENTS.md / README.md / CHANGELOG.md / docs/contracts/** / docs/reference/**)`);
+    red('R1', `${f}: not on the doc whitelist (allowed: AGENTS.md / README.md / README.en.md / CHANGELOG.md / docs/contracts/** / docs/reference/**)`);
   }
 }
 
@@ -318,11 +318,13 @@ if (text.has('AGENTS.md')) {
   if (n > 100) warn('R10', `AGENTS.md: ${n} lines (>100) —— 把内容送进契约，地图留指针`);
 }
 
-if (text.has('README.md')) {
-  const n = lines('README.md').length;
-  // The README is the only doc written for users: it stays short on purpose, and a size
-  // warning is the cheapest reminder that a new feature paragraph belongs in CHANGELOG.md.
-  if (n > 120) warn('R12', `README.md: ${n} lines (>120) —— 只写使用者视角，细节进 CHANGELOG / 契约`);
+// The READMEs are the only docs written for users: they stay short on purpose, and a size
+// warning is the cheapest reminder that a new feature paragraph belongs in CHANGELOG.md.
+// Both language editions are held to the same line, so the warning names the file it read.
+for (const readme of ['README.md', 'README.en.md']) {
+  if (!text.has(readme)) continue;
+  const n = lines(readme).length;
+  if (n > 120) warn('R12', `${readme}: ${n} lines (>120) —— 只写使用者视角，细节进 CHANGELOG / 契约`);
 }
 
 for (const [f, limit] of declaredLimit) {

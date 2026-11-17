@@ -391,6 +391,35 @@ test('R12 体量：README.md 超 120 行只告警，不判红', async () => {
 });
 
 
+test('R1/R2 白名单与头注：README.en.md 是第二份根级使用者文档，不带头注也不该红', async () => {
+  const { dir, cleanup } = await tree({ ...BASELINE, 'README.en.md': '# README (en)\n' });
+  try {
+    const { status, out } = runGate(dir);
+    assert.equal(status, 0, out);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('R12 体量：README.en.md 超 120 行同样只告警，且不误报到 README.md', async () => {
+  const long = `# README (en)\n\n${Array.from({ length: 120 }, (_, i) => `- line ${i + 1}`).join('\n')}\n`;
+  const { dir, cleanup } = await tree({
+    ...BASELINE,
+    'README.md': '# README\n\n短正文。\n',
+    'README.en.md': long,
+  });
+  try {
+    const { status, out } = runGate(dir);
+    assert.equal(status, 0, out);
+    assert.match(out, /warn R12 README\.en\.md: \d+ lines/, out);
+    // 告警要点名真正超长的那一版，不能两版串成一条。
+    assert.doesNotMatch(out, /warn R12 README\.md:/, out);
+  } finally {
+    await cleanup();
+  }
+});
+
+
 test('R5 参考类：缺「来源版本」必须红（外部升级是第一过期触发器，不能只有采集日期）', async () => {
   const noVersion = REFERENCE.replace('> 来源版本：demo/1.0.0\n', '');
   assert.notEqual(noVersion, REFERENCE, 'R5 用例没有删到来源版本');

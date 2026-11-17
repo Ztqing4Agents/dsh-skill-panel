@@ -295,6 +295,17 @@
 | V-3 | 条目页 ≠ 进索引 | `awesome-dsh-plugin.com/p/<owner>/<repo>/` 返回 200 只证明 `data/plugins/<owner>__<repo>.yml` 存在；能否被 DSH「发现」页签搜到，取决于该条目是否被探针登记到 npm 包（页面缺 Stars / Downloads / npm 名那一行＝未登记），未登记条目**静默不进 `index.json`、无报错**。验证：对 `index.json` 加 `?cb=$(date +%s)` 绕缓存后在 JSON 里搜包名；四个常见索引里 `cdn.dsh.so/market/index.json` 是 npm 侧聚合、收录最快 |
 
 
+## 附录 W 对外文案口径（README / Release，2026-11-17）
+
+> 对外门面（README 与 GitHub Release 正文）的写法定死在本文，避免每轮改版重新讨论一次。正文事实仍以 `README.md`、`CHANGELOG.md` 为准。
+
+| # | 事项 | 硬闸 |
+| --- | --- | --- |
+| W-1 | README 骨架 | 固定顺序：标题 → 语言切换 → 徽标 → 一句话定位 → 头图 → 三步安装 → 能力 5 条 → 技能市场 → 已知限制 → 升级指针 → 要求 → 契约外链 → 许可；体量 ≤120 行（`check:docs` 的 R12），分区判定表与参数级阈值只留契约指针，不复述 `CHANGELOG` |
+| W-2 | 双语同构 | `README.md` 与 `README.en.md` 章节一一对应、同名条目数相等；改一侧必须同轮改另一侧。命令、包名、错误码、路径字面量不翻译 |
+| W-3 | 徽标出处 | 只放有可验证来源的徽标（npm 版本 / npm 月下载 / GitHub release / `engines.dsh` 静态值 / 许可），不放 CI 徽标、自造数字与「100% 安全」类断言；**许可徽标取 `github/license/<owner>/<repo>`（读仓库 `LICENSE` 文件），不用 `npm/l`**——后者读的是已发布包的不可变元数据，仓库换许可后它会长期显示旧值 |
+| W-4 | Release 正文 | 五段式：定位句 → 新装 → 升级/迁移 → 亮点（≤5 条，每条一句）→ 已知问题 → 全量变更见 `CHANGELOG`；不复制 `CHANGELOG` 长列表，不写「改了哪些文件」；升级步骤只写用户要做的动作 |
+
 ## 验收
 
 每条登记都必须能指出来源（PRD 原文 / 宿主读数 / 队长决策 / 测试用例），没有一条是「因为我觉得」。登记与实现不符时，先改实现或先改登记，不允许两边并存。

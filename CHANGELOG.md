@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- 许可从 BSD-3-Clause 改为 **MIT**：`LICENSE` 全文、`package.json` 的 `license` 字段、README 两版的许可行与徽标同轮改掉。**已发布的 1.1.0 及更早版本仍按 BSD-3-Clause 授权**（许可不可追溯），新许可自下一个版本起生效。
+
 ## [1.1.0] - 2026-11-15
 
 ### Changed

@@ -29,8 +29,8 @@ npm publish --//registry.npmjs.org/:_authToken=<token>   # 账号 2FA 绑的是�
 | 页面视觉刻度（px、令牌、`skc_` 类名、收拢顺序） | `docs/contracts/visual.md` | A.1–A.9 |
 | 技能市场（源适配器、数据流、市场刻度、安装链路） | `docs/contracts/market.md` | §7 附录 F 附录 G（路由见 `routes.md` §3.7 §8.6） |
 | 宿主「插件」页长什么样（外部形状、稳定钩子、几何） | `docs/reference/host-plugin-page.md` | 带采集日期；宿主升级后整份重采，不在旧值上打补丁 |
-| 使用者能感知什么、怎么装、有哪些已知限制 | `README.md` | 只写使用者视角 |
-| 升级时我要注意什么 | `CHANGELOG.md` | 记行为变化与迁移，不记改过哪些文件 |
+| 使用者能感知什么、怎么装、有哪些已知限制 | `README.md`、`README.en.md` | 只写使用者视角；中英两版同构、条目数须相等（`docs/contracts/decisions.md` 附录 W-2） |
+| 升级时我要注意什么 | `CHANGELOG.md` | 记行为变化与迁移，不记改过哪些文件；Release 正文五段式见 `docs/contracts/decisions.md` 附录 W-4 |
 | 过去是什么、为什么这么定 | `git log`（`git log -S`） | 仓库里没有 `archive/`，历史交 git |
 | 现在卡在哪、还剩什么没验 | `.agents/work/BOARD.md` | 本地看板（列约定在文件头，过程产物在 wip/ 与 scratch/），不入库 |
 
