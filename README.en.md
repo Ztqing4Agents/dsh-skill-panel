@@ -2,11 +2,7 @@
 
 English | [简体中文](README.md)
 
-[![npm](https://img.shields.io/npm/v/@ztqing4agents/dsh-skill-panel?logo=npm&color=cb3837)](https://www.npmjs.com/package/@ztqing4agents/dsh-skill-panel)  
-[![downloads](https://img.shields.io/npm/dt/@ztqing4agents/dsh-skill-panel?logo=npm&color=cb3837)](https://www.npmjs.com/package/@ztqing4agents/dsh-skill-panel)  
-![DSH](https://img.shields.io/badge/DSH-%3E%3D0.2.1-4B6EF5)  
-![Node](https://img.shields.io/badge/Node-%3E%3D20-339933?logo=node.js&logoColor=white)  
-[![license](https://img.shields.io/github/license/Ztqing4Agents/dsh-skill-panel)](LICENSE)
+[![npm](https://img.shields.io/npm/v/@ztqing4agents/dsh-skill-panel?logo=npm&color=cb3837)](https://www.npmjs.com/package/@ztqing4agents/dsh-skill-panel) [![downloads](https://img.shields.io/npm/dt/@ztqing4agents/dsh-skill-panel?logo=npm&color=cb3837)](https://www.npmjs.com/package/@ztqing4agents/dsh-skill-panel) ![DSH](https://img.shields.io/badge/DSH-%3E%3D0.2.1-4B6EF5) ![Node](https://img.shields.io/badge/Node-%3E%3D20-339933?logo=node.js&logoColor=white) [![license](https://img.shields.io/github/license/Ztqing4Agents/dsh-skill-panel)](LICENSE)
 
 A native-style skill management panel for the DSH (DeepSeek Harness) Web GUI.
 
