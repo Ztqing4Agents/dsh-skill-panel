@@ -1,73 +1,136 @@
-# dsh-skill-panel — Skill Panel
+# dsh-skill-panel
 
 English | [简体中文](README.md)
 
 [![npm](https://img.shields.io/npm/v/@ztqing4agents/dsh-skill-panel)](https://www.npmjs.com/package/@ztqing4agents/dsh-skill-panel) ![downloads](https://img.shields.io/npm/dm/@ztqing4agents/dsh-skill-panel)
 [![release](https://img.shields.io/github/v/release/Ztqing4Agents/dsh-skill-panel?logo=github)](https://github.com/Ztqing4Agents/dsh-skill-panel/releases/latest) ![dsh](https://img.shields.io/badge/dsh-%3E%3D0.2.1-4B6EF5) ![license](https://img.shields.io/github/license/Ztqing4Agents/dsh-skill-panel)
 
-**One sidebar entry, one full-page panel. Built-in, local and market-installed skills listed apart, each row a switch; symlinked skills are read-only.**
+A native-style skill management panel for the DSH (DeepSeek Harness) Web GUI.
+
+It adds a **Skills** entry to the sidebar and gathers **built-in skills**, **local skills** and **skills installed from the market** into one view, with a skill market that reads the [SkillHub](https://skillhub.cn) mirror and supports search, install, update and on/off control.
 
 ![Skills page: built-in skills grouped by plugin, the local symlink row read-only, one switch per installed row](docs/assets/installed-page.png)
 
-## Three steps to install
+## Features
 
-1. **Desktop app**: open **Plugins** in the app → add plugin → paste the npm name `@ztqing4agents/dsh-skill-panel`. For a source install, paste `github:Ztqing4Agents/dsh-skill-panel` instead.
-2. **CLI**: `dsh plugin --profile <name> add @ztqing4agents/dsh-skill-panel`. `--profile` is required. The desktop profile belongs to the app, so desktop users take step 1.
-3. **Restart DSH**: the plugin list is read once at startup, so no restart means no **Skills** entry.
-
-- Make sure the machine has `pnpm` and can reach the npm registry first; without `pnpm` it says it cannot find it and the install stops.
-- The `dsh-skill-panel` package on npm belongs to someone else — do not install that one.
-- The old and the new package cannot be installed side by side; they clash and the second one fails.
-
-## What it does
-
-- The panel opens on one list in three groups: built-in skills (grouped by the plugin that provides them), skills on this machine, and skills installed from the market. A skill shows up only once, never twice.
-- Every row has a switch on the right. Click it to turn that skill off or on, and you never edit a file yourself. Once it is off, the model stops using it. Skills that are symlinked in are read-only and get no switch.
-- Click the title of any row under **Installed** to open its own page: the name you call it by (you can select and copy it), the folder it lives in on this machine, its own description, where it came from and which version. Market installs also show older versions, and the page header gains **Update**.
-- In **Skill market**, search, narrow by one of the 12 categories, sort by downloads or favorites, and keep scrolling to load more. Click the empty part of a card for a short description and what is inside the package; click **Install** to put it on this machine, and the next session can use it.
-- **＋ Add skill** in the toolbar takes a folder path on this machine or a GitHub repository address; the `⌄` next to it also offers **Let the Agent create a skill**. When you no longer want one, **Uninstall** in the detail page header deletes it together with its install record.
-
-## Skill market
-
-![Skill market: search, source and sort menus, 12 categories with their counts, an equal-width card grid](docs/assets/market-page.png)
-
-Skills come from the skillhub.cn catalog, and ClawHub skills are in there too. Pick a range at the top: **All sources** is the default and the largest, or narrow it to **SkillHub** or **ClawHub**.
-
-There are 12 categories, each label saying how many skills it holds, and four sort orders: default, recently updated, downloads, favorites. Scroll to the bottom and the next page loads by itself; when everything is loaded it says **No more results**.
-
-- **Where it lands**: in your own skills folder, `~/.dsh/skills/<name>`, next to the skills you put there by hand. The folder name is the name the skill declares itself, which is not always the name shown in the market.
-- **When you can use it**: in a new session. The one you are in keeps the list it loaded earlier, so the skill will not show up right away.
-- **If the name is taken**: a skill with that name is not replaced, and the panel tells you where the old one is. There is no overwrite button — to change versions, use **Update** on the detail page.
-- **Why some skills will not install**: a name can only use lowercase English letters, digits and hyphens. Names with capitals, spaces or Chinese characters cannot be installed.
-
-## Known limitations
-
-- **Symlinked skills are read-only**: no switch, and the panel will not change them for you.
-- **A built-in skill's switch only counts inside this panel**: the plugin that provides it does not read that setting, so whether the model still uses the skill depends on that plugin.
-- **No going back to an older version**: after an update, the only way back is to move the skill folder out and install it again.
-- **No network only affects Skill market**: that tab shows an error with a retry button, while **Installed** keeps working.
-- **Installed, but the record was not written**: the skill is already in the list while its install record is missing. Installing again is blocked as a name clash — move the folder out and install once more.
-- **The panel only touches skills you can see in it**: if a skill moved on disk, the write is refused instead of landing on the wrong file.
-
-## Upgrade and migration
-
-From `dsh-skill-center` to 1.0.0, run `mv ~/.dsh/dsh-skill-center ~/.dsh/dsh-skill-panel` first. From 1.0.0 to 1.1.0 it is `remove` → `add` → restart, and **do not `mv`**. Details are in the 1.1.0 and 1.0.0 sections of [CHANGELOG.md](CHANGELOG.md).
+- **Native look and feel**: layout, the sticky collapsing page header, responsive step-down, the detail page structure and the row height all follow DSH's own **Plugins** panel, so nothing looks bolted on.
+- **Three sources, real grouping**: symlinks on disk, the install ledger and metadata sort skills into built-in / local / installed, and duplicate names are resolved by the host's own priority order, so what you see is the copy the model actually loads.
+- **Lossless on/off control**: flipping a local or installed skill rewrites only the `disable-model-invocation` field in that skill's `SKILL.md` and keeps the original line endings (CRLF/LF), BOM, comments and line order; a built-in skill's state is stored by the plugin instead.
+- **A skill market built in (SkillHub mirror)**: switch between **All sources / SkillHub / ClawHub**; debounced search, 12 category filters, multi-dimension sorting and infinite scrolling. Market installs keep their upstream icon and display name.
+- **Flexible import and updates**: import a third-party skill from a local directory or a GitHub repository link (subdirectories included); market installs support automatic and manual update checks, a full overwrite upgrade and a complete uninstall.
 
 ## Requirements
 
-- DSH `>= 0.2.1`, Node `>= 20`.
-- The skill market reaches `api.skillhub.cn` only, and goes through the plugin rather than the browser.
-- No runtime dependencies. `esbuild` is only needed if you rebuild the client yourself.
+- **DSH**: `>= 0.2.1`
+- **Node.js**: `>= 20`
+- **Network**: the market only needs `api.skillhub.cn` (the plugin requests it for you, and the browser never connects to it directly); installing also needs to reach the npm registry.
 
-## More
+## Installation
 
-- Nine-level classification and the same-name tiers: [architecture.md §1.4.2 / §1.4.3](docs/contracts/architecture.md)
-- Market install / update / rollback and error codes: [routes.md §3.7](docs/contracts/routes.md)
-- zh/en locale keys and UI vocabulary: [client.md §8.3](docs/contracts/client.md)
-- Full change history: [CHANGELOG.md](CHANGELOG.md)
+> ℹ️ DSH reads its plugin list only at startup, so **restart DSH after every install or upgrade**.
+
+### Option 1: desktop app (recommended)
+
+1. Open the DSH desktop app and go to the **Plugins** page in the sidebar.
+2. Click **Add plugin**, enter this package name and confirm (to install from source, use `github:Ztqing4Agents/dsh-skill-panel`):
+   ```text
+   @ztqing4agents/dsh-skill-panel
+   ```
+3. Restart the app, and **Skills** shows up in the sidebar.
+
+*(Note: the desktop profile belongs to the Electron client, so do not touch the `desktop` profile from the command line.)*
+
+### Option 2: CLI / custom profile
+
+Make sure `pnpm` is on your `PATH`, then run this (`--profile` is required):
+
+```bash
+dsh plugin --profile <your-profile-name> add @ztqing4agents/dsh-skill-panel
+```
+
+*The install pulls the peer dependencies it needs from the npm registry, so keep the network up. Running the same command again is idempotent.*
+
+### Migrating from the older `dsh-skill-center`
+
+If you installed `dsh-skill-center` before the rename, move the data directory first so your favourites, install ledger and built-in switch states survive:
+
+```bash
+mv ~/.dsh/dsh-skill-center ~/.dsh/dsh-skill-panel
+```
+
+Then replace the old package name with `dsh-skill-panel` in the profile config and restart.
+
+## Usage
+
+### 1. Managing installed skills
+
+- **Browse by group**: the page lists every available skill as Built-in skills (folded by provider) → Local skills → Installed skills, each row with its own switch on the right.
+- **Skill details**: click the title of any row under **Installed** to see the full `SKILL.md` body, the invocation name (selectable and copyable), the real path on disk, the source repository and the version.
+- **Import a third-party skill**: click **＋ Add skill** in the toolbar, which takes three forms of input:
+  - **Local directory**: for example `~/my-skills/demo-skill` (copied in full to `$DSH_HOME/skills/` once it passes validation)
+  - **GitHub shorthand**: `github:owner/repo`
+  - **Full GitHub link**: `https://github.com/owner/repo`, or a branch and subdirectory `https://github.com/owner/repo/tree/<branch>/<subdir>`
+- Click the arrow next to the button to jump straight into the host's **Let the Agent create a skill** mode.
+
+### 2. Skill market
+![Skill market: search, source and sort menus, 12 categories with their counts, an equal-width card grid](docs/assets/market-page.png)
+
+- **Browse and search**: switch the data source (All sources (default, the largest) / SkillHub / ClawHub), with keyword search, category filters and sorting (default / recently updated / downloads / favorites).
+- **Where it installs, and when it works**: skills go to `$DSH_HOME/skills/<name>` (default `~/.dsh/skills/<name>`), with the directory name taken from the `name` declared in the package's `SKILL.md`. **A new session can use it right away** (a session that is already open keeps its old list).
+- **Updates and uninstall**: opening the **Installed** tab or a skill's detail page checks the upstream version; if there is a newer one, **Update** appears at the top right of the detail page (an update replaces the whole skill directory and keeps the enabled state); **Uninstall** removes the skill directory and the install ledger entry together.
+
+## How it works and known limits
+
+### Classification priority (top to bottom, first match wins)
+
+1. **Built-in**: the source is not `filesystem`, or the skill sits in the `bundled` tier.
+2. **Not shown (counted in the footer)**: skills in the project, custom-root or `user-agents` tiers.
+3. **Local**: the skill directory is a symlink.
+4. **Installed**: the install ledger has it, its metadata (`_skillhub_meta.json` / `_meta.json`) carries valid source information, or the directory name follows `<handle>--<slug>`.
+5. **Local**: everything else that matches none of the above.
+
+*Note: when the same skill name exists in several scopes, the panel dedupes by the host's load priority (project > runtime > user > bundled) and shows only the one that really takes effect.*
+
+### Known limits
+
+- **Name validation**: the host strictly requires a lowercase `kebab-case` declared name (`^[a-z0-9]+(?:-[a-z0-9]+)*$`). If a market package's `SKILL.md` declares a name with capitals, spaces or Chinese characters, the plugin refuses to install it, since the host would not load it anyway.
+- **Duplicate-name protection**: if a directory with the same name already exists, the install stops and shows the path instead of overwriting silently; to change versions, remove the old directory first or use **Update** on the detail page.
+- **Symlinked skills are read-only**: a symlinked local skill is tagged `symlink · read-only`, gets no switch, and the server refuses writes to it too.
+- **Scope of a built-in skill's switch**: the state of a built-in skill's switch is recorded and shown only inside this panel; whether the skill is injected into the model is still up to the provider that ships it.
+- **No version rollback yet**: an update is an overwrite, so going back to an older version means removing the directory and installing again.
+- **Local-only security**: every backend route checks the loopback socket, the `Host` header and the browser's same-origin marker, so it can only be reached from this machine.
+- **Offline affects the skill market only**: that tab shows a full-page error you can retry; the **Installed** tab keeps working.
+- **Installed, but the ledger entry is missing**: when the install lands but the ledger write fails, the skill already shows under **Installed skills**, and a re-install is refused by the name check — move the directory out and install again.
+
+## Local development
+
+The repository ships a prebuilt `client.js`, so a normal install needs no build step. To change the front end (`src/client/**`):
+
+```bash
+# install the dev dependencies (esbuild only)
+npm install
+
+# rebuild the bundled client
+npm run build
+```
+
+For local debugging, mount the plugin in a test profile's `package.json` with `"dsh-skill-panel": "link:/path/to/dsh-skill-panel"` and register it in `dsh.profile.bundles`.
+
+## Recommended skills
+
+Once the plugin is installed, you can try the engineering-standards skills the author maintains straight from the skill market or through **＋ Add skill**:
+
+- **[dev-docs-standards](https://www.skillhub.cn/skills/user_7e37093e/dev-docs-standards)** ([source on GitHub](https://github.com/Ztqing4Agents/Skills/tree/main/dev-docs-standards)) — a standardised way to write and organise developer documentation, so the Agent produces technical documents with a clear structure and a consistent style (this project's README follows that standard).
+
+## Acknowledgements
+
+This project's development and ecosystem integration draw on the following open-source projects. Thanks to all of them:
+
+- **[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)** — the official DSH host framework, which provides the plugin loading mechanism, the native panel interaction patterns and the underlying skill system.
+- **[dsh-market/dsh-market](https://github.com/dsh-market/dsh-market)** — a DSH plugin market ecosystem project, which informed this plugin's extension mechanism and package management flow.
+- **[montersy123/dsh-skill-market](https://github.com/montersy123/dsh-skill-market)** — an early skill market for DSH, which inspired how skill catalogs are aggregated and distributed.
+- **[michengai/dsh-skills-manager](https://github.com/michengai/dsh-skills-manager)** — an open-source DSH skills manager, whose approach to local skill state and organisation informed this plugin.
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
-
-The internal contract documents linked above are written in Chinese.
+This project is open source under the [MIT](LICENSE) license.

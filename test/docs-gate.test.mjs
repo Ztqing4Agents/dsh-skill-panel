@@ -378,8 +378,9 @@ test('R10 体量：AGENTS.md 超 100 行只告警，不判红', async () => {
   }
 });
 
-test('R12 体量：README.md 超 120 行只告警，不判红', async () => {
-  const long = `# README\n\n${Array.from({ length: 120 }, (_, i) => `- 行 ${i + 1}`).join('\n')}\n`;
+test('R12 体量：README.md 超 160 行只告警，不判红', async () => {
+  // 164 行：标题行 + 空行 + 161 条 + 尾部空行，稳稳越过 160 的预算线。
+  const long = `# README\n\n${Array.from({ length: 161 }, (_, i) => `- 行 ${i + 1}`).join('\n')}\n`;
   const { dir, cleanup } = await tree({ ...BASELINE, 'README.md': long });
   try {
     const { status, out } = runGate(dir);
@@ -401,8 +402,9 @@ test('R1/R2 白名单与头注：README.en.md 是第二份根级使用者文档�
   }
 });
 
-test('R12 体量：README.en.md 超 120 行同样只告警，且不误报到 README.md', async () => {
-  const long = `# README (en)\n\n${Array.from({ length: 120 }, (_, i) => `- line ${i + 1}`).join('\n')}\n`;
+test('R12 体量：README.en.md 超 160 行同样只告警，且不误报到 README.md', async () => {
+  // 与中文版同口径：164 行，越过 160 的预算线但只告警。
+  const long = `# README (en)\n\n${Array.from({ length: 161 }, (_, i) => `- line ${i + 1}`).join('\n')}\n`;
   const { dir, cleanup } = await tree({
     ...BASELINE,
     'README.md': '# README\n\n短正文。\n',

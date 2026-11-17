@@ -318,13 +318,14 @@ if (text.has('AGENTS.md')) {
   if (n > 100) warn('R10', `AGENTS.md: ${n} lines (>100) —— 把内容送进契约，地图留指针`);
 }
 
-// The READMEs are the only docs written for users: they stay short on purpose, and a size
-// warning is the cheapest reminder that a new feature paragraph belongs in CHANGELOG.md.
-// Both language editions are held to the same line, so the warning names the file it read.
+// The READMEs are the only docs written for users: they stay short, and a size warning is the
+// cheapest reminder that a new feature paragraph belongs in CHANGELOG.md. The budget went from
+// 120 to 160 lines when the prebuilt-skills and acknowledgements sections landed; both language
+// editions share the same line, so the warning names the file it read.
 for (const readme of ['README.md', 'README.en.md']) {
   if (!text.has(readme)) continue;
   const n = lines(readme).length;
-  if (n > 120) warn('R12', `${readme}: ${n} lines (>120) —— 只写使用者视角，细节进 CHANGELOG / 契约`);
+  if (n > 160) warn('R12', `${readme}: ${n} lines (>160) —— 只写使用者视角，细节进 CHANGELOG / 契约`);
 }
 
 for (const [f, limit] of declaredLimit) {
