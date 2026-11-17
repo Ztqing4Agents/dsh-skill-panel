@@ -2,8 +2,11 @@
 
 **简体中文** | [English](README.en.md)
 
-[![npm](https://img.shields.io/npm/v/@ztqing4agents/dsh-skill-panel)](https://www.npmjs.com/package/@ztqing4agents/dsh-skill-panel) ![downloads](https://img.shields.io/npm/dm/@ztqing4agents/dsh-skill-panel)
-[![release](https://img.shields.io/github/v/release/Ztqing4Agents/dsh-skill-panel?logo=github)](https://github.com/Ztqing4Agents/dsh-skill-panel/releases/latest) ![dsh](https://img.shields.io/badge/dsh-%3E%3D0.2.1-4B6EF5) ![license](https://img.shields.io/github/license/Ztqing4Agents/dsh-skill-panel)
+[![npm](https://img.shields.io/npm/v/@ztqing4agents/dsh-skill-panel?logo=npm&color=cb3837)](https://www.npmjs.com/package/@ztqing4agents/dsh-skill-panel)  
+[![downloads](https://img.shields.io/npm/dt/@ztqing4agents/dsh-skill-panel?logo=npm&color=cb3837)](https://www.npmjs.com/package/@ztqing4agents/dsh-skill-panel)  
+![DSH](https://img.shields.io/badge/DSH-%3E%3D0.2.1-4B6EF5)  
+![Node](https://img.shields.io/badge/Node-%3E%3D20-339933?logo=node.js&logoColor=white)  
+[![license](https://img.shields.io/github/license/Ztqing4Agents/dsh-skill-panel)](LICENSE)
 
 适用于 DSH（DeepSeek Harness）Web GUI 的原生风格技能管理面板插件。
 
