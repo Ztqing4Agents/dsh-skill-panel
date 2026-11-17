@@ -50,16 +50,6 @@ dsh plugin --profile <your-profile-name> add @ztqing4agents/dsh-skill-panel
 
 *安装过程中会自动从 npm registry 拉取所需的 peer dependencies，请确保网络畅通。重复执行该命令是幂等的。*
 
-### 从旧版（`dsh-skill-center`）迁移
-
-如果你此前安装过更名前的 `dsh-skill-center`，请先迁移本地数据目录以保留收藏、安装台账与内置技能开关状态：
-
-```bash
-mv ~/.dsh/dsh-skill-center ~/.dsh/dsh-skill-panel
-```
-
-随后在对应的 Profile 配置中将旧包名替换为 `dsh-skill-panel` 并重启即可。
-
 ## 使用说明
 
 ### 1. 已安装技能管理

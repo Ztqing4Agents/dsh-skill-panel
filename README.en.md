@@ -50,16 +50,6 @@ dsh plugin --profile <your-profile-name> add @ztqing4agents/dsh-skill-panel
 
 *The install pulls the peer dependencies it needs from the npm registry, so keep the network up. Running the same command again is idempotent.*
 
-### Migrating from the older `dsh-skill-center`
-
-If you installed `dsh-skill-center` before the rename, move the data directory first so your favourites, install ledger and built-in switch states survive:
-
-```bash
-mv ~/.dsh/dsh-skill-center ~/.dsh/dsh-skill-panel
-```
-
-Then replace the old package name with `dsh-skill-panel` in the profile config and restart.
-
 ## Usage
 
 ### 1. Managing installed skills
