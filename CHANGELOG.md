@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-18
+
 ### Changed
 
 - **开源协议变更**：项目协议由 BSD-3-Clause 变更为 **MIT**（同步更新 `LICENSE`、`package.json` 及文档徽标）。已发布的 `1.1.0` 及更早版本仍适用原 BSD-3-Clause 协议，MIT 协议自下一正式版起生效。
