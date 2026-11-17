@@ -2,7 +2,7 @@
   "name": "@ztqing4agents/dsh-skill-panel",
   "version": "1.1.0",
   "type": "module",
-  "description": "DSH skill panel: tell built-in, local, and market-installed skills apart at a glance, and switch each one on or off.",
+  "description": "Native-style skill management panel for the DSH Web GUI: manage built-in, local and market-installed skills in one view, switch each on or off, and browse the built-in SkillHub skill market.",
   "icon": "assets/icon.svg",
   "license": "MIT",
   "author": {
