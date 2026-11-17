@@ -60,7 +60,7 @@ npm publish --//registry.npmjs.org/:_authToken=<token>   # 账号 2FA 绑的是�
    **注释里不能出现反引号**；`src/client/**` 的注释只留「为什么不能改」——注释同样吃 180000 B 的产物预算。
 2. **不要在 `lib/**` 或 `src/client/**` 写中文**（注释也不行）：`check:i18n` 直接 exit 1。
    界面文案一律进 `locale/*.json`，代码里只出现键名。
-3. **入口名只在 `locale/*.json` 里改**（`panel.label` + `meta.title`），代码零改动。
+3. **入口名与插件名都只在 `locale/*.json` 里改**（`panel.label` = 侧栏行标题，`meta.title` = 插件名，**两键可独立取值**：2026-11-17 起二者不同——侧栏 `技能`/`Skills`，插件名 `技能面板`/`Skill Panel`），代码零改动。
 4. **不写同名 `--dsw-*` 变量**，不引第二套样式系统。宿主类名是构建哈希，不许出现在选择器里；
    页骨架用 `skc_` 前缀，规则体逐字来自宿主「插件」页（`docs/contracts/visual.md`）。
 5. **软链技能只读，三层同时拦**：扫描层给 `symlink` 事实 → 前端渲染只读标记不渲染开关 →

@@ -179,12 +179,26 @@ test('三处必需键都存在且非空', async () => {
   }
 });
 
-test('K27 入口键 panel.label 存在，中文取值是「技能」', async () => {
+test('K27 panel.label 是侧栏行标题、meta.title 是插件名，两键各自取值（2026-11-17 起不同）', async () => {
   const zh = await readDictionary('zh');
   const en = await readDictionary('en');
-  assert.equal(valueAt(zh, 'panel.label'), '技能', '中文入口名是「技能」');
-  assert.equal(valueAt(zh, 'meta.title'), '技能', '插件列表里的名字同样是「技能」');
-  assert.equal(valueAt(en, 'panel.label'), 'Skills', '英文入口名是 Skills');
+  // Two keys, two surfaces, one dictionary. `panel.label` is the sidebar row the Host renders from
+  // the `sidebar.panellist` registration; `meta.title` is the plugin name on the Host 「插件」page
+  // card and its detail page (`readPluginMeta` reads the file's top-level `meta` block). Since
+  // 2026-11-17 they are deliberately different values: the row keeps the short word, the plugin
+  // carries its full product name.
+  assert.equal(valueAt(zh, 'panel.label'), '技能', '中文侧栏行标题是「技能」');
+  assert.equal(valueAt(zh, 'meta.title'), '技能面板', '中文插件名是「技能面板」');
+  assert.equal(valueAt(en, 'panel.label'), 'Skills', '英文侧栏行标题是 Skills');
+  assert.equal(valueAt(en, 'meta.title'), 'Skill Panel', '英文插件名是 Skill Panel');
+  // The page heading is a third key and was NOT part of the rename: it stays the short word.
+  assert.equal(valueAt(zh, 'page.title'), '技能', '页面大标题仍是「技能」');
+  assert.equal(valueAt(en, 'page.title'), 'Skills', '页面大标题仍是 Skills');
+  // A guard against the plausible "tidy-up" of syncing the two keys back together: this is the
+  // decided product split, not drift, so a session that makes them equal must fail here and read
+  // this comment before "fixing" the test.
+  assert.notEqual(valueAt(zh, 'meta.title'), valueAt(zh, 'panel.label'), '中文两键取值不同（既定口径，不是回归）');
+  assert.notEqual(valueAt(en, 'meta.title'), valueAt(en, 'panel.label'), '英文两键取值不同（既定口径，不是回归）');
 });
 
 test('两个语言的占位符集合逐键相同（否则插值会某一边漏字）', async () => {

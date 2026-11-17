@@ -1,4 +1,4 @@
-# dsh-skill-panel — skill panel
+# dsh-skill-panel — Skill Panel
 
 English | [简体中文](README.md)
 

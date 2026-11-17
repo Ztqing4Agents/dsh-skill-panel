@@ -65,7 +65,7 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | **K24** | 加载/错误态 | `status='loading'` ⇒ 4 个 `skc_skeletonBar` 且存在 `正在读取技能…`；`status='error'` ⇒ `role="alert"` + 重试按钮 | L3 |
 | **K25** | 页签 | `SegmentedTabs` 渲染两个 `role="tab"`，默认选中「已安装」；切到市场 ⇒ 只渲染 `market.placeholder`，工具栏 `hidden` | L3 |
 | **K26** | 页头不渲染计数 | 页头状态位只承载更新提示（宿主 `.updatesNote` 同位也只有这一句）：没有检测对象时 `.skc_status` 不渲染；渲染时只有一个 `<span>`、HTML 里不出现「共 N 个技能」「个已停用」 | L3 · `test/view-page.test.mjs` |
-| **K27** | 不硬编码中文 | `scripts/check-i18n.mjs`：`src/client/**` 与 `lib/**` 的 CJK 计数为 0；`zh.json`/`en.json` 键集相等；`panel.label` 存在 | 门禁 |
+| **K27** | 不硬编码中文 | `scripts/check-i18n.mjs`：`src/client/**` 与 `lib/**` 的 CJK 计数为 0；`zh.json`/`en.json` 键集相等；`panel.label`（侧栏行）与 `meta.title`（插件名）各自取值、允许不同 | 门禁 |
 
 ### D.4 验收口径（A 组：通过标准，每条都能现场执行）
 

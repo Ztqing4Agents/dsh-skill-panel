@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "技能",
+    "title": "技能面板",
     "description": "一眼分清内置、本地与市场安装的技能，逐行启用或停用。"
   },
   "panel.label": "技能",

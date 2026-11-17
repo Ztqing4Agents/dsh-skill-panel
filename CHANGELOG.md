@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - 许可从 BSD-3-Clause 改为 **MIT**：`LICENSE` 全文、`package.json` 的 `license` 字段、README 两版的许可行与徽标同轮改掉。**已发布的 1.1.0 及更早版本仍按 BSD-3-Clause 授权**（许可不可追溯），新许可自下一个版本起生效。
+- 插件在 DSH「插件」页里的名字改为 **技能面板**（英文界面 `Skill Panel`），随 DSH 界面语言切换；侧栏入口仍叫「技能」/`Skills`。
+- 插件列表里的图标换成品牌色系（深墨蓝底、白色行、琥珀高亮）的朴素面板图形；琥珀行右侧的空白处放一枚宿主插件风车图标的淡色水印，标识「这是插件」；深色主题下不再是一片黑，与宿主其他界面的语言一致。图标已按宿主规范铺满 36×36 的展示框（此前四周留白，观感偏小）。
 
 ## [1.1.0] - 2026-11-15
 

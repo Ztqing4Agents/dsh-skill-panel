@@ -188,6 +188,7 @@ locale 键值（逐字，来自该包的 zh 表）：
 | 角色 | 读数 |
 | --- | --- |
 | 图标盒 | **48** content-box（加 `.5px` 边框实际 49）、圆角 `--dsw-radius-lg`（16）、`border: .5px solid` `border-l3`（亮 `rgba(0,0,0,.12)` / 暗 `rgba(255,255,255,.16)`）、背景透明；内部 `<img>` **36×36** 居中。**详情与列表同尺寸**（详情不放大） |
+| 图标来源 | `iconOf()` 把 `package.json` 的 `icon`（**包内相对路径**，只认 SVG / PNG / JPEG / WebP，单文件 **≤256 KiB**）读成 `data:<media>;base64,…` 交给 `<img>` 承载 ⇒ 图内**不能依赖 `currentColor` 或外部样式**（在 `<img>` 里解析成默认黑，深色主题下等于看不见），必须自着色；卡片内 `<img>` 固定 **36×36**（行内图标 30）⇒ **图标文件必须铺满自身 `viewBox`**，图内留白会直接缩小图形（首版底板只占 86.7%，实测只有 32 CSS）；官方内置插件由组件绘制、能画到 40，文件型图标的上限就是 36 |
 | 布局 | `display: flex` + `justify-content: space-between` + `align-items: center` + `gap: 12`；图标贴内容左沿（x=380）、动作组贴右沿（right=1340） |
 | 动作组内 `gap` | **16** |
 | 更新按钮（包级） | `Button outline/sm` + `IconRefreshOutlineRegular` 13，`aria-label` = `updateLabel` |

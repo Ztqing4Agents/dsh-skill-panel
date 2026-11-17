@@ -299,7 +299,7 @@ ledger.readAll() ─────────────────┘   （R5�
 | `client.js` ★ | **Client 半部产物**：`__ModuleLoader__.load` 外壳 + 全部页面代码（由 `scripts/build-client.mjs` 生成） |
 | `assets/icon.svg` | 插件列表图标（`package.json` 的 `icon` 指向它） |
 | `README.md` / `AGENTS.md` | 使用者视角（能力、安装、已知限制）与维护者视角（命令、真源文件地图、硬约束：不手改产物、不硬编码中文） |
-| `locale/zh.json` | 唯一中文文案真源（含 `meta.title` = 入口名、`panel.label`、全部 UI 键） |
+| `locale/zh.json` | 唯一中文文案真源（含 `meta.title` = 插件名、`panel.label`、全部 UI 键） |
 | `locale/en.json` | 英文真源，键集必须与 `zh.json` 完全一致（`check:i18n` 强制） |
 
 ### 2.2 Host 半部（`lib/`，纯 node ESM，无构建）

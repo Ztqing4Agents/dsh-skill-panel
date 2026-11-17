@@ -280,13 +280,13 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
   `test/i18n.test.mjs` 校验「每个 `t('…')` 字面量键在两侧字典里都存在」。
 - `client/src/**` 与 `lib/**` **不得出现 CJK 字面量**（`check:i18n` 强制）；界面文案一律 `t('key')`。
 - 占位符用 `{name}`（宿主同款：`t('partToggle', { name: title })`）。
-- 入口标题**只允许**通过 `panel.label` 表达：改名 = 改 `locale/*.json` 的 `panel.label` + `meta.title`，代码零改动（这是「不硬编码中文」的可验收形态）。两处都要改的理由：`meta.title` 是插件列表里的显示名（`PROF/*/locale/zh.json` 四家都是 `{meta:{title,description}}`），`panel.label` 是侧栏行标题。`check-i18n` 会校验两者都存在。
+- 入口名与插件名是两个键，**职责不同、可各自独立取值**：`panel.label` = 侧栏行标题（`label: () => t('panel.label')`），`meta.title` = 宿主插件列表里的插件名（`PROF/*/locale/zh.json` 四家都是 `{meta:{title,description}}`）。自 2026-11-17 起二者取值不同：侧栏 `技能` / `Skills`，插件名 `技能面板` / `Skill Panel`；两者都必须在 `locale/*.json` 里存在（`check:i18n` 校验）、都随 DSH 显示语言自适应，改文案只改 `locale/*.json`，代码零改动。
 - 市场面沿用两族键：`market.*` **65 个**与 `error.E_*` **13 个**；已安装详情页另有 35 个 `detail.*`（键表见 `docs/contracts/installed-detail.md` 的「文案」一节），外加 6 个 `markdown.*`（宿主 `MarkdownText` 的代码围栏与脚注 chrome，缺了它就整段回落成纯文本），全字典 **197** 键（`check-i18n` 口径 = 195 个扁平键 + `meta` 两项）。下表有几行把同族键合并成一行，这是为了守住 400 行上限（`check-docs` 的 R11），键与值逐条列出。这些键已退役、不会再回来：`add.comingSoon`、`detail.uninstallSoon`、`detail.checkUnavailable`、`detail.checkIdle`、`detail.copy`、`detail.copied`、`plugin.copyCommand`、`status.count`、`status.offSuffix`、`market.placeholder`（缘由散见 `docs/contracts/decisions.md` 各附录）。
 - 键表（P0 全集 + 市场轮；`zh` 值逐字来自 `PRD` §3.3.5 与本设计）：
 
 | key | zh |
 | --- | --- |
-| `meta.title` | 技能 |
+| `meta.title` | 技能面板 |
 | `meta.description` | 一眼分清内置、本地与市场安装的技能，逐行启用或停用。 |
 | `panel.label` | 技能 |
 | `page.title` / `page.intro` | 技能 ／ 启用、停用和查看技能来源 |
