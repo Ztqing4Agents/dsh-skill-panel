@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **开源协议变更**：项目协议由 BSD-3-Clause 变更为 **MIT**（同步更新 `LICENSE`、`package.json` 及文档徽标）。已发布的 `1.1.0` 及更早版本仍适用原 BSD-3-Clause 协议，MIT 协议自下一正式版起生效。
+- **开源协议变更**：项目协议由 BSD-3-Clause 变更为 **MIT**（同步更新 `LICENSE`、`package.json` 及文档徽标）。已发布的 1.1.0 及更早版本仍适用原 BSD-3-Clause 协议；**MIT 自本版（1.1.1）起生效**。
 - **插件展示名称本地化**：在 DSH「插件」管理页中的名称正式调整为 **技能面板**（英文界面下显示为 `Skill Panel`），随宿主语言自动切换；侧栏导航入口保持「技能 / `Skills`」不变。
 - **插件图标视觉升级**：重绘品牌色系图标（深墨蓝底、白线与琥珀色高亮，右下角附带宿主插件风车水印），铺满宿主 `36×36` 展示框并适配深色主题。
 
