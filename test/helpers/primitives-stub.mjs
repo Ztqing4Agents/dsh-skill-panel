@@ -23,6 +23,10 @@
  *   Modal           div[role=dialog][aria-modal][aria-label] with title/body/footer
  *   MarkdownText    div carrying the raw text (no markdown pipeline in node)
  *   fileSizeText    the host's byte-count formatter, transcribed verbatim
+ *   PluginArtworkDefault
+ *                   svg[data-artwork=plugin-default] with the host's own path geometry,
+ *                   default `size` 36, fixed `#54ECE7 -> #658EFF` gradient (never
+ *                   `currentColor`); the host's figure for a package head with no icon
  *
  * Anything the panel imports has to exist here first: a missing export fails the whole
  * L3 batch with `No matching export`, not just the case that needed it. The pieces that
@@ -309,6 +313,60 @@ export function fileSizeText(bytes) {
   if (mb < 1024) return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)}MB`;
   const gb = mb / 1024;
   return `${gb < 10 ? gb.toFixed(1) : Math.round(gb)}GB`;
+}
+
+/**
+ * The host artwork's path, verbatim from the real package (see `PluginArtworkDefault` below).
+ */
+const PLUGIN_ARTWORK_DEFAULT_PATH = 'M24.6294 8.63696C26.2862 8.63705 27.6294 9.98016 27.6294 11.637V12.7825C27.6292 14.4391 26.2861 15.7824 24.6294 15.7825H23.4839C22.6519 15.7825 21.5454 16.3459 21.5454 17.1778V18.1573C21.5454 18.7757 22.216 19.1966 22.8345 19.1965H24.6294C26.2861 19.1965 27.6292 20.5398 27.6294 22.1965V23.9924C27.6292 25.6491 26.2861 26.9924 24.6294 26.9924H22.8345C21.1778 26.9924 19.8347 25.649 19.8345 23.9924V22.1965C19.8345 21.7148 19.4957 21.2327 19.014 21.2327H16.4792C15.7975 21.2327 15.3374 22.0061 15.3374 22.6877V23.8333C15.3373 25.49 13.9942 26.8333 12.3374 26.8333H11.1919C9.53509 26.8333 8.19198 25.49 8.19189 23.8333V22.6877C8.19189 21.0309 9.53504 19.6877 11.1919 19.6877H12.3374C13.1964 19.6877 14.3999 19.0959 14.3999 18.2369V16.0185C14.3999 14.9518 15.2646 14.0872 16.3312 14.0872H19.435C20.0596 14.0872 20.484 13.4071 20.4839 12.7825V11.637C20.4839 9.98011 21.827 8.63696 23.4839 8.63696H24.6294ZM13.4116 11.2468C13.4116 12.6882 12.2431 13.8567 10.8018 13.8567C9.36037 13.8567 8.19189 12.6882 8.19189 11.2468C8.19189 9.80544 9.36037 8.63696 10.8018 8.63696C12.2431 8.63696 13.4116 9.80544 13.4116 11.2468Z';
+
+/**
+ * The host's default package artwork, i.e. the figure the host draws for a plugin that ships
+ * no icon of its own (and for one whose icon fails to decode).
+ *
+ * Transcribed from `lib/index.js` of the real package, the block starting
+ * `const PluginArtworkDefault = ({ size = 36, className }) => {` and ending with its
+ * `linearGradient` `defs`: same `viewBox="0 0 36 36"`, same `path` `d` (copied verbatim),
+ * same fixed two-stop gradient `#54ECE7 -> #658EFF` at `y1 9.94188 / y2 13.6375` on the
+ * `x 15.1481` axis. Geometry and palette are the host's, so a test that reads this stub is
+ * reading the host's drawing, not our imitation of it.
+ *
+ * Two deliberate deviations, both required by a string render: the gradient id is a constant
+ * instead of `useArtworkId()`'s per-instance id (no document in node, so nothing to collide
+ * with), and `data-artwork="plugin-default"` is added as a stable hook so an assertion can
+ * say "this is the host's package figure" without matching raw path data. `size` still
+ * defaults to 36 and still drives `width`/`height`, which is what the panel's 36px seat
+ * depends on.
+ * @param {{size?: number, className?: string}} props - the square edge and the class.
+ * @returns {import('react').ReactElement} the svg.
+ */
+export function PluginArtworkDefault({ size = 36, className }) {
+  return jsxs('svg', {
+    'data-artwork': 'plugin-default',
+    width: size,
+    height: size,
+    className,
+    viewBox: '0 0 36 36',
+    fill: 'none',
+    xmlns: 'http://www.w3.org/2000/svg',
+    children: [
+      jsx('path', { d: PLUGIN_ARTWORK_DEFAULT_PATH, fill: 'url(#stub-plugin-artwork-a)' }),
+      jsx('defs', {
+        children: jsxs('linearGradient', {
+          id: 'stub-plugin-artwork-a',
+          x1: '15.1481',
+          y1: '9.94188',
+          x2: '15.1481',
+          y2: '13.6375',
+          gradientUnits: 'userSpaceOnUse',
+          children: [
+            jsx('stop', { stopColor: '#54ECE7' }),
+            jsx('stop', { offset: '1', stopColor: '#658EFF' }),
+          ],
+        }),
+      }),
+    ],
+  });
 }
 
 /**

@@ -176,6 +176,26 @@ test('严格 ctx 下侧栏标题仍从字典解析（入口名不硬编码）', 
 /** A key-shaped token: something that should have been translated. */
 const KEY_SHAPE = /\b[a-z][a-zA-Z]*(?:\.[a-zA-Z][a-zA-Z0-9]*)+\b/g;
 
+/** The attributes that carry wording a user can read (a key must not hide in one). */
+const WORDING_ATTRS = /\s(?:title|aria-label|aria-description|placeholder|alt)="([^"]*)"/g;
+
+/**
+ * The user-readable text of one rendered page: its text nodes plus the wording attributes.
+ *
+ * Attribute values are otherwise skipped on purpose. Scanning raw markup reported the host
+ * figure's `xmlns="http://www.w3.org/2000/svg"` as an untranslated key (`www.w3.org`) — the
+ * host's own bundle carries that very attribute, so it is the shape of an `<svg>`, not a
+ * missed translation. Dropping attributes wholesale would also stop catching a key that
+ * leaked into a tooltip or an accessible name, which is why those are appended back.
+ * {@link readableText} is exercised by its own case, so this scan cannot go quietly vacuous.
+ * @param {string} html - rendered markup.
+ * @returns {string} the readable text, one chunk per line.
+ */
+function readableText(html) {
+  const wording = [...html.matchAll(WORDING_ATTRS)].map((match) => match[1]);
+  return [html.replace(/<[^>]*>/g, '\n'), ...wording].join('\n');
+}
+
 /** One row per partition, so the first screen exercises every group heading. */
 const COPY_PAYLOAD = {
   groups: [
@@ -225,6 +245,19 @@ test('真实 client.js 注册的字典只含字符串，且覆盖全部 UI 键',
   }
 });
 
+test('键名扫描只读可见文字：命名空间不算键名，漏翻的键名照样抓得住', () => {
+  // 反例（本轮踩到的误报）：真宿主 bundle 也带这个属性，它是 <svg> 的形状而不是漏翻。
+  assert.deepEqual(
+    [...(readableText('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36"></svg>').match(KEY_SHAPE) ?? [])],
+    [],
+    'xmlns / viewBox 这类属性值不进扫描面',
+  );
+  // 正例（扫描不能因此失效）：文本节点、文案属性里的键名都还在扫描面内。
+  assert.deepEqual([...(readableText('<span>panel.label</span>').match(KEY_SHAPE) ?? [])], ['panel.label'], '文本节点里的键名仍被抓住');
+  assert.deepEqual([...(readableText('<button title="page.title">x</button>').match(KEY_SHAPE) ?? [])], ['page.title'], 'title 里的键名仍被抓住');
+  assert.deepEqual([...(readableText('<i aria-label="row.enable"></i>').match(KEY_SHAPE) ?? [])], ['row.enable'], 'aria-label 里的键名仍被抓住');
+});
+
 test('真机同款扁平 translate：侧栏标题与首屏文案里没有未翻译的键名', async () => {
   const { module } = await loadCommittedBundle();
   const zh = await readDictionary('zh');
@@ -240,8 +273,11 @@ test('真机同款扁平 translate：侧栏标题与首屏文案里没有未翻�
   const props = page.registration.inject();
   props.store.actions.ready(COPY_PAYLOAD);
   const html = renderToStaticMarkup(createElement(page.component, { t, ...props }));
-  const leftover = [...new Set(html.match(KEY_SHAPE) ?? [])];
-  assert.deepEqual(leftover, [], `首屏 HTML 里没有未翻译的键名（发现：${leftover.join(', ')}）`);
+  const text = readableText(html);
+  // 扫描面不能因为「剥掉属性」而变空：首屏那几句可见文案必须在里面。
+  assert.ok(text.includes('内置技能配置') && text.length > 200, `扫描面仍是整页可见文字（实测 ${text.length} 字符）`);
+  const leftover = [...new Set(text.match(KEY_SHAPE) ?? [])];
+  assert.deepEqual(leftover, [], `首屏可见文字里没有未翻译的键名（发现：${leftover.join(', ')}）`);
   for (const copy of ['内置技能配置', '本地技能', '已安装技能', '技能市场', '添加技能', '刷新']) {
     assert.equal(html.includes(copy), true, `首屏出现文案「${copy}」`);
   }

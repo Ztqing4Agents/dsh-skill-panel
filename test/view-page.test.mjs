@@ -10,6 +10,13 @@
  * `role="switch"` here is evidence of prop wiring, not of the host painting.
  *
  * Contract: docs/contracts/acceptance.md 附录 D.1 (L3) and case ids K22, K23, K24, K25.
+ *
+ * K22 counts *letter* avatars only. Since 2026-11-18 the builtin plugin block's tile draws
+ * the host's package figure instead of a letter (its subject is a package, not a name —
+ * docs/contracts/client.md §3.9.2 item 7), so the first screen carries three letters (the
+ * three skill rows), not four. Final shape: our own 48 box (`.skc_cardIcon`, no extra class)
+ * with a 36 `PluginArtworkDefault` inside — the same figure and the same size as the plugin
+ * page head, so the two package seats cannot drift apart (`docs/contracts/visual.md` A.9).
  */
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -177,14 +184,36 @@ test('K22 行结构：图标 + 名称 + 描述 + 右侧控件', () => {
   assert.ok(rowHtml.includes('class="skc_cardMain"'), '名称与描述在中间列');
 });
 
-test('K22 头像按名字取色：内置块取 provider 名，两区的行取技能名', () => {
+test('K22 头像按名字取色：两区的行取技能名，内置块画 PluginArtworkDefault（36、透明底）', () => {
   const html = renderPage();
+  // 内置插件块的 subject 是「包」而不是「技能」：`pluginIcon` 为 null 时画宿主那张
+  // `PluginArtworkDefault`（内容 36、框底透明）—— 与插件页头**同图同尺寸**，框仍是我们
+  // 自己的 `.skc_cardIcon`（48）。所以这一块**不写** `--skc-avatar-*`、也不画字母 ——
+  // 三处技能行仍是名字首字母头像（docs/contracts/client.md §3.9.2 第 7 条）。
   const tiles = matches(html, /style="--skc-avatar-bg:([^;]+);--skc-avatar-ink:[^"]+"/g);
-  assert.equal(tiles.length, 4, '一个内置块 + 三条行，各有一个头像');
-  assert.equal(new Set(tiles).size, 4, '四个名字拿到四种色块（常量色或按首字母上色都会撞色）');
+  assert.equal(tiles.length, 3, '三条技能行各有一个首字母头像（内置块不再算一个）');
+  assert.equal(new Set(tiles).size, 3, '三个名字拿到三种色块（常量色或按首字母上色都会撞色）');
   const letters = matches(html, /aria-hidden="true">([^<]*)<\/span>/g);
-  // 内置区折成 provider 块（runtime），所以第一块的头像是 R，不再是被折进去的 office。
-  assert.deepEqual(letters, ['R', 'D', 'H', 'U'], '字母跟随各自名字（runtime 块 / dev-docs-standards / hand-written / ui-design）');
+  // 内置区折成 provider 块（runtime），那块画的是默认图形而不是字母 R。
+  assert.deepEqual(letters, ['D', 'H', 'U'], '字母跟随各自技能名（dev-docs-standards / hand-written / ui-design）');
+
+  // 内置块：我们自己那颗 48 框（`.skc_cardIcon` 原样，**没有**额外类）+ 里面 36 的 Default，
+  // 框上没有任何内联色板（透明底）。与插件页头同图同尺寸。
+  const block = html.slice(html.indexOf('data-skc-plugin="runtime"'), html.indexOf('data-skc-group="local"'));
+  assert.ok(block.length > 0, '内置块在页面上');
+  assert.ok(block.includes('<span class="skc_cardIcon" aria-hidden="true">'), '内置块的瓦片只有 skc_cardIcon、没有 style（透明底，不挂粉彩）');
+  assert.equal(block.includes('skc_pluginBlockIcon'), false, '不挂行内刻度类（那一档已撤回）');
+  assert.ok(block.includes('data-artwork="plugin-default"'), '内置块画的是 PluginArtworkDefault');
+  assert.match(block, /<svg data-artwork="plugin-default" width="36" height="36"/, '图形内容 36（与插件页头同尺寸）');
+  assert.equal((block.match(/<path\b/g) ?? []).length, 1, 'Default 是 1 个 path');
+  assert.equal((block.match(/<rect\b/g) ?? []).length, 0, '没有 rect（Subagent 那一档已撤）');
+  assert.ok(block.includes('#54ECE7') && block.includes('#658EFF'), '青→蓝两段渐变在');
+  assert.ok(block.includes('viewBox="0 0 36 36"'), '36 网格');
+  assert.equal(block.includes('--skc-avatar-bg'), false, '插件位不写 --skc-avatar-bg');
+  assert.equal(block.includes('--skc-avatar-ink'), false, '插件位不写 --skc-avatar-ink');
+  // 这一页（已安装列表）里恰好一张默认图形，且没有 Subagent。
+  assert.equal((html.match(/data-artwork="plugin-default"/g) ?? []).length, 1, '整页恰好一张默认图形');
+  assert.equal(html.includes('data-artwork="plugin-subagent"'), false, '整页没有 Subagent（那一档已撤）');
 });
 
 test('K22 可写行的右侧是 role=switch 的开关，aria-label 为「启用 <name>」', () => {

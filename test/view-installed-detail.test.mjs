@@ -387,6 +387,11 @@ test('H1 头排顺序：detailTop（图标 + 动作组）在 detailIntro（标�
   assert.ok(iconTag !== null, 'detailTop 里的图标带 .skc_detailIcon（49）');
   assert.equal((html.match(/skc_detailIcon/g) ?? []).length, 1, '整页只有详情头这一个 49 图标');
   assert.ok(topBlock.indexOf('skc_detailIcon') < topBlock.indexOf('class="skc_detailActions"'), '图标在动作组左边');
+  // 逆行保护（2026-11-18）：已安装详情页头是**技能**详情，不是插件位——仍是首字母头像，
+  // 不画宿主默认插件图形、也不带插件位的 36 覆盖类（docs/contracts/client.md §3.9.2 第 7 条）。
+  assert.equal(topBlock.includes('data-artwork'), false, '详情头不画默认插件图形');
+  assert.equal(topBlock.includes('skc_pluginIconImg'), false, '详情头的图片不带插件位覆盖类');
+  assert.ok(topBlock.includes('--skc-avatar-bg'), '详情头仍是首字母头像（有粉彩底）');
   // detailIntro 里是 标题行 → 作者 → 描述。
   const introBlock = html.slice(intro);
   const titleRow = introBlock.indexOf('class="skc_marketTitleRow"');

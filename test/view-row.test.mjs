@@ -14,6 +14,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { avatarOf } from '../src/client/avatar.js';
 import { loadClientModules, ROOT, zhTranslator } from './helpers/ssr.mjs';
+import { mountHooks } from './helpers/hooks.mjs';
 
 /** Bundled row module. */
 let modules;
@@ -21,7 +22,7 @@ let modules;
 let t;
 
 before(async () => {
-  modules = await loadClientModules(['row']);
+  modules = await loadClientModules(['row', 'iconTile']);
   t = await zhTranslator();
 });
 
@@ -308,4 +309,126 @@ test('K110 每个可点单元恰好一个 onClick：行一个（标题按钮）�
   assert.match(source, /onClick=\{\(\) => onOpen\?\.\(row\)\}/, '行的那个是标题按钮的 onOpen(row)');
   assert.match(source, /onClick=\{\(\) => onOpen\?\.\(block\.key\)\}/, '块的那个是标题按钮的 onOpen(block.key)（键 = 包名）');
   assert.equal(/<li[^>]*onClick/.test(source), false, '<li> 上没有 onClick（行/块本身不是可点元素）');
+});
+
+/* --------------------------------------- 插件位（块）与技能位的分界（2026-11-18） */
+
+/**
+ * One plugin block, shaped like `toPluginBlocks` output.
+ * @param {object} [overrides] - fields to replace.
+ * @returns {object} the block.
+ */
+function block(overrides = {}) {
+  return {
+    key: 'dsh-univer-office',
+    provider: 'univer',
+    iconUrl: null,
+    version: null,
+    description: null,
+    skills: [row({ name: 'office', provider: 'univer', partition: 'builtin', path: null, writable: false, readonlyReason: 'provider-store' })],
+    ...overrides,
+  };
+}
+
+/**
+ * The props the component under test hands its tile seat (`IconTile`), i.e. what the seat
+ * asked the visual unit to draw.
+ * @param {import('react').ReactElement} element - a rendered element tree.
+ * @returns {object|null} the tile props, or null when the tree has no tile.
+ */
+function tilePropsOf(element) {
+  if (element === null || typeof element !== 'object' || element.type === undefined) return null;
+  if (element.type === modules.iconTile.IconTile) return element.props;
+  const children = [element.props?.children].flat(Infinity);
+  for (const child of children) {
+    const found = tilePropsOf(child);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+/** The non-null children of one rendered element, flattened. */
+const kidsOf = (node) => [node.props.children].flat().filter((child) => child !== null && child !== undefined);
+
+/** Render one plugin block to markup. */
+function renderBlock(overrides) {
+  return renderToStaticMarkup(createElement(modules.row.PluginBlock, { block: block(overrides), t, onOpen: () => {} }));
+}
+
+/** The tile element tree of one PluginBlock (not executed: props only). */
+function blockTileProps(overrides) {
+  return tilePropsOf(modules.row.PluginBlock({ block: block(overrides), t, onOpen: () => {} }));
+}
+
+test('插件块：没有包图标 ⇒ 画 PluginArtworkDefault（36、透明底），不画字母', () => {
+  const html = renderBlock({ iconUrl: null });
+  // 框就是我们自己的 `.skc_cardIcon`（48 / radius-lg 16），**没有**额外的行内刻度类；
+  // 框上没有任何内联色板：插件位不挂粉彩底。
+  assert.ok(html.includes('<span class="skc_cardIcon" aria-hidden="true">'), '瓦片类名只有 skc_cardIcon（没有额外类）、没有 style（透明底）');
+  assert.equal(html.includes('skc_pluginBlockIcon'), false, '不挂行内刻度类（48 框原样）');
+  assert.equal(html.includes('--skc-avatar-bg'), false, '不写 --skc-avatar-bg');
+  assert.equal(html.includes('--skc-avatar-ink'), false, '不写 --skc-avatar-ink');
+  // 画的是宿主 primitives 的 `PluginArtworkDefault` —— 与插件页头同图同尺寸（36）。
+  assert.match(html, /<svg data-artwork="plugin-default" width="36" height="36"/, '宿主 primitives 的 PluginArtworkDefault，内容 36');
+  assert.ok(html.includes('viewBox="0 0 36 36"'), '36 网格');
+  assert.equal((html.match(/<path\b/g) ?? []).length, 1, 'Default 是 1 个 path');
+  assert.equal((html.match(/<rect\b/g) ?? []).length, 0, 'Default 里没有 rect（那一档已随 Subagent 一起撤掉）');
+  assert.equal(html.includes('#54ECE7') && html.includes('#658EFF'), true, '青→蓝两段渐变在');
+  // 不画字母：瓦片里除了那张 svg 什么都没有。
+  const tile = /<span class="skc_cardIcon" aria-hidden="true">([\s\S]*?)<\/span>/.exec(html);
+  assert.ok(tile !== null, '瓦片包着一层');
+  assert.equal(/^<svg[\s\S]*<\/svg>$/.test(tile[1]), true, `瓦片里只有默认图形，没有字母（实测开头：${tile[1].slice(0, 40)}）`);
+  assert.equal(tile[1].includes('>O<'), false, '没有字母 O（office / univer 都不该出现在插件位）');
+  // 可点区域零新增：整块仍只有标题那一个按钮。
+  assert.equal((html.match(/<button\b/g) ?? []).length, 1, '整块只有一个按钮（标题即整块点击层）');
+});
+
+test('插件块：有包图标 ⇒ 交给瓦片的是那张图的 URL 与 PluginArtworkDefault 两条信息', () => {
+  const url = 'data:image/svg+xml;base64,AAA';
+  const props = blockTileProps({ iconUrl: url });
+  assert.equal(props.iconUrl, url, 'URL 原样交给视觉单元');
+  assert.equal(props.title, 'dsh-univer-office', '名字（字母占位与散列色用）是包名');
+  assert.equal(props.className, undefined, '框上不加额外类（48 框是 .skc_cardIcon 原样）');
+  assert.ok(props.artwork !== null && props.artwork !== undefined, '同时带上默认图形：解码失败时回落到它，而不是字母');
+  assert.equal(props.artwork.props.size, 36, '默认图形与插件页头同尺寸 36');
+
+  // 首帧（SSR）：探测图 + 字母，瓦片不空。
+  const html = renderBlock({ iconUrl: url });
+  assert.match(html, new RegExp(`<img[^>]*src="${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`), '有那张探测图');
+  assert.ok(html.includes('>D<'), '探测期间画字母 D');
+  assert.equal(html.includes('plugin-default'), false, '这一帧还没有默认图形（等失败才回落）');
+
+  // onload 之后：可见图带插件位的 36 覆盖类，且不再挂粉彩底。
+  const mounted = mountHooks(modules.iconTile.IconTile, props);
+  const [probe] = kidsOf(mounted.render());
+  probe.props.onLoad();
+  const loaded = mounted.render();
+  const [visible] = kidsOf(loaded);
+  assert.equal(visible.type, 'img', '加载成功就是那张图');
+  assert.equal(visible.props.className, 'skc_marketIconImg skc_pluginIconImg', '图片带 36 的覆盖类');
+  assert.equal(loaded.props.style, undefined, '显示图片时摘要不挂粉彩底');
+});
+
+test('逆行保护：技能行不是插件位 —— 不传 artwork、不带 36 覆盖类、仍画首字母', () => {
+  const props = tilePropsOf(modules.row.SkillRow({ row: row(), t, rows: new Map(), onToggle: () => {} }));
+  assert.equal(props.iconUrl, null, '技能行把（可能为空的）iconUrl 交给瓦片');
+  assert.equal(props.artwork ?? null, null, '技能行不传 artwork（省略或 null 都算没传）');
+  assert.equal(props.className, undefined, '技能行不带行内刻度的覆盖类（框仍是 48 / radius-lg）');
+  assert.equal(props.title, 'ui-design', '名字参与散列取色');
+
+  const html = render(row());
+  assert.ok(html.includes('--skc-avatar-bg'), '技能位照旧写 --skc-avatar-bg');
+  assert.ok(html.includes('--skc-avatar-ink'), '技能位照旧写 --skc-avatar-ink');
+  assert.ok(html.includes('>U<'), '技能位照旧画首字母');
+  assert.equal(html.includes('plugin-default'), false, '技能位不画默认图形');
+  assert.equal(html.includes('skc_pluginBlockIcon'), false, '技能位不带插件块的行内刻度类');
+
+  // 有图标、且图片加载成功时：仍然只有基类（100% 填满），没有 36 覆盖类。
+  const mounted = mountHooks(modules.iconTile.IconTile, tilePropsOf(modules.row.SkillRow({
+    row: row(), t, rows: new Map(), onToggle: () => {}, iconUrl: 'api/x?name=zap',
+  })));
+  const [probe] = kidsOf(mounted.render());
+  probe.props.onLoad();
+  const [visible] = kidsOf(mounted.render());
+  assert.equal(visible.props.className, 'skc_marketIconImg', '技能行的图片只有基类');
 });

@@ -10,6 +10,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { loadClientModules, zhTranslator } from './helpers/ssr.mjs';
+import { mountHooks } from './helpers/hooks.mjs';
 
 /** Bundled modules. */
 let modules;
@@ -17,7 +18,9 @@ let modules;
 let t;
 
 before(async () => {
-  modules = await loadClientModules(['pluginDetail']);
+  // `iconTile` 一起装进来：同一个 bundle 里 `plugin-detail.jsx` 引的就是这个实例，
+  // 才能用它把页面交出去的那份 props 走一遍 onload 帧。
+  modules = await loadClientModules(['pluginDetail', 'iconTile']);
   t = await zhTranslator();
 });
 
@@ -213,13 +216,103 @@ test('插件页没有正文盒 / 版本卡 / 仓库链接 / 旧的头行类名',
   assert.ok(html.includes('class="skc_cardIcon skc_detailIcon"'), '头图标是 .skc_detailIcon（49 那颗）');
 });
 
-test('插件页头：有包图标就把 data URL 交给头像位，没有就只画首字母', () => {
-  const withIcon = render({ ...blockOf('univer', ['sheet']), iconUrl: 'data:image/svg+xml;base64,AAA' });
+/* ------------------------------------------- 插件页头：包图标位（2026-11-18） */
+
+/** The head slice: from `.skc_detailTop` to the title group below it. */
+function headOf(html) {
+  return html.slice(html.indexOf('class="skc_detailTop"'), html.indexOf('class="skc_detailIntro"'));
+}
+
+/**
+ * The props the page hands its head tile (`IconTile`), found by walking the element tree.
+ * @param {import('react').ReactElement} element - rendered element tree.
+ * @returns {object|null} the tile props, or null when the tree has no tile.
+ */
+function firstTileProps(element) {
+  if (element === null || typeof element !== 'object' || element.type === undefined) return null;
+  if (element.type === modules.iconTile.IconTile) return element.props;
+  const children = [element.props?.children].flat(Infinity);
+  for (const child of children) {
+    const found = firstTileProps(child);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+/** The non-null children of one rendered element, flattened. */
+const kidsOf = (node) => [node.props.children].flat().filter((child) => child !== null && child !== undefined);
+
+test('插件页头：没有包图标 ⇒ 画 PluginArtworkDefault（36、49 框、透明底），与列表块同图同尺寸', () => {
+  const html = render(blockOf('univer', ['sheet', 'docx']));
+  const head = headOf(html);
+  assert.ok(head.length > 0, '头行在页面上');
+  // 49 那颗框仍是容器，但头上没有内联色板（插件位不挂粉彩底）。
+  assert.ok(head.includes('class="skc_cardIcon skc_detailIcon"'), '头像位还是那颗 49 图标');
+  assert.equal(head.includes('--skc-avatar-bg'), false, '头位不写 --skc-avatar-bg');
+  assert.equal(head.includes('--skc-avatar-ink'), false, '头位不写 --skc-avatar-ink');
+  assert.match(head, /<svg data-artwork="plugin-default" width="36" height="36"/, '头位画 PluginArtworkDefault，内容 36');
+  // 两处插件位（列表块 / 页头）是**同一张图同尺寸**：都是 Default、都是 36；框各按各的座位
+  // （列表块 48、页头 49）。这里正面钉住页头那一半，列表块那一半在 `view-page.test.mjs` K22。
+  // 防混面：Default 是 1 个 path + 青→蓝两段渐变，撤掉的 Subagent（2 个 rect + 四段渐变）不该出现。
+  assert.equal((head.match(/<path\b/g) ?? []).length, 1, '头位图形是 1 个 path');
+  assert.equal((head.match(/<rect\b/g) ?? []).length, 0, '头位图形里没有 rect');
+  assert.equal(head.includes('#54ECE7') && head.includes('#658EFF'), true, '青→蓝两段渐变在');
+  assert.equal(head.includes('#45E7A4'), false, '没有行内那张的四段渐变');
+  assert.equal(head.includes('plugin-subagent'), false, '整页没有 Subagent（那一档已撤）');
+  assert.equal((html.match(/data-artwork="plugin-default"/g) ?? []).length, 1, '整页恰好一张 Default（头位那一张）');
+  assert.equal(html.includes('skc_pluginBlockIcon'), false, '整页不带列表块的行内刻度类（头位是 49/36）');
+  assert.equal(head.includes('>P<'), false, '头位没有字母 P（包名首字母不该出现）');
+  assert.equal(head.includes('data:image'), false, '没有图标时不出现任何 img 数据');
+});
+
+test('插件页头：有包图标 ⇒ 先探测图 + 字母，onload 后是带 36 覆盖类的可见图', () => {
+  const url = 'data:image/svg+xml;base64,AAA';
+  const withIcon = render({ ...blockOf('univer', ['sheet']), iconUrl: url });
   assert.ok(withIcon.includes('class="skc_cardIcon skc_detailIcon"'), '头像位还是那颗 49 图标');
   // 头像是「先探测、加载成功才替换字母」（SSR 阶段拿到的是隐藏的 eager 探针图）。
   assert.ok(/<img[^>]*src="data:image\/svg\+xml;base64,AAA"/.test(withIcon), 'data URL 进了 img');
   assert.ok(/<img[^>]*loading="eager"/.test(withIcon), '是 eager 探针图');
-  const without = render(blockOf('univer', ['sheet']));
-  assert.equal(without.includes('data:image'), false, '没有图标时不出现任何 img 数据');
-  assert.ok(without.includes('--skc-avatar-bg'), '没有图标就是首字母头像');
+  assert.ok(/style="display:none"/.test(withIcon), '探测图不可见（瓦片这一帧靠字母撑着）');
+
+  // 用页面真正交出去的那份 props 驱动视觉单元，走到 onload 那一帧。
+  const props = firstTileProps(modules.pluginDetail.PluginDetail({
+    block: blockOf('univer', ['sheet'], 'pkg-univer', { iconUrl: url }),
+    t,
+    rows: new Map(),
+    onBack: () => {},
+    onToggle: () => {},
+  }));
+  assert.equal(props.artwork === null || props.artwork === undefined, false, '头位同时带着默认图形（解码失败时回落到它）');
+  const mounted = mountHooks(modules.iconTile.IconTile, props);
+  const [probe] = kidsOf(mounted.render());
+  probe.props.onLoad();
+  const loaded = mounted.render();
+  const [visible] = kidsOf(loaded);
+  assert.equal(visible.props.className, 'skc_marketIconImg skc_pluginIconImg', '可见图带插件位的 36 覆盖类');
+  assert.equal(loaded.props.style, undefined, '显示图片时不挂粉彩底');
+});
+
+test('逆行保护：插件页里的技能行（callIcon）仍是首字母头像，整页只有头位那一张默认图形', () => {
+  const html = render(blockOf('univer', ['sheet', 'docx']));
+  // 行段：从 `.skc_cards` 到事实表。
+  const rowsHtml = rowsOf(html);
+  assert.equal(rowsHtml.includes('plugin-default'), false, '行段里没有默认插件图形');
+  assert.equal(rowsHtml.includes('--skc-avatar-bg'), true, '技能行照旧写 --skc-avatar-bg');
+  assert.equal((rowsHtml.match(/style="--skc-avatar-bg:/g) ?? []).length, 2, '两行各一个首字母头像');
+  assert.deepEqual(
+    // 状态点也是 `aria-hidden="true"` 的 span，但它是空的（点靠 CSS 上色），所以只取有字的那几个。
+    [...rowsHtml.matchAll(/aria-hidden="true">([^<]+)<\/span>/g)].map((match) => match[1]),
+    ['S', 'D'],
+    '字母跟随技能名（sheet / docx）',
+  );
+  assert.equal((html.match(/data-artwork="plugin-default"/g) ?? []).length, 1, '整页恰好一张默认图形（头位那一张）');
+  assert.equal(html.includes('data-artwork="plugin-subagent"'), false, '插件页里没有列表行那张 Subagent（两面不混）');
+
+  assert.equal(rowsHtml.includes('skc_pluginIconImg'), false, '行段里没有插件位的 36 覆盖类（技能行仍是 100% 填满）');
+  // 头位之外的瓦片不传 artwork：页面里只有头位那一处把默认图形交给视觉单元。
+  const headProps = firstTileProps(modules.pluginDetail.PluginDetail({
+    block: blockOf('univer', ['sheet', 'docx']), t, rows: new Map(), onBack: () => {}, onToggle: () => {},
+  }));
+  assert.equal(headProps.artwork === null || headProps.artwork === undefined, false, '头位带 artwork');
+  assert.equal(headProps.className, 'detailIcon', '带 artwork 的只有头位那颗（callIcon 行由页面内部渲染，没有这张图）');
 });

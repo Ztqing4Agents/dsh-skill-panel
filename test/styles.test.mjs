@@ -8,7 +8,10 @@
  * a rule added anywhere else is invisible to them, so the number moves in the same round
  * as the thing it counts:
  *
- *   skc_ class names in the stylesheet   137
+ *   skc_ class names in the stylesheet   138
+ *                                        （137 + `.skc_pluginIconImg`〔插件位内容 36：
+ *                                        列表块与插件页头同一颗，块自身不加类、也没有
+ *                                        行高补偿规则〕，见 Y-3）
  *   per-hook rule counts                 .skc_addGroup 1 / .skc_addPrimary 3 /
  *                                        .skc_addMore 2 / .skc_detailDanger 2
  *   the four addMenu readings            K148: 320 / calc(100vw - 48px) / 72 /
@@ -462,7 +465,71 @@ function capturedCss() {
   return captured;
 }
 
-test('K136 类名总数与既有挂点的规则条数（U20 起；U22 的添加菜单加了三个类）', () => {
+test('A.9 插件位内容 36：`.skc_pluginIconImg` 只两条声明，且靠声明顺序压过 `.skc_marketIconImg` 的 100%', () => {
+  const css = capturedCss();
+  // 宿主 `PackageArtwork` 的图与 `PluginArtworkDefault` 都是 36，所以插件位那颗 48 的框里
+  // 内容只能占 36（列表卡与详情头同值）；技能行 / 市场卡继续填满内容盒 —— 全局那五条不动，
+  // 插件位只加一个覆盖类。
+  const body = ruleBody(css, '.skc_pluginIconImg');
+  assert.deepEqual(
+    body.split(';').map((part) => part.trim()).filter(Boolean),
+    ['width: 36px', 'height: 36px'],
+    '只两条声明：宽高各 36（多一条就是有人顺手改了别的）',
+  );
+  assert.match(css, /\.skc_pluginIconImg\{[^}]*width: 36px(?!\d)/, '宽钉成 36px（`36` 不许跟数字，否则 36.5 也能过）');
+  assert.match(css, /\.skc_pluginIconImg\{[^}]*height: 36px(?!\d)/, '高钉成 36px');
+  // 覆盖靠同权重后声明：`.skc_pluginIconImg` 必须排在 `.skc_marketIconImg` 之后，否则两条
+  // 同权重规则里先来的那条会被后者盖回 100%。
+  const base = css.indexOf('.skc_marketIconImg{');
+  const plugin = css.indexOf('.skc_pluginIconImg{');
+  assert.notEqual(base, -1, '.skc_marketIconImg 规则仍在');
+  assert.ok(plugin > base, `覆盖类排在基类之后（基类 ${base} / 插件位 ${plugin}）`);
+  // 基类仍是「填满内容盒」，没有被顺手改成 36。
+  const baseBody = ruleBody(css, '.skc_marketIconImg');
+  assert.match(baseBody, /(?:^|;)\s*width\s*:\s*100%(?!\d)/, '.skc_marketIconImg 的宽仍是 100%');
+  assert.match(baseBody, /(?:^|;)\s*height\s*:\s*100%(?!\d)/, '.skc_marketIconImg 的高仍是 100%');
+  // 36 只加在图片上，容器几何不是这条类负责的。
+  assert.equal(/\.skc_pluginIconImg\{[^}]*(?:border|padding|margin|position|background)/.test(css), false, '覆盖类不碰容器几何与底色');
+});
+
+test('A.9 插件位：两处同图同尺寸，框内 36', () => {
+  const css = capturedCss();
+  // 定稿口径：内置插件块与插件页头**同图同尺寸** —— 两张都是 `PluginArtworkDefault`、都 36；
+  // 框各按各的座位（列表块用我们自己的 48 `.skc_cardIcon`，页头 49），所以插件位只剩**一条**
+  // 样式规则：把内容从 `.skc_marketIconImg` 的 100% 收到 36。块本身不加类、不改宽高圆角，
+  // 也没有行高补偿（48 + 8×2 天然是 64）。
+
+  // 1) 唯一那条插件位规则：只两条声明，36/36。
+  assert.equal(/\.skc_pluginIconImg\{[^}]*width: 100%/.test(css), false, '内容不是 100% 填充（那是技能行与市场卡）');
+  assert.match(css, /\.skc_pluginIconImg\{ width: 36px; height: 36px \}/, '插件位内容逐字是 `width: 36px; height: 36px`');
+  assert.match(css, /\.skc_pluginIconImg\{[^}]*width: 36px(?!\d)/, '内容宽钉成 36px（`36` 不许跟数字）');
+  assert.match(css, /\.skc_pluginIconImg\{[^}]*height: 36px(?!\d)/, '内容高钉成 36px');
+  const body = ruleBody(css, '.skc_pluginIconImg');
+  assert.deepEqual(
+    body.split(';').map((part) => part.trim()).filter(Boolean),
+    ['width: 36px', 'height: 36px'],
+    '插件位只覆盖尺寸（圆角、描边、底色、flex 居中全由基类给）',
+  );
+  // 覆盖靠同权重后声明：必须排在 `.skc_marketIconImg` 之后。
+  assert.ok(css.indexOf('.skc_pluginIconImg{') > css.indexOf('.skc_marketIconImg{'), '排在基类之后（否则 100% 会盖回 36）');
+  assert.match(ruleBody(css, '.skc_marketIconImg'), /(?:^|;)\s*width\s*:\s*100%(?!\d)/, '技能行与市场卡仍是 100% 填满');
+
+  // 2) 框是 `.skc_cardIcon` 的：48 / 48 / radius-lg，插件位没有自己的框规则。
+  const icon = ruleBody(css, '.skc_cardIcon');
+  assert.match(icon, /(?:^|;)\s*width\s*:\s*48px(?!\d)/, '列表块的框仍是 48（border-box）');
+  assert.match(icon, /(?:^|;)\s*height\s*:\s*48px(?!\d)/, '高仍是 48');
+  assert.match(icon, /(?:^|;)\s*border-radius\s*:\s*var\(--dsw-radius-lg\)/, '圆角仍是 radius-lg 16');
+
+  // 3) 防回潮：撤掉的四样一个都不许回来。
+  assert.equal(css.includes('skc_pluginBlockIcon'), false, '没有 `.skc_pluginBlockIcon`（40/30 那一档已撤）');
+  assert.equal(css.includes('padding-block'), false, '没有 `padding-block`（11px 行高补偿已撤）');
+  assert.equal(css.includes('data-skc-plugin'), false, '没有 `data-skc-plugin` 选择器（属性补偿已撤）');
+  // `radius-md` 在别处仍有正当用法（按钮、warn 块、骨架动作），所以只钉「插件位那条规则不碰圆角」。
+  assert.equal(/border-radius/.test(body), false, '插件位那条规则不碰圆角（圆角由 .skc_cardIcon 的 radius-lg 给）');
+  assert.match(ruleBody(css, '.skc_cardHead'), /(?:^|;)\s*padding\s*:\s*8px(?!\d)/, '.skc_cardHead 仍是 padding: 8px（行高 64 = 48 + 8×2）');
+});
+
+test('K136 类名总数与既有挂点的规则条数（U20 起；U22 添加菜单 +3；插件位 +1）', () => {
   const css = capturedCss();
   // 用两件事一起钉：几个挂点仍各有规则（名称没被改名/删掉），以及**类名总数**恰好是
   // 实测值 —— 多一个，就是有人顺手加了新类。
@@ -474,7 +541,7 @@ test('K136 类名总数与既有挂点的规则条数（U20 起；U22 的添加�
     assert.equal(counts(selector), want, `.skc_${selector.slice(5)} 的规则条数是 ${want}（实际 ${counts(selector)}）`);
   }
   const classes = [...new Set([...css.matchAll(/\.(skc_[A-Za-z0-9_]+)/g)].map((match) => match[1]))];
-  assert.equal(classes.length, 137, `skc_ 类名总数是 137（实际 ${classes.length}）：U22 的添加菜单加了 .skc_addMenu / .skc_addMenuItem / .skc_addMenuDescription`);
+  assert.equal(classes.length, 138, `skc_ 类名总数是 138（实际 ${classes.length}）：U22 的添加菜单加了 .skc_addMenu / .skc_addMenuItem / .skc_addMenuDescription，插件位再加一个 .skc_pluginIconImg（两处插件位共用的 36 内容）`);
   // 弹窗与确认框用的是市场面那套（skc_marketDialog / skc_marketConfirmBody / skc_detailActions）：
   // 它们已经在表里，U20 只是复用。
   for (const reused of ['.skc_marketDialog', '.skc_marketConfirmBody', '.skc_detailActions']) {

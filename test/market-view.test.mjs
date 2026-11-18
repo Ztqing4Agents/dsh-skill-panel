@@ -966,6 +966,15 @@ test('K52 三态在卡片/详情/确认弹窗里都走同一个组件（同一�
   });
   assert.equal(probeForm(confirmHtml), true, '确认弹窗也一致');
 
+  // 逆行保护（2026-11-18）：内置插件位改画宿主默认图形后，市场面这三处**没有**跟着变——
+  // 它们仍是首字母头像 + 100% 填满的图片，不画默认图形、也不带插件位的 36 覆盖类。
+  for (const [where, markup] of [['卡片', cardHtml], ['详情头', detailHtml], ['确认弹窗', confirmHtml]]) {
+    assert.equal(markup.includes('data-artwork'), false, `${where}不画宿主默认插件图形`);
+    assert.equal(markup.includes('skc_pluginIconImg'), false, `${where}的图片不带插件位的 36 覆盖类`);
+    assert.equal(markup.includes('skc_pluginBlockIcon'), false, `${where}不带插件块的行内刻度类（40/30）`);
+    assert.equal(markup.includes('--skc-avatar-bg'), true, `${where}仍挂粉彩底（首字母头像）`);
+  }
+
   const bare = item({ id: 'clawhub:ake:plain' });
   bare.sourceId = 'clawhub';
   bare.iconUrl = null;
