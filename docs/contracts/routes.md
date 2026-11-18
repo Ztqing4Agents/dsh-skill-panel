@@ -166,13 +166,13 @@ return concat(bom, block, body.subarray(block.end))   // 其余字节一个不�
 | 1 | `lstat(entryDir)`：软链直接 `E_SYMLINK_READONLY`（双保险，路由已拦） | 返回 409 |
 | 2 | `lstat(file)` 记下 `{size, mtimeMs, ino, dev}` 指纹（第 5 步同口径；`fstat` 会跟随软链，软链下两值天然不同）→ `open(file)` 读完整个文件 | 读失败 → `E_WRITE_FAILED` |
 | 3 | 计算 `next`；`changed === false` 则**不写**，直接返回成功（幂等） | —— |
-| 4 | 同目录写 `<SKILL.md>.<pid>.<rand>.tmp`（`flag:'wx'`），`fsync`，`close`；`chmod` 成原文件 mode | 失败 → 删 tmp → `E_WRITE_FAILED` |
+| 4 | 同目录写 `<SKILL.md>.<pid>.<rand>.tmp`（`flag:'wx'`，mode 取原文件 mode）→ 写入 → `fsync` → `close`；**不改 mode**：新 inode 的 mode 为 `mode & ~umask`，umask 022 下 0666 / 0664 落成 0644 | 失败 → 删 tmp → `E_WRITE_FAILED` |
 | 5 | 重取指纹，与第 2 步不等 → 删 tmp → `409 E_FILE_CHANGED`（有人在面板打开期间改了文件；测试从这个窗口唯一的注入口 `beforeVerify` 造改动，见 K14） | 已处理 |
 | 6 | `rename(tmp, file)`；`fsync` 目录（best-effort） | 失败 → 删 tmp → `E_WRITE_FAILED` |
 | 7 | 回读文件与 `next` **逐字节比较**；不一致 → 把原字节写回（再走一次 4–6，仍失败则 `E_VERIFY_FAILED` 并报告「文件可能处于中间状态」） | `E_VERIFY_FAILED` |
 | 8 | 用 `parseFrontmatter(回读内容)` 断言 `disableModelInvocation === 目标值` | 同上回滚 |
 
-`rename` 会换 inode：不改 mode 时新文件默认 0666&~umask，因此第 4 步的 `chmod` 是必需的（否则用户 `SKILL.md` 的 0600 会被放大）。
+`rename` 会换 inode，所以写回后的 mode 就是临时文件创建时的 `mode & ~umask`：`open` 的 mode 要先过进程 umask，而 **umask 只清位、不加位**，`0600` 既不会被放大，`0664` / `0666` 的 group/other 写位则会被清掉。本仓**刻意不做** mode 保真（不 `chmod`），取舍与生态参照见 `docs/contracts/decisions.md` 附录 X——宿主本地 FS 后端的原子写会补这一步，我们不对齐它。代价如实说：umask 022 下共享技能目录里原本 group 可写的 `SKILL.md`，一次停用或启用后变成 0644，同组用户写不进去且没有任何报错；`0600` / `0640` / `0755` 这类不含 group/other 写位的值不受影响，所以常见场景看不出差别。写入窗口内临时文件的 mode 同样是 `mode & ~umask`（不是 owner-only），这一点一并认下。
 
 #### 3.4.4 `provider-toggles.json` 格式与降级（`lib/provider-toggles.js`）
 

@@ -10,6 +10,10 @@
  * changes the file's *size*, never its timestamp alone — a same-size write would leave the
  * verdict resting on mtime resolution, and a coarse filesystem would then pass the re-check.
  *
+ * 写回后的 mode 是 `mode & ~umask`：临时文件按原文件 mode 创建，创建期的 mode 过 umask，
+ * 之后没有任何一步把原 bits 设回去。本仓不做保真（取舍而非能力限制，见
+ * `docs/contracts/decisions.md` 附录 X），所以下面没有一条用例断言 mode 保真。
+ *
  * Every case works on a copy: the fixtures are read-only inputs.
  */
 import assert from 'node:assert/strict';
@@ -76,7 +80,7 @@ test('幂等：第二次写同样的值不落盘（changed=false）', async () =
   }
 });
 
-test('保留原文件权限位（rename 会换 inode，mode 必须显式带过去）', async () => {
+test('不放大 0600（umask 022 不动的一档，只守这一侧）', async () => {
   const tree = await customTree({ 'mode-skill': skillFile({ name: 'mode-skill' }) });
   try {
     const file = join(tree.skillsRoot, 'mode-skill', 'SKILL.md');
