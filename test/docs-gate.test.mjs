@@ -280,11 +280,11 @@ const caseRow = (id) => `**${id}** | 某事 | 断言 | L1`;
 const titles = (...ids) => ids.map((id) => `test('${id} 某事', () => {});\n`).join('');
 
 /**
- * The numbers the gate exempts (retired / real-machine / K14). The gate also asserts that
- * every exempt number still has a case row, so a fixture that models an acceptance file
- * has to carry these rows too — that is the invariant, not fixture noise.
+ * The numbers the gate exempts (retired / real-machine). The gate also asserts that every
+ * exempt number still has a case row, so a fixture that models an acceptance file has to
+ * carry these rows too — that is the invariant, not fixture noise.
  */
-const EXEMPT_ROWS = ['K33', 'K58', 'K60', 'K80', 'K50', 'K51', 'K109', 'K14'].map((id) => caseRow(id));
+const EXEMPT_ROWS = ['K33', 'K58', 'K60', 'K80', 'K50', 'K51', 'K109'].map((id) => caseRow(id));
 
 test('R14 用例挂载：acceptance 的 K 行在测试标题里查不到就红，并点名号与该行的行号', async () => {
   const { dir, cleanup } = await tree({
@@ -316,10 +316,10 @@ test('R14 编号双向：测试标题里出现 acceptance 没有的 K 号也要�
   }
 });
 
-test('R14 豁免会自己失效：K14 缺落点时绿，标题一带上 K14 就红', async () => {
+test('R14 豁免会自己失效：K109 缺落点时绿，标题一带上 K109 就红', async () => {
   const exempt = {
     ...BASELINE,
-    'docs/contracts/acceptance.md': CASES_DOC([...EXEMPT_ROWS, caseRow('K1'), caseRow('K14')]),
+    'docs/contracts/acceptance.md': CASES_DOC([...EXEMPT_ROWS, caseRow('K1')]),
     'test/case-c.test.mjs': titles('K1'),
   };
   const first = await tree(exempt);
@@ -330,11 +330,11 @@ test('R14 豁免会自己失效：K14 缺落点时绿，标题一带上 K14 就�
     await first.cleanup();
   }
 
-  const landed = await tree({ ...exempt, 'test/case-c.test.mjs': titles('K1', 'K14') });
+  const landed = await tree({ ...exempt, 'test/case-c.test.mjs': titles('K1', 'K109') });
   try {
     const { status, out } = runGate(landed.dir);
     assert.equal(status, 1, out);
-    assert.match(out, /R14 docs\/contracts\/acceptance\.md: 豁免已失效——K14 已经有测试落点/, out);
+    assert.match(out, /R14 docs\/contracts\/acceptance\.md: 豁免已失效——K109 已经有测试落点/, out);
   } finally {
     await landed.cleanup();
   }

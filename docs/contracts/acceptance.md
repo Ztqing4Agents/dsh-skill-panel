@@ -35,7 +35,7 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 
 ### D.3 用例编号（测试头注按此编号锚定）
 
-**编号有门禁**：`check-docs` 的 R14 逐行读下面的用例表行（`| **K123** | …` 这种），要求每个号都在某个测试标题的**开头**出现——`test('K123 …')`、`test('K6 / A1 …')`、`test('K25/K28 …')` 都算，正文里顺带提到不算；反向也查：测试标题里的号必须在本文件有用例行。抓不到的是「标题带着号但断言搬去了别处」和断言内容对不对——那是评审的活。三批号有意不进 `npm test`，写在 R14 的豁免集里并注了理由：退役的 K33/K58/K60/K80、真机抽查的 K50/K51/K109、缺注入点的 K14；豁免会自己失效——那些号一旦有了落点，门禁就报「豁免已失效」要求删掉那一行。
+**编号有门禁**：`check-docs` 的 R14 逐行读下面的用例表行（`| **K123** | …` 这种），要求每个号都在某个测试标题的**开头**出现——`test('K123 …')`、`test('K6 / A1 …')`、`test('K25/K28 …')` 都算，正文里顺带提到不算；反向也查：测试标题里的号必须在本文件有用例行。抓不到的是「标题带着号但断言搬去了别处」和断言内容对不对——那是评审的活。两批号有意不进 `npm test`，写在 R14 的豁免集里并注了理由：退役的 K33/K58/K60/K80、真机抽查的 K50/K51/K109；豁免会自己失效——那些号一旦有了落点，门禁就报「豁免已失效」要求删掉那一行。
 
 | ID | 目标 | 断言（可直接写成 `assert`） | 层 |
 | --- | --- | --- | --- |
@@ -52,7 +52,7 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | **K11** | 扫描跳过噪声 | `fixtures/skills-messy` 扫描结果不含 `.DS_Store`、不含无 `name`/`description` 的条目、不含非法 name | L2 |
 | **K12** | 软链识别 | `fixtures/skills-symlink` 条目 `symlink === true`、`path === null`、`realPath` 指向 target | L2 |
 | **K13** | 原子写 + 回滚 | 写入后内容等于 `next`；把 rename 目标设为不可写目录 ⇒ `E_WRITE_FAILED` 且原文件字节不变 | L2 |
-| **K14** | 指纹变化 | 写入过程中改文件（mock 或在 step 间 touch）⇒ 409 `E_FILE_CHANGED`，原文件不变 | L2 · **当前无自动化落点**：要改在 `writeTemp` 与复核之间（竞态），自动化得先给 `lib/write-skill.js` 加 seam（`sameFingerprint` 未导出）；实现仍在，测试待补 |
+| **K14** | 指纹变化 | 写入窗口内文件被外部改 size（经 `writeDisableFlag` 的 `beforeVerify` 注入口，不靠 `touch` 抢时序）⇒ 409 `E_FILE_CHANGED`，外部字节留在盘上、面板的写入不落盘、无 `.tmp` 残留；`sameFingerprint` 的 size/mtimeMs/ino/dev 四字段任一不同即判为已变 | L2 · `test/write-skill.test.mjs` |
 | **K15** | provider 存储损坏降级 | `provider-toggles.json` 内容为 `{`、`[]`、`{"version":9}`、超 64 KiB ⇒ `read()` 返回空集且不抛 | L1/L2 |
 | **K16** | provider 存储幂等 | 连续两次停用同一身份 ⇒ 文件里 1 条；启用不存在的身份 ⇒ 文件字节不变 | L2 |
 | **K17** | loopback 围栏 | `{socket:{remoteAddress:'127.0.0.1'}, headers:{host:'127.0.0.1:5173'}}` ⇒ true；改成 `10.0.0.2` / `host:'evil.com'` / 带 `x-forwarded-for` / `sec-fetch-site:'cross-site'` ⇒ false | L1 |

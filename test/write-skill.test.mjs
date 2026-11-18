@@ -2,7 +2,13 @@
  * `lib/write-skill.js` — fingerprint, temp file, fsync, rename, read back, roll back.
  *
  * Contract: docs/contracts/routes.md §3.4.3; case ids K13 (atomic write + rollback on
- * failure) and the "symlink is never written" half of the three-layer fence.
+ * failure), K14 (fingerprint re-check rejects a file changed mid-write) and the "symlink is
+ * never written" half of the three-layer fence.
+ *
+ * K14 enters through the writer's `beforeVerify` seam: the window it guards closes as soon as
+ * a caller can reach it, so a test cannot touch the file there by scheduling luck. The case
+ * changes the file's *size*, never its timestamp alone — a same-size write would leave the
+ * verdict resting on mtime resolution, and a coarse filesystem would then pass the re-check.
  *
  * Every case works on a copy: the fixtures are read-only inputs.
  */
@@ -11,7 +17,7 @@ import test from 'node:test';
 import { chmod, lstat, mkdir, readdir, readFile, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { writeDisableFlag } from '../lib/write-skill.js';
+import { sameFingerprint, writeDisableFlag } from '../lib/write-skill.js';
 import { copyFixtureTree, customTree, skillFile, tempDir } from './helpers/tree.mjs';
 
 /** The field the writer owns, spelled out once. */
@@ -92,6 +98,45 @@ test('临时文件不残留：写完目录里只剩 SKILL.md', async () => {
     assert.deepEqual(names, ['SKILL.md'], '目录里没有 .tmp 残留');
   } finally {
     await tree.cleanup();
+  }
+});
+
+test('K14 指纹变化：写入窗口内文件被外部改 size ⇒ E_FILE_CHANGED，外部字节留盘、面板的写入不落盘', async () => {
+  const tree = await customTree({ 'raced': skillFile({ name: 'raced' }) });
+  try {
+    const dir = join(tree.skillsRoot, 'raced');
+    const file = join(dir, 'SKILL.md');
+    const before = await readFile(file);
+    /** What an editor outside the panel leaves behind: same file, more bytes. */
+    const external = Buffer.concat([before, Buffer.from('\n<!-- edited outside the panel -->\n')]);
+    const seen = [];
+    await assert.rejects(
+      writeDisableFlag(file, true, {
+        beforeVerify: async ({ file: target, temp }) => {
+          seen.push({ target, temp });
+          await writeFile(target, external);
+        },
+      }),
+      (error) => error.code === 'E_FILE_CHANGED',
+      '窗口内被外部改过的文件按并发编辑拒掉，错误码是 E_FILE_CHANGED',
+    );
+    assert.equal(seen.length, 1, '注入口恰好调用一次');
+    assert.equal(seen[0].target, file, '注入口拿到的是目标文件');
+    assert.match(seen[0].temp, /\.tmp$/, '注入口拿到的临时文件已经写完');
+    const after = await readFile(file);
+    assert.equal(after.equals(external), true, '磁盘上是外部写下的字节：没有 rename 覆盖，也没有回滚别人的改动');
+    assert.equal(after.toString('utf8').includes(`${FIELD}: true`), false, '面板这次写入一个字节也没落上去');
+    assert.deepEqual(await readdir(dir), ['SKILL.md'], '临时文件被清掉，没有 .tmp 残留');
+  } finally {
+    await tree.cleanup();
+  }
+});
+
+test('K14 指纹谓词：size / mtimeMs / ino / dev 任一不同即判为已变', () => {
+  const base = { size: 10, mtimeMs: 1000, ino: 42, dev: 7 };
+  assert.equal(sameFingerprint(base, { ...base }), true, '四个字段全等时判为未变');
+  for (const [field, value] of Object.entries({ size: 11, mtimeMs: 1000.5, ino: 43, dev: 8 })) {
+    assert.equal(sameFingerprint(base, { ...base, [field]: value }), false, `${field} 变了就判为已变`);
   }
 });
 

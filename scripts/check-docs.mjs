@@ -386,8 +386,6 @@ const EXEMPT_CASES = new Map([
   ['K50', 'real-machine spot check — pixel-level hit plus the live upstream, not in `npm test`'],
   ['K51', 'real-machine spot check — installs a real skill end to end against the live upstream'],
   ['K109', 'real-machine spot check — the three-line description geometry at 1320×940'],
-  // 实现仍在、自动化缺一个注入点：竞态在纯 node 里稳定复现不了（看板 V2 补 seam）。
-  ['K14', 'no automated landing yet — the fingerprint re-check is a race; delete this line once V2 adds the seam'],
 ]);
 
 if (text.has('docs/contracts/acceptance.md')) {

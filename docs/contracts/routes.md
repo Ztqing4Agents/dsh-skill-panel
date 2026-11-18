@@ -164,10 +164,10 @@ return concat(bom, block, body.subarray(block.end))   // 其余字节一个不�
 | 步 | 动作 | 失败处理 |
 | --- | --- | --- |
 | 1 | `lstat(entryDir)`：软链直接 `E_SYMLINK_READONLY`（双保险，路由已拦） | 返回 409 |
-| 2 | `open(file)` → `fstat` → 记录 `{size, mtimeMs, ino, dev}` 指纹 → 读完整个文件 | 读失败 → `E_WRITE_FAILED` |
+| 2 | `lstat(file)` 记下 `{size, mtimeMs, ino, dev}` 指纹（第 5 步同口径；`fstat` 会跟随软链，软链下两值天然不同）→ `open(file)` 读完整个文件 | 读失败 → `E_WRITE_FAILED` |
 | 3 | 计算 `next`；`changed === false` 则**不写**，直接返回成功（幂等） | —— |
 | 4 | 同目录写 `<SKILL.md>.<pid>.<rand>.tmp`（`flag:'wx'`），`fsync`，`close`；`chmod` 成原文件 mode | 失败 → 删 tmp → `E_WRITE_FAILED` |
-| 5 | 重取指纹，与第 2 步不等 → 删 tmp → `409 E_FILE_CHANGED`（有人在面板打开期间改了文件） | 已处理 |
+| 5 | 重取指纹，与第 2 步不等 → 删 tmp → `409 E_FILE_CHANGED`（有人在面板打开期间改了文件；测试从这个窗口唯一的注入口 `beforeVerify` 造改动，见 K14） | 已处理 |
 | 6 | `rename(tmp, file)`；`fsync` 目录（best-effort） | 失败 → 删 tmp → `E_WRITE_FAILED` |
 | 7 | 回读文件与 `next` **逐字节比较**；不一致 → 把原字节写回（再走一次 4–6，仍失败则 `E_VERIFY_FAILED` 并报告「文件可能处于中间状态」） | `E_VERIFY_FAILED` |
 | 8 | 用 `parseFrontmatter(回读内容)` 断言 `disableModelInvocation === 目标值` | 同上回滚 |
