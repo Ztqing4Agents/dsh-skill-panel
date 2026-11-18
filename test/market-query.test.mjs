@@ -1,7 +1,7 @@
 /**
  * `lib/market/query.js` — the whitelists, the cursor codec, the URL builder.
  *
- * Contract: docs/contracts/routes.md §3.7.2 (list semantics), §3.7.3 (whitelists and
+ * Contract: docs/contracts/market-routes.md §3.7.2 (list semantics), §3.7.3 (whitelists and
  * injection defence); docs/contracts/market.md §7.2 (cursor shapes); case id K29.
  *
  * Everything here is pure: no network, no filesystem, no clock. A value that fails a

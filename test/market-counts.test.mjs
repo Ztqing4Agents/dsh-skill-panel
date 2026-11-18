@@ -1,7 +1,7 @@
 /**
  * `lib/market/sources/skillhub.js` — the per-category counts behind the chip numbers.
  *
- * Contract: docs/contracts/routes.md §3.7.1 (`bootstrap` payload: `categories[].count`,
+ * Contract: docs/contracts/market-routes.md §3.7.1 (`bootstrap` payload: `categories[].count`,
  * `total`, `countsOk`) and §3.7.2 (the counts budgets: 6s per item, 10s overall,
  * concurrency 6, ten-minute cache, one failed item never fails the request);
  * docs/contracts/client.md §3.9.1 rule 6 (what the chips do with those numbers);

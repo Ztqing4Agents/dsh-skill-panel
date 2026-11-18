@@ -2,7 +2,7 @@
  * `lib/market/favorites.js` — the panel's own bookmark list.
  *
  * Contract: docs/contracts/market.md §7.7 (identity key, file shape, cap, idempotency,
- * degradation, atomicity) and docs/contracts/routes.md §3.7.6 (`market/favorite`'s
+ * degradation, atomicity) and docs/contracts/market-routes.md §3.7.6 (`market/favorite`'s
  * idempotency and cap); case id K75.
  *
  * Every case here is about one promise the file makes to the rest of the plugin:

@@ -76,7 +76,7 @@ test('首次 apply 注册十六条路由，且扫描的是 config 指定的目�
       '/api/dsh-skill-panel/provider-toggle',
       '/api/dsh-skill-panel/remove',
       '/api/dsh-skill-panel/toggle',
-    ], '十六条路径与设计一致（routes.md §3.3 + §3.7.1）');
+    ], '十六条路径与设计一致（routes.md §3.3 + market-routes.md §3.7.1）');
     assert.equal(registrations.every((route) => typeof route.handler === 'function'), true, '每条路由都有 handler');
     assert.equal(registrations.every((route) => route.kind === 'exact'), true, '全部是 exact 路由');
 

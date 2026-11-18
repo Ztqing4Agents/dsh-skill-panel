@@ -4,7 +4,7 @@
  * still gets its key (with `null`), and the icon cache carries the title with the image so
  * a cache hit never asks upstream twice for the same skill.
  *
- * Contract: docs/contracts/market.md §7.1 §7.5, docs/contracts/routes.md §3.7.5,
+ * Contract: docs/contracts/market.md §7.1 §7.5, docs/contracts/market-routes.md §3.7.5,
  * docs/contracts/acceptance.md 附录 D.6 K71.
  */
 import assert from 'node:assert/strict';

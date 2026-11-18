@@ -1,7 +1,7 @@
 /**
  * `lib/market/errors.js` — one `E_*` code per failure, each pinned to one HTTP status.
  *
- * Contract: docs/contracts/routes.md §8.6 (the full market code table) and §8.1 (the
+ * Contract: docs/contracts/market-routes.md §8.6 (the full market code table) and §8.1 (the
  * envelope). Case id K30.
  *
  * The interesting assertion is the cross-check at the end: the table in the contract
@@ -23,7 +23,7 @@ import {
 } from '../lib/market/errors.js';
 import { ROOT } from './helpers/ssr.mjs';
 
-/** The status each code must map to, transcribed from routes.md §8.6. */
+/** The status each code must map to, transcribed from market-routes.md §8.6. */
 const EXPECTED = {
   E_BAD_QUERY: 400,
   E_BAD_REQUEST: 400,
@@ -92,10 +92,10 @@ test('K30 未知 / 缺 code 的异常不会把 undefined 当状态发出去', ()
   assert.equal(isMarketError(new Error('x')), false, '普通 Error 不是 MarketError');
 });
 
-test('K30 契约文本与代码同源：routes.md §8.6 的表格行逐条对得上', async () => {
-  const text = await readFile(join(ROOT, 'docs', 'contracts', 'routes.md'), 'utf8');
+test('K30 契约文本与代码同源：market-routes.md §8.6 的表格行逐条对得上', async () => {
+  const text = await readFile(join(ROOT, 'docs', 'contracts', 'market-routes.md'), 'utf8');
   const section = text.slice(text.indexOf('## 8.6'));
-  assert.notEqual(section, '', 'routes.md 里有 §8.6 一节');
+  assert.notEqual(section, '', 'market-routes.md 里有 §8.6 一节');
   const rows = [...section.matchAll(/^\| `(E_[A-Z_]+)` \| (\d{3}) \|/gm)]
     .map((match) => [match[1], Number(match[2])]);
   assert.equal(rows.length >= 20, true, `§8.6 的表格至少二十行（实际 ${rows.length} 行）`);

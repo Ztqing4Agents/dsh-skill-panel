@@ -1,8 +1,8 @@
 /**
  * `lib/routes.js` — the sixteen exact routes, one shared guard, one identity check.
  *
- * Contracts: docs/contracts/routes.md §3.3 (route table), §3.3.2 (path identity),
- * §3.7 (the five market routes), §8.1 / §8.6 (error codes);
+ * Contracts: docs/contracts/routes.md §3.3 (route table), §3.3.2 (path identity) and §8.1
+ * (local codes); docs/contracts/market-routes.md §3.7 (the market routes) and §8.6 (market codes);
  * case ids K18, K19, K20, K21, K29–K31.
  */
 import assert from 'node:assert/strict';
@@ -68,7 +68,7 @@ test('路由表就是设计里的十六条 exact 路由（本地面 7 + 市场�
     marketFavorite: '/api/dsh-skill-panel/market/favorite',
     add: '/api/dsh-skill-panel/add',
     remove: '/api/dsh-skill-panel/remove',
-  }, '十六条路径与设计逐字一致（本地面 7 条 + 市场面 9 条，见 routes.md §3.3 / §3.7.1）');
+  }, '十六条路径与设计逐字一致（本地面 7 条 + 市场面 9 条，见 routes.md §3.3 / market-routes.md §3.7.1）');
 });
 
 test('路由都是 exact 类型，不用前缀匹配', async () => {

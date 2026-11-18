@@ -4,7 +4,7 @@
  *
  * Contract: docs/contracts/market.md §7.8 (the single-origin mirror, the four hard rules),
  * §7.2 (per-method endpoints) and §7 (the `E_PACKAGE_INVALID` table); docs/contracts/
- * routes.md §3.7.4 (the install pipeline); case ids K88 (superseded by the mirror-only
+ * market-routes.md §3.7.4 (the install pipeline); case ids K88 (superseded by the mirror-only
  * boundary, kept as the file's anchor), K90, K91, K92.
  *
  * Four failure modes are worth this much text because all four are silent:

@@ -60,13 +60,13 @@ test('K40 check:client 绿：重打一次与 client.js 逐字节相同', async (
   assert.match(gate.stdout, /matches src\/client/, '报出与源码一致');
 });
 
-test('K40 check:docs 绿：15 份 0 warn', async () => {
+test('K40 check:docs 绿：16 份 0 warn', async () => {
   const gate = await runGate('check-docs.mjs');
   assert.equal(gate.code, 0, `check:docs 必须 exit 0（实际 ${gate.code}）：${gate.stdout}${gate.stderr}`);
   assert.match(gate.stdout, /check-docs: OK/, '门禁自报 OK');
   const summary = /check-docs: OK \((\d+) md files, (\d+) warn\)/.exec(gate.stdout);
   assert.ok(summary !== null, '门禁输出里带统计');
-  assert.equal(Number(summary[1]), 15, `文档恰好 15 份（实际 ${summary[1]}）`);
+  assert.equal(Number(summary[1]), 16, `文档恰好 16 份（实际 ${summary[1]}）`);
   assert.equal(Number(summary[2]), 0, `警告为 0（实际 ${summary[2]}）`);
 });
 
@@ -622,10 +622,11 @@ test('K115 契约自洽：ROUTES、§3.3 与 §3.7.1 两张路由表说的是同
   assert.equal(Object.keys(ROUTES).length, 16, 'ROUTES 恰好 16 个键');
 
   const text = await readFile(join(ROOT, 'docs', 'contracts', 'routes.md'), 'utf8');
+  const marketText = await readFile(join(ROOT, 'docs', 'contracts', 'market-routes.md'), 'utf8');
   assert.match(text, /十六条 \*\*exact\*\* 路由/, '§3.3 头注说十六条');
   assert.match(text, /本地面 7 条/, '§3.3 头注说本地面七条');
   const local = routeNumbersOf(sectionOf(text, '## 3.3 ', '#### 3.3.1'));
-  const market = routeNumbersOf(sectionOf(text, '#### 3.7.1', '#### 3.7.2'));
+  const market = routeNumbersOf(sectionOf(marketText, '#### 3.7.1', '#### 3.7.2'));
   assert.deepEqual(local, ['1', '2', '3', '4', '14', '17', '18'], '本地面七条：#1–#4、#14、#17/#18（历史编号不重排、不复用）');
   assert.deepEqual(market, ['5', '6', '7', '8', '9', '11', '13', '15', '16'], '市场面九条：#10 与 #12 已退役，编号留空；#15/#16 是 U19 的两条');
   assert.equal(local.length + market.length, 16, '两张表的条数合计就是 16 条');
@@ -865,11 +866,11 @@ test('K115 check:docs 认这份新契约：installed-detail.md 在白名单里�
   assert.match(text, /K110–K115/, '验收节指向 K110–K115');
   const gate = await runGate('check-docs.mjs');
   assert.equal(gate.code, 0, `check:docs 必须 exit 0：${gate.stdout}${gate.stderr}`);
-  assert.match(gate.stdout, /15 md files, 0 warn/, '文档 15 份、0 警告');
+  assert.match(gate.stdout, /16 md files, 0 warn/, '文档 16 份、0 警告');
 });
 
 test('K115 契约自洽：§3.7 头注说的市场条数与共用 guard 的名单，跟两张表一致', async () => {
-  const text = await readFile(join(ROOT, 'docs', 'contracts', 'routes.md'), 'utf8');
+  const text = await readFile(join(ROOT, 'docs', 'contracts', 'market-routes.md'), 'utf8');
   const intro = sectionOf(text, '## 3.7 ', '#### 3.7.1');
   const claim = /市场面 (\d+) 条/.exec(intro);
   assert.ok(claim !== null, '§3.7 头注里有一个条数');
@@ -896,8 +897,8 @@ test('K125 门禁同步：16 条路由、197 键、§8.6 二十个码、产物 �
   assert.ok(keys !== null, '门禁输出里带键数');
   assert.equal(Number(keys[1]), 197, `locale 恰好 197 键（实际 ${keys[1]}）`);
 
-  const routesText = await readFile(join(ROOT, 'docs', 'contracts', 'routes.md'), 'utf8');
-  const table = routesText.slice(routesText.indexOf('## 8.6'));
+  const marketText = await readFile(join(ROOT, 'docs', 'contracts', 'market-routes.md'), 'utf8');
+  const table = marketText.slice(marketText.indexOf('## 8.6'));
   const codes = [...table.matchAll(/^\| `(E_[A-Z_]+)` \| (\d{3}) \|/gm)].map((match) => match[1]);
   assert.equal(codes.length, 20, `§8.6 有二十个单码行（实际 ${codes.length}）`);
   for (const code of ['E_NOT_MARKET_INSTALLED', 'E_ALREADY_UP_TO_DATE', 'E_UPDATE_RESTORED', 'E_UPDATE_LOST', 'E_UPDATE_UNCONFIRMED']) {

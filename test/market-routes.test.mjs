@@ -2,7 +2,7 @@
  * The six market read/write routes: fences, query fences, envelopes, the installed map,
  * and the local bookmark write.
  *
- * Contracts: docs/contracts/routes.md §3.7.1 (route table), §3.7.2 (list semantics),
+ * Contracts: docs/contracts/market-routes.md §3.7.1 (route table), §3.7.2 (list semantics),
  * §3.7.3 (whitelists), §3.7.6 (`market/favorite` idempotency and cap), §8.6 (codes and
  * the `data` exception); case ids K35, K36, K76, K77.
  *
@@ -1255,12 +1255,12 @@ test('K76 出参列表最新在前：第二个收藏排第一个；取消没收�
   }
 });
 
-test('K77 契约文本与实现同形：routes.md 的 bootstrap 行必须列出 favorites / favoritesOk', async () => {
+test('K77 契约文本与实现同形：market-routes.md 的 bootstrap 行必须列出 favorites / favoritesOk', async () => {
   // K77 says the response has exactly eight keys; the route table is where a reader
   // learns that shape, so the two cannot disagree. (K30 does the same for the codes.)
-  const text = await readFile(join(ROOT, 'docs', 'contracts', 'routes.md'), 'utf8');
+  const text = await readFile(join(ROOT, 'docs', 'contracts', 'market-routes.md'), 'utf8');
   const row = text.split('\n').find((line) => line.includes('`GET /api/dsh-skill-panel/market/bootstrap`'));
-  assert.ok(row !== undefined, 'routes.md §3.7.1 里找得到 bootstrap 一行');
+  assert.ok(row !== undefined, 'market-routes.md §3.7.1 里找得到 bootstrap 一行');
   assert.match(row, /\bfavorites\b/, '出参 data 里写着 favorites（收藏随 bootstrap 下发）');
   assert.match(row, /\bfavoritesOk\b/, '出参 data 里写着 favoritesOk（读成功才是 true）');
 });

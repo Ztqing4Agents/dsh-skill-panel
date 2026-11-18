@@ -1,7 +1,7 @@
 /**
  * `skillhubSource.icons()` — the SkillHub half of the icon batch.
  *
- * Contract: docs/contracts/routes.md §3.7.5 (per-source dispatch, per-source budget, keys
+ * Contract: docs/contracts/market-routes.md §3.7.5 (per-source dispatch, per-source budget, keys
  * `skillhub:<owner>:<slug>`, absolute-https-only icons), market.md §7.5; case id K65 (L1).
  *
  * SkillHub answers icons one skill at a time (its list payload carries them, a detail

@@ -3,7 +3,8 @@
  * directory, and the invariant that neither can leave a half-state behind.
  *
  * Contract: docs/contracts/routes.md §3.3 (the two rows), §3.3.4 (S0–S12 / D0–D9 and the
- * two invariants) and §8.1 / §8.6 (the codes); case ids K127–K132.
+ * two invariants) and §8.1 (local codes); docs/contracts/market-routes.md §8.6 (market codes);
+ * case ids K127–K132.
  *
  * Everything runs against a throwaway `DSH_HOME` + `skillsRoot` under `os.tmpdir()` and
  * through `makeRoutes`, so the guards are exercised in the order the contract numbers

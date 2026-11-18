@@ -1,7 +1,7 @@
 /**
  * `lib/market/upstream.js` — the single outbound door, and the one-hop redirect rule.
  *
- * Contract: docs/contracts/routes.md §3.7.2 (timeouts table), §3.7.3 rule 4 (302 must be
+ * Contract: docs/contracts/market-routes.md §3.7.2 (timeouts table), §3.7.3 rule 4 (302 must be
  * followed manually, one hop, COS hosts only) and §3.7.4 (byte caps); case id K43.
  *
  * Nothing here opens a socket. The network behaviour (deadline, byte ceiling, mapping a

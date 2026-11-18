@@ -1,7 +1,7 @@
 /**
  * `lib/market/install.js` + `lib/market/store.js` — the install pipeline, end to end.
  *
- * Contract: docs/contracts/routes.md §3.7.4 (the fourteen stages and the "no half a
+ * Contract: docs/contracts/market-routes.md §3.7.4 (the fourteen stages and the "no half a
  * skill" predicate) and docs/contracts/market.md §7.4 (`_meta.json` shape); case id K34.
  *
  * Every case runs against a throwaway `dshHome` and `skillsRoot` under `os.tmpdir()`.
@@ -474,7 +474,7 @@ test('K34 包内 _meta.json：保留原字段，原文另存 _meta.upstream.json
     assert.equal(meta.source, SOURCE, '补充了 source（R6 要它）');
     assert.equal(meta.ownerId, 'ake', '补充了 ownerId（R7 要它）');
     assert.equal(meta.slug, 'dev-god', '补充了 slug（R7 要它）');
-    // 口径（routes.md §3.7.1）：`files` 是**落盘去重后的路径数**，`bytes` 是**包内字节合计**。
+    // 口径（market-routes.md §3.7.1）：`files` 是**落盘去重后的路径数**，`bytes` 是**包内字节合计**。
     // 包里自带 _meta.json 时它被我们覆盖（原文另存 _meta.upstream.json），因此磁盘上只有
     // 三个路径：SKILL.md、_meta.json、_meta.upstream.json —— 被覆盖的那份不再重复计。
     const onDisk = (await entriesOf(result.path)).sort();

@@ -3,7 +3,7 @@
  *
  * Contract: docs/contracts/client.md §3.9.6 (who is picked: market cards from
  * `iconCandidates()`, installed rows from `Row.upstream`; per-source 12, total 24, dedupe
- * by `source:owner:slug`, market entries first), routes.md §3.7.5 (the server only enforces
+ * by `source:owner:slug`, market entries first), market-routes.md §3.7.5 (the server only enforces
  * the total, so the per-source split is the *client's* rule); case id K67 (L1).
  *
  * The per-source limit is not cosmetic: one slow source must not eat the whole batch, and

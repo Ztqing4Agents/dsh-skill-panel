@@ -22,7 +22,7 @@ const ROUTE_CODES = [
   'E_FORBIDDEN', 'E_NOT_FOUND', 'E_STALE_PATH', 'E_SYMLINK_READONLY',
   'E_FILE_CHANGED', 'E_NOT_WRITABLE', 'E_WRITE_FAILED', 'E_VERIFY_FAILED',
   'E_BAD_NAME', 'E_BAD_PATH', 'E_UNKNOWN',
-  // 市场面（routes.md §8.6）。界面按 code 取文案，缺一条就会把英文原句丢给中文用户。
+  // 市场面（market-routes.md §8.6）。界面按 code 取文案，缺一条就会把英文原句丢给中文用户。
   'E_BAD_QUERY', 'E_SOURCE_UNKNOWN', 'E_SOURCE_UNAVAILABLE', 'E_SOURCE_TIMEOUT',
   'E_SOURCE_BAD_RESPONSE', 'E_SKILL_NAME_INVALID', 'E_ALREADY_INSTALLED',
   'E_PACKAGE_INVALID', 'E_DOWNLOAD_FAILED', 'E_INSTALL_IO', 'E_INSTALL_BUSY',
@@ -152,12 +152,12 @@ test('文案键一个不少：按名字断言，不按数量（键源是 locale/
     'error.E_NOT_FOUND', 'error.E_BAD_NAME', 'error.E_BAD_PATH', 'error.E_STALE_PATH',
     'error.E_SYMLINK_READONLY', 'error.E_FILE_CHANGED', 'error.E_NOT_WRITABLE',
     'error.E_WRITE_FAILED', 'error.E_VERIFY_FAILED', 'error.E_FORBIDDEN', 'error.E_UNKNOWN',
-    // 市场面错误码（routes.md §8.6）：装不上/查不到时界面按 code 取这几条文案。
+    // 市场面错误码（market-routes.md §8.6）：装不上/查不到时界面按 code 取这几条文案。
     'error.E_BAD_QUERY', 'error.E_SOURCE_UNKNOWN', 'error.E_SOURCE_UNAVAILABLE',
     'error.E_SOURCE_TIMEOUT', 'error.E_SOURCE_BAD_RESPONSE', 'error.E_SKILL_NAME_INVALID',
     'error.E_ALREADY_INSTALLED', 'error.E_PACKAGE_INVALID', 'error.E_DOWNLOAD_FAILED',
     'error.E_INSTALL_IO', 'error.E_INSTALL_BUSY',
-    // 本地面四个新码（routes.md §8.1 只登记在本表，§8.6 仍是二十行）。
+    // 本地面四个新码（routes.md §8.1 只登记在本表，market-routes.md §8.6 仍是二十行）。
     'error.E_ADD_NOT_FOUND', 'error.E_ADD_NOT_SKILL_DIR', 'error.E_ADD_SHADOWED', 'error.E_DELETE_IO',
   ];
   for (const language of ['zh', 'en']) {

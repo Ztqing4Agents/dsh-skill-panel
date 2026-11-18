@@ -3,7 +3,7 @@
  *
  * Contract: docs/contracts/market.md §7.4 (the `iconUrl` column: an absolute `https`
  * address or `null`), §7.5 (the icon pipeline) and §7.8 (the single-origin mirror);
- * docs/contracts/routes.md §3.7.1 route #7 (`market/icons`); case id K57.
+ * docs/contracts/market-routes.md §3.7.1 route #7 (`market/icons`); case id K57.
  *
  * Two properties make the pipeline affordable, and both are asserted here: a page of cards
  * costs **exactly one** upstream request, and the batch that resolves icons is bounded -
