@@ -327,7 +327,7 @@ test('K34 非法声明名：422 E_SKILL_NAME_INVALID，只取 1 个文件，skil
 });
 
 test('K34 上游失败：plan 阶段原样上抛 502/503/504；取文件阶段按 §8.6 归一', async () => {
-  // §3.7.4 S2 说 plan 阶段「502/503/504 透传」；§8.6 说「单文件下载阶段把 503/502 归一成
+  // §3.7.4 I2 说 plan 阶段「502/503/504 透传」；§8.6 说「单文件下载阶段把 503/502 归一成
   // E_DOWNLOAD_FAILED」，而超时不在归一之列（120s 预算与 30s 单文件各报各的）。
   const expected = [
     { at: 'plan', code: 'E_SOURCE_UNAVAILABLE', expect: 'E_SOURCE_UNAVAILABLE' },

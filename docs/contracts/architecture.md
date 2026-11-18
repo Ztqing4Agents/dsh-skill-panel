@@ -14,8 +14,6 @@
 
 ---
 
----
-
 ## 1 实现方案与框架选型
 
 ### 1.1 核心难点 → 方案 → 模式
@@ -278,10 +276,7 @@ ledger.readAll() ─────────────────┘   （R5�
 
 依据：`EX/dsh-client-ui-plugin-manager/lib/client.js`（SegmentedTabs / Switch / Button / Tooltip / StateDot / Toast 的真实调用点，见 §3.3 各条引注）；导出名在 `SHELL/index-Ciz7DZxv.js` 中存在（如 `IconSkillOutlineRegular`、`IconLinkOutlineRegular`、`StateDot`、`Toast`）。
 
-行图标（`.skc_cardIcon`）**不取 primitives**：它是首字母头像（技能名首字母 + 按名字散列的粉彩色块），
-色板与散列在 `src/client/avatar.js`，刻度见 `docs/contracts/visual.md` A.5 / A.9。
-
----
+行图标（`.skc_cardIcon`）**不取 primitives**：它是首字母头像（技能名首字母 + 按名字散列的粉彩色块），色板与散列在 `src/client/avatar.js`，刻度见 `docs/contracts/visual.md` A.5 / A.9。
 
 ---
 
@@ -328,15 +323,17 @@ ledger.readAll() ─────────────────┘   （R5�
 | `src/client/api.js` | `SkillCenterApi`：`list()` / `toggle({name,path,enabled})` / `toggleProvider({provider,name,enabled})` / `skillDetail({name})`；文档相对 URL；把 `{code,data,message}` 归一成 `ApiError{code}` |
 | `src/client/state.js` | 模块级 store（`createStore` 形状：`getSnapshot`/`subscribe`/`actions`）：`tab` / `payload` / `status` / `error` / `rows` / `notice` / `detail`（详情三态）/ `detailScrollTop` |
 | `src/client/model.js` | **纯函数**：`toGroups(payload)`、`rowViewState(row, rows)`、`isPending(rows, key)`、`groupEmptyKey(key)`、`rowByKey(payload, key)`、`detailStateOf(state, key)` |
-| `src/client/avatar.js` | **纯函数（无 React）**：`SKC_AVATAR_TONES`（12 组 `{bg, ink}` 粉彩，色相 30° 等分）+ `avatarOf(name)`（首个 `\p{L}`/`\p{N}` 大写字母 + FNV-1a 散列选色），node 可直接测 |
+| `src/client/avatar.js` | **纯函数（无 React）**：`SKC_AVATAR_TONES`（6 组 `{bg, ink}` 粉彩，对齐 skillhub.cn 的 accent 10% 底 + 实色字）+ `avatarOf(name)`（首个 `\p{L}`/`\p{N}` 大写字母 + FNV-1a 散列选色），node 可直接测 |
 | `src/client/page.jsx` | 页面组件：`page` → `pageBody` → `pageBar`(header) + 两个 `tabPanel`；骨架/空/错/页脚的组装 |
 | `src/client/row.jsx` | `SkillRow`（首字母头像/标题/描述/`cardEnd`）、`EnableSwitch`（`bundleToggle` + `toggleProgress` + primitives `Switch`）、`ReadonlyTag`（软链只读标记） |
 | `src/client/skeleton.jsx` | 加载态：区标题占位 + 4 行骨架卡（规格见 `docs/contracts/visual.md` A.6） |
 | `src/client/header-scroll.js` | `attachHeader(bar)`（克隆量测 + 观测）+ **纯函数** `interpolateParts(parts, offset)` |
 | `src/client/styles.js` | 单一 CSS 字符串（`docs/contracts/visual.md` 的全文）+ `injectStyles()`（按 `data-plugin-css` 去重） |
 | `src/client/toast.jsx` | `shell.overlay` 占位者：渲染刷新失败 toast（primitives `Toast`），离开页面后仍可见 |
+| `src/client/icon-tile.jsx` | `IconTile` / `tileElement()` / `useIconState()`：头像槽的唯一画法（有上游图标画图标、没有画首字母），拆成「无 hook 的纯函数 + 两个状态的 hook」两种入口，行 / 详情 / 插件页共用；容器仍是 `.skc_cardIcon`，不改它 |
+| `src/client/plugin-detail.jsx` | `PluginDetail({block, t, rows, onBack, onToggle})`：内置 provider 的第二级页（一个包里的技能逐行可开关，行本身只读、没有下一级），没有**独立的**版本区块与仓库链接（版本只出现在来源事实的一行里） |
 | `src/client/skill-dialogs.jsx` | 已安装页签的两个弹窗：`AddSkillDialog`（一条路径输入 + 三态 + 就地报因）与 `DeleteConfirm`（标题 + 正文 + 一行路径事实）；座位与 `market-confirm.jsx` 同一套 `Modal`，规范见 `docs/contracts/client.md` §3.9.7 |
-| `src/client/` 下的 `market-*` 文件 | 市场页的纯函数模块与 6 个组件（列表 / 筛选 / 卡片 / 详情 / 骨架 / 确认）加图形单元（品牌位图与三段字形）；职责见 `docs/contracts/market.md` 附录 G。`installed-detail.jsx`（已安装详情页）与 `markdown.jsx`（两页共用的正文渲染 + 兜底）见 `docs/contracts/installed-detail.md` |
+| `src/client/` 下的 `market-*` 文件 | 市场页的纯函数模块与 6 个组件（列表 / 筛选 / 卡片 / 详情 / 骨架 / 确认）加图形单元（品牌位图与三段字形）；职责见 `docs/contracts/market.md` 附录 G。`src/client/installed-detail.jsx`（已安装详情页）与 `src/client/markdown.jsx`（两页共用的正文渲染 + 兜底）见 `docs/contracts/installed-detail.md` |
 
 ### 2.4 构建与门禁脚本（`scripts/`）
 
@@ -353,8 +350,6 @@ ledger.readAll() ─────────────────┘   （R5�
 ### 2.6 文档
 
 本文件是架构与接口契约。「想知道什么该看哪份」的读者入口见 `AGENTS.md` 的文档地图；页面视觉刻度在 `docs/contracts/visual.md`；宿主页面形状（外部取值来源）在 `docs/reference/host-plugin-page.md`。
-
----
 
 ---
 
@@ -391,9 +386,6 @@ react-dom                              ^18.2.0
 
 ---
 
----
-
 ## 验收
 
-- `npm run check:client` 通过 ⇒ `exports["./client"]`、产物装载形状与 `src/client/**` 一致（§2.4）。
-- `test/bundle-contract.test.mjs`、`test/index.test.mjs` 通过 ⇒ §1.2 的座位接线与 §2.1 的包清单没被改坏。
+- `npm run check:client` 通过 ⇒ `exports["./client"]`、产物装载形状与 `src/client/**` 一致（§2.4）；`test/bundle-contract.test.mjs`、`test/index.test.mjs` 通过 ⇒ §1.2 的座位接线与 §2.1 的包清单没被改坏。

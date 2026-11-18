@@ -6,7 +6,7 @@
 > 更新触发：改区块顺序、检测状态机、返回口径、更新动作或这 35 个键时，本文件与 `docs/contracts/routes.md` §3.3.3 §3.7.7、`docs/contracts/market.md` §7.11 一起改
 > 规模上限：400
 
-`docs/contracts/client.md` §3.9.2 只留指针（那张表已到 400 行档位）。点击边界见 `AGENTS.md` 硬约束 9，刻度见 `docs/contracts/visual.md` A.5。
+`docs/contracts/client.md` §3.9.2 只留指针。点击边界见 `AGENTS.md` 硬约束 9，刻度见 `docs/contracts/visual.md` A.5。
 
 ---
 
@@ -187,7 +187,7 @@ store.checkRun = {id: number, status: 'idle'|'running'|'done'}   // 一轮自动
 
 本页另有 4 个 `delete.{title,body,confirm,factDir}`（卸载确认弹窗用的键族，不计入上面那 35 个 `detail.*`）。**用户可见词汇统一是「卸载」**（宿主详情头那枚按钮就是 `uninstall`，用户真机对照后要求同词；键名不改——`delete.*` 是内部标识）：`delete.title`「卸载「{name}」？」/ `delete.body`「卸载后这个技能的文件会被永久移除，本机不再加载它。」/ `delete.confirm`「卸载」/ `delete.factDir`「目录」。`delete.factDir` 只给那一行路径事实当标签，**不复用** `market.factInstallTo`——本页要显示的是**将被删掉的那个目录**，「安装到」在卸载语境里是错的。`detail.{back,loading,error,retry,noBody,truncated,filesTruncated,uninstall}`（`detail.uninstallSoon` 已退役：卸载可用，按钮不再需要 title 说明；`detail.uninstall` 的值改成「卸载」/`Uninstall`，**键不动**）、版本与底部键组 `detail.{sectionVersion,checkAgain,checking,upToDate,checkedAt,newerVersion,checkOffline,checkFailed,factCodeSource,factVersion,viewRepo}`、`detail.{sectionSource,sourceBuiltin}`（`detail.back` = 「技能」/`Skills`，头部的面包屑根）、更新（9 个）`detail.{update,updating,updateTitle,updateBody,updateOk,updateFailed,updateRolledBack,updateLost,updateUnknown}`、版本列表（6 个）`detail.{newVersionCount,collapse,moreNewVersions,updateTo,publishedAt}`。**退役 2 个**：`detail.checkIdle`（自动检测后「尚未检查」不再是可见态）与 `detail.checkUnavailable`（语义被 `detail.checkFailed` 吸收，`upstream` 有而 `version` 空的行现在也落它）。**改文案不改键 2 个**：`detail.newerVersion` → 「可更新到 {version}」、`detail.checkFailed` → 「无法检查更新」。
 
-复用而不造同义词：`row.{enable,disable,applying,symlinkReadonly,symlinkTitle}`、`market.{detailOverview,detailFiles,factSource}` + `market.source.*`、`error.E_NOT_FOUND`。另加 6 个 `markdown.*`（`codeCopy`/`codeCopied`/`codePlain`/`codeWrap`/`codeUnwrap`/`footnotes`）：它们不是本页文案，而是宿主 `MarkdownText` 的**代码围栏与脚注 chrome**，`labels` 缺了它宿主读 `labels.code.copyLabel` 直接抛错、整篇正文回落成纯文本，所以两个详情页共用这一段。全字典现为 **197** 键（`check-i18n` 口径 = 195 个扁平键 + `meta` 两项，分族见 `docs/contracts/client.md` §8.3）。本页与页头相关的退役键：`detail.checkUnavailable`、`detail.checkIdle`、`status.count`、`status.offSuffix`——都不会再回来。`detail.filesTruncated` 与 `market.detailFiles` 不再上屏（文件清单已删），键留着。版本 Tag 不新增键：复用 `market.metaVersion`（`v{version}`）；作者行已不显示，`market.metaAuthor` 不再被本页读取。
+复用而不造同义词：`row.{enable,disable,applying,symlinkReadonly,symlinkTitle}`、`market.{detailOverview,detailFiles,factSource}` + `market.source.*`、`error.E_NOT_FOUND`。另加 6 个 `markdown.*`（`codeCopy`/`codeCopied`/`codePlain`/`codeWrap`/`codeUnwrap`/`footnotes`）：它们不是本页文案，而是宿主 `MarkdownText` 的**代码围栏与脚注 chrome**，`labels` 缺了它宿主读 `labels.code.copyLabel` 直接抛错、整篇正文回落成纯文本，所以两个详情页共用这一段。全字典键数以 `check:i18n` 输出为准（口径 = 扁平键 + `meta` 两项；形状与键族约定见 `docs/contracts/client.md` §8.3）。本页与页头相关的退役键：`detail.checkUnavailable`、`detail.checkIdle`、`status.count`、`status.offSuffix`——都不会再回来。`detail.filesTruncated` 与 `market.detailFiles` 不再上屏（文件清单已删），键留着。版本 Tag 不新增键：复用 `market.metaVersion`（`v{version}`）；作者行已不显示，`market.metaAuthor` 不再被本页读取。
 
 ## 点击边界
 
@@ -216,6 +216,6 @@ store.checkRun = {id: number, status: 'idle'|'running'|'done'}   // 一轮自动
 
 ## 验收
 
-- `npm run check:client` 逐字节通过；`npm run check:i18n` 报 **197** 键且 zh/en 键集一致、`lib/**` 与 `src/client/**` 无 CJK；产物 ≤ **180000** B（当前实测见 `npm run check:client` 输出；上限 180000 由用户预授权，K115 行与本文件同值）。
+- `npm run check:client` 逐字节通过；`npm run check:i18n` 的键集一致（键数以它自报为准）、`lib/**` 与 `src/client/**` 无 CJK；产物 ≤ **180000** B（当前实测见 `npm run check:client` 输出；上限 180000 由用户预授权，K115 行与本文件同值）。
 - K110–K115（`docs/contracts/acceptance.md` 附录 D.5）、K116–K125（附录 D.7）与 K126–K136（附录 D.8）逐条绿。
 - 真机三项：面包屑返回落点与打开前一致、40 KB 正文可滚且 Markdown 正常、触屏 `:active` 有底色。

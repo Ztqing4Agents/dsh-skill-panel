@@ -316,19 +316,13 @@ locateSkillDir(root: string, subdir: string|null): {dir: string}   // ① 给了
 ```jsonc
 // MarketItem —— 市场页唯一的渲染输入，也是去重键的来源
 {
-  "sourceId": "skillhub",            // 本地算：按上游行的 source 折叠（community/enterprise → skillhub，clawhub → clawhub），跨 scope 恒定
-  "id": "skillhub:ake:dev-god",      // 本地算：`${sourceId}:${owner}:${slug}`
-  "owner": "ake",                    // 上游；缺失 null
-  "slug": "dev-god",                 // 上游；缺失 null
-  "displayName": "编程大神.Skill",   // 上游；缺则回落 slug，再缺为空串
-  "iconUrl": "https://…png | null",                          // 两种形态，见不变式 6
-  "summary": "≤ 400 字符单行",        // 上游；超长截断，缺失为空串
-  "author": "阿客实验室",             // 上游；三级回落，全缺 null
-  "version": "1.2.4",                // 上游；**缺失如实 null**（镜像缺版本时就是 null）
-  "downloads": 11340092,             // 上游；缺失 null（**绝不补 0**）
+  "sourceId": "skillhub", "id": "skillhub:ake:dev-god",   // 本地算：sourceId 按上游行的 source 折叠（community/enterprise → skillhub，clawhub → clawhub）、跨 scope 恒定；id = `${sourceId}:${owner}:${slug}`
+  "owner": "ake", "slug": "dev-god",                      // 上游；缺失 null
+  "displayName": "编程大神.Skill", "summary": "≤ 400 字符单行",   // displayName 缺则回落 slug、再缺为空串；summary 超长截断、缺失为空串
+  "iconUrl": "https://…png | null", "author": "阿客实验室",       // iconUrl 两种形态见不变式 6；author 三级回落，全缺 null
+  "version": "1.2.4", "downloads": 11340092,             // 上游；**version 缺失如实 null**（镜像缺版本时就是 null）；downloads 缺失 null（**绝不补 0**）
   "saves": 99, "score": 100000, "tags": ["代码生成", "Bug 修复"],   // 上游 stars/score（缺失 null，绝不补 0）/ subCategories.name 前 3（≤3 条、单条 ≤24 字符、保留大小写、**缺 = []**）
-  "updatedAt": 1794205858796,        // 上游；epoch 毫秒，只用于排序，**不上屏**
-  "category": "dev-programming", "packageKind": "files"   // 上游（两源都有分类）/ 本地算：当前两源恒 'files'（没有任何 zip 形态）
+  "updatedAt": 1794205858796, "category": "dev-programming", "packageKind": "files"   // updatedAt 是 epoch 毫秒、只用于排序**不上屏**；category 上游（两源都有分类）/ packageKind 本地算：当前两源恒 'files'（没有任何 zip 形态）
 }
 ```
 
@@ -347,8 +341,7 @@ locateSkillDir(root: string, subdir: string|null): {dir: string}   // ① 给了
 
 ```jsonc
 // MarketVersions —— market/versions 的 data（新的在前，不排序、不过滤，保留前 50 条）
-{ "source": "skillhub", "owner": "ake", "slug": "dev-god", "namespace": "ake",
-  "latest": "1.2.4", "versions": [{ "version": "1.2.4", "publishedAt": 1762396800000 }], "total": 3 }
+{ "source": "skillhub", "owner": "ake", "slug": "dev-god", "namespace": "ake", "latest": "1.2.4", "versions": [{ "version": "1.2.4", "publishedAt": 1762396800000 }], "total": 3 }
 ```
 
 `SourcePage`（`list` / `search` 的返回）= `{items: MarketItem[], next: string|null, total: number|null}`：`next` 由 `encodeCursor` 产出、客户端原样回传（`null` = 没有下一页），`total` 只有 SkillHub 给。

@@ -49,7 +49,7 @@ npm publish --//registry.npmjs.org/:_authToken=<token>   # 账号 2FA 绑的是�
 | `lib/write-skill.js` | 指纹 → 临时文件 → fsync → rename → 回读校验 → 回滚 |
 | `lib/routes.js` | 16 条 exact 路由（本地面 7 + 市场面 9），共用一个 `guard()` |
 | `lib/local/**` | 已安装页两条写路由的编排：`add` 复制本机目录或 **GitHub 浅克隆**（`rules.js` 分类/定位，`git.js` 克隆，`copy.js` 拷贝）、`remove` 删目录 + 清台账；守卫顺序 G0–G12 + S0–S12 见 `docs/contracts/routes.md` §3.3.4 |
-| `src/client/**` → `client.js` | 源码 23 个文件（市场页 8 个为 `market-*`；`installed-detail.jsx` 是已安装详情页、`skill-dialogs.jsx` 是添加/卸载两个弹窗（`page.jsx` 里另有工具条那个两项的添加菜单）、`markdown.jsx` 是两页共用的 markdown 兜底，`icon-tile.jsx`/`avatar.js` 是共用视觉单元；纯逻辑模块不含 JSX，node 可直接测）；`client.js` 是**构建产物、入库、不要手改** |
+| `src/client/**` → `client.js` | 源码 24 个文件（市场页 8 个为 `market-*`；`installed-detail.jsx` 是已安装详情页、`plugin-detail.jsx` 是内置 provider 页、`skill-dialogs.jsx` 是添加/卸载两个弹窗（`page.jsx` 里另有工具条那个两项的添加菜单）、`markdown.jsx` 是两页共用的 markdown 兜底，`icon-tile.jsx`/`avatar.js` 是共用视觉单元；纯逻辑模块不含 JSX，node 可直接测）；`client.js` 是**构建产物、入库、不要手改** |
 | `lib/market/**`、`src/client/` 的 `market-*` 文件 | 市场半部：源适配器、安装链路、市场页组件（清单见 `docs/contracts/market.md` 附录 G） |
 | `locale/{zh,en}.json` | 唯一文案真源 |
 

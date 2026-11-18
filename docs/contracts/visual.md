@@ -251,18 +251,13 @@ font-size: 13px; line-height: 20px; display: inline-flex;
 ```
 
 > **行可点**：已安装行点标题即进本地详情页，实现只有上一条 `.skc_cardOpen::after` + `.skc_cardEnd{z-index:1}`（见 `AGENTS.md` 硬约束 9 与 `docs/contracts/installed-detail.md`）；不要 `<a href>`、不要第二个可点区域。行高恒 64px（48 图标 + 8×2 padding）。
-> **行底色的取色已落实（2026-11-15，宿主 `0.2.2-rc.3`；读数见 `docs/reference/host-plugin-page.md` §5）**：宿主用的是两个**令牌**、不是字面量——`@media (hover: hover)` 下 `.cardLink:hover` 取 `--dsw-alias-interactive-bg-hover`（亮 `rgba(38, 49, 72, .06)` = `#2631480f`，暗 `rgba(255, 255, 255, .08)` = `#ffffff14`），`.cardLink:active` 取 `--dsw-alias-interactive-bg-active`（亮 `rgba(38, 49, 72, .1)` = `#2631481a`，暗 `rgba(255, 255, 255, .14)` = `#ffffff24`）。**两个态都按用户 2026-11-15 裁决跟改了**：`.skc_card:hover` 用 hover 令牌（与宿主同一个），`.skc_card:active` 用 **active** 令牌（按下比悬停深一档），与宿主两条规则逐条对应；原「待真机取色」到此关闭（`docs/contracts/decisions.md` 附录 Q 的 Q-5）。
+> **行底色的现取值**：宿主用的是两个**令牌**、不是字面量——`@media (hover: hover)` 下 `.cardLink:hover` 取 `--dsw-alias-interactive-bg-hover`（亮 `rgba(38, 49, 72, .06)` = `#2631480f`，暗 `rgba(255, 255, 255, .08)` = `#ffffff14`），`.cardLink:active` 取 `--dsw-alias-interactive-bg-active`（亮 `rgba(38, 49, 72, .1)` = `#2631481a`，暗 `rgba(255, 255, 255, .14)` = `#ffffff24`）。`.skc_card:hover` 用 hover 令牌（与宿主同一个），`.skc_card:active` 用 **active** 令牌（按下比悬停深一档），与宿主两条规则逐条对应；取舍与采集读数见 `docs/contracts/decisions.md` Q-5。
 > 市场卡片**复用** `.skc_cardIcon`（48×48 同一条规则），其声明一字不改——改它会让「已安装」页签 11 行同时回归。来源品牌图标**不是**头像色板的第七组：它是 `src/client/market-marks.jsx` 里两段 `data:image/png;base64` 位图（16×16 显示），只在市场卡片上出现，「已安装」页签不渲染它，也不参与 `avatar.js` 的散列。
 
-头像的两种颜色**不走样式表常量，走行内自定义属性**：`row.jsx` 渲染
-`<span class="skc_cardIcon" style="--skc-avatar-bg:…;--skc-avatar-ink:…">首字母</span>`，
-本规则用 `var()` 取值——同一套规则因此能画六种颜色，且不新增类名、不动容器样式。
-色板与「技能名 → 色板下标」的 FNV-1a 散列在 `src/client/avatar.js`；
-字母取名字里第一个 `\p{L}` 或 `\p{N}` 并大写（中文取首字），空名回落 `#`。
-头像纯装饰（`aria-hidden`），读屏只念名字；**色板不随主题变化**，深浅两套主题用的是同六个固定值。
+头像的两种颜色**不走样式表常量，走行内自定义属性**：`row.jsx` 渲染 `<span class="skc_cardIcon" style="--skc-avatar-bg:…;--skc-avatar-ink:…">首字母</span>`，本规则用 `var()` 取值——同一套规则因此能画六种颜色，且不新增类名、不动容器样式；色板与「技能名 → 色板下标」的 FNV-1a 散列在 `src/client/avatar.js`。
+字母取名字里第一个 `\p{L}` 或 `\p{N}` 并大写（中文取首字），空名回落 `#`；头像纯装饰（`aria-hidden`），读屏只念名字；**色板不随主题变化**，深浅两套主题用的是同六个固定值。
 
-**配色与排印对齐 skillhub.cn（2026-11-09 用户要求「除圆角外都对齐」）**，六组是站点实测值，
-不是我们选的：底色是该 accent 的 10%（天空那组 12%），字色是该 accent 的实色——
+**配色与排印对齐 skillhub.cn**，六组是站点实测值，不是我们选的：底色是该 accent 的 10%（天空那组 12%），字色是该 accent 的实色——
 
 | # | `--skc-avatar-bg` | `--skc-avatar-ink` |
 | --- | --- | --- |
@@ -273,10 +268,8 @@ font-size: 13px; line-height: 20px; display: inline-flex;
 | 5 | `rgba(52, 199, 89, .1)` | `#34C759` |
 | 6 | `rgba(0, 122, 255, .1)` | `#007AFF` |
 
-字号与字重按站点 14/40 的比例投到 48px 盒：**17px / 700**（舍入自 16.8）。站点瓦片本身是 40×40、
-圆角 8px；**我们只保留自己的 48×48 与 `radius-lg`（16px）**——用户明确「除了圆角外，其他都对齐」。
-⚠️ **对比度判据已主动放弃**：这六组的字母对底色约 2–3:1，低于原「≥4.5:1」，这是对齐站点换来的
-（登记在 `docs/contracts/decisions.md` 附录 H），不要再按 4.5:1 去「修」它。
+字号与字重按站点 14/40 的比例投到 48px 盒：**17px / 700**（舍入自 16.8）；站点瓦片本身是 40×40、圆角 8px，**我们只保留自己的 48×48 与 `radius-lg`（16px）**——用户明确「除了圆角外，其他都对齐」。
+⚠️ **对比度判据已主动放弃**：这六组的字母对底色约 2–3:1，低于原「≥4.5:1」，这是对齐站点换来的（登记在 `docs/contracts/decisions.md` 附录 H），不要再按 4.5:1 去「修」它。
 
 ## A.6 开关位、软链只读标记、骨架
 

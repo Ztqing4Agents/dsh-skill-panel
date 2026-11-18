@@ -216,7 +216,7 @@ ClawHub 的**目录、详情、安装包**三条链路都由 SkillHub 的镜像�
 
 | 阶段 | 动作 | 失败 → 码 |
 | --- | --- | --- |
-| U1 计划 | `source.plan({owner, slug, version})`：定版本 + 清单；空清单 / 无 `SKILL.md` 拒；包里自带 `_meta.json` 的版本与请求不符即拒（同安装 S2） | `502/503/504` 透传 / `422 E_PACKAGE_INVALID` |
+| U1 计划 | `source.plan({owner, slug, version})`：定版本 + 清单；空清单 / 无 `SKILL.md` 拒；包里自带 `_meta.json` 的版本与请求不符即拒（同安装 I2） | `502/503/504` 透传 / `422 E_PACKAGE_INVALID` |
 | U2 预取 + 声明名 | 只下 `SKILL.md`，比 `size`/`sha256`；`parseFrontmatter.name` **必须 `isSkillName` 且逐字等于现有目录名 `name`** | `502 E_DOWNLOAD_FAILED` / `422 E_PACKAGE_INVALID` / `422 E_SKILL_NAME_INVALID`（`data.declaredName`） |
 | U3 暂存 | `mkdir(.skc-update-<pid>-<rand6>)`（**点开头** ⇒ `scan.js` 跳过），逐文件 `writePackageFile`（4 并发，拒绝重复路径与逃逸） | `422 E_PACKAGE_INVALID` / `500 E_INSTALL_IO` |
 | U4 元数据 | `writeMeta`：`{source, ownerId, slug, version: to, name, installedAt}`；包自带 `_meta.json` 的原文留 `_meta.upstream.json` | `500 E_INSTALL_IO` |
@@ -315,7 +315,7 @@ R2 与 R3 的分界就是「有没有动过磁盘」：动手之前失败一律 
 
 三条不可协商的纪律：
 
-1. 市场**不新增任何颜色字面量**：色值只来自 `--dsw-*` 令牌与 `avatar.js` 的 12 组粉彩。
+1. 市场**不新增任何颜色字面量**：色值只来自 `--dsw-*` 令牌与 `avatar.js` 的 6 组粉彩。
 2. 全仓库**仍然只有 `styles.js` 与 `avatar.js` 两处**有颜色字面量（`test/styles.test.mjs` 会查）；两枚来源品牌图形是**位图**（`src/client/market-marks.jsx` 的两段 `data:image/png;base64`），其颜色是品牌自带的像素、不是可写的样式值——不得据此在样式表里补任何色值。
 3. 市场卡片**复用**既有 `.skc_cardIcon`（48×48、`border-box`、`radius-lg`、`background-clip:padding-box`），一条声明都不改——改它会让「已安装」页签 11 行同时回归。
 
@@ -359,7 +359,7 @@ Client 半部（`src/client/`，纯逻辑模块 node 可直接 import）：
 三句不变量：
 
 1. **不新增依赖**：`node:https` / `node:zlib` / `node:crypto` / `node:fs/promises` 全是内置；`dependencies` 恒空。
-2. **客户端不新增 require**：仍只用平台 seed 的 `react` / `react/jsx-runtime` / primitives，`inject` 仍是 `['slots','locale']`。
+2. **客户端不新增 require**：仍只用平台 seed 的 `react` / `react/jsx-runtime` / primitives，`inject` 见 `AGENTS.md` 硬约束 11。
 3. **不新增座位**：安装成功的 toast 复用既有 `shell.overlay`，市场页仍是 `main` 槽里的同一个全局页。
 
 ---

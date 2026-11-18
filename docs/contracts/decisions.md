@@ -45,7 +45,7 @@
 | --- | --- | --- | --- |
 | KI-2 | 折叠块标量被读成 `>`：`description: >` + 缩进正文时，行描述只剩一个 `>`（真机 `clawhub-wpank--ui-design` 可见） | `lib/frontmatter.js` 的 `parseFrontmatter` 增加块标量读侧规则（见 §3.2.4「读侧契约」）。**写入器不动**：它只替换 `disable-model-invocation` 一行，与解析器解耦 | 仅影响读出的 `description`/`name`/`display-name` 值；写回字节与保真清单不变 |
 | KI-3 | `SKILL.md` 本身是软链时写入被拒，但错误码是 `E_FILE_CHANGED`（`fstat` 口径取指纹、`lstat` 口径复核，软链下 inode 天然不同） | `lib/write-skill.js`：写前先 `lstat(file)`，软链直接 `409 E_SYMLINK_READONLY`；两次指纹复核统一 `lstat` 口径，不再混用 `fstat` | 错误码更准，fail-safe 行为不变（目标字节不变、软链不被替换） |
-| KI-1 | `E_BAD_NAME`/`E_BAD_PATH` 在 §8.1 标「行内原因」，但 §8.3 键表没有对应文案 → 用户看到中文夹英文 | `locale/{zh,en}.json` 补 `error.E_BAD_NAME`/`error.E_BAD_PATH` 两键，`src/client/model.js` 的 `ROW_ERRORS` 收录两码（§8.3 的「P0 全集」= 下表 + 这两条） | 仅文案；两个码正常不可达（name/path 都源自已校验的 payload），属兜底 |
+| KI-1 | `E_BAD_NAME`/`E_BAD_PATH` 在 §8.1 标「行内原因」，但 `locale/*.json` 里没有对应文案 → 用户看到中文夹英文 | `locale/{zh,en}.json` 补 `error.E_BAD_NAME`/`error.E_BAD_PATH` 两键，`src/client/model.js` 的 `ROW_ERRORS` 收录两码（P0 全集 = `locale/*.json` 里除 `meta` 外的扁平键，含这两条） | 仅文案；两个码正常不可达（name/path 都源自已校验的 payload），属兜底 |
 
 ---
 
@@ -84,8 +84,6 @@
 | I-2 | **已安装页签主动解析一次**（参考项目**不做**这一步） | 参考项目只对「本会话浏览过的」条目显示图标，没浏览过的一律字母；队长加严要求「有台账身份、本会话没浏览过」的技能也取一次 | 图标循环上移到 `page.jsx`（面板打开期间恒挂载），`iconBatch` 同时产出两半候选：市场缺图的条目 + 已安装行里有身份却没问过的行。失败静默、每源 ≤12、总 ≤24，与路由限制同源 |
 | I-4 | **已安装行的标题用上游标题**（`names[key]` → 本地 `metadata.displayName` → `row.name`），**kebab 名退到 tooltip** | 用户报告「已安装的技能，技能标题并不是 skillhub 的标题」：列表显示 `dev-expert-pro`，SkillHub 上叫「编程专家Pro.Skill」。用户认的是市场里的那个名字 | 标题走与图标同一条缓存链（`market/list` 的 `displayName` 种子 + `POST market/icons` 回来的 `names`），**会话内、不落盘**；`row.name` 仍是 tooltip（它是模型调用技能用的字符串，不能从界面上消失）。容器、字号、单行省略一律不动——只换文字内容 |
 | I-3 | **手工 / 别的工具装的技能没有身份，因此没有图标** | `_meta.json` 里 `source` 是已知源 id 才认（那是本插件安装器写下的印记）。本机实测 `clawhub-wpank--ui-design` 的 `ownerId` 是 ClawHub 内部 Convex id，当 `ownerHandle` 查详情 **404**；目录名里的 `clawhub-wpank--` 前缀又把工具名一起吞了，切出来的 handle 是垃圾 | `upstream === null` ⇒ 字母瓦片。**不从目录名反推**、不按名字 join 台账、不用 slug 猜 owner。README「已知限制」写明，用户可感知的后果是「这类技能永远显示首字母」 |
-
----
 
 ---
 
@@ -214,7 +212,7 @@
 | Q-1 | 宿主有插件详情页 | `app.asar` 内 `dsh/node_modules/@deepseek-ai/dsh-client-ui-plugin-manager/lib/client.js`（node 读 asar 实测 438 450 B，含 zh/en/ja locale 表）的详情页键：`crumbRoot:"插件"`、`backToList:"返回插件"`、`openDetail:"查看 {name}"`、`uninstall:"卸载"`、`uninstallLabel:"卸载 {name}"`、`versionTag:"v{version}"`、`sourceTitle:"来源信息"`、`sourceSpec:"代码来源"`、`sourceVersion:"当前版本"`、`sourceBuiltIn:"内置"`；渲染侧顺序是「头行（图标 + 卸载按钮(`outline/sm`, `IconTrashOutlineRegular` 13) + 开关）→ `titleRow`(`h3` + `versionTag`) → 描述 → 正文/说明 → 来源信息」 |
 | Q-2 | 上一轮判「没有」是**采集方法**错，不是宿主没有 | 同一份 213 MB asar：`grep -ac "卸载"` → **0**（假阴性）、`grep -ac "uninstall"` → 111（ASCII 正常）、node 逐字节读同一包时「卸载」「插件」各命中上百次。⇒ **对 asar 不能只用 grep 搜中文**；采集一律 node 读 asar（`u32@4 = headerSize`、`u32@12 = jsonLen`、JSON 从 byte 16 起、内容区 = `8 + headerSize`，按 offset 切片）。同一条规矩适用于以后任何「0 命中」的结论 |
 | Q-3 | 本轮按宿主重排头部 | 面包屑「技能」（对 `crumbRoot`，不是 `backToList`）→ 图标行右侧「卸载（`disabled` 占位，无 onClick）+ 开关」→ 名称 + 版本（`v{version}`）+ 作者（`@owner/slug`，仅 `upstream` 非空）+ 描述；来源信息移到页尾。真实卸载仍是看板 M6（C-3「可见的不可点」先例） |
-| Q-4 | 余项：**px 未逐值采集** | 宿主详情页的类名是构建哈希、样式在另一份产物里，本轮只对齐结构与顺序（用户也只要「先这样」）；详情页的确切 px/色值与 `.cardLink:hover` 一样标「待真机取色」（`docs/contracts/visual.md` A.5）。下次若采到样式，按 `docs/reference/host-plugin-page.md` 头注「整份重采」，不在旧的 §7 上补值 |
+| Q-4 | 余项：**px 未逐值采集** | 宿主详情页的类名是构建哈希、样式在另一份产物里，本轮只对齐结构与顺序（用户也只要「先这样」）；详情页的确切 px/色值与 `.cardLink:hover` 一样标「待真机取色」（`docs/contracts/visual.md` A.5）；**其中 hover 的色值已由 Q-5 收口，现在只剩 px**。下次若采到样式，按 `docs/reference/host-plugin-page.md` 头注「整份重采」，不在旧的 §7 上补值 |
 | Q-5 | Q-4 的两项余项于 2026-11-15 **落实**（宿主 `0.2.2-rc.3`），按 Q-4 说的整份重采而非补值 | ①rc.3 的 asar 带 CSS 模块源码，详情页刻度不再只能靠真机：声明值与二次采集的真机值并列在 `docs/reference/host-plugin-page.md` §7；②行底色是**令牌**不是字面量——hover = `--dsw-alias-interactive-bg-hover`（亮 `rgba(38, 49, 72, .06)` = `#2631480f`、暗 `rgba(255, 255, 255, .08)` = `#ffffff14`），active = `--dsw-alias-interactive-bg-active`（亮 `.1` = `#2631481a`、暗 `.14` = `#ffffff24`），**两者是不同令牌**。结论：hover 我们一直绑的就是宿主那个令牌（`docs/contracts/visual.md` A.5）；`:active` 改前绑 hover 令牌是**已知偏离**——按下比宿主浅一档，改法只是在 A.5 把那一行的令牌名换掉——**用户 2026-11-15 裁决跟改，已执行**：`src/client/styles.js` 的 `.skc_card:active` 改成 `--dsw-alias-interactive-bg-active`，产物随之 177491 → 177492 B，`docs/contracts/visual.md` A.5 的注与 CSS 块同轮同步。令牌可用性实测（2026-11-15）：该令牌自 `0.1.5-rc.3` 起就有、`0.2.0-rc.2` / `0.2.1-rc.1` / `0.2.2-rc.1` 与 rc.3 四版值一致，且宿主与 client-ui 包版本锁步，故 `engines.dsh: ">=0.2.1"` 已覆盖，不抬下限、不加 `var()` fallback |
 
 ---
@@ -272,7 +270,7 @@
 | T-11 | **相对路径与裸 `o/r` 归 `E_GIT_SPEC_INVALID`，不新建码** | 分类器接管后，`E_BAD_PATH` 只覆盖「**看起来是路径**（`/` 或 `~` 开头）却不合法」（含 NUL / 展开后超 1024 / 展开后仍非绝对）。`rel/path`、`./x`、`../x`、`o/r`、`github.com/o/r`（无 scheme）一律落 `E_GIT_SPEC_INVALID`——它的文案「认不出这个输入：请填本机目录或 GitHub 链接」对这几类都更有用，而 `E_BAD_PATH` 那句「需要以 / 或 ~ 开头」会把一个想填 GitHub 链接的人引向错的方向。落地：`lib/local/rules.js` 的 `classifyAddSpec` 尾部兜底就是它；`docs/contracts/routes.md` §8.1 的 `E_BAD_PATH` 行与 §3.3.4 的 S1/G1 措辞已同步（D.9 的 K138 钉的就是这次收窄） |
 | T-12 | **git 形态不另取 `local:<name>` 那把锁**：`S8` 的 key 用 `github:<owner>/<repo>` | 克隆开始的那一刻**还不知道技能叫什么**（名字要等 G4 定位 + S5 取名才有），拿不到 `local:<name>`；嵌套两把锁会同时占掉全局 2 个名额里的两个，让并发的 path 形态 `add` 无谓吃 `429 E_INSTALL_BUSY`。同名并发仍由 **S6（重扫后同名即拒）+ `landSkill` 的 `mkdir` claim（`EEXIST` ⇒ 409）** 兜住——两道闸都在落位前，不依赖锁。切子目录不改锁：同一仓库不并行克隆两次 |
 | T-13 | **`locateSkillDir` 放在 `rules.js`，但它是 `async` 且会读盘** | 它要 `lstat` / `readdir` 才能探测，同步做不了。这里「纯」的定义收紧为：**无时钟、无网络、不写盘、只读**（对比 `classifyAddSpec`：连 I/O 都没有）。放在 `rules.js` 是为了让「一份输入怎么变成一棵树里的一个目录」这两步挨着，而不是把它塞进 `git.js`（那会与子进程混在一起）。`docs/contracts/data-model.md` §3.2.6 的注已按此改写，测试用真目录或注入的假目录均可 |
-| T-14 | **7 条 git 错误文案按体积预案①压短**（`add.fetching` 等新键不动） | 设计 §12 预估客户端增量 ≈ +4.4 KB、会顶穿**当时的上限 175000**；预案①（错误句压到 ≤60 汉字、把「为什么」挪进 `add.description`）执行后产物 **174755 B / 175000**（U21 当时的上限；U22 抬到 **180000**，此后每次改动的实测以 `npm run check:client` 输出为准，上限见 K115）。代价是文案比 PRD §10.1 草拟的短（例如 `E_GIT_SPEC_INVALID` 由「…请填本机目录的完整路径（以 / 或 ~ 开头），或 GitHub 链接（https://github.com/owner/repo 或 github:owner/repo）」压成「认不出这个输入：请填本机目录或 GitHub 链接」）。**`docs/contracts/client.md` §8.3 已按 `locale/zh.json` 实测值回填**，以此为准；U21 收口时键数 **193**（U22 的添加菜单再加 4 键 ⇒ **197**，见附录 U），没有为省体积退役任何键 |
+| T-14 | **7 条 git 错误文案按体积预案①压短**（`add.fetching` 等新键不动） | 设计 §12 预估客户端增量 ≈ +4.4 KB、会顶穿**当时的上限 175000**；预案①（错误句压到 ≤60 汉字、把「为什么」挪进 `add.description`）执行后产物 **174755 B / 175000**（U21 当时的上限；U22 抬到 **180000**，此后每次改动的实测以 `npm run check:client` 输出为准，上限见 K115）。代价是文案比 PRD §10.1 草拟的短（例如 `E_GIT_SPEC_INVALID` 由「…请填本机目录的完整路径（以 / 或 ~ 开头），或 GitHub 链接（https://github.com/owner/repo 或 github:owner/repo）」压成「认不出这个输入：请填本机目录或 GitHub 链接」）。**键与值的真源是 `locale/zh.json`**，以此为准；U21 收口时键数 **193**（U22 的添加菜单再加 4 键 ⇒ **197**，见附录 U），没有为省体积退役任何键 |
 
 | T-15 | **`E_ADD_AMBIGUOUS_SKILL` 的 `data` 必须带 `owner`/`repo`**（U21 缺陷 P1 的裁决） | `locateSkillDir` 只看克隆目录，天然不知道仓库是谁，它给的 detail 只有 `{candidates, candidateTotal}`；客户端要拼 `github:<o>/<r>#path:<sub>` 就必须知道 owner/repo，于是这一支在真机上表现为「弹窗只显示一句话、画不出候选按钮」。裁决：**由编排层补齐**——`lib/local/index.js` 的 `addFromGithub` 在 G4 只对 `E_ADD_AMBIGUOUS_SKILL` 重新包一层 `localError(..., { ...error.detail, owner, repo })`（取入参原样大小写），其余码原样透出、`E_ADD_NOT_SKILL_DIR` 的 detail 仍是 null。`locateSkillDir` 与码表、`LOCAL_STATUS`、`src/**` 都不动。契约落点：`docs/contracts/acceptance.md` 附录 D.9 的 K143 与真机第 11 条② |
 ## 附录 U 添加菜单两项（U22，2026-11-13）
@@ -293,7 +291,6 @@
 | V-1 | 条目文件名与字段 | 只投 `data/plugins/<owner>__<repo>.yml`——文件名由 `slugFor(url)` 定死，不能自定；字段只有 `url` / `name` / `category` / `description.{en,zh}` / `icon` / `tarball`，多一个字段即红，且 `description.en` **必须单行**（换行会被 YAML 解析成多行而判不合格）；`icon` 只收 **GitHub 托管的位图**，截图放自己仓库的 `screenshots.json` 里，不给外链图床 |
 | V-2 | 仓库侧资格与扫批节奏 | 仓库要有 `dsh.bundle` manifest + `dsh-plugin` topic + **建满 1 天**（年龄闸未满时条目不会转绿）；官方 `regate` 每 6 小时重跑一次，达标后自动转绿，**不必重开 PR**、也不必人工催办 |
 | V-3 | 条目页 ≠ 进索引 | `awesome-dsh-plugin.com/p/<owner>/<repo>/` 返回 200 只证明 `data/plugins/<owner>__<repo>.yml` 存在；能否被 DSH「发现」页签搜到，取决于该条目是否被探针登记到 npm 包（页面缺 Stars / Downloads / npm 名那一行＝未登记），未登记条目**静默不进 `index.json`、无报错**。验证：对 `index.json` 加 `?cb=$(date +%s)` 绕缓存后在 JSON 里搜包名；四个常见索引里 `cdn.dsh.so/market/index.json` 是 npm 侧聚合、收录最快 |
-
 
 ## 附录 W 对外文案口径（README / Release，2026-11-17）
 

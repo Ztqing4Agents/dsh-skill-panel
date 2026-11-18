@@ -25,8 +25,7 @@ ClientPlugin.apply(ctx)
 
 `main` 槽注册带 `locale: NS` ⇒ 页面组件从框架拿到 `t`（宿主同款；依据 `EX/dsh-client-ui-plugin-manager/lib/client.js` 的 `function PluginManagerPage(props){ const { t, ensure, renderSlot, resolveText } = props; … }` 与其 `main` 注册里的 `locale: NS`）。
 
-页签状态放**模块级 store**（不是 `localStorage`）：满足 P0-3「离开页面再回来保持所选页签」，且与宿主一致（宿主用 `main` 注册的 `store` 选项保存视图状态，页面卸载后重建仍能恢复）。
-`market` 子状态同理（见 §3.9.1）：它和 `tab` 一样跨页签存活，**离开市场页签不会销毁已加载的页、筛选与滚动位置**。
+页签状态放**模块级 store**（不是 `localStorage`）：满足 P0-3「离开页面再回来保持所选页签」，且与宿主一致（宿主用 `main` 注册的 `store` 选项保存视图状态，页面卸载后重建仍能恢复）；`market` 子状态同理（见 §3.9.1），它和 `tab` 一样跨页签存活，**离开市场页签不会销毁已加载的页、筛选与滚动位置**。
 
 **滚动偏移的不变式（两种，别当成一回事）**：**进详情再返回**⇒恢复原偏移（打开详情时记 `scrollTop`，返回逐项还原且不重拉，见 §3.9.1 与 §3.9.5）；**切页签不恢复**⇒离开「已安装」页签再回来会复位（列表页、插件页与两个滚动偏移全清，从列表顶重新开始），这是刻意的「一次页签访问＝一次独立读取」。两条都是既有行为，不是待办，也不许为「看起来更连贯」而对齐成一种。
 
@@ -34,33 +33,17 @@ ClientPlugin.apply(ctx)
 
 ## 3.6 视觉契约
 
-完整、可直接抄进代码的样式表见 **`docs/contracts/visual.md`**；「哪条规则抄自宿主哪条」逐行标注。关键类名与宿主规则的对应：
+完整、可直接抄进代码的样式表见 **`docs/contracts/visual.md`**：类名↔宿主规则的映射逐条写在它的规则注释里（`[PM-CSS] .page`、`[PM-CSS] .cards / .card / …`、`SHELL` 这几类记号），本文不另存一份副本。
+页骨架的 `skc_` 前缀与「不引第二套样式系统」见 `AGENTS.md` 硬约束 4。
 
-| 我们的类 | 宿主来源 | 语义 |
-| --- | --- | --- |
-| `skc_page` / `skc_pageBody` / `skc_pageBar` / `skc_pageHead` | `[PM-CSS]` `.page` / `.pageBody` / `.pageBar` / `.pageHead` | 页面外壳与页头条 |
-| `skc_pageHeading` / `skc_pageTitle` / `skc_pageIntro` / `skc_infoButton` / `skc_toolbar` | 同上 | 页头四件套 |
-| `skc_pageTabs` / `skc_pageTabList` | 同上 + `SHELL` `._tabs_1lga9_1` | 页签容器（组件用 `SegmentedTabs`） |
-| `skc_installedPanel` / `skc_tabPanel` / `skc_group` / `skc_groupHead` / `skc_groupTitle` | 同上 | 分区骨架 |
-| `skc_cards` / `skc_card` / `skc_cardHead` / `skc_cardIcon` / `skc_cardMain` / `skc_titleRow` / `skc_cardTitle` / `skc_cardDesc` / `skc_cardEnd` | 同上 | 行 |
-| `skc_bundleToggle` / `skc_toggleProgress` / `skc_progressAnnouncement` | 同上 | 开关左侧 22px 预留 + 进行中指示 |
-| `skc_roTag` | `[PM-CSS]` `.attemptBadge`（配方）+ `IconLinkOutlineRegular` | 软链只读标记（队长决策 2） |
-| `skc_skeletonFill` / `skc_skeletonBar` / `skc_skeletonHeading` … | 同上 | 骨架 |
-| `skc_empty` / `skc_failure` / `skc_status` / `skc_reason` | 同上 | 空 / 错 / 状态 / 行内原因 |
-| `skc_addGroup` / `skc_addPrimary` / `skc_addMore` / `skc_addButton` | 同上 | `＋ 添加技能 ⌄`（P0 禁用态） |
-
-`.skc_cardIcon` 的**容器是宿主 `.cardIcon` 原样式**（`.5px` `border-l3` 描边、`radius-lg` 圆角、48×48、`border-box`），
-不随头像需求改动；变化只在内容层：宿主画通用技能图标，本面板画首字母。
-颜色不是样式表常量，而是 `avatar.js` 的 6 组色板（对齐 skillhub.cn 的 accent 10% 底 + 实色字，字母对比度约 2–3:1 是刻意取舍）经 `row.jsx`
-以 `--skc-avatar-bg` / `--skc-avatar-ink` 行内传入（刻度见 `docs/contracts/visual.md` A.5）；
-`background-clip: padding-box` 保证粉彩底不盖住半透明描边。骨架复用同一个类，由 `.skc_skeletonIcon`
-自己再写灰色底，加载态不出现彩色块、也不出现字母。
+`.skc_cardIcon` 的**容器是宿主 `.cardIcon` 原样式**（`.5px` `border-l3` 描边、`radius-lg` 圆角、48×48、`border-box`），不随头像需求改动；变化只在内容层：宿主画通用技能图标，本面板画首字母。
+颜色不是样式表常量，而是 `avatar.js` 的 6 组色板（对齐 skillhub.cn 的 accent 10% 底 + 实色字，字母对比度约 2–3:1 是刻意取舍）经 `row.jsx` 以 `--skc-avatar-bg` / `--skc-avatar-ink` 行内传入（刻度见 `docs/contracts/visual.md` A.5）；`background-clip: padding-box` 保证粉彩底不盖住半透明描边。骨架复用同一个类，由 `.skc_skeletonIcon` 自己再写灰色底，加载态不出现彩色块、也不出现字母。
 
 ---
 
 ## 3.9 市场页组件与状态
 
-「技能市场」是同一个全局页的第二个页签：仍是 `main` 槽里的 `SkillsPage`，**不新增座位、不新增 `ctx.*` 服务**（`inject` 仍是 `['slots','locale']`）；安装成功的提示复用既有 `shell.overlay`。样式与取值来源见 `docs/contracts/market.md` 附录 F。
+「技能市场」是同一个全局页的第二个页签：仍是 `main` 槽里的 `SkillsPage`，**不新增座位、不新增 `ctx.*` 服务**（`inject` 见 `AGENTS.md` 硬约束 11）；安装成功的提示复用既有 `shell.overlay`。样式与取值来源见 `docs/contracts/market.md` 附录 F。
 
 ### 3.9.1 状态机
 
@@ -83,7 +66,7 @@ market = {
   installs: {[id]: {state, reason?, path?, version?, seq?}},   // 确认/安装中/已安装/失败
   icons / iconsTried,                             // 图标缓存 {[key]: url} 与「本会话已问过」{[key]: true}；两个消费者共用（市场条目 + 已装行的 upstream）
   names,                                          // 上游标题缓存 {[key]: title}；与 icons 同键空间、同生命周期
-  favorites / favoritesOk,                        // 本地收藏 {[id]:true} 与可用性；**没有 UI 入口**（L-5），只为将来接回入口与 bootstrap 对齐而留（写侧已撤）
+  favorites / favoritesOk,                        // 本地收藏 {[id]:true} 与可用性；**没有 UI 入口**，字段保留，决策见 `decisions.md` L-5（写侧已撤）
   installedDirty,                                 // 已安装页签标脏
   scrollTop,                                      // 进详情前记下，返回时恢复
 }
@@ -178,7 +161,7 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 
 `notice` 复用既有字段，`kind` 现有**三种**：`refresh-failed`（刷新失败，带 `code`/`message`）、`install-ok`（副行给安装路径；添加成功**复用它**，不新增 kind）、`update-ok`（更新成功的结局文案，副行给 `{from} → {to}` 与路径）；由 `toast.jsx` 按 `kind` 选文案与图标，5 秒后 `dismissNotice(seq)`。收藏写侧仍没有入口（`docs/contracts/decisions.md` 附录 L），所以**没有**第四种 `kind`。
 
-`marketPageAppended` 的入参仍是**数组**（设计文档写的是单源形状）：现在是「一源一项」，留着数组是为了将来真要同屏多源时不必改签名；语义（写游标、合并、翻页计数）不变。
+`marketPageAppended` 的入参仍是**数组**（设计文档写的是单源形状）：现在是「一源一项」，数组形态保留（同屏多源的余地，不必再改签名；决策见 `decisions.md` L-5）；语义（写游标、合并、翻页计数）不变。
 
 ### 3.9.4 api 方法（`src/client/api.js`）
 
@@ -247,7 +230,7 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 - `src/client/model.js` 的 `headerUpdateNote` 只做一件事：按当前 `checks` 与 `checkRun` 算一句话；「保留上一轮」是页面持有的**上一轮结论快照**，属于行为口径，不是那个纯函数的职责。四态表见 `docs/contracts/installed-detail.md` 的「页头四态」。
 
 ## 3.10 已安装详情页
-组件树、`detail` 三态、返回与失败口径、五个更新结局与 35 个文案键见 `docs/contracts/installed-detail.md`（本节只留指针：§3.9 已到 400 行档位）。「已安装」页签的**自动检测**（进页签串行查一轮、单行 2s / 整轮 8s、按 `source:owner:slug` 去重、会话内 10 分钟缓存、失败只影响那一行）与**页头更新提示四态**（可更新 `info` / 部分失败 `error` / 全部最新无色 / 检查中与无检测对象不渲染；宿主同位只有这一句、没有计数，所以 `.skc_status` 里就是一个 `<span>`、`data-tone` 只做 info/error 换色）的规范句同在 `docs/contracts/installed-detail.md` §「更新检测与页头」；键数见 §8.3（197）。
+组件树、`detail` 三态、返回与失败口径、五个更新结局与 35 个文案键见 `docs/contracts/installed-detail.md`（本节只留指针）。「已安装」页签的**自动检测**（进页签串行查一轮、单行 2s / 整轮 8s、按 `source:owner:slug` 去重、会话内 10 分钟缓存、失败只影响那一行）与**页头更新提示四态**（可更新 `info` / 部分失败 `error` / 全部最新无色 / 检查中与无检测对象不渲染；宿主同位只有这一句、没有计数，所以 `.skc_status` 里就是一个 `<span>`、`data-tone` 只做 info/error 换色）的规范句同在 `docs/contracts/installed-detail.md` §「更新检测与页头」；键数口径见 §8.3。
 
 ## 8.2 命名约定
 
@@ -269,110 +252,14 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 ## 8.3 i18n 键约定
 
 - 命名空间 `NS = 'dsh-skill-panel'`；`locale/zh.json` / `locale/en.json` 是**唯一文案真源**，键集必须一致。
-- **文件形状：单层扁平点号键**（`"panel.label": "技能"`），**不是**嵌套对象（`{"panel":{"label":…}}`）。
-  依据是宿主实现：`ctx.locale` 的 `lookup(ns,key)` 是 `locales.get(locale)?.[key]` ——**字面量属性查找**，
-  找不到就 `?? key` 回落成键名；它不做点号路径遍历。嵌套字典在真机上的表现是**整页显示原始键名**
-  （`page.title` / `group.builtin` / `status.updatesAvailable`…）。
-- **唯一允许的嵌套是顶层 `meta` 块**（`{"meta":{"title":…,"description":…}}`）：它不进运行时字典，
-  只给宿主的插件列表读（`dsh-app-boot` 的 `readPluginMeta` → `dictionariesOf` 读 `parsed.meta.title`）。
-  `src/client/index.jsx` 注册前用 `uiDictionary()` 滤掉 `meta`，因此运行时字典里**只有字符串**；
-  反过来把 `meta` 也拍平会让插件列表里的名字掉回包名。`check:i18n` 校验这个形状，
-  `test/i18n.test.mjs` 校验「每个 `t('…')` 字面量键在两侧字典里都存在」。
+- **文件形状：单层扁平点号键**（`"panel.label": "技能"`），**不是**嵌套对象（`{"panel":{"label":…}}`）。依据是宿主实现：`ctx.locale` 的 `lookup(ns,key)` 是 `locales.get(locale)?.[key]` ——**字面量属性查找**，找不到就 `?? key` 回落成键名；它不做点号路径遍历。嵌套字典在真机上的表现是**整页显示原始键名**（`page.title` / `group.builtin` / `status.updatesAvailable`…）。
+- **唯一允许的嵌套是顶层 `meta` 块**（`{"meta":{"title":…,"description":…}}`）：它不进运行时字典，只给宿主的插件列表读（`dsh-app-boot` 的 `readPluginMeta` → `dictionariesOf` 读 `parsed.meta.title`）。`src/client/index.jsx` 注册前用 `uiDictionary()` 滤掉 `meta`，因此运行时字典里**只有字符串**；反过来把 `meta` 也拍平会让插件列表里的名字掉回包名。`check:i18n` 校验这个形状，`test/i18n.test.mjs` 校验「每个 `t('…')` 字面量键在两侧字典里都存在」。
 - `client/src/**` 与 `lib/**` **不得出现 CJK 字面量**（`check:i18n` 强制）；界面文案一律 `t('key')`。
 - 占位符用 `{name}`（宿主同款：`t('partToggle', { name: title })`）。
 - 入口名与插件名是两个键，**职责不同、可各自独立取值**：`panel.label` = 侧栏行标题（`label: () => t('panel.label')`），`meta.title` = 宿主插件列表里的插件名（`PROF/*/locale/zh.json` 四家都是 `{meta:{title,description}}`）。自 2026-11-17 起二者取值不同：侧栏 `技能` / `Skills`，插件名 `技能面板` / `Skill Panel`；两者都必须在 `locale/*.json` 里存在（`check:i18n` 校验）、都随 DSH 显示语言自适应，改文案只改 `locale/*.json`，代码零改动。
-- 市场面沿用两族键：`market.*` **65 个**与 `error.E_*` **13 个**；已安装详情页另有 35 个 `detail.*`（键表见 `docs/contracts/installed-detail.md` 的「文案」一节），外加 6 个 `markdown.*`（宿主 `MarkdownText` 的代码围栏与脚注 chrome，缺了它就整段回落成纯文本），全字典 **197** 键（`check-i18n` 口径 = 195 个扁平键 + `meta` 两项）。下表有几行把同族键合并成一行，这是为了守住 400 行上限（`check-docs` 的 R11），键与值逐条列出。这些键已退役、不会再回来：`add.comingSoon`、`detail.uninstallSoon`、`detail.checkUnavailable`、`detail.checkIdle`、`detail.copy`、`detail.copied`、`plugin.copyCommand`、`status.count`、`status.offSuffix`、`market.placeholder`（缘由散见 `docs/contracts/decisions.md` 各附录）。
-- 键表（P0 全集 + 市场轮；`zh` 值逐字来自 `PRD` §3.3.5 与本设计）：
-
-| key | zh |
-| --- | --- |
-| `meta.title` | 技能面板 |
-| `meta.description` | 一眼分清内置、本地与市场安装的技能，逐行启用或停用。 |
-| `panel.label` | 技能 |
-| `page.title` / `page.intro` | 技能 ／ 启用、停用和查看技能来源 |
-| `page.infoLabel` / `page.infoDescription` | 关于技能 ／ 在这里启用或停用技能。内置技能、本地技能和从市场安装的技能分三组展示。 |
-| `page.refresh` | 刷新 |
-| `page.loading` | 正在读取技能… |
-| `page.error` | 可能由于网络问题，无法读取全部技能 |
-| `page.retry` | 重试 |
-| `page.refreshError` | 刷新失败，请重试 |
-| `tabs.label` / `tabs.installed` / `tabs.market` | 技能分区 ／ 已安装 ／ 技能市场 |
-| `group.builtin` / `group.local` / `group.installed` | 内置技能配置 ／ 本地技能 ／ 已安装技能 |
-| `group.builtinEmpty` / `group.localEmpty` / `group.installedEmpty` | 这个部署没有内置技能。 ／ 还没有本地技能。把技能目录放进 ~/.dsh/skills/ 就会出现。 ／ 还没有从市场安装技能。 |
-| `footer.excluded` | 另有 {count} 个技能位于项目级或其他目录，首版不展示 |
-| `status.updatesAvailable` / `status.updatesPartial` / `status.updatesNone` | {count} 个技能可更新 ／ 部分技能检查更新失败 ／ 所有技能均为最新版本 |
-| `market.sectionLabel` | 技能市场 |
-| `market.searchLabel` | 搜索技能 |
-| `market.searchPlaceholder` | 搜索技能… |
-| `market.clearSearch` | 清除搜索 |
-| `market.sourceLabel` | 来源 |
-| `market.source.all` / `market.source.skillhub` / `market.source.clawhub` | 所有来源 ／ SkillHub ／ ClawHub |
-| `market.sortLabel` | 排序 |
-| `market.sort.recommended` / `market.sort.updated` / `market.sort.downloads` / `market.sort.stars` | 默认排序 ／ 最近更新 ／ 下载量 ／ 收藏量 |
-| `market.categoriesLabel` | 分类 |
-| `market.category.all` | 全部 |
-| `market.loading` | 正在读取技能市场… |
-| `market.loadingMore` | 正在加载更多 |
-| `market.endOfList` | 没有更多了 |
-| `market.moreFailed` | 加载失败，点此重试 |
-| `market.emptyTitle` / `market.emptyCategoryTitle` / `market.emptyCategoryAction` | 这个来源暂时没有技能 ／ 这个分类下暂时没有技能 ／ 看全部分类 |
-| `market.emptySearchTitle` / `market.emptySearchHint` | 没有找到与「{keyword}」匹配的技能 ／ 换个词试试，或看看全部分类 |
-| `market.errorTitle` | 无法连接技能市场 |
-| `market.errorHint` | 检查网络后重试 |
-| `market.retry` | 重试 |
-| `market.categoriesUnavailable` | 暂时读不到分类 |
-| `market.cardOpen` | 查看 {name} 详情 |
-| `market.metaAuthor` | @{author} |
-| `market.metaVersion` | v{version} |
-| `market.metaDownloads` | 下载 {count} |
-| `market.metaSaves` / `market.metaRating` / `market.metaRatingHint` | 收藏 {count} ／ 评分 {rating} ／ 上游评分的折算（4.0–5.0），不是用户评分均值 |
-| `market.install` | 安装 |
-| `market.installing` | 安装中… |
-| `market.installed` | 已安装 |
-| `market.installedTitle` | 已安装到 {path} |
-| `market.retryInstall` | 重试 |
-| `market.detailBack` | 返回市场 |
-| `market.detailLoading` | 正在读取详情… |
-| `market.detailError` | 读不到这个技能的详情 |
-| `market.detailOverview` / `market.detailFiles` | 概览 ／ 文件 |
-| `market.detailNoOverview` / `market.detailFilesEmpty` | 这个技能没有单独的说明 ／ 这个技能的包里没有可列出的文件 |
-| `market.factSource` / `market.factAuthor` / `market.factVersion` / `market.factDownloads` / `market.factCategory` | 来源 ／ 作者 ／ 版本 ／ 下载量 ／ 分类 |
-| `market.factInstallTo` / `market.factUnknown` | 安装到 ／ 未知 |
-| `market.confirmTitle` / `market.confirmCancel` / `market.confirmInstall` | 安装 {name} ／ 取消 ／ 安装 |
-| `market.confirmTrust` | 技能来自第三方，安装前请确认可信。装好后在新建的会话里生效，当前会话仍用它已加载的技能清单。 |
-| `market.installStarted` | 正在安装 {name} |
-| `market.installOk` | 已安装 {name} · 新会话生效 |
-| `market.installOkHint` | 安装到 {path} |
-| `market.nameInvalidNote` | 这个技能的包声明了不合规的名字，不能安装 |
-| `row.enable` / `row.disable` / `row.applying` | 启用 {name} ／ 停用 {name} ／ 正在应用 {name} 的更改 |
-| `row.symlinkReadonly` | 软链·只读 |
-| `row.symlinkTitle` | 这是一个软链（指向 {path}），本面板不会修改它 |
-| `add.label` / `add.chooseMethod` / `add.fromPath` / `add.fromPathHint` / `add.createWithAgent` / `add.createWithAgentHint` / `add.createWithAgentOff` | 添加技能 ／ 选择添加技能方式 ／ **安装第三方技能** ／ **支持本机目录和 GitHub 仓库** ／ **让 Agent 创建技能** ／ **进入创造模式，用 Agent 制作** ／ **当前部署没有创造模式**（`add.createWithAgentOff`：不可用时的副行，见 §3.9.7） |
-| `add.title` / `add.description` / `add.pathLabel` | 添加技能 ／ **输入一个技能目录在本机的完整路径，或 GitHub 仓库链接。**目录里必须有 SKILL.md，添加后会复制进 ~/.dsh/skills/。 ／ **技能目录路径或 GitHub 链接** |
-| `add.pathPlaceholder` / `add.safety` | 例如 /Users/name/my-skill ／ 请确认**这个技能**的来源可信。添加后它在本机以你的权限运行，来源不明的技能可能读取和泄露你的数据。 |
-| `add.run` / `add.busy` / `add.fetching` / `add.done` / `add.doneFrom` / `add.close` / `add.moreCandidates` / `add.chooseCandidate` | 添加 ／ 正在添加… ／ 正在从 GitHub 取仓库… ／ 已添加 ／ 来自 {repo} ／ 完成 ／ 另有 {count} 个未列出 ／ 用 {path} 这个子目录 |
-| `delete.title` / `delete.body` / `delete.confirm` / `delete.factDir` | 卸载「{name}」？ ／ 卸载后这个技能的文件会被永久移除，本机不再加载它。 ／ 卸载 ／ 目录 |
-| `error.E_NOT_FOUND` / `error.E_BAD_NAME` | 这个技能已不存在，请刷新 ／ 技能名不合规范，未做任何修改 |
-| `error.E_BAD_PATH` | 路径不合规范（需要以 / 或 ~ 开头的完整路径），未做任何修改 |
-| `error.E_STALE_PATH` | 技能文件位置已变化，请刷新后重试 |
-| `error.E_SYMLINK_READONLY` | 软链技能只读，未做任何修改 |
-| `error.E_FILE_CHANGED` | 技能文件在你操作期间被修改，请刷新后重试 |
-| `error.E_NOT_WRITABLE` | 这个技能没有可写的本地文件 |
-| `error.E_WRITE_FAILED` / `error.E_VERIFY_FAILED` | 写入技能文件失败：{reason} ／ 写入后回读不一致，已回滚 |
-| `error.E_FORBIDDEN` | 请求被拒绝（仅限本机访问） |
-| `error.E_UNKNOWN` | 操作失败：{reason} |
-| `error.E_SOURCE_UNKNOWN` / `error.E_SOURCE_UNAVAILABLE` / `error.E_SOURCE_TIMEOUT` / `error.E_SOURCE_BAD_RESPONSE` | 不认识这个来源 ／ {source} 暂时连不上 ／ {source} 响应超时 ／ {source} 返回了无法识别的数据 |
-| `error.E_BAD_QUERY` | 请求参数不合规 |
-| `error.E_SKILL_NAME_INVALID` | 这个技能的包声明了不合规的名字：{name} |
-| `error.E_ALREADY_INSTALLED` | 本机已有同名技能：{path} |
-| `error.E_PACKAGE_INVALID` | 这个技能的包不完整、超过体积上限，或含软链 |
-| `error.E_DOWNLOAD_FAILED` | 下载技能包失败：{reason} |
-| `error.E_INSTALL_IO` | 写入技能目录失败：{reason} |
-| `error.E_INSTALL_BUSY` | 这个技能正在被处理，请稍候 |
-| `error.E_ADD_NOT_FOUND` / `error.E_ADD_NOT_SKILL_DIR` | 这个路径不存在 ／ 这不是一个技能目录：需要含 SKILL.md 的目录 |
-| `error.E_ADD_SHADOWED` / `error.E_DELETE_IO` | 已有同名技能随 DSH 或预设提供，添加后不会显示 ／ 卸载技能目录失败：{reason} |
-| `error.E_FAVORITE_FULL` / `error.E_FAVORITE_IO` | 收藏数量已达上限，请先取消一些 ／ 写入收藏失败：{reason} |
-| `error.E_GIT_SPEC_INVALID` / `error.E_GIT_NOT_SUPPORTED` / `error.E_GIT_REPO_NOT_FOUND` / `error.E_GIT_UNREACHABLE` / `error.E_GIT_TIMEOUT` / `error.E_GIT_MISSING` / `error.E_ADD_AMBIGUOUS_SKILL`（七码，按序；**值按 `locale/zh.json` 实测**——为守住产物体积上限已压短，见 `docs/contracts/decisions.md` 附录 T-14） | 认不出这个输入：请填本机目录或 GitHub 链接 ／ 只支持 github.com 公开仓库，不接受 SSH 地址 ／ 找不到这个仓库、分支或标签，或它需要登录 ／ 取不到这个仓库：请检查网络或稍后重试 ／ 取仓库超时，请稍后重试 ／ 本机没有 git：请先安装 git，或填本机目录路径 ／ 仓库里有 {count} 个 SKILL.md：请在链接后加 #path: 选一个 |
+- 市场面沿用两族键：`market.*` 与 `error.E_*`（码表见 `docs/contracts/routes.md` §8.1 与 §8.6）；已安装详情页另有 35 个 `detail.*`（键表见 `docs/contracts/installed-detail.md` 的「文案」一节，K115 逐处核这个数），外加 6 个 `markdown.*`（宿主 `MarkdownText` 的代码围栏与脚注 chrome，缺了它就整段回落成纯文本）。
+- **键与值不在本文件维护**：真源是 `locale/{zh,en}.json`（`zh` 值逐字来自 `PRD` §3.3.5 与本设计），全字典键数以 `check:i18n` 输出为准（口径 = 扁平键 + `meta` 两项），新增键必须 zh/en 同轮加、由 `test/i18n.test.mjs` 的按名断言兜住。
+- 已退役的键不会再回来：`add.comingSoon`、`detail.uninstallSoon`、`detail.checkUnavailable`、`detail.checkIdle`、`detail.copy`、`detail.copied`、`plugin.copyCommand`、`status.count`、`status.offSuffix`、`market.placeholder`（缘由散见 `docs/contracts/decisions.md` 各附录）。
 
 ---
 
@@ -387,13 +274,10 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 
 ## 8.5 样式字面量单点
 
-尺寸与颜色字面量只允许出现在 `src/client/styles.js`（样式）与 `src/client/avatar.js`（6 组头像色板，含 `rgba()` 半透明底与实色字；全仓库仅此两处色值）；其它组件文件不得写颜色/尺寸（`size={11|13}` 这类图标尺寸除外）。
-市场样式同样只进 `styles.js`（类名 `skc_market*`，取值逐条来自 `docs/contracts/market.md` 附录 F）；**市场不新增任何颜色字面量**，也不改 `.skc_cardIcon` 的任何一条声明。上游图标用的 `.skc_marketIconImg` 只有四条声明（`width/height:100%`、`object-fit:contain`、`display:block`、`border-radius:calc(var(--dsw-radius-lg) - .5px)` 同心内圆角），不含色值；`contain` 是因为上游图标尺寸从 256×64 的横版 logo 到 1024×1024 都有，`cover` 会把横版裁成怪形状。
-分类 chip 的数量位用 `.skc_marketChipCount`（`margin-left:4px`、12px/18px、`var(--dsw-alias-label-secondary)`），**不改 chip 的高度与点击面积**，也不新增色值。锚点：`test/styles.test.mjs`；把刻度搬进组件时那条用例先红。
+尺寸与颜色字面量只允许出现在 `src/client/styles.js`（样式）与 `src/client/avatar.js`（6 组头像色板，含 `rgba()` 半透明底与实色字；全仓库仅此两处色值）；其它组件文件不得写颜色/尺寸（`size={11|13}` 这类图标尺寸除外）。市场样式同样只进 `styles.js`（类名 `skc_market*`，取值逐条来自 `docs/contracts/market.md` 附录 F）；**市场不新增任何颜色字面量**，也不改 `.skc_cardIcon` 的任何一条声明。上游图标用的 `.skc_marketIconImg` 只有四条声明（`width/height:100%`、`object-fit:contain`、`display:block`、`border-radius:calc(var(--dsw-radius-lg) - .5px)` 同心内圆角），不含色值；`contain` 是因为上游图标尺寸从 256×64 的横版 logo 到 1024×1024 都有，`cover` 会把横版裁成怪形状。分类 chip 的数量位用 `.skc_marketChipCount`（`margin-left:4px`、12px/18px、`var(--dsw-alias-label-secondary)`），**不改 chip 的高度与点击面积**，也不新增色值。锚点：`test/styles.test.mjs`；把刻度搬进组件时那条用例先红。
 
 ---
 
 ## 验收
 
-K22–K27：`test/view-row.test.mjs`、`test/view-page.test.mjs`、`test/view-skeleton.test.mjs`、`test/view-toast.test.mjs`、`test/state.test.mjs`、`test/header-scroll.test.mjs`、`test/i18n.test.mjs`；`npm run check:i18n` 兜住「代码里不许有中文」。
-K28–K51（市场）：见 `docs/contracts/acceptance.md` 的附录 D.5。
+K22–K27：`test/view-row.test.mjs`、`test/view-page.test.mjs`、`test/view-skeleton.test.mjs`、`test/view-toast.test.mjs`、`test/state.test.mjs`、`test/header-scroll.test.mjs`、`test/i18n.test.mjs`；`npm run check:i18n` 兜住「代码里不许有中文」。K28–K51（市场）：见 `docs/contracts/acceptance.md` 的附录 D.5。

@@ -545,7 +545,7 @@ test('K129 台账写失败 ⇒ 500 E_INSTALL_IO，但目录保留（唯一允许
     const src = await sourceDir(mounted.tree.dshHome, 'probe', {});
     const response = await mounted.call('add', { spec: src });
     assert.equal(response.status, 500, '台账写失败 ⇒ 500');
-    assert.equal(response.json.code, 'E_INSTALL_IO', '码是 E_INSTALL_IO（§3.7.4 S13 的同一处例外）');
+    assert.equal(response.json.code, 'E_INSTALL_IO', '码是 E_INSTALL_IO（§3.7.4 I13 的同一处例外）');
     assert.equal((await lstat(join(mounted.tree.skillsRoot, 'probe', 'SKILL.md'))).isFile(), true,
       '目录**没有**回滚（用户能看见一次装好的技能胜过静默丢弃）');
     assert.deepEqual(await leftovers(mounted.tree.skillsRoot), [], '临时目录还是清掉了');
