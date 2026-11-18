@@ -3,7 +3,7 @@
 > 类型：规范
 > 读者：改「已安装」页签的详情页（`src/client/installed-detail.jsx`）、它的第 12 条路由、更新检测 / 覆盖安装的前端口径或它那 35 个文案键的人
 > 真源：`src/client/installed-detail.jsx`、`src/client/state.js` 的 `detail`、`lib/routes.js` 的 detail 路由与 `lib/scan.js` 的 `readSkillContent`
-> 更新触发：改区块顺序、检测状态机、返回口径、更新动作或这 35 个键时，本文件与 `docs/contracts/routes.md` §3.3.3 §3.7.7、`docs/contracts/market.md` §7.11 一起改
+> 更新触发：改区块顺序、检测状态机、返回口径、更新动作或这 35 个键时，本文件与 `docs/contracts/routes.md` §3.3.3、`docs/contracts/market-routes.md` §3.7.7、`docs/contracts/market.md` §7.11 一起改
 > 规模上限：400
 
 `docs/contracts/client.md` §3.9.2 只留指针。点击边界见 `AGENTS.md` 硬约束 9，刻度见 `docs/contracts/visual.md` A.5。

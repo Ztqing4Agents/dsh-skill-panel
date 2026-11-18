@@ -257,7 +257,7 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 - `client/src/**` 与 `lib/**` **不得出现 CJK 字面量**（`check:i18n` 强制）；界面文案一律 `t('key')`。
 - 占位符用 `{name}`（宿主同款：`t('partToggle', { name: title })`）。
 - 入口名与插件名是两个键，**职责不同、可各自独立取值**：`panel.label` = 侧栏行标题（`label: () => t('panel.label')`），`meta.title` = 宿主插件列表里的插件名（`PROF/*/locale/zh.json` 四家都是 `{meta:{title,description}}`）。自 2026-11-17 起二者取值不同：侧栏 `技能` / `Skills`，插件名 `技能面板` / `Skill Panel`；两者都必须在 `locale/*.json` 里存在（`check:i18n` 校验）、都随 DSH 显示语言自适应，改文案只改 `locale/*.json`，代码零改动。
-- 市场面沿用两族键：`market.*` 与 `error.E_*`（码表见 `docs/contracts/routes.md` §8.1 与 §8.6）；已安装详情页另有 35 个 `detail.*`（键表见 `docs/contracts/installed-detail.md` 的「文案」一节，K115 逐处核这个数），外加 6 个 `markdown.*`（宿主 `MarkdownText` 的代码围栏与脚注 chrome，缺了它就整段回落成纯文本）。
+- 市场面沿用两族键：`market.*` 与 `error.E_*`（码表见 `docs/contracts/routes.md` §8.1 与 `docs/contracts/market-routes.md` §8.6）；已安装详情页另有 35 个 `detail.*`（键表见 `docs/contracts/installed-detail.md` 的「文案」一节，K115 逐处核这个数），外加 6 个 `markdown.*`（宿主 `MarkdownText` 的代码围栏与脚注 chrome，缺了它就整段回落成纯文本）。
 - **键与值不在本文件维护**：真源是 `locale/{zh,en}.json`（`zh` 值逐字来自 `PRD` §3.3.5 与本设计），全字典键数以 `check:i18n` 输出为准（口径 = 扁平键 + `meta` 两项），新增键必须 zh/en 同轮加、由 `test/i18n.test.mjs` 的按名断言兜住。
 - 已退役的键不会再回来：`add.comingSoon`、`detail.uninstallSoon`、`detail.checkUnavailable`、`detail.checkIdle`、`detail.copy`、`detail.copied`、`plugin.copyCommand`、`status.count`、`status.offSuffix`、`market.placeholder`（缘由散见 `docs/contracts/decisions.md` 各附录）。
 

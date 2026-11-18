@@ -313,35 +313,32 @@ locateSkillDir(root: string, subdir: string|null): {dir: string}   // ① 给了
 
 #### 3.8.1 `MarketItem` / `MarketDetail` / `MarketVersions` / `SourcePage`
 
-```jsonc
+四个类型的**形状与类型**在下面；每个字段的来源、缺失怎么补、为什么这么定，统一在 `docs/contracts/market.md` §7.4 的字段表，本节不复述。
+
+```ts
 // MarketItem —— 市场页唯一的渲染输入，也是去重键的来源
-{
-  "sourceId": "skillhub", "id": "skillhub:ake:dev-god",   // 本地算：sourceId 按上游行的 source 折叠（community/enterprise → skillhub，clawhub → clawhub）、跨 scope 恒定；id = `${sourceId}:${owner}:${slug}`
-  "owner": "ake", "slug": "dev-god",                      // 上游；缺失 null
-  "displayName": "编程大神.Skill", "summary": "≤ 400 字符单行",   // displayName 缺则回落 slug、再缺为空串；summary 超长截断、缺失为空串
-  "iconUrl": "https://…png | null", "author": "阿客实验室",       // iconUrl 两种形态见不变式 6；author 三级回落，全缺 null
-  "version": "1.2.4", "downloads": 11340092,             // 上游；**version 缺失如实 null**（镜像缺版本时就是 null）；downloads 缺失 null（**绝不补 0**）
-  "saves": 99, "score": 100000, "tags": ["代码生成", "Bug 修复"],   // 上游 stars/score（缺失 null，绝不补 0）/ subCategories.name 前 3（≤3 条、单条 ≤24 字符、保留大小写、**缺 = []**）
-  "updatedAt": 1794205858796, "category": "dev-programming", "packageKind": "files"   // updatedAt 是 epoch 毫秒、只用于排序**不上屏**；category 上游（两源都有分类）/ packageKind 本地算：当前两源恒 'files'（没有任何 zip 形态）
-}
-```
+type MarketItem = {
+  sourceId: string; id: string;
+  owner: string | null; slug: string | null;
+  displayName: string; summary: string;
+  iconUrl: string | null; author: string | null;
+  version: string | null; downloads: number | null;
+  saves: number | null; score: number | null; tags: string[];
+  updatedAt: number | null; category: string | null; packageKind: string;
+};
 
-```jsonc
 // MarketDetail —— market/detail 的 data
-{
-  "item": MarketItem,
-  "iconUrl": "恒等于 item.iconUrl",            // 路由层复制一份，详情头部直接用；两处永不相同
-  "overview": "SKILL.md 正文（≤ 8000 字符）",   // stripFrontmatter 后；正文为空则回落 summary
-  "declaredName": "dev-god", "nameValid": true, // parseFrontmatter(SKILL.md).name（不合规也原样给出）/ isSkillName(declaredName)
-  "installTo": "/Users/…/.dsh/skills/dev-god", // nameValid ? join(skillsRoot, declaredName) : skillsRoot
-  "files": [{ "path": "SKILL.md", "size": 7953 }], // 清单顺序；sha256 不下发
-  "filesComplete": true                        // 'files' 形态恒 true（'files' 逐文件校验，没有读不全这条分支）
-}
-```
+type MarketDetail = {
+  item: MarketItem; iconUrl: string;
+  overview: string; declaredName: string; nameValid: boolean;
+  installTo: string; files: { path: string; size: number }[]; filesComplete: boolean;
+};
 
-```jsonc
 // MarketVersions —— market/versions 的 data（新的在前，不排序、不过滤，保留前 50 条）
-{ "source": "skillhub", "owner": "ake", "slug": "dev-god", "namespace": "ake", "latest": "1.2.4", "versions": [{ "version": "1.2.4", "publishedAt": 1762396800000 }], "total": 3 }
+type MarketVersions = {
+  source: string; owner: string; slug: string; namespace: string | null;
+  latest: string | null; versions: { version: string; publishedAt: number | null }[]; total: number;
+};
 ```
 
 `SourcePage`（`list` / `search` 的返回）= `{items: MarketItem[], next: string|null, total: number|null}`：`next` 由 `encodeCursor` 产出、客户端原样回传（`null` = 没有下一页），`total` 只有 SkillHub 给。

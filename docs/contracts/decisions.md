@@ -51,14 +51,14 @@
 
 ## 附录 E 市场轮决策登记
 
-> 2026-11-09 技能市场轮。每条都带来源（PRD 原文 / 宿主读数 / 队长裁决 / 设计结论），没有一条是「我觉得」。市场面的完整契约在 `docs/contracts/market.md`，路由与安装链路在 `docs/contracts/routes.md` §3.7。
+> 2026-11-09 技能市场轮。每条都带来源（PRD 原文 / 宿主读数 / 队长裁决 / 设计结论），没有一条是「我觉得」。市场面的完整契约在 `docs/contracts/market.md`，路由与安装链路在 `docs/contracts/market-routes.md` §3.7。
 
 | # | 原文 / 待定说法 | 实际（逐字证据） | 处理 |
 | --- | --- | --- | --- |
 | E-1 | PRD §7.2「卡面：`radius-xl`、`.5px` 描边（`border-l3`）、padding 14px」 | 宿主市场卡片 **没有边框**：`border-radius:var(--dsw-radius-xl); align-items:center; gap:14px; margin:0 -8px; padding:8px; display:flex; position:relative`；可点性由 hover 底色 `interactive-bg-hover` 与 `cardOpen::after{inset:0}` 铺满整卡提供，描边只出现在 `.icon` 上 | **不自造描边**：卡面照宿主（无边框 + `radius-xl` + hover 底色），描边只留在头像框（复用既有 `.skc_cardIcon`，其声明一字不改）。竖向排布与 `padding:14px` 属新刻度，登记在 `docs/contracts/market.md` 附录 F |
 | E-2 | PRD §7.5「详情含概览」＋ 旧记忆「ClawHub 详情只给 summary、SkillHub 用 `overviewMd`」 | ClawHub `GET /api/v1/skills/<slug>?ownerHandle=` 的 `skill.description` 就是**整份 `SKILL.md` 原文**（实测 7068 / 39618 字节，均以 `---` 开头）；SkillHub 的 `overviewMd` 恒为 `''`（实测多个技能） | 两源的「概述」都从 `SKILL.md` 派生：`stripFrontmatter()` 取正文当概览、`parseFrontmatter()` 取声明 `name`。**两个既有纯函数直接复用**，不新写解析器；正文为空时回落 `summary` |
 | E-3 | PRD §9.1「`<name>` = 包内 `SKILL.md` 的 `name`，必须符合 kebab-case」＋ 待拍板项「不合规时是否用 slug 顶替」 | 真实包确实会声明不合规的名字：`ivangdavila/design` 声明 `Design`（大写），SkillHub 的展示名是 `编程大神.Skill` | **硬失败**：`422 E_SKILL_NAME_INVALID`，`data.declaredName` 回显原文，**不改名、不用 slug 顶替**（判名文法 `^[a-z0-9]+(?:-[a-z0-9]+)*$` 就是宿主加载器的 `SKILL_NAME`，声明 `Design` 的包装进去宿主也不会加载，所以这是对齐宿主而非保守）。安装顺序改为「先取 `SKILL.md` 再取其余」，这类失败只花 1 次文件请求；详情页在装前就用 `installTo` 给出「会装到哪」，名字不合规时显示不能安装的说明 |
-| E-4 | 「市场刻度与适配器契约写进现有契约」 | `architecture.md` 已 393 行、`visual.md` 已 317 行；`类型：规范` 的 400 行上限由门禁钉死，改头注绕不过去 | **新开 `docs/contracts/market.md`**（`类型：规范`、上限 400）承载 §7 适配器与数据流 + 附录 F 视觉刻度 + 附录 G 文件清单；两份旧文件只加指针（`architecture.md` +4 行 → 397，守住 400）。`visual.md` 的 `A.10` 编号**弃用不占号**，市场刻度只在附录 F 维护，两处不重复 |
+| E-4 | 「市场刻度与适配器契约写进现有契约」 | `architecture.md` 已 393 行、`visual.md` 已 317 行；`类型：规范` 的 400 行上限由门禁钉死，改头注绕不过去 | **新开 `docs/contracts/market.md`**（`类型：规范`、上限 400）承载 §7 适配器与数据流 + 附录 F 视觉刻度 + 附录 G 文件清单；两份旧文件只加指针（`architecture.md` +4 行 → 397，守住 400）。`visual.md` 的 `A.10` 编号**弃用不占号**，市场刻度只在附录 F 维护，两处不重复。**2026-11-18 续**：同一手法再用一次——市场面的 9 条路由、安装链路与 §8.6 错误码从 `routes.md` 整体搬进 `docs/contracts/market-routes.md`（`类型：规范`、上限 400），编号 `§3.7` / `§8.6` 原样跟随、不重排；`routes.md` 只留本地面 7 条与一行指针，`K40` 的「`§3.7` / `§8.6` 全仓库恰好一处」因此仍成立 |
 
 ---
 
@@ -115,12 +115,12 @@
 
 ## 附录 J 市场卡片重做轮（2026-11-09）
 
-> 参考项目 `montersy123/dsh-skill-market` 的卡片结构（作者行 / 等宽三段 / 收藏按钮）。每条都带来源，市场面的完整契约在 `docs/contracts/market.md` §7，路由在 `docs/contracts/routes.md` §3.7。
+> 参考项目 `montersy123/dsh-skill-market` 的卡片结构（作者行 / 等宽三段 / 收藏按钮）。每条都带来源，市场面的完整契约在 `docs/contracts/market.md` §7，路由在 `docs/contracts/market-routes.md` §3.7。
 
 | # | 待定说法 | 实际（逐字证据 / 算式） | 处理 |
 | --- | --- | --- | --- |
 | J-1 | 卡片的**来源标识**用什么 | 用户诉求是「skillhub 就显示 skillhub 的 icon」，因此保真是需求本身：单色自绘 path 只能做到六成神似（等于自造 logo）；运行时直连品牌 URL 会踩「浏览器半部零 URL」那条回归门禁 | **内联位图**：`src/client/market-marks.jsx` 里两段 `data:image/png;base64`（SkillHub 站点自带 32×32 favicon 1334 B、sha256 `b00f1749…25a0fc`；ClawHub 站点自带 logo 由 192×192 降采样到 32×32、2357 B、sha256 `64a32b4f…949600`），显示 16×16、零网络、零新路由、不新增依赖。**替换**原来那枚文字 Tag（同一位），`title` 保留来源名；注释里不写 URL |
-| J-2 | 收藏存哪、键是什么 | 别人的存储（`~/.dsh/skills-manager/state.json`、`skill-market/*`、`.skills-lock.json`）对本面板只读（`AGENTS.md` 硬约束 10），书签只能落本插件自己的目录 | `$DSH_HOME/dsh-skill-panel/favorites.json`，键 = `marketId(source, owner, slug)`（与图标缓存 / 上游标题 / 安装台账同一个键）；`{version:1, favorites:[…]}` 最新在前；上限 500；写盘走 `store.js` 的 `writeAtomic`；进程内一条 Promise 链串行化；与现状一致的写入不落盘（幂等）。读侧只在 `market/bootstrap`（`favorites` + `favoritesOk`），**不新增 GET**；写侧一条 `POST market/favorite`（见 `docs/contracts/routes.md` §3.7.6） |
+| J-2 | 收藏存哪、键是什么 | 别人的存储（`~/.dsh/skills-manager/state.json`、`skill-market/*`、`.skills-lock.json`）对本面板只读（`AGENTS.md` 硬约束 10），书签只能落本插件自己的目录 | `$DSH_HOME/dsh-skill-panel/favorites.json`，键 = `marketId(source, owner, slug)`（与图标缓存 / 上游标题 / 安装台账同一个键）；`{version:1, favorites:[…]}` 最新在前；上限 500；写盘走 `store.js` 的 `writeAtomic`；进程内一条 Promise 链串行化；与现状一致的写入不落盘（幂等）。读侧只在 `market/bootstrap`（`favorites` + `favoritesOk`），**不新增 GET**；写侧一条 `POST market/favorite`（见 `docs/contracts/market-routes.md` §3.7.6） |
 | J-3 | 三段数字各是什么口径 | 参考项目的 `Stats` 是「下载 / 收藏 / 评分」三段；SkillHub 的 `stars` 是小整数（实测 37 / 99 / 158）、`score` 是 0–100000 的连续分（实测 `95757.41562195931`） | 下载 = `downloads`；收藏 = 上游 **`stars`**（不是你自己的书签，你自己的由按钮 `aria-pressed` 表达，两者不合并）；评分 = `4 + min(1, score/100000)` 量化到一位小数。`rating` **不进数据层**：它是客户端的显示投影，Host 只给原料 `score`（`normalize.js` 的「只映射、不解释」）。`score <= 0` 时评分段整段不出现——`4.0` 是缺值伪装成的分数 |
 | J-4 | 三段与安装按钮能否同一行 | 安装按钮四态（安装 / 已安装 / 安装中… / 重试）宽度不同：段宽 =（内容宽 − 按钮宽 − gap）/ 3，`安装` 与 `已安装` 差一个汉字 ≈12.5px ⇒ 每段差 ≈4.2px，同屏两卡的「收藏」「评分」列各错开 4.2 / 8.4px；最窄卡（280−28=252px）塞进「安装中…」（≈78px）后三格只剩 ≈166px，每格 ≈55px 而中文 `1135万` 需 ≈39px 文本 + 16px 图标 | **三段独占一行**（`repeat(3, minmax(0,72px))` 左对齐）、安装按钮另起一行右对齐（`.skc_marketCardEnd` 既有声明一字不改）。代价是卡片高 ≈28px，换来四种情况下数字列零抖动 |
 | J-5 | 缺段的格子：占位还是不占位 | 若缺段就让后面的段左移，一张缺「收藏」的卡会把「评分」挪到第二格，同屏立刻错位 | **槽位占位、内容不出现**：三格轨道恒在（同列的 x 坐标在任何两张卡上相同），空格里没有图标、没有数字、没有 `0`、没有破折号，读屏也读不到（`aria-hidden`）；三格全缺时整行不渲染（否则卡片中部剩三格空白） |
@@ -156,7 +156,7 @@
 
 ## 附录 N ClawHub 数据源改走 SkillHub 镜像（2026-11-09）
 
-> 用户原话：「ClawHub 的数据来源，你看 skillhub.cn/skills?sortBy=score&source=clawhub 这个网站就有下载量等情况」。字段口径见 `docs/contracts/market.md` §7 与 `docs/contracts/routes.md` §3.7；用例见 `docs/contracts/acceptance.md` 的 K86–K88。
+> 用户原话：「ClawHub 的数据来源，你看 skillhub.cn/skills?sortBy=score&source=clawhub 这个网站就有下载量等情况」。字段口径见 `docs/contracts/market.md` §7 与 `docs/contracts/market-routes.md` §3.7；用例见 `docs/contracts/acceptance.md` 的 K86–K88。
 
 | # | 待定说法 | 实际（实测证据） | 处理 |
 | --- | --- | --- | --- |

@@ -219,7 +219,7 @@ sequenceDiagram
     Note over MP: next === null 即到底，显示「没有更多了」
 ```
 
-四条分支与两条失败分支的判据：切来源 / 切分类 / 切排序 / 换关键词 / 页头刷新 ⇒ 都清 `pages/cursors/exhausted/detail` 并重拉第一页，且都**保留 `items`**（旧列表直出，不换骨架、不滚回顶部）；答案落地时整表替换（首屏重取不带 `existing`）；首屏失败 ⇒ 整页错误态；追加失败 ⇒ 已有卡片留着，尾部给「重试」（`market/list` 用 HTTP 状态码表达失败，见 `docs/contracts/routes.md` §3.7.2）。市场一次只看一个来源，所以没有「部分源失败」这一支。
+四条分支与两条失败分支的判据：切来源 / 切分类 / 切排序 / 换关键词 / 页头刷新 ⇒ 都清 `pages/cursors/exhausted/detail` 并重拉第一页，且都**保留 `items`**（旧列表直出，不换骨架、不滚回顶部）；答案落地时整表替换（首屏重取不带 `existing`）；首屏失败 ⇒ 整页错误态；追加失败 ⇒ 已有卡片留着，尾部给「重试」（`market/list` 用 HTTP 状态码表达失败，见 `docs/contracts/market-routes.md` §3.7.2）。市场一次只看一个来源，所以没有「部分源失败」这一支。
 
 ### 4.6 市场安装
 
@@ -248,7 +248,7 @@ sequenceDiagram
     IN->>SRC: fetchFile(plan, 'SKILL.md')（只这一个）
     IN->>IN: 校验 sha256/CRC + size ⇒ 422
     IN->>IN: parseFrontmatter → name ⇒ 不合规 422 E_SKILL_NAME_INVALID
-    IN->>IN: lstat(skillsRoot/name) 存在 ⇒ 409 E_ALREADY_INSTALLED（不动一个字节）
+    IN->>IN: I6 冲突检查
     IN->>T: mkdir .skc-install-<pid>-<rand>
     IN->>SRC: fetchFile 其余文件（4 路并发）
     IN->>T: 逐文件 wx 写入 + 校验 + fsync
@@ -264,7 +264,7 @@ sequenceDiagram
     Note over IN,T: 任一步失败 → finally 删临时目录 → 不写台账 →<br/>skillsRoot 条目集合与安装前逐字节相同
 ```
 
-唯一的例外窗口：台账写失败时目录保留（否则用户装好的技能凭空消失），返回 `500 E_INSTALL_IO` 并在 `message` 里说明「技能已落位、台账未写」——后果只是卡片显示未安装，下次安装会被同名检查拦下，不产生坏数据。分阶段失败码全表见 `docs/contracts/routes.md` §3.7.4。
+唯一的例外窗口：台账写失败时目录保留（否则用户装好的技能凭空消失），返回 `500 E_INSTALL_IO` 并在 `message` 里说明「技能已落位、台账未写」——后果只是卡片显示未安装，下次安装会被同名检查拦下，不产生坏数据。分阶段失败码全表见 `docs/contracts/market-routes.md` §3.7.4。
 
 ---
 
@@ -304,7 +304,7 @@ sequenceDiagram
     Note over IN,T: 失败 → R1 暂存失败（旧版本逐字节未动）/ R3·R5 回滚成功（E_UPDATE_RESTORED）/<br/>R4 回滚也失败（E_UPDATE_LOST）/ R6 台账未写（E_UPDATE_UNCONFIRMED）
 ```
 
-四条回滚路径、十个阶段与三条不变式见 `docs/contracts/market.md` §7.11；前置校验的顺序与失败码见 `docs/contracts/routes.md` §3.7.7；两个页面的落点见 `docs/contracts/installed-detail.md`。与安装（§4.6）的关系：**同一张锁表**（`source:owner:slug` + 全局最多 2 个），所以同一个技能不可能同时在装和在更新。
+四条回滚路径、十个阶段与三条不变式见 `docs/contracts/market.md` §7.11；前置校验的顺序与失败码见 `docs/contracts/market-routes.md` §3.7.7；两个页面的落点见 `docs/contracts/installed-detail.md`。与安装（§4.6）的关系：**同一张锁表**（`source:owner:slug` + 全局最多 2 个），所以同一个技能不可能同时在装和在更新。
 
 ### 4.8 添加技能（本机目录 → 用户技能根）
 
@@ -384,7 +384,7 @@ sequenceDiagram
 | # | 事项 | 现行采用 | 影响 |
 | --- | --- | --- | --- |
 | D1 | `SkillSummary` 不暴露 `rank` | 用 `source`/`provider` 反推（1.4.3），第三方 provider 一律按 600 | 只有当某个 provider 自报 rank ≠ 600 时，同名裁决可能与模型实际拿到的不一致；验证方法见文末 A1/A2 |
-| D2 | PRD 两句「rank 小者胜」与「内置永远胜出」在 bundled(600) vs user(400) 时互斥 | 取 **rank 小者胜**（保 G1 的核心承诺：面板显示的必须是模型拿到的那条） | 若用户坚持「内置永远显示为内置」，需要在 `mergeCatalog` 里加一条覆盖规则，改动 1 个函数 |
+| D2 | PRD 两句「rank 小者胜」与「内置永远胜出」在 bundled(600) vs user(400) 时互斥 | 取 **rank 小者胜**，理由见 `docs/contracts/decisions.md` Q-B | 若用户坚持「内置永远显示为内置」，需要在 `mergeCatalog` 里加一条覆盖规则，改动 1 个函数 |
 | D3 | 页头停靠用「克隆量测 + 插值」在真机上是否稳定 | 照 port 宿主实现 | 若抖动，降级阶梯：① 去掉逐部件插值，只保留 sticky + `data-compact` 的 padding/分隔线切换；② 再不行退回纯 `position:sticky` + 静态 28px。每一级都要在真机对着宿主插件页比对后再决定 |
 
 ---

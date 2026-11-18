@@ -6,7 +6,7 @@
 > 更新触发：加删源适配器、改上游调用/归一化/安装取包形状/覆盖安装算法，或改市场刻度时，同步改 §7 / 附录 F / 附录 G
 > 规模上限：400
 
-本文只写市场面（Host 的 `lib/market/**` 与 Client 的 `market-*` 组件）的契约。路由表、安装链路的分阶段与失败码在 `docs/contracts/routes.md` §3.7；类型与纯函数总览在 `docs/contracts/data-model.md` §3.8；调用顺序在 `docs/contracts/flows.md` §4.5 §4.6。
+本文只写市场面（Host 的 `lib/market/**` 与 Client 的 `market-*` 组件）的契约。路由表、安装链路的分阶段与失败码在 `docs/contracts/market-routes.md` §3.7；类型与纯函数总览在 `docs/contracts/data-model.md` §3.8；调用顺序在 `docs/contracts/flows.md` §4.5 §4.6。
 
 市场面**只连一个 origin**：`https://api.skillhub.cn`（ClawHub 的目录、详情与安装包都由它的镜像接口 `source=clawhub` 提供）。浏览器不直连上游（SkillHub 的列表响应没有 `access-control-allow-origin`），一切网络都在 Host 侧的 `lib/market/upstream.js`。
 
@@ -65,7 +65,7 @@
 | `search` | 同一端点 + `keyword=` | 同一端点 + `keyword=` | 同一端点 + `keyword=` |
 | 游标形状 | `{page: number}`（1 起） | 同上（三档共用 `query.js` 的 `pageOf`） | 同上 |
 | `detail` | `GET /api/v1/skills/<slug>?namespace=&version=` + 清单 + `SKILL.md`（**身份按行判定**，与 scope 无关；见 §7.9） | 同左（`namespace` = 行的 `namespace.handle`） | 同左，`namespace` 由一次 `keyword=<slug>` 的列表查询按 `slug`+`upstream_owner_login` 双匹配解析（**不猜前缀**；评分也用那一行补，见 §7.8） |
-| `plan` / `fetchFile` | `GET …/files?namespace=&version=` + `GET …/file?path=`（302 → COS，见 §3.7.3 第 4 条） | 同左 | 同左（version 由镜像 detail 解析；清单无 `SKILL.md` ⇒ `E_PACKAGE_INVALID`） |
+| `plan` / `fetchFile` | `GET …/files?namespace=&version=` + `GET …/file?path=`（302 → COS，见 `docs/contracts/market-routes.md` §3.7.3 第 4 条） | 同左 | 同左（version 由镜像 detail 解析；清单无 `SKILL.md` ⇒ `E_PACKAGE_INVALID`） |
 | `categories` | `GET /api/v1/categories`（不带 `source`），滤 `pay-skill`，10 分钟内存缓存 | 同一张表 | 同一张表（`caps.categories` 恒 `true`） |
 | `caps` | `{search:true, paged:true, categories:true, package:'files'}` | 同左 | 同左 |
 | `total` | `data.total`（实测 224,219） | `data.total`（实测 160,838） | `data.total`（实测 63,381） |
@@ -162,7 +162,7 @@ sort 映射（`sort` 四个值，路由层已白名单化；**默认仍是 `reco
 
 **两条同名不同源**：卡片上的「收藏 N」是上游 `stars`（别人收藏了多少），你自己的书签（**卡片上没有入口**，见 `docs/contracts/decisions.md` 附录 L；这份集合与写路由原样保留）。界面**不合并、不互相修正**，数字段的 `aria-label` 说清它是上游收藏数——否则「我收藏了它为什么显示 0」是一定的投诉。
 
-**降级 / 上限 / 幂等 / 并发**：文件**缺失** ⇒ 空集 + `readable:true`（全新安装没写过这个文件，**缺失 ≠ 损坏**，`favoritesOk` 的唯一语义是「书签可能丢了」）；**只有**解析失败或不可读（非 JSON、顶层非对象、`favorites` 非数组、EACCES/EISDIR…）才 `readable:false`，此时 `bootstrap` 照常 `200`（`favoritesOk:false`），**绝不让市场页失败**；读侧逐条丢弃「不是 `sourceId:owner:slug` 三元组或超过 200 字符」的条目与重复项，手改坏了只丢坏行；上限 **500**，满时新增 `409 E_FAVORITE_FULL`，取消永远允许；与现状一致的写入不落盘（幂等）；写盘复用 `store.js` 的 `writeAtomic`（临时文件 + fsync + rename，临时名带 `favorites` 前缀），进程内一条 Promise 链把读-改-写串行化。跨进程并发不处理：与 `install.js` 一样按「本机单宿主」设计。路由细节见 `docs/contracts/routes.md` §3.7.6。
+**降级 / 上限 / 幂等 / 并发**：文件**缺失** ⇒ 空集 + `readable:true`（全新安装没写过这个文件，**缺失 ≠ 损坏**，`favoritesOk` 的唯一语义是「书签可能丢了」）；**只有**解析失败或不可读（非 JSON、顶层非对象、`favorites` 非数组、EACCES/EISDIR…）才 `readable:false`，此时 `bootstrap` 照常 `200`（`favoritesOk:false`），**绝不让市场页失败**；读侧逐条丢弃「不是 `sourceId:owner:slug` 三元组或超过 200 字符」的条目与重复项，手改坏了只丢坏行；上限 **500**，满时新增 `409 E_FAVORITE_FULL`，取消永远允许；与现状一致的写入不落盘（幂等）；写盘复用 `store.js` 的 `writeAtomic`（临时文件 + fsync + rename，临时名带 `favorites` 前缀），进程内一条 Promise 链把读-改-写串行化。跨进程并发不处理：与 `install.js` 一样按「本机单宿主」设计。路由细节见 `docs/contracts/market-routes.md` §3.7.6。
 
 ### 7.8 ClawHub 全部走 SkillHub 镜像（单源）
 
@@ -208,11 +208,11 @@ ClawHub 的**目录、详情、安装包**三条链路都由 SkillHub 的镜像�
 - **不缓存**（与 `latestVersion` 同档）：服务端缓存会让「重新检查」在一个 TTL 内说谎，而那正是用户点它的理由；10 分钟窗口在客户端（`docs/contracts/client.md` §3.10）。
 - 归一在适配器内：只留 `{version, publishedAt}`（`publishedAt` = 上游 `createdAt`，过 `timestampOrNull`，不可解析 ⇒ `null`，**绝不补 0、也绝不补 now**）；`version` 不是非空字符串的条目丢弃，同一版本号出现两次保留第一次；保留前 **50** 条（`VERSIONS_LIMIT`），`total` 记上游本次返回的原始条数；`latest` = 首条版本，一条都没有时为 `null`。`changelog`/`versionId`/`securityReports` **不下发**（changelog 实测全是 `New version` 这类占位，上屏是噪声）。
 - **不排序、不过滤**：上游新的在前就照发；预发布、降级、日期式版本号一条不筛——候选判据是客户端的「第一条」（`docs/contracts/installed-detail.md`），Host 半部不做任何版本比较。
-- 形状：`Array.isArray(body.versions)` 不成立 ⇒ `502 E_SOURCE_BAD_RESPONSE`；上游 404（技能已下架）走 `io` 的既有映射，不新增码。类型见 `docs/contracts/data-model.md` §3.8.1；路由见 `docs/contracts/routes.md` §3.7.1 #15。
+- 形状：`Array.isArray(body.versions)` 不成立 ⇒ `502 E_SOURCE_BAD_RESPONSE`；上游 404（技能已下架）走 `io` 的既有映射，不新增码。类型见 `docs/contracts/data-model.md` §3.8.1；路由见 `docs/contracts/market-routes.md` §3.7.1 #15。
 
 ### 7.11 覆盖安装：启用状态搬运、原子交换与回滚
 
-实现在 `lib/market/install.js` 的 **`update(ref, target)`**：与 `install()` 同文件、**同一张锁表**（`source:owner:slug` 的 `Set` + `MAX_CONCURRENT_INSTALLS = 2`），复用 `writePackageFile` / `writeMeta` / `verifyLanded` / `fetchVerified` / `syncDirectory` 与 `pathExists`。**不新建模块**——少一个文件就少一处会漂移的实现。路由层的前置校验 P0–P7 见 `docs/contracts/routes.md` §3.7.7。
+实现在 `lib/market/install.js` 的 **`update(ref, target)`**：与 `install()` 同文件、**同一张锁表**（`source:owner:slug` 的 `Set` + `MAX_CONCURRENT_INSTALLS = 2`），复用 `writePackageFile` / `writeMeta` / `verifyLanded` / `fetchVerified` / `syncDirectory` 与 `pathExists`。**不新建模块**——少一个文件就少一处会漂移的实现。路由层的前置校验 P0–P7 见 `docs/contracts/market-routes.md` §3.7.7。
 
 | 阶段 | 动作 | 失败 → 码 |
 | --- | --- | --- |
@@ -366,4 +366,4 @@ Client 半部（`src/client/`，纯逻辑模块 node 可直接 import）：
 
 ## 验收
 
-市场面的验收不另建表（避免两份口径）：用例编号 K28–K51 与 K75–K81 与 PRD 的 A1–A17 对照登记在 `docs/contracts/acceptance.md` 的附录 D.5；路由与安装链路的契约面见 `docs/contracts/routes.md` §3.7 与 §8.6。
+市场面的验收不另建表（避免两份口径）：用例编号 K28–K51 与 K75–K81 与 PRD 的 A1–A17 对照登记在 `docs/contracts/acceptance.md` 的附录 D.5；路由与安装链路的契约面见 `docs/contracts/market-routes.md` §3.7 与 §8.6。

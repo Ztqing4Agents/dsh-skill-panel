@@ -27,7 +27,8 @@ npm publish --//registry.npmjs.org/:_authToken=<token>   # 账号 2FA 绑的是�
 | 验收口径、夹具、用例编号 K1–K148 | `docs/contracts/acceptance.md` | 附录 D.5（K28–K61 K75–K78 K82–K115）、D.6（K62–K74）、D.7（K116–K125）、D.8（K126–K137）、D.9（K138–K147）、D.10（K148） |
 | 决策登记（偏离 / 更正 / 假设） | `docs/contracts/decisions.md` | 附录 B |
 | 页面视觉刻度（px、令牌、`skc_` 类名、收拢顺序） | `docs/contracts/visual.md` | A.1–A.9 |
-| 技能市场（源适配器、数据流、市场刻度、安装链路） | `docs/contracts/market.md` | §7 附录 F 附录 G（路由见 `routes.md` §3.7 §8.6） |
+| 技能市场（源适配器、数据流、市场刻度、安装链路） | `docs/contracts/market.md` | §7 附录 F 附录 G |
+| 市场面 9 条路由、安装链路与市场错误码 | `docs/contracts/market-routes.md` | §3.7 §8.6（本地面 7 条见 `docs/contracts/routes.md` §3.3 / §3.4） |
 | 宿主「插件」页长什么样（外部形状、稳定钩子、几何） | `docs/reference/host-plugin-page.md` | 带采集日期；宿主升级后整份重采，不在旧值上打补丁 |
 | 使用者能感知什么、怎么装、有哪些已知限制 | `README.md`、`README.en.md` | 只写使用者视角；中英两版同构、条目数须相等（`docs/contracts/decisions.md` 附录 W-2） |
 | 升级时我要注意什么 | `CHANGELOG.md` | 记行为变化与迁移，不记改过哪些文件；Release 正文五段式见 `docs/contracts/decisions.md` 附录 W-4 |
@@ -42,12 +43,12 @@ npm publish --//registry.npmjs.org/:_authToken=<token>   # 账号 2FA 绑的是�
 
 | 路径 | 是什么 |
 | --- | --- |
-| `index.js` | Host 半部入口：解析 `dshHome`/`skillsRoot`，注册 16 条路由（本地面 7 + 市场面 9） |
+| `index.js` | Host 半部入口：解析 `dshHome`/`skillsRoot`，注册路由（清单见 `docs/contracts/routes.md` §3.3 与 `docs/contracts/market-routes.md` §3.7） |
 | `lib/classify.js` | **纯函数核心**：`rankOf` / `classifySkill` / `mergeCatalog` / `buildGroups`。改判据只改这里 |
 | `lib/scan.js`、`lib/ledger.js` | 唯一碰盘的读取模块（自扫描 / 安装台账） |
 | `lib/frontmatter.js` | 字节级改写器（CRLF/BOM/注释保真）+ 读侧解析器（含块标量 `>`/`\|`） |
 | `lib/write-skill.js` | 指纹 → 临时文件 → fsync → rename → 回读校验 → 回滚 |
-| `lib/routes.js` | 16 条 exact 路由（本地面 7 + 市场面 9），共用一个 `guard()` |
+| `lib/routes.js` | 路由表与共用 `guard()`：本地面见 `docs/contracts/routes.md` §3.3、市场面见 `docs/contracts/market-routes.md` §3.7 |
 | `lib/local/**` | 已安装页两条写路由的编排：`add` 复制本机目录或 **GitHub 浅克隆**（`rules.js` 分类/定位，`git.js` 克隆，`copy.js` 拷贝）、`remove` 删目录 + 清台账；守卫顺序 G0–G12 + S0–S12 见 `docs/contracts/routes.md` §3.3.4 |
 | `src/client/**` → `client.js` | 源码 24 个文件（市场页 8 个为 `market-*`；`installed-detail.jsx` 是已安装详情页、`plugin-detail.jsx` 是内置 provider 页、`skill-dialogs.jsx` 是添加/卸载两个弹窗（`page.jsx` 里另有工具条那个两项的添加菜单）、`markdown.jsx` 是两页共用的 markdown 兜底，`icon-tile.jsx`/`avatar.js` 是共用视觉单元；纯逻辑模块不含 JSX，node 可直接测）；`client.js` 是**构建产物、入库、不要手改** |
 | `lib/market/**`、`src/client/` 的 `market-*` 文件 | 市场半部：源适配器、安装链路、市场页组件（清单见 `docs/contracts/market.md` 附录 G） |
@@ -78,9 +79,8 @@ npm publish --//registry.npmjs.org/:_authToken=<token>   # 账号 2FA 绑的是�
 12. **`locale/*.json` 必须是单层扁平点号键**：`ctx.locale` 只做字面量查找，嵌套字典会让整页显示 `page.title` 这种原始键名（真机踩过）；
     唯一例外是顶层 `meta` 块（只给宿主插件列表读，改平会让插件名掉回包名）。`check:i18n` 与 `test/i18n.test.mjs` 双向守，见 `docs/contracts/client.md` §8.3。
 13. **浏览器半部不直连上游**：单上游 `api.skillhub.cn`（三个 scope）一律走 Host 代理（`lib/market/upstream.js` 是唯一出口）；`src/client/**` 里出现 `fetch('https://api.skillhub.cn…')` 即返工。
-14. **安装只写清单里的文件**：不执行包内脚本、不跟随包内符号链接、不写包外路径；任一步失败必须删掉 `.skc-install-*` 临时目录，`skills/<name>` 与自有台账要么都有、要么都没有（唯一例外：台账写失败时目录保留并报 `E_INSTALL_IO`，见 `docs/contracts/routes.md` §3.7）。`files` 形态下**空清单 / 无 `SKILL.md` / 路径不安全**三态一律 `E_PACKAGE_INVALID`——镜像单源之后这是唯一的包闸。
-15. **`docs/contracts/acceptance.md` 的体积与键数门禁不回读、必须手改**：K115 正则还钉死 `installed-detail.md`(3 处)、`client.md`(2 处 `detail.*`)、
-    `routes.md` §3.3「十六条 exact 路由」与 §3.7「市场面 N 条」——改措辞或改键数须与 `locale/`、`ROUTES` 同轮改，否则红。
+14. **安装只写清单里的文件**：不执行包内脚本、不跟随包内符号链接、不写包外路径；任一步失败必须删掉 `.skc-install-*` 临时目录，`skills/<name>` 与自有台账要么都有、要么都没有（唯一例外：台账写失败时目录保留并报 `E_INSTALL_IO`，见 `docs/contracts/market-routes.md` §3.7）。`files` 形态下**空清单 / 无 `SKILL.md` / 路径不安全**三态一律 `E_PACKAGE_INVALID`——镜像单源之后这是唯一的包闸。
+15. **`docs/contracts/acceptance.md` 的体积与键数门禁不回读、必须手改**：K115 正则还钉死 `installed-detail.md`(3 处)、`client.md`(2 处 `detail.*`)、`routes.md` §3.3「十六条 exact 路由」与 `market-routes.md` §3.7「市场面 N 条」——改措辞或改键数须与 `locale/`、`ROUTES` 同轮改，否则红。
 16. **契约文档 400 行满档**：加行须同轮合并同族短行；`check-docs` 的 R11 比 `wc -l` 多 1，要 0 warn 就 ≤399。
     引用「尚未创建」的仓库路径不能加反引号（R8 会校验存在）；文档里不许引 `.agents/work/` 下的瞬态产物（R13；不入库，必然腐化）——工作现场入口 `BOARD.md` 与 `BOARD-archive.md` 除外。
 17. **npm 包名（scoped `@ztqing4agents/dsh-skill-panel`）≠ 插件内部 id（短名 `dsh-skill-panel`）**：cordis `name`、16 条 `/api/dsh-skill-panel/*`、`NS`/`PANEL_ID`/`STYLE_ID`、`$DSH_HOME/dsh-skill-panel/`、patch 的 `insert[].id` 一律不动，只有 `client.js` 的装载 id 跟包名（宿主强制，`check-client` 守 `id == pkg.name`）——别「顺手统一」成一处。
