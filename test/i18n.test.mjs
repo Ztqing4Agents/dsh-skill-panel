@@ -106,10 +106,10 @@ test('K27 zh.json 与 en.json 的键集完全一致', async () => {
   assert.deepEqual(zhKeys.filter((key) => !enKeys.includes(key)), [], 'zh 里没有 en 缺失的键');
 });
 
-test('设计 §8.3 键表要求的每一个键都在（按名字断言，不按数量）', async () => {
+test('文案键一个不少：按名字断言，不按数量（键源是 locale/*.json）', async () => {
   // 以前这里钉过 `zhKeys.length === 43`。那是维护陷阱：以后合法新增一个文案键（P1 tooltip
   // 等）就会让门禁变红，而它并不比「集合包含」多证明任何东西 —— 删键由下面的子集断言兜住，
-  // 增键不再误报。要求的键名逐条来自 §8.3 键表 + KI-1 补的两个错误码。
+  // 增键不再误报。要求的键名逐条来自 `locale/*.json`（字典即真源）+ KI-1 补的两个错误码。
   const zh = await readDictionary('zh');
   const en = await readDictionary('en');
   const required = [

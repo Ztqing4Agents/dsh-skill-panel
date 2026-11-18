@@ -745,14 +745,19 @@ test('K115 host-plugin-page.md §7：真源三件套齐全，且每条尺寸读�
   }
 });
 
-test('K115 visual.md A.5 有整行可点的三条刻度与「待真机取色」', async () => {
+test('K115 visual.md A.5 有整行可点的三条刻度与行底色的现取值（hover / active 两个令牌）', async () => {
   const text = await readFile(join(ROOT, 'docs', 'contracts', 'visual.md'), 'utf8');
   const a5 = sectionOf(text, '## A.5', '## A.6');
   assert.match(a5, /\.skc_cardOpen\{/, 'A.5 有 .skc_cardOpen 的规则');
   assert.match(a5, /\.skc_cardOpen::after\{[^}]*inset: 0/, 'A.5 写了 inset:0 的点击层');
   assert.match(a5, /\.skc_cardEnd\{[^}]*z-index: 1/, 'A.5 写了 z-index:1 的动作位');
   assert.match(a5, /@media \(hover: hover\)/, 'A.5 把 hover 限定在有悬停的设备上');
-  assert.match(a5, /待真机取色/, 'A.5 标注了待真机取色的刻度');
+  // 锚点是「现取值 + 两个令牌」，不是「待采」这类过程词：过程词的寿命只到下一次采集，
+  // 而令牌名是这条刻度真正的不变量（改它等于改实现）。
+  assert.match(a5, /行底色的现取值/, 'A.5 写下行底色的现取值（不写「待采」这类过程词）');
+  for (const token of ['--dsw-alias-interactive-bg-hover', '--dsw-alias-interactive-bg-active']) {
+    assert.ok(a5.includes(token), `A.5 记下 ${token}`);
+  }
   for (const rule of ['.skc_callRow{', '.skc_callName{', '.skc_detailBody{']) {
     assert.ok(a5.includes(rule), `A.5 记下详情页新增的 ${rule}`);
   }
