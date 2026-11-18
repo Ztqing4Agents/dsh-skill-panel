@@ -10,7 +10,7 @@
  * upstream identity to compare or to link to (the rule settled for local skills applies to
  * them as well - see docs/contracts/installed-detail.md).
  */
-import { Tag } from '@deepseek-ai/dsh-client-ui-primitives';
+import { PluginArtworkDefault, Tag } from '@deepseek-ai/dsh-client-ui-primitives';
 
 import { DetailCrumb } from './installed-detail.jsx';
 import { IconTile } from './icon-tile.jsx';
@@ -69,7 +69,15 @@ export function PluginDetail({ block, t, rows, onBack, onToggle }) {
       {/* Same head row and title group as a skill page; the right side stays empty - a
           provider has neither an uninstall nor a switch of its own. */}
       <div className={cn('detailTop')}>
-        <IconTile iconUrl={block.iconUrl ?? null} title={block.key} className="detailIcon" />
+        {/* Same seat as the list block: no icon (or one that fails to decode) draws the
+            host's default package figure, never a letter - `docs/contracts/client.md`
+            §3.9.2 item 7. The skill rows below are unaffected: a skill is a name. */}
+        <IconTile
+          iconUrl={block.iconUrl ?? null}
+          title={block.key}
+          className="detailIcon"
+          artwork={<PluginArtworkDefault size={36} />}
+        />
       </div>
       <div className={cn('detailIntro')}>
         <div className={cn('marketTitleRow')}>

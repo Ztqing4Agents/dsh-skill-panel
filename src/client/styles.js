@@ -296,6 +296,7 @@ margin: 0; padding: 0; list-style: none; display: grid;
 border-radius: calc(var(--dsw-radius-lg) - .5px); width: 100%; height: 100%;
 object-fit: contain; display: block;
 }
+.skc_pluginIconImg{ width: 36px; height: 36px }
 .skc_marketChipCount{
 margin-left: 4px; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 18px;
 }

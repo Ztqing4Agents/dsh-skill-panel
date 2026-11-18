@@ -250,7 +250,7 @@ font-size: 13px; line-height: 20px; display: inline-flex;
 .skc_detailBody{ font-size: 13px; line-height: 20px }
 ```
 
-> **行可点**：已安装行点标题即进本地详情页，实现只有上一条 `.skc_cardOpen::after` + `.skc_cardEnd{z-index:1}`（见 `AGENTS.md` 硬约束 9 与 `docs/contracts/installed-detail.md`）；不要 `<a href>`、不要第二个可点区域。行高恒 64px（48 图标 + 8×2 padding）。
+> **行可点**：已安装行点标题即进本地详情页，实现只有上一条 `.skc_cardOpen::after` + `.skc_cardEnd{z-index:1}`（见 `AGENTS.md` 硬约束 9 与 `docs/contracts/installed-detail.md`）；不要 `<a href>`、不要第二个可点区域。行高恒 64px（48 图标 + 8×2 padding；内置插件块共用这一颗 48 框）。
 > **行底色的现取值**：宿主用的是两个**令牌**、不是字面量——`@media (hover: hover)` 下 `.cardLink:hover` 取 `--dsw-alias-interactive-bg-hover`（亮 `rgba(38, 49, 72, .06)` = `#2631480f`，暗 `rgba(255, 255, 255, .08)` = `#ffffff14`），`.cardLink:active` 取 `--dsw-alias-interactive-bg-active`（亮 `rgba(38, 49, 72, .1)` = `#2631481a`，暗 `rgba(255, 255, 255, .14)` = `#ffffff24`）。`.skc_card:hover` 用 hover 令牌（与宿主同一个），`.skc_card:active` 用 **active** 令牌（按下比悬停深一档），与宿主两条规则逐条对应；取舍与采集读数见 `docs/contracts/decisions.md` Q-5。
 > 市场卡片**复用** `.skc_cardIcon`（48×48 同一条规则），其声明一字不改——改它会让「已安装」页签 11 行同时回归。来源品牌图标**不是**头像色板的第七组：它是 `src/client/market-marks.jsx` 里两段 `data:image/png;base64` 位图（16×16 显示），只在市场卡片上出现，「已安装」页签不渲染它，也不参与 `avatar.js` 的散列。
 
@@ -374,8 +374,9 @@ font-size: 13px; line-height: 20px; display: inline-flex;
 | 页签文字 | 14px / 20px，选中 500（sm 档） | `._tab_1lga9_1` |
 | 区标题 | 14px / 22px / 500 | `.skc_groupTitle` |
 | 列表 gap / 行外扩 | 2px / `margin:0 -8px` | `.skc_cards` / `.skc_card` |
-| 行内 gap / padding | 14px / 8px → 行高 64px | `.skc_cardHead` |
+| 行内 gap / padding | 14px / 8px → 行高 **64px**（48 图标 + 8×2；内置插件块共用同一颗 48 框，实测 head 64 / padding 8，与技能行逐字相同） | `.skc_cardHead` |
 | 图标 | 外框 48×48、底色 47×47（`background-clip: padding-box`），`.5px` `border-l3`，`radius-lg`（16px）；**17px / 700** 大写首字母居中；**6 组** accent 10%（天空 12%）底 + accent 实色字按技能名散列，对齐 skillhub.cn，**字母对比度约 2–3:1（刻意放弃原 ≥4.5:1）** | `.skc_cardIcon`（色板与散列见 `src/client/avatar.js`，理由见 A.5 与 `decisions.md` 附录 H） |
+| **插件位**（列表块 `PluginBlock` / 页头 `detailTop`） | **两处同图同尺寸**：无图标或解码失败画 `PluginArtworkDefault`（`size={36}`），框内 **36×36** 居中（宿主卡片与详情头就是这张；宿主列表行那张 `PluginArtworkSubagent` 30 不采用）。框各按我们的：列表块 48（`radius-lg` 16 / `.5px` `border-l3`）、页头 49（48 内容盒）；两处都不挂粉彩底（粉彩只在画字母那一帧写） | `.skc_pluginIconImg`（与 `.skc_marketIconImg` 同挂，靠声明顺序把 100% 覆盖成 36）；**`.skc_marketIconImg` 的全局值仍是 100% 填满**，技能行与市场卡不变 |
 | 名称 / 描述 | 14/20/500 · 13/18 tertiary 单行（**已安装行**；市场卡描述三行，刻度在 `docs/contracts/market.md` 附录 F） | `.skc_cardTitle` / `.skc_cardDesc` |
 | 开关 | 36×20（`Switch`），左侧预留 14px + 8px | `.skc_bundleToggle` |
 | 软链标记 | 高 18px，padding 0 6px，11/18，`bg-layer-3`，图标 12px | `.skc_roTag` |

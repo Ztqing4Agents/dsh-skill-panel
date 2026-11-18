@@ -276,7 +276,7 @@ ledger.readAll() ─────────────────┘   （R5�
 
 依据：`EX/dsh-client-ui-plugin-manager/lib/client.js`（SegmentedTabs / Switch / Button / Tooltip / StateDot / Toast 的真实调用点，见 §3.3 各条引注）；导出名在 `SHELL/index-Ciz7DZxv.js` 中存在（如 `IconSkillOutlineRegular`、`IconLinkOutlineRegular`、`StateDot`、`Toast`）。
 
-行图标（`.skc_cardIcon`）**不取 primitives**：它是首字母头像（技能名首字母 + 按名字散列的粉彩色块），色板与散列在 `src/client/avatar.js`，刻度见 `docs/contracts/visual.md` A.5 / A.9。
+行图标（`.skc_cardIcon`）的**技能位不取 primitives**：它是首字母头像（技能名首字母 + 按名字散列的粉彩色块），色板与散列在 `src/client/avatar.js`，刻度见 `docs/contracts/visual.md` A.5 / A.9。**插件位**（内置插件块与插件页头）是例外：没有图标时画宿主 primitives 给这个面的那张图形（`PluginArtworkDefault` 36；两处插件位同图同尺寸），口径见 `docs/contracts/client.md` §3.9.2 第 7 条。
 
 ---
 
@@ -330,7 +330,7 @@ ledger.readAll() ─────────────────┘   （R5�
 | `src/client/header-scroll.js` | `attachHeader(bar)`（克隆量测 + 观测）+ **纯函数** `interpolateParts(parts, offset)` |
 | `src/client/styles.js` | 单一 CSS 字符串（`docs/contracts/visual.md` 的全文）+ `injectStyles()`（按 `data-plugin-css` 去重） |
 | `src/client/toast.jsx` | `shell.overlay` 占位者：渲染刷新失败 toast（primitives `Toast`），离开页面后仍可见 |
-| `src/client/icon-tile.jsx` | `IconTile` / `tileElement()` / `useIconState()`：头像槽的唯一画法（有上游图标画图标、没有画首字母），拆成「无 hook 的纯函数 + 两个状态的 hook」两种入口，行 / 详情 / 插件页共用；容器仍是 `.skc_cardIcon`，不改它 |
+| `src/client/icon-tile.jsx` | `IconTile` / `tileElement()` / `useIconState()`：头像槽的唯一画法（有上游图标画图标；没有画首字母，插件位则由调用方传 `artwork` 画宿主的默认插件图形），拆成「无 hook 的纯函数 + 两个状态的 hook」两种入口，行 / 详情 / 插件页共用；容器仍是 `.skc_cardIcon`（48 框），不改它——插件位只改框内内容尺寸（36） |
 | `src/client/plugin-detail.jsx` | `PluginDetail({block, t, rows, onBack, onToggle})`：内置 provider 的第二级页（一个包里的技能逐行可开关，行本身只读、没有下一级），没有**独立的**版本区块与仓库链接（版本只出现在来源事实的一行里） |
 | `src/client/skill-dialogs.jsx` | 已安装页签的两个弹窗：`AddSkillDialog`（一条路径输入 + 三态 + 就地报因）与 `DeleteConfirm`（标题 + 正文 + 一行路径事实）；座位与 `market-confirm.jsx` 同一套 `Modal`，规范见 `docs/contracts/client.md` §3.9.7 |
 | `src/client/` 下的 `market-*` 文件 | 市场页的纯函数模块与 6 个组件（列表 / 筛选 / 卡片 / 详情 / 骨架 / 确认）加图形单元（品牌位图与三段字形）；职责见 `docs/contracts/market.md` 附录 G。`src/client/installed-detail.jsx`（已安装详情页）与 `src/client/markdown.jsx`（两页共用的正文渲染 + 兜底）见 `docs/contracts/installed-detail.md` |

@@ -36,7 +36,7 @@ ClientPlugin.apply(ctx)
 完整、可直接抄进代码的样式表见 **`docs/contracts/visual.md`**：类名↔宿主规则的映射逐条写在它的规则注释里（`[PM-CSS] .page`、`[PM-CSS] .cards / .card / …`、`SHELL` 这几类记号），本文不另存一份副本。
 页骨架的 `skc_` 前缀与「不引第二套样式系统」见 `AGENTS.md` 硬约束 4。
 
-`.skc_cardIcon` 的**容器是宿主 `.cardIcon` 原样式**（`.5px` `border-l3` 描边、`radius-lg` 圆角、48×48、`border-box`），不随头像需求改动；变化只在内容层：宿主画通用技能图标，本面板画首字母。
+`.skc_cardIcon` 的**容器是宿主 `.cardIcon` 原样式**（`.5px` `border-l3` 描边、`radius-lg` 圆角、48×48、`border-box`），不随头像需求改动（内置插件块共用这一颗 48 框）；变化都在内容层：宿主画通用技能图标，本面板的**技能位**画首字母、**插件位**（列表块与插件页头）画宿主那张默认插件图形 `PluginArtworkDefault`，**两处同图同尺寸**（框内 36；框各按我们的：列表块 48、页头 49），刻度见 visual.md A.9（第三态见 §3.9.2 第 7 条）。
 颜色不是样式表常量，而是 `avatar.js` 的 6 组色板（对齐 skillhub.cn 的 accent 10% 底 + 实色字，字母对比度约 2–3:1 是刻意取舍）经 `row.jsx` 以 `--skc-avatar-bg` / `--skc-avatar-ink` 行内传入（刻度见 `docs/contracts/visual.md` A.5）；`background-clip: padding-box` 保证粉彩底不盖住半透明描边。骨架复用同一个类，由 `.skc_skeletonIcon` 自己再写灰色底，加载态不出现彩色块、也不出现字母。
 
 ---
@@ -125,8 +125,10 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 4. 组件只读 props（`store/api/t`）写 `store.actions`，不直接 `fetch`；只有滚动位置恢复与触底预取读 DOM，且都在 `useEffect` 里（字符串渲染不触发）。
 5. **一次只问一个 scope**：来源菜单是 `所有来源`（默认）/`SkillHub`/`ClawHub` 三项——`all` 上游就是一次不带 `source` 的请求，所以仍不存在「两源同屏」「部分源失败提示条」，当前 scope 失败即整页错误态（可重试）。分类行三个 scope 都渲染（同一张 12 类表，计数按 scope 各算），menu 选项与计数来自 `bootScope` 那一份；`all` 下不判「这个来源暂时没有技能」。
 6. **分类 chip 带数量**：`全部` 用 `bootstrap.total`，各分类用 `categories[].count`；`count` 为 `null` 时数字位整段不渲染（不写 0、不写破折号），`countsOk:false` 时所有数字位都不出现。格式是 `Intl.NumberFormat(undefined, {notation:'compact'})`（运行时默认语言，`try/catch` 兜底成原数字），样式见 §8.5。
-7. **头像只有两态**（卡片、详情头、确认弹窗共用一个 `MarketIcon`）：**瓦片任何时候都不空**——URL 有值但还没 `onload` 时画字母 + 一张 `display:none` + `loading="eager"` 的探测图（同 `src`/同 `referrerPolicy`），图片只在 `onload` 之后才换成可见的 `<img class="skc_marketIconImg">`；探测图与可见图同一个 URL，浏览器只发一次请求（实测 `display:none` 的 eager 图会加载并触发 `onload`，`loading="lazy"` 的不会）。取值顺序 **`item.iconUrl` → `market.icons[marketKeyOf(item)]` → `null`**（`iconUrlOf()`，纯函数），拿到非空字符串就画图（`<img>` + `skc_marketIconImg`、`alt=""`、`loading="lazy"`、`referrerPolicy="no-referrer"`），否则画首字母；**图片 `onError` 也回落首字母**，任何情况下都不留空白方块。ClawHub 的图标是**后到的**：列表先给 `iconUrl:null`，页面渲染完成后由 `market/icons` 批量补齐，所以同一张卡会先字母、后换图。
-8. **图标补齐不阻塞渲染**：`market/list` 回来后先画卡片，再由面板 effect 把「ClawHub + 无图标 + 本会话没问过」的条目打包（≤24）调 `market/icons`；**同一 id 只问一次**（`iconsTried` 同时记正负结果），请求失败静默保持字母；切来源 / 搜索 / 页头刷新都**不清**已拿到的图标（缓存按身份键，重问同一个身份不会得到不同答案；清掉只会让卡片先回退成字母再换图，还会多打一轮 `market/icons`）。图片是 `.skc_cardIcon` 的 flex 子项、只填满内容盒，所以宿主那条 `.5px` 描边始终压在图片之上；头像盒既有声明（48×48 / `border .5px` / `radius-lg` / `background-clip: padding-box` / 粉彩底）一字不改。
+7. **头像三种取值：技能位两态，插件位第三态**（卡片、详情头、确认弹窗共用一个 `MarketIcon`）：**瓦片任何时候都不空**——URL 有值但还没 `onload` 时画字母 + 一张 `display:none` + `loading="eager"` 的探测图（同 `src`/同 `referrerPolicy`），图片只在 `onload` 之后才换成可见的 `<img class="skc_marketIconImg">`；探测图与可见图同一个 URL，浏览器只发一次请求（实测 `display:none` 的 eager 图会加载并触发 `onload`，`loading="lazy"` 的不会）。取值顺序 **`item.iconUrl` → `market.icons[marketKeyOf(item)]` → `null`**（`iconUrlOf()`，纯函数），拿到非空字符串就画图（`<img>` + `skc_marketIconImg`、`alt=""`、`loading="lazy"`、`referrerPolicy="no-referrer"`），否则画首字母；**图片 `onError` 也回落首字母**，任何情况下都不留空白方块。
+   **插件位是第三种取值**（只两个地方：已安装列表的内置插件块 `PluginBlock`、内置插件页头 `detailTop`）：这里的 subject 是「包」而不是「技能」，所以 `pluginIcon` 为 `null` **或**图片 `onError` 都画宿主那张默认插件图形（primitives 的 `PluginArtworkDefault`，`size={36}`；两处同图同尺寸，都是宿主卡片 / 详情头那一档）而不是首字母；探测期间仍画字母占位（「瓦片不空」在插件位同样成立），`onload` 后换成图片（列表块 48 框内 36、页头 49 框内 36）。行高因此仍是 48 + 8×2 = **64**，与技能行逐字相同（真机实测 head 64 / padding 8，刻度见 `docs/contracts/visual.md` A.9）。插件位画图或画默认图形时**不挂粉彩底**（`tileElement` 只在画字母那一帧写 `--skc-avatar-*`），因为宿主那张框是透明的；技能行、市场卡、安装确认弹窗、插件页里的技能行（`callIcon`）全部逐字不变。
+   ClawHub 的图标是**后到的**：列表先给 `iconUrl:null`，页面渲染完成后由 `market/icons` 批量补齐，所以同一张卡会先字母、后换图。
+8. **图标补齐不阻塞渲染**：`market/list` 回来后先画卡片，再由面板 effect 把「ClawHub + 无图标 + 本会话没问过」的条目打包（≤24）调 `market/icons`；**同一 id 只问一次**（`iconsTried` 同时记正负结果），请求失败静默保持字母；切来源 / 搜索 / 页头刷新都**不清**已拿到的图标（缓存按身份键，重问同一个身份不会得到不同答案；清掉只会让卡片先回退成字母再换图，还会多打一轮 `market/icons`）。技能位与市场位的图片是 `.skc_cardIcon` 的 flex 子项、只填满内容盒（插件位按第 7 条跑 36），所以宿主那条 `.5px` 描边始终压在图片之上；头像盒既有声明（48×48 / `border .5px` / `radius-lg` / `background-clip: padding-box` / 粉彩底）一字不改。
 
 ### 3.9.3 store action（`src/client/state.js`）
 

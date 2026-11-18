@@ -12,7 +12,9 @@
  * static read-only marker in the switch's seat instead of a switch, because this panel
  * never writes through a symlink - and the marker is not a control.
  */
-import { StateDot, Switch, IconLinkOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives';
+import {
+  StateDot, Switch, IconLinkOutlineRegular, PluginArtworkDefault,
+} from '@deepseek-ai/dsh-client-ui-primitives';
 
 import { IconTile } from './icon-tile.jsx';
 import { cn } from './styles.js';
@@ -75,14 +77,20 @@ export function EnableSwitch({ row, t, pending, onToggle }) {
  * (title button + `::after` covering the block, hard constraint 9), with no action seat.
  * @param {{block: {key: string, provider: string, iconUrl: string|null, skills: object[]},
  *   t: Function, onOpen: Function}} props - the package block, translate and the open handler.
- *   The block's icon comes from the package manifest; without one it keeps the letter avatar.
+ *   Both package seats draw the same thing: `PluginArtworkDefault` at 36 inside a 48px box -
+ *   the host's card / detail-head reading, not its row variant. A package is not a name, so a
+ *   letter would be the wrong fallback here; `docs/contracts/client.md` §3.9.2 item 7.
  * @returns {import('react').ReactElement} the block.
  */
 export function PluginBlock({ block, t, onOpen }) {
   return (
     <li className={cn('card')} data-skc-plugin={block.provider} data-skc-plugin-pkg={block.key}>
       <div className={cn('cardHead')}>
-        <IconTile iconUrl={block.iconUrl ?? null} title={block.key} />
+        <IconTile
+          iconUrl={block.iconUrl ?? null}
+          title={block.key}
+          artwork={<PluginArtworkDefault size={36} />}
+        />
         <div className={cn('cardMain')}>
           <div className={cn('titleRow')}>
             <button
