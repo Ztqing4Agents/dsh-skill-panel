@@ -2,7 +2,7 @@
 
 **简体中文** | [English](README.en.md)
 
-[![npm](https://img.shields.io/npm/v/@ztqing4agents/dsh-skill-panel?logo=npm&color=cb3837)](https://www.npmjs.com/package/@ztqing4agents/dsh-skill-panel) [![downloads](https://img.shields.io/npm/dt/@ztqing4agents/dsh-skill-panel?logo=npm&color=cb3837)](https://www.npmjs.com/package/@ztqing4agents/dsh-skill-panel) ![DSH](https://img.shields.io/badge/DSH-%3E%3D0.2.1-4B6EF5) ![Node](https://img.shields.io/badge/Node-%3E%3D20-339933?logo=node.js&logoColor=white) [![license](https://img.shields.io/github/license/Ztqing4Agents/dsh-skill-panel)](LICENSE)
+[![npm](https://img.shields.io/npm/v/@ztqing4agents/dsh-skill-panel?logo=npm&color=cb3837)](https://www.npmjs.com/package/@ztqing4agents/dsh-skill-panel) [![downloads](https://img.shields.io/npm/dt/@ztqing4agents/dsh-skill-panel?logo=npm&color=cb3837)](https://www.npmjs.com/package/@ztqing4agents/dsh-skill-panel) ![DSH](https://img.shields.io/badge/DSH-%3E%3D0.2.2--rc.1-4B6EF5) ![Node](https://img.shields.io/badge/Node-%3E%3D20-339933?logo=node.js&logoColor=white) [![license](https://img.shields.io/github/license/Ztqing4Agents/dsh-skill-panel)](LICENSE)
 
 适用于 DSH（DeepSeek Harness）Web GUI 的原生风格技能管理面板插件。
 
@@ -17,12 +17,6 @@
 - **无损启停控制**：切换本地或已安装技能开关时，仅精确修改目标 `SKILL.md` 中的 `disable-model-invocation` 字段，完整保留原有的换行符（CRLF/LF）、BOM、注释与行序；内置技能状态则独立持久化于插件存储中。
 - **内置技能市场（SkillHub 镜像）**：支持在 **所有来源 / SkillHub / ClawHub** 间切换，提供防抖搜索、12 类标签筛选、多维度排序及无限滚动分页；市场安装技能自动继承上游图标与展示名称。
 - **灵活导入与版本更新**：支持从本地目录或 GitHub 仓库链接（含子目录）导入第三方技能；市场安装的技能支持自动与手动检查更新、一键覆盖升级及彻底卸载。
-
-## 环境要求
-
-- **DSH**：`>= 0.2.1`
-- **Node.js**：`>= 20`
-- **网络**：运行市场只需可访问 `api.skillhub.cn`（由插件代为请求，浏览器不直连）；安装时另需连得上 npm 源
 
 ## 安装指南
 

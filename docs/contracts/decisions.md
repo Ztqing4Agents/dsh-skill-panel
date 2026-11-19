@@ -95,7 +95,7 @@
 | --- | --- | --- | --- |
 | **Q-A** | 入口名（PRD Q1）——**已由用户 2026-11-17 拍板**，不再是待定项 | 已定：插件名 **`技能面板` / `Skill Panel`**（随 DSH 显示语言自适应），侧栏入口名保持 **`技能` / `Skills`** 不随插件名改 | 已定：只通过 `locale/*.json` 的 `meta.title`（插件名）与 `panel.label`（侧栏行标题）表达，两键各自独立取值，代码零改动 |
 | **Q-B** | 「内置永远胜出」vs「rank 小者胜」在 `bundled(600)` 与 `user-dsh(400)` 同名时互斥（见 §3.2.2 冲突表的第 3 条） | 取 **rank 小者胜**（保 G1：面板显示的就是模型拿到的那条） | 若改为「内置永远胜出」，`mergeCatalog` 加一条覆盖规则，并接受「面板显示的不是模型拿到的那条」 |
-| **Q-C** | `＋ 添加技能 ⌄` 的「即将支持」提示形态 | 包裹 `<span title>` 的原生 tooltip（禁用按钮不触发鼠标事件，宿主对只读行也用 `title` 传原因） | 若要求浮层样式，需改用 `Tooltip` + `aria-disabled` 的非禁用按钮，多 1 个组件 |
+| **Q-C** | `＋ 添加技能 ⌄` 的第二行（「让 Agent 创建技能」）在没有创造模式的部署里怎么呈现——**已落地，不再是待定项** | 菜单行用 `disabled` + 行内提示 `add.createWithAgentOff`（「当前部署没有创造模式」），不弹浮层、不用 tooltip；占位期的「未开放」提示已随功能撤除，`locale/*.json` 里已无该文案 | 若要求浮层样式，需改用 `Tooltip` + `aria-disabled` 的非禁用按钮，多 1 个组件 |
 | **Q-D** | 侧栏行的位置（`PANEL_ORDER = 40`，排在已知行之后） | 40 | 改 1 个常量 |
 
 ### 假设（已按此推进，如不成立请纠正）
@@ -324,6 +324,38 @@
 | Y-2 | 依据 | 宿主 `PackageArtwork` 的分支是两层：`src === undefined \|\| src === failedSource` ⇒ 画 `Fallback`，而 `Fallback = row ? PluginArtworkSubagent : PluginArtworkDefault`，`size = row ? 30 : 36`。宿主自家有三个面两种图：**已安装列表行（`row` 形态）是 Subagent 30**，**包卡片与详情页头是 Default 36**。本面板两处插件位都取后者（见 Y-1）。读数与出处见 `docs/reference/host-plugin-page.md` §7.3。 |
 | Y-3 | 代价（如实记） | 插件位不再有技能名散列的粉彩底：**36 的图坐在 48 / 49 框里**，原先被图标铺满的粉彩会露出宿主没有的一圈色环，因此 `tileElement` 只在「画字母那一帧」写 `--skc-avatar-bg` / `--skc-avatar-ink`，插件位画图或画默认图形时回落到透明底；技能行、市场卡、确认弹窗逐字不变，`.skc_cardIcon` 的六条容器声明（含 48 框本身）与 `.skc_marketIconImg` 的五条声明也不动——框内 36 只由 `.skc_pluginIconImg` 一条给，列表块与页头共用它（块不再有专属类）。 |
 | Y-4 | 不采用 / 不动的一面 | 宿主列表行形态的 `PluginArtworkSubagent`（size 30）**本面板不采用**：两处插件位都按宿主卡片 / 详情头的 36 口径。本面板**插件页里的技能行**（`callIcon`）仍是首字母头像——宿主那里是包内组件行、我们这里是技能行，按用户划定不动。 |
+
+## 附录 Z 宿主 rc.5 复核与 peer 区间修正（2026-11-19）
+
+> 归这一节的理由：本轮两件事都不是新需求，而是**对既有结论的复核与更正**——rc.5 复核把契约面结论保留下来，peer 区间则被实测推翻并改写。这与附录 B / E / H…Y 这一串「偏离 / 更正 / 假设」同类，形态又和附录 X / Y 的「裁决 + 代价」一致，所以接着 Y 往后编 Z，不新开编号族。**Z-9 起的区间收窄与单一真源是同一轮的后续裁决**，改的仍是这同一份声明（宿主区间），接在 Z-5 之后最省读者的回溯成本。
+
+| # | 事项 | 硬闸 / 依据 |
+| --- | --- | --- |
+| Z-1 | 裁决：宿主 `0.2.2-rc.3 → 0.2.2-rc.5` **不破坏兼容性**，本轮不改代码、不改运行口径 | 判据见 Z-2 / Z-3；`src/`、`lib/`、`client.js` 零改动，界面、路由与错误码行为不变 |
+| Z-2 | 复核方法 | 全量扫描宿主 337 个运行时依赖：314 个与 rc.3 内容相同（只变锁步版本号，其中我方依赖面 17 个包逐文件确认）、14 个实质变化、8 个非锁步版本包（cordis 等，版本未动）。对我方真正依赖的 22 项契约面逐项比对：注入服务与 `cannot get property … without inject` 语义、`webServer.register` 的 `kind`/`path`/`handler`、`skills.snapshot` 与 `SkillSummary` 字段、`sessions.list`、`slots` 的四个方法与三个座位声明形状、`locale.register`/`bind` 与扁平点号键的字面量查找、`uiWorkspace.startSession` 实参、`clientExportOf` 与 `exports["./client"]`、浏览器 seed 的 11 个模块 id、25 个 `--dsw-*` 令牌、`iconOf` 的 256 KiB 与四种媒体类型、宿主插件页形状 |
+| Z-3 | 变化面（都不在我方依赖上） | 14 个变化包全落在 DeepSeek 拒答码、web 搜索选源（`ctx.web.selectSearchProvider(llmProvider)` 改为按模型路由挑提供方）、会话持久化 worker、实验包与文档；宿主自带升级指南的 `v0.2.2-rc.3` / `v0.2.2-rc.4` 两段也只登记这两件事 |
+| Z-4 | 前提更正（任务书给错的一条） | 「cordis 4.0.5 → 4.1.0」不发生在 rc.3→rc.5：`@deepseek-ai/dsh@0.2.2-rc.1` 起 `dependencies` 就是 `~4.1.0`（cordis 4.1.0 与 rc.1 同日发布），`0.2.1-rc.2` 才是 `~4.0.5`。rc.3 的基线文档本就在 4.1.0 上采集，所以本轮没有 cordis 语义增量 |
+| ~~Z-5~~ | ~~**更正：peer 区间对预发布宿主全部不成立**~~ **→ 已由 Z-9 取代**（只对 npm 侧成立，宿主侧不成立） | `>=0.2.0-rc.1 <0.3.0-0` 只带 `0.2.0` / `0.3.0` 两个 tuple；semver 规定带预发布的版本，其 `major.minor.patch` 必须出现在比较子里，于是 `0.2.1-rc.x`、`0.2.2-rc.3`、`0.2.2-rc.5` 在 **npm / pnpm 的 peer 解析（默认模式）** 下全判 false，npm 消费者装包直接 `ERESOLVE`。原句「`includePrerelease: true` 也救不回来」对**宿主侧不成立**：宿主固定走 `satisfies(..., { includePrerelease: true })`，同一串对 `0.2.2-rc.5` 判 **true**（两侧比较器语义与逐条实测见 Z-8），所以老区间从没在真机炸过、只在 npm 侧炸。~~落地形态是按 tuple 枚举成联合区间：七条 `@deepseek-ai/dsh-*` 统一为 `^0.2.0-rc.1 \|\| ^0.2.1-rc.1 \|\| ^0.2.2-rc.1`，`cordis` 仍 `>=4.0.1`~~ **→ 已由 Z-9 收窄成单串 `>=0.2.2-0 <0.3.0-0`**（`peerDependencies` 与 `engines.dsh` 同串）；条目规则见 `AGENTS.md` 硬约束 18 |
+| ~~Z-6~~ | ~~覆盖范围与代价（如实记）~~ **→ 已由 Z-9 取代**（`0.2.0-rc.*` / `0.2.1-rc.*` 不在支持面内了，代价见 Z-10） | ~~`0.2.0-rc.*` / `0.2.1-rc.*` 仍在区间内——保留它们是因为 `engines.dsh: ">=0.2.1"` 与 README 承诺的支撑下限就是 `0.2.1`，把 `0.2.1-rc.*` 踢出 peer 会与对外承诺自相矛盾（工程师在 `0.2.1-rc.5` 宿主消费者工程里实测装得动）~~（下限随 `engines.dsh` 同轮改，这条理由本身消失）。**仍然成立的是这半句**：本轮只在 `0.2.2-rc.5` 上验过门禁 + 真机，别把区间当验证结论读；本地验证宿主版本靠锁文件 + `npm ci` 复现，`npm install <宿主包>@ver` 会写进 `dependencies` 一起发出去。`0.2.3-rc.1` 出现时的动作见 Z-11 |
+| Z-7 | 采集纪律（本轮新踩的坑） | 宿主包内 `client.js` 的 CSS Module 哈希在 asar 与 npm tarball 上不同（同一 commit 的两次构建，哈希种子各异），哈希类读数只能读 asar；三对实测值与规则见 `docs/reference/host-plugin-page.md` §1 |
+| Z-8 | 规矩：**宿主侧看 `engines.dsh`、npm 侧看 `peerDependencies`，两者别互推** | 宿主 `dsh-app-boot` 的 `unmetRequirements` 是两级：**有 `engines.dsh` 就由它单独裁决、`peerDependencies` 根本不读**（只有没有 `engines.dsh` 时才逐条比对 `@deepseek-ai/dsh` / `dsh-*` 的 peer）；两侧比较器语义也不同——宿主固定走 `satisfies()`，它传 `{ includePrerelease: true }`，npm 侧不带。所以「宿主能加载」证不了「npm 装得上」：老区间 `>=0.2.0-rc.1 <0.3.0-0` 因此从未在真机上炸过，只在 npm 消费者工程里 `ERESOLVE`。逐条实测：`includePrerelease: true` 下 `>=0.2.1` 对 `0.2.2-rc.5` 判 **true**（这才是真机放行的原因），但对 `0.2.1-rc.5` 仍判 **false**——于是区间里 `^0.2.1-rc.1` 那条 tuple 是「npm 侧装得动、宿主侧反而被 `engines.dsh` 拦下」，两条线的覆盖面本就不一致（见 Z-6），别按「`>=0.2.1` 已覆盖」往下推。~~区间本身不因此缩窄：peer 是对外的「可装性」声明，宿主拦不拦是宿主自己的裁决~~ **→ 已由 Z-9 取代**：收窄的理由是「声明与事实对齐」，不是「宿主会拦」——两侧现在同串、同代际 |
+| Z-9 | **裁决：宿主支持面收窄到 `0.2.2` 代际，区间收成 `>=0.2.2-0 <0.3.0-0`**（取代 Z-5 的 tuple 枚举与 Z-6 的覆盖范围；2026-11-19 用户拍板，13 个生态项目调研后确认） | `engines.dsh` 与七条 `@deepseek-ai/dsh-*` peer **同串**——`-0` 是让预发布进门的写法，删掉它 `0.2.2-rc.*` 就落不进比较子。**理由**：旧 `engines.dsh: ">=0.2.1"` 在**宿主侧**（`satisfies(..., { includePrerelease: true })`）对 `0.2.1-rc.5` 判 false ⇒ `0.2.0` / `0.2.1` 的 rc 宿主本来就被挡在门外；Z-5 那两条 tuple 只让 npm 装得上、装上之后宿主照样拒，是死配置。收窄不减少真实用户，只让声明与事实一致 |
+| Z-10 | **代价（如实记）** | 仍在 `0.2.0` / `0.2.1` 宿主上的用户：已装的 1.1.x 及更早版本继续可用，但不再接收修复；新版本对他们**两侧都装不上**——npm 侧被 `peerDependencies` 拒（`ERESOLVE`），宿主侧被 `engines.dsh` 拒。升级路径只剩「先升宿主、再升插件」，这句指引按发布纪律写进 `CHANGELOG.md` 的 Fixed 段 |
+| Z-11 | **换代的触发与动作** | `0.2.3-rc.1` 一出现就必须抬下限、再发一版：`0.2.2-0` 这条区间对 `0.2.3-rc.1` 在 **npm 默认模式**下判 false，而**宿主侧**因 `includePrerelease` 反而放行——两侧不一致正是「声明已过期」的信号，不许拖到用户报错。同轮在 `CHANGELOG.md` 写「旧宿主请装哪个版本」 |
+| Z-12 | **单一真源** | 宿主清单与区间只在 `scripts/hosts.mjs` 一处维护（`supportedHosts` / `peerRange` / `developmentHost` / `requiredHostPeers`，`assertHostPeers()` 自检）：`scripts/sync-hosts.mjs` 默认只校验、`--write` 才回写 `package.json` 与中英两条 README，`scripts/test-compat.mjs` 的宿主清单同源。`npm run check` 的第五门 `check:hosts` 守「声明与真源一致」，手改 `package.json` 的区间会立刻红——**改区间只能改一处** |
+| Z-13 | **发布纪律（规矩，不是建议）** | ① tag 逐字等于 `v<package.json version>`，由 `scripts/check-version.mjs` 断言；② 版本号带 `-` 的预发布只发 `--tag beta`、**永不 `latest`**（dshmarket 的教训：每修一版都推给所有用户，1.13.0 因此发了个点了没用的重启按钮）；③ `prepublishOnly` = `npm run check`（五门）+ `npm test`（全量单测）+ `check-version` 三条断言（tag ↔ 版本号、`engines` 与 peer 同串且匹配 `supportedHosts`、预发布禁发 `latest`）。照 dsh-market / dsh-remote 的成文做法落地，不引入 dev 通道（没有自动构建，dev 通道无意义） |
+| Z-14 | **规矩：抬宿主代际的那次发版，同轮对旧代际版本执行一次 `npm deprecate`**（2026-11-19 用户裁决：三条候选机制里只采纳这一条） | **动作**：宿主支持面从 `0.2.x` 抬到新代际的那次发版（换代触发见 Z-11），**同轮**对「新版的第一个版本之前的**所有**版本」跑一次 `npm deprecate`，消息里写清**旧版支持哪一代宿主、新版从哪个版本起**。它是唯一能让**装到旧版的人当场看到指引**的机制——即使他不读 `CHANGELOG.md`，`npm install` 也会打印 `npm warn deprecated <pkg>@<ver>: <消息>`。**取舍（为什么不是另两条）**：代际 dist-tag（`compat-0.2.2` 之类）不做——用户得先读到文档才知道有这个别名，且 `dsh plugin add` 是否接受 `@tag` 形式未经真机验证；README 历史兼容表也不做——多一处要跟代际同步的文案。deprecate 是三条里唯一「被动可见」的一条，成本一条命令。**命令模板**：本轮（1.1.2 发布时）`npm deprecate "@ztqing4agents/dsh-skill-panel@<1.1.2" "该版本声明的宿主 peer 区间覆盖不到 DSH 0.2.2-rc.*，npm 侧安装会 ERESOLVE；请改用 1.1.2 及以上（或用 dsh plugin add，pnpm 链路不受影响）。"`；将来换代际（通用形）`npm deprecate "<pkg>@<新旧版第一个版本>" "仅支持 DSH <旧代际>；<新代际> 宿主请用 <新版本>。"`。**撤销**：把消息置空——`npm deprecate "<同一 spec>" ""`。**边界（如实记）**：deprecate 不阻断安装、不迁移、不会让旧宿主上的用户自动升级；真正的硬闸仍是 peer 区间与 `engines.dsh`（Z-9），它只解决「撞墙时没有指向」这一件事。**执行者与凭据**：本机 `~/.npmrc` 对 agent 不可读、账号 2FA 绑通行密钥 ⇒ 这一步要么由维护者本人跑，要么用一次性 bypass token；token 不进仓库、不进对话 |
+
+## 附录 AA 文档体系裁决（2026-11-19）
+
+> 归这一节的理由：四条都是落地 `dev-docs-standards` 时的裁决，与宿主代际无关——挂在附录 Z（宿主 rc.5 复核与 peer 区间修正）的表里会让人误读成宿主侧结论，所以编号接 Z 之后另开一族；体例同附录 X / Y（裁决 + 依据 + 代价）。
+
+| # | 事项 | 硬闸 / 依据 |
+| --- | --- | --- |
+| AA-1 | **裁决：本仓 `docs/contracts/*.md` 一律标 `类型：规范`（400 行档），不标 `契约`（300 行档）**（2026-11-19 用户拍板，偏离 dev-docs-standards 的类型判据） | **理由**：这 11 份是多来源约定的合集，`§x.y` / `附录 X.n` 编号与 K 号锚点跨文件复用；改标 `契约` 后档位降到 300 行，超线的那几份只能拆文件，而拆分会把编号分区切碎、并让 `test/*.test.mjs` 的头注成批变红（2026-11-18 拆出 `docs/contracts/market-routes.md` 时一次红了 10 条 R7）。**代价（如实记）**：与规范的「契约 = 现在必须成立的事实」不严格一致——`类型：规范` 只要求一个含「验收」的章节，`## 范围` / `## 条款` 三节模板不适用。**兜底**：`check-docs` 的 R3 按声明值守 400 行，超线照旧告警 |
+| AA-2 | **裁决：`docs/reference/` 不挪回根 `reference.md`**（2026-11-19 用户拍板） | 规范建议「参考 ≤ 1 份时放根」，但同一份细则允许「已有体系仍在维护 → 只按归位表对账、不重排目录」。本仓现在只有 `docs/reference/host-plugin-page.md` 一份，挪动会波及路径限定的锚点（R7）、K 号头注与三处正文引用，收益只是少一层目录。**重估触发**：`docs/reference/` 出现第二份参考时按规范重排一次 |
+| AA-3 | **裁决：项目级 `MEMORY.md` 维持 `.gitignore`、不入库**（2026-11-19 用户拍板，偏离 dev-docs-standards 的「MEMORY.md 应进 git」） | **理由**：条目以本机环境事实为主（具体路径、运行时版本、验收手法），对 clone 者无意义；入库后 agent 每次写记忆都会产生 diff 噪音，淹没真正的改动。**代价（如实记）**：记忆改动不进 review、漂移没有第二双眼睛，只能靠解耦控制——可 grep 的断言送回 `docs/contracts/`，不能做错的事送回 `AGENTS.md` 硬约束 |
+| AA-4 | **裁决：`README.en.md` 进 `.docs-standards.json` 的 `exclude`，标准门禁只覆盖中文版 README**（2026-11-19 用户拍板） | **缺口**：vendored 的 `scripts/check-docs-standards.mjs` 把 `ENUMS.headerExempt` 写死成 `README.md` / `AGENTS.md` / `CHANGELOG.md` 三个根文件（不含 `README.en.md`），G1 又要求 `whitelist` 每条都命中仓库里的 md——两条夹起来只剩两条路：给它补 `> 类型：…` 头注（中英两版从此不同构，与附录 W-2 相冲），或加进 `exclude`。**取后者**：`exclude` 含 `README.en.md`、`whitelist` 不含它，同构由 W-2 守。**代价（如实记）**：英文版的体量只由本仓 `check:docs` 的 R12 守、逐节同构只由 W-2 的人工核对守——标准门禁的 G7 / G8 / G9 / G13 / G14（指路坐标、引用可达、零行号、描述一致、计数与承诺词）都不落在英文版上，英文版里的失效链接或过期数值不会被标准门禁发现 |
 
 ## 验收
 

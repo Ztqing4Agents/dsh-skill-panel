@@ -342,6 +342,9 @@ ledger.readAll() ─────────────────┘   （R5�
 | `scripts/build-client.mjs` | esbuild 打包 + `__ModuleLoader__` 外壳 + sourcemap |
 | `scripts/check-client.mjs` | 重新构建到临时文件并与 `client.js` 逐字节比对；校验产物含 `__ModuleLoader__.load({ id: "<包名>"`；无 esbuild 时给出可读报错 |
 | `scripts/check-i18n.mjs` | `zh.json`/`en.json` 键集一致；`src/client/**` 与 `lib/**` 中**禁止 CJK 字面量**；`panel.label` 键存在 |
+| `scripts/check-docs.mjs`、`scripts/check-board.mjs` | 文档门禁（白名单 / 头注 / 章节 / 锚点 / 引用 / 零行号 / 体积 R10–R12 / 用例落点 R14，自测在 `test/docs-gate.test.mjs`）与看板门禁（格式 + 依据锚点，无 `.agents/work/` 时跳过） |
+| `scripts/hosts.mjs`、`scripts/sync-hosts.mjs`、`scripts/semver-lite.mjs` | 宿主真源：`supportedHosts` / `peerRange` / `developmentHost` / `requiredHostPeers` 与 `assertHostPeers()`；`sync-hosts` 就是第五门 `check:hosts`——**默认只读校验**（`package.json` 与两条 README 漂移即红），**回写必须显式 `--write`**；`semver-lite` 是前两者与 `check-version` 共用的最小 semver 实现（含 `includePrerelease` 口径） |
+| `scripts/check-version.mjs`、`scripts/test-compat.mjs`、`scripts/asar-read.mjs`、`scripts/cdp.mjs` | 发布前三断言（tag 逐字等于 `v<package.json version>`、`engines` 与 peer 同串且覆盖 `supportedHosts`、预发布禁发 `latest`）与真机冒烟 H1–H5（`--host <ver>`，隔离 `DSH_HOME` 起实例；不进本地门禁）；后两只只在冒烟脚本内用——读 `app.asar` 与零依赖 CDP 驱动 |
 
 ### 2.5 测试（QA 拥有）
 
@@ -365,22 +368,22 @@ react-dom@18.3.1          —— renderToStaticMarkup 结构测试（运行时�
 @types/react-dom@~18.3.1  —— 同上
 ```
 
-`peerDependencies`（声明我们依赖宿主提供什么，不安装）：
+`peerDependencies`（声明我们依赖宿主提供什么，不安装；七条宿主包共用一条**代际区间** `>=0.2.2-0 <0.3.0-0`，**字面量与 `package.json` 逐字一致**；改区间只改 `scripts/hosts.mjs` 一处——`check:hosts` **只校验**（默认只读，漂移即红），要补齐声明得显式 `node scripts/sync-hosts.mjs --write`）：
 
 ```
-@deepseek-ai/cordis                    >=4.0.1        —— Host 半部 ctx
-@deepseek-ai/dsh-host-webserver        >=0.2.0-rc.1   —— ctx.webServer.register
-@deepseek-ai/dsh-skill                 >=0.2.0-rc.1   —— ctx.skills.snapshot
-@deepseek-ai/dsh-session               >=0.2.0-rc.1   —— ctx.sessions.list（解析 cwd）
-@deepseek-ai/dsh-client-locale         >=0.2.0-rc.1   —— ctx.locale.register/bind
-@deepseek-ai/dsh-client-ui-layout      >=0.2.0-rc.1   —— main 座位
-@deepseek-ai/dsh-client-ui-sidebar     >=0.2.0-rc.1   —— sidebar.panellist 座位
-@deepseek-ai/dsh-client-ui-primitives  >=0.2.0-rc.1   —— 控件与图标（经 seed）
+@deepseek-ai/cordis                    >=4.0.1                                    —— Host 半部 ctx
+@deepseek-ai/dsh-host-webserver        >=0.2.2-0 <0.3.0-0                       —— ctx.webServer.register
+@deepseek-ai/dsh-skill                 >=0.2.2-0 <0.3.0-0                       —— ctx.skills.snapshot
+@deepseek-ai/dsh-session               >=0.2.2-0 <0.3.0-0                       —— ctx.sessions.list（解析 cwd）
+@deepseek-ai/dsh-client-locale         >=0.2.2-0 <0.3.0-0                       —— ctx.locale.register/bind
+@deepseek-ai/dsh-client-ui-layout      >=0.2.2-0 <0.3.0-0                       —— main 座位
+@deepseek-ai/dsh-client-ui-sidebar     >=0.2.2-0 <0.3.0-0                       —— sidebar.panellist 座位
+@deepseek-ai/dsh-client-ui-primitives  >=0.2.2-0 <0.3.0-0                       —— 控件与图标（经 seed）
 react                                  ^18.2.0
 react-dom                              ^18.2.0
 ```
 
-依据：`PROF/@michengai/dsh-skills-manager/package.json` 与 `PROF/@linxin666/dsh-client-ui-skill-explorer/package.json` 的 peer 集合（我们只取真正用到的子集），版本区间取本机实测可用的 `0.2.2-rc.1` 系列。
+依据：`PROF/@michengai/dsh-skills-manager/package.json` 与 `PROF/@linxin666/dsh-client-ui-skill-explorer/package.json` 的 peer 集合（我们只取真正用到的子集）。四条口径：①**区间只在一处维护**——`scripts/hosts.mjs` 的 `supportedHosts` / `peerRange` 是真源，`npm run check` 的第五门 `check:hosts`（`scripts/sync-hosts.mjs`，默认只校验、`--write` 才回写）守 `package.json` 与两条 README 的声明与它一致，改别处即红；②**`-0` 不许省**——写成 `>=0.2.2` 会把 `0.2.2-rc.*` 全部挡在门外（预发布只有其 `major.minor.patch` 出现在比较子里才可比较，`-0` 就是把它显式放进来的写法）；③**宿主与 npm 是两套比较器**——宿主 `satisfies(..., { includePrerelease: true })`、npm / pnpm 走默认模式，同一条区间两侧可以给出不同结论，声明必须以「npm 侧装得上」为准（两侧语义与逐条实测见 `docs/contracts/decisions.md` 附录 Z 的 Z-8）；④换代际的触发与代价见同附录 Z-9–Z-14。
 
 市场面同样**不新增任何 dependency / devDependency**：`node:https`、`node:crypto`、`node:fs/promises` 都是 node 内置；没有 zip 读取器（`package:'zip'` 那条路已不存在）。
 

@@ -10,9 +10,10 @@ npm run check:i18n   # zh/en 键集一致 + 入口键存在 + lib/ 与 src/ 无 
 npm run check:client # 重打一次与 client.js 逐字节比对 + 装载形状 + exports["./client"]
 npm run check:docs   # 文档门禁：白名单/头注/章节/锚点/引用/零行号（脚本自测见 test/docs-gate）
 npm run check:board  # 看板格式与依据锚点（无 .agents/work/ 时跳过）
-npm run check        # 上面四个
-npm test             # node --test test/（测试由 QA 维护）
-npm publish --//registry.npmjs.org/:_authToken=<token>   # 账号 2FA 绑的是通行密钥，CLI 的 --otp 只吃 TOTP；发布必须用勾了 "Bypass two-factor authentication" 的 granular token（一次性传参），token 不进仓库、不进对话
+npm run check:docs:standards   # 标准文档门禁：dev-docs-standards 的 vendored 副本，交付前当第二意见；不进 npm run check，升级方式见脚本头注
+npm run check        # 上面四道 + check:hosts：宿主声明须与 scripts/hosts.mjs 一致（共五门）
+npm test             # node --test test/（测试由 QA 维护）；真机冒烟另跑 npm run test:compat [-- --host <ver>]，隔离 DSH_HOME 起实例，不进本地门禁
+npm publish --//registry.npmjs.org/:_authToken=<token>   # 2FA 绑的是通行密钥（CLI 的 --otp 只吃 TOTP）⇒ 必须用勾了 "Bypass two-factor authentication" 的 granular token，一次性传参，token 不进仓库、不进对话；本次发版若抬了宿主代际，同轮 npm deprecate 旧代际版本（模板与理由见 docs/contracts/decisions.md Z-14）
 ```
 
 ## 文档地图
@@ -28,7 +29,7 @@ npm publish --//registry.npmjs.org/:_authToken=<token>   # 账号 2FA 绑的是�
 | 决策登记（偏离 / 更正 / 假设） | `docs/contracts/decisions.md` | 附录 B |
 | 页面视觉刻度（px、令牌、`skc_` 类名、收拢顺序） | `docs/contracts/visual.md` | A.1–A.9 |
 | 技能市场（源适配器、数据流、市场刻度、安装链路） | `docs/contracts/market.md` | §7 附录 F 附录 G |
-| 市场面 9 条路由、安装链路与市场错误码 | `docs/contracts/market-routes.md` | §3.7 §8.6（本地面 7 条见 `docs/contracts/routes.md` §3.3 / §3.4） |
+| 市场面路由（清单见 §3.7）、安装链路与市场错误码 | `docs/contracts/market-routes.md` | §3.7 §8.6（本地面见 `docs/contracts/routes.md` §3.3 / §3.4） |
 | 宿主「插件」页长什么样（外部形状、稳定钩子、几何） | `docs/reference/host-plugin-page.md` | 带采集日期；宿主升级后整份重采，不在旧值上打补丁 |
 | 使用者能感知什么、怎么装、有哪些已知限制 | `README.md`、`README.en.md` | 只写使用者视角；中英两版同构、条目数须相等（`docs/contracts/decisions.md` 附录 W-2） |
 | 升级时我要注意什么 | `CHANGELOG.md` | 记行为变化与迁移，不记改过哪些文件；Release 正文五段式见 `docs/contracts/decisions.md` 附录 W-4 |
@@ -50,7 +51,7 @@ npm publish --//registry.npmjs.org/:_authToken=<token>   # 账号 2FA 绑的是�
 | `lib/write-skill.js` | 指纹 → 临时文件 → fsync → rename → 回读校验 → 回滚 |
 | `lib/routes.js` | 路由表与共用 `guard()`：本地面见 `docs/contracts/routes.md` §3.3、市场面见 `docs/contracts/market-routes.md` §3.7 |
 | `lib/local/**` | 已安装页两条写路由的编排：`add` 复制本机目录或 **GitHub 浅克隆**（`rules.js` 分类/定位，`git.js` 克隆，`copy.js` 拷贝）、`remove` 删目录 + 清台账；守卫顺序 G0–G12 + S0–S12 见 `docs/contracts/routes.md` §3.3.4 |
-| `src/client/**` → `client.js` | 源码 24 个文件（市场页 8 个为 `market-*`；`installed-detail.jsx` 是已安装详情页、`plugin-detail.jsx` 是内置 provider 页、`skill-dialogs.jsx` 是添加/卸载两个弹窗（`page.jsx` 里另有工具条那个两项的添加菜单）、`markdown.jsx` 是两页共用的 markdown 兜底，`icon-tile.jsx`/`avatar.js` 是共用视觉单元；纯逻辑模块不含 JSX，node 可直接测）；`client.js` 是**构建产物、入库、不要手改** |
+| `src/client/**` → `client.js` | 源码（逐文件说明见 `docs/contracts/architecture.md` §2）：市场页为 `market-*`；`installed-detail.jsx` 是已安装详情页、`plugin-detail.jsx` 是内置 provider 页、`skill-dialogs.jsx` 是添加/卸载两个弹窗（`page.jsx` 里另有工具条那个两项的添加菜单）、`markdown.jsx` 是两页共用的 markdown 兜底，`icon-tile.jsx`/`avatar.js` 是共用视觉单元；纯逻辑模块不含 JSX，node 可直接测；`client.js` 是**构建产物、入库、不要手改** |
 | `lib/market/**`、`src/client/` 的 `market-*` 文件 | 市场半部：源适配器、安装链路、市场页组件（清单见 `docs/contracts/market.md` 附录 G） |
 | `locale/{zh,en}.json` | 唯一文案真源 |
 
@@ -62,8 +63,7 @@ npm publish --//registry.npmjs.org/:_authToken=<token>   # 账号 2FA 绑的是�
 2. **不要在 `lib/**` 或 `src/client/**` 写中文**（注释也不行）：`check:i18n` 直接 exit 1。
    界面文案一律进 `locale/*.json`，代码里只出现键名。
 3. **入口名与插件名都只在 `locale/*.json` 里改**（`panel.label` = 侧栏行标题，`meta.title` = 插件名，**两键可独立取值**：2026-11-17 起二者不同——侧栏 `技能`/`Skills`，插件名 `技能面板`/`Skill Panel`），代码零改动。
-4. **不写同名 `--dsw-*` 变量**，不引第二套样式系统。宿主类名是构建哈希，不许出现在选择器里；
-   页骨架用 `skc_` 前缀，规则体逐字来自宿主「插件」页（`docs/contracts/visual.md`）。
+4. **不写同名 `--dsw-*` 变量**，不引第二套样式系统。宿主类名是构建哈希，不许出现在选择器里；页骨架用 `skc_` 前缀，规则体逐字来自宿主「插件」页（`docs/contracts/visual.md`）。
 5. **软链技能只读，三层同时拦**：扫描层给 `symlink` 事实 → 前端渲染只读标记不渲染开关 →
    写路由返回 `409 E_SYMLINK_READONLY`。任何一层被去掉都算回归。
 6. **写路由不得信任请求里的路径**：先按 name 重新扫描，`row.path !== path` 即 `409 E_STALE_PATH`。
@@ -81,9 +81,9 @@ npm publish --//registry.npmjs.org/:_authToken=<token>   # 账号 2FA 绑的是�
 13. **浏览器半部不直连上游**：单上游 `api.skillhub.cn`（三个 scope）一律走 Host 代理（`lib/market/upstream.js` 是唯一出口）；`src/client/**` 里出现 `fetch('https://api.skillhub.cn…')` 即返工。
 14. **安装只写清单里的文件**：不执行包内脚本、不跟随包内符号链接、不写包外路径；任一步失败必须删掉 `.skc-install-*` 临时目录，`skills/<name>` 与自有台账要么都有、要么都没有（唯一例外：台账写失败时目录保留并报 `E_INSTALL_IO`，见 `docs/contracts/market-routes.md` §3.7）。`files` 形态下**空清单 / 无 `SKILL.md` / 路径不安全**三态一律 `E_PACKAGE_INVALID`——镜像单源之后这是唯一的包闸。
 15. **`docs/contracts/acceptance.md` 的体积与键数门禁不回读、必须手改**：K115 正则还钉死 `installed-detail.md`(3 处)、`client.md`(2 处 `detail.*`)、`routes.md` §3.3「十六条 exact 路由」与 `market-routes.md` §3.7「市场面 N 条」——改措辞或改键数须与 `locale/`、`ROUTES` 同轮改，否则红。
-16. **契约文档 400 行满档**：加行须同轮合并同族短行；`check-docs` 的 R11 比 `wc -l` 多 1，要 0 warn 就 ≤399。
-    引用「尚未创建」的仓库路径不能加反引号（R8 会校验存在）；文档里不许引 `.agents/work/` 下的瞬态产物（R13；不入库，必然腐化）——工作现场入口 `BOARD.md` 与 `BOARD-archive.md` 除外。
+16. **契约文档 400 行满档**：加行须同轮合并同族短行；`check-docs` 的 R11 比 `wc -l` 多 1，要 0 warn 就 ≤399。引用「尚未创建」的仓库路径不能加反引号（R8 会校验存在）；文档里不许引 `.agents/work/` 下的瞬态产物（R13；不入库，必然腐化）——工作现场入口 `BOARD.md` 与 `BOARD-archive.md` 除外。
 17. **npm 包名（scoped `@ztqing4agents/dsh-skill-panel`）≠ 插件内部 id（短名 `dsh-skill-panel`）**：cordis `name`、16 条 `/api/dsh-skill-panel/*`、`NS`/`PANEL_ID`/`STYLE_ID`、`$DSH_HOME/dsh-skill-panel/`、patch 的 `insert[].id` 一律不动，只有 `client.js` 的装载 id 跟包名（宿主强制，`check-client` 守 `id == pkg.name`）——别「顺手统一」成一处。
+18. **宿主区间只有一个写法：`>=0.2.2-0 <0.3.0-0`，`engines.dsh` 与七条 `@deepseek-ai/dsh-*` peer 同串**：`-0` 是让预发布进门的写法、不许省；目标预发布的三段号还必须出现在比较子里——`>=0.2.0-rc.1 <0.3.0-0` 只带 `0.2.0` / `0.3.0` 两个 tuple，对 `0.2.1-rc.x` / `0.2.2-rc.x` 判 false。**宿主与 npm 是两套规则两套结果**：宿主走 `satisfies(..., { includePrerelease: true })`（同一条老区间对 `0.2.2-rc.5` 判 **true**，所以它从没在真机炸过，只在 npm 侧炸），npm / pnpm 的 peer 解析走默认模式（判 false ⇒ 消费者工程 `ERESOLVE`）；别拿一侧的结果推另一侧。改区间只改 `scripts/hosts.mjs` 一处（`npm run check` 的 `check:hosts` 守声明一致）。本地验宿主版本靠**锁文件**钉住、`npm ci` 冷装复现（宿主包不进 `devDependencies`：npm 自己按 peer 解析到当前 rc，用 `-D` 钉版本会随宿主每条 rc 线腐化且没人跟），`npm install <宿主包>@ver` 会写进 `dependencies` 一起发出去、禁止。换代触发、代价与发布纪律见 `docs/contracts/decisions.md` 附录 Z（Z-9–Z-14）。
 
 ## 四处容易踩的真机坑
 
@@ -95,5 +95,5 @@ npm publish --//registry.npmjs.org/:_authToken=<token>   # 账号 2FA 绑的是�
 ## 改完自检
 
 ```bash
-node scripts/build-client.mjs && node scripts/check-client.mjs && node scripts/check-i18n.mjs && node scripts/check-docs.mjs && node scripts/check-board.mjs && node --check index.js && node --check client.js && node --check lib/*.js
+node scripts/build-client.mjs && node scripts/check-client.mjs && node scripts/check-i18n.mjs && node scripts/check-docs.mjs && node scripts/sync-hosts.mjs && node scripts/check-board.mjs && node --check index.js && node --check client.js && node --check lib/*.js
 ```

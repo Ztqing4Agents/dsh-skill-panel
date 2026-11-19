@@ -2,7 +2,7 @@
 
 English | [简体中文](README.md)
 
-[![npm](https://img.shields.io/npm/v/@ztqing4agents/dsh-skill-panel?logo=npm&color=cb3837)](https://www.npmjs.com/package/@ztqing4agents/dsh-skill-panel) [![downloads](https://img.shields.io/npm/dt/@ztqing4agents/dsh-skill-panel?logo=npm&color=cb3837)](https://www.npmjs.com/package/@ztqing4agents/dsh-skill-panel) ![DSH](https://img.shields.io/badge/DSH-%3E%3D0.2.1-4B6EF5) ![Node](https://img.shields.io/badge/Node-%3E%3D20-339933?logo=node.js&logoColor=white) [![license](https://img.shields.io/github/license/Ztqing4Agents/dsh-skill-panel)](LICENSE)
+[![npm](https://img.shields.io/npm/v/@ztqing4agents/dsh-skill-panel?logo=npm&color=cb3837)](https://www.npmjs.com/package/@ztqing4agents/dsh-skill-panel) [![downloads](https://img.shields.io/npm/dt/@ztqing4agents/dsh-skill-panel?logo=npm&color=cb3837)](https://www.npmjs.com/package/@ztqing4agents/dsh-skill-panel) ![DSH](https://img.shields.io/badge/DSH-%3E%3D0.2.2--rc.1-4B6EF5) ![Node](https://img.shields.io/badge/Node-%3E%3D20-339933?logo=node.js&logoColor=white) [![license](https://img.shields.io/github/license/Ztqing4Agents/dsh-skill-panel)](LICENSE)
 
 A native-style skill management panel for the DSH (DeepSeek Harness) Web GUI.
 
@@ -17,12 +17,6 @@ It adds a **Skills** entry to the sidebar and gathers **built-in skills**, **loc
 - **Lossless on/off control**: flipping a local or installed skill rewrites only the `disable-model-invocation` field in that skill's `SKILL.md` and keeps the original line endings (CRLF/LF), BOM, comments and line order; a built-in skill's state is stored by the plugin instead.
 - **A skill market built in (SkillHub mirror)**: switch between **All sources / SkillHub / ClawHub**; debounced search, 12 category filters, multi-dimension sorting and infinite scrolling. Market installs keep their upstream icon and display name.
 - **Flexible import and updates**: import a third-party skill from a local directory or a GitHub repository link (subdirectories included); market installs support automatic and manual update checks, a full overwrite upgrade and a complete uninstall.
-
-## Requirements
-
-- **DSH**: `>= 0.2.1`
-- **Node.js**: `>= 20`
-- **Network**: the market only needs `api.skillhub.cn` (the plugin requests it for you, and the browser never connects to it directly); installing also needs to reach the npm registry.
 
 ## Installation
 

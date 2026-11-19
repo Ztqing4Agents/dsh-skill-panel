@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **内置插件图标与宿主一致**：「已安装」页签里的内置插件块、以及内置插件的详情页头部，在没有图标（或图标解码失败）时不再显示首字母头像，改为显示宿主「插件」页上那张默认插件图形（`PluginArtworkDefault`）——**列表块与详情页头部同图同尺寸**，框内 **36×36**（此前一律铺满整个框，并排看比宿主大一圈；框本身、行高与技能行都不变）。技能行、市场卡片与安装确认弹窗的头像保持原样（有图填满、没图画首字母）。
 
+### Fixed
+
+- **统一宿主兼容区间，支持面收敛到 `0.2.2` 代际**：宿主 `peerDependencies`（七条 `@deepseek-ai/dsh-*`）与 `engines.dsh` 同串改为 `>=0.2.2-0 <0.3.0-0`（`-0` 让 `0.2.2-rc.*` 这类预发布进得来）。此前那串 `>=0.2.0-rc.1 <0.3.0-0` 按 semver 的预发布规则覆盖不到预发布宿主，npm 消费者工程里与 `0.2.1-rc.x` / `0.2.2-rc.x` 宿主一起安装会报 `ERESOLVE`；DSH 自带的安装链路（pnpm）不受影响，问题只在 npm 侧复现。
+  - **支持范围**：宿主 **`0.2.2` 系列（rc.1 起）**为正式支持面；`0.2.0` / `0.2.1` 系列不再声明支持——它们的 rc 宿主本来就被 `engines.dsh` 挡在门外，收窄不减少可用用户，只是让声明与事实一致。
+  - **旧宿主指引**：仍在使用宿主 `0.2.0` / `0.2.1` 系列的用户，请留在已安装的旧版本上（该版本继续可用，但不再接收后续修复），等升级宿主之后再升级本插件。
+  - 本次是 patch 级修正：只改兼容声明，不改任何运行时行为，版本号本身本次不动。
+
 ## [1.1.1] - 2026-11-18
 
 ### Changed
@@ -24,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **迁移至 npm 作用域包 `@ztqing4agents/dsh-skill-panel`**：正式以公共作用域包名发布至 npm（需注意 npm 上无作用域的同名 `dsh-skill-panel` 为第三方无关包，请勿误装）。
-- **零迁移成本升级**：内部 16 条 `/api/dsh-skill-panel/*` 接口路由、面板命名空间（`NS` / `PANEL_ID`）、样式挂载钩子及本地数据目录（`$DSH_HOME/dsh-skill-panel/`）均保持不变。从 `1.0.0` 升级时**切勿移动或重命名数据目录**，原有收藏、安装台账与内置技能开关状态将自动沿用。
+- **零迁移成本升级**：全部 `/api/dsh-skill-panel/*` 接口路由、面板命名空间（`NS` / `PANEL_ID`）、样式挂载钩子及本地数据目录（`$DSH_HOME/dsh-skill-panel/`）均保持不变。从 `1.0.0` 升级时**切勿移动或重命名数据目录**，原有收藏、安装台账与内置技能开关状态将自动沿用。
 - **前端模块注册 ID 同步**：`client.js` 装载标识已对齐新包名，避免宿主加载时因 ID 不匹配触发 `loaded without registering` 启动异常。
 - **升级操作说明**：请先卸载旧包再安装新包并重启 DSH（`dsh plugin --profile <name> remove dsh-skill-panel` → `dsh plugin --profile <name> add @ztqing4agents/dsh-skill-panel`）。**切勿同时启用新旧两个包**，否则会因注册相同路由触发 `webserver: duplicate exact route` 冲突。
 

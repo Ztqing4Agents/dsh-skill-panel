@@ -12,6 +12,7 @@
 > 四次采集：§8.1「添加插件菜单」于 2026-11-13 复采（**同一版宿主** `0.2.2-rc.1`；这一版装了 `dsh-client-ui-agent-preset`，菜单从一项变两项）
 > 五次采集：全文于 2026-11-15 按宿主 `0.2.2-rc.3` 整份重采。rc.3 的 asar 带 TS/TSX/CSS 源码，读数优先取源码声明值；rc.1 留下的「px 未逐值采集」「`cardLink` 待取色」两处在本轮落实
 > 来源版本：DeepSeek Harness `0.2.2-rc.3`（`/Applications/DeepSeek Harness.app/Contents/Resources/app.asar`）
+> 六次复核（2026-11-19，宿主 `0.2.2-rc.5`）：在同一 `app.asar` 上重跑 §1 的五条计数（**8 / 2 / 5 / 3 / 5**，与五次采集逐条相等），并按 §1 的采集纪律核对 §2–§5 的形状读数与 §7.3 的图标契约——三类类名哈希、页头四段稳定钩子、§4 的几何令牌、`PM/lib/client.js` 的 357 239 B（rc.5 侧 sha256 前 12 位 `ab4d7b1c98bf`）与 `PluginManagerPage.module.css` 的 2318 行 / 50 181 B 全部相同，**正文一字未改**。§7 / §8 的真机读数未逐条重采，其有效性由「`PM`、`SHELL`、`THEME`、`LAYOUT`、`SRV` 这些包与前端产物在 rc.3 与 rc.5 上逐文件相同」保证。
 
 只描述**宿主长什么样**，不写「我们应该怎么用」——复刻口径在 `docs/contracts/visual.md`。
 
@@ -21,11 +22,11 @@ asar 是「头部 JSON + 拼接内容」的容器，不是目录；整包 `grep 
 
 ```bash
 A="/Applications/DeepSeek Harness.app/Contents/Resources/app.asar"
-grep -ac updatesNote              "$A"   # 页头状态文案类（本文 3 节）：rc.3 = 8
-grep -ac _tabs_1lga9_1            "$A"   # 页签容器的构建哈希（本文 3 节）：rc.3 = 2
-grep -ac -- --bundle-progress-size "$A"  # 打开进度占位宽（本文 4 节）：rc.3 = 5
-grep -ac AddPluginMenu            "$A"   # 添加菜单组件（本文 8.1）：rc.3 = 3
-grep -ac InstallDialog            "$A"   # 安装弹窗（本文 8.2）：rc.3 = 5
+grep -ac updatesNote              "$A"   # 页头状态文案类（本文 3 节）：rc.3 = rc.5 = 8
+grep -ac _tabs_1lga9_1            "$A"   # 页签容器的构建哈希（本文 3 节）：rc.3 = rc.5 = 2
+grep -ac -- --bundle-progress-size "$A"  # 打开进度占位宽（本文 4 节）：rc.3 = rc.5 = 5
+grep -ac AddPluginMenu            "$A"   # 添加菜单组件（本文 8.1）：rc.3 = rc.5 = 3
+grep -ac InstallDialog            "$A"   # 安装弹窗（本文 8.2）：rc.3 = rc.5 = 5
 ```
 
 本文任何一条测量都可用「重跑上面五条 + 重新截同一页」复核。宿主升级后**五条全为 0** 说明整份已失效，按 `来源版本` 重采；只有个别条数变化时按对应节重读。
@@ -33,6 +34,8 @@ grep -ac InstallDialog            "$A"   # 安装弹窗（本文 8.2）：rc.3 =
 ⚠️ **`grep -a` 只能用来搜 ASCII**：同一份 asar 上 `grep -ac "卸载"` 是 **0**（假阴性），而 `grep -ac "uninstall"` 有 161 —— grep 按字节匹配，对 UTF-8 中文会静默漏检。**搜中文、确认「某界面不存在」一律用 node 读 asar**（切片规则见 1.1 的 `EX/` 行），否则「0 命中」只是采集方法在骗人（2026-11-10 踩过，结论见 `docs/contracts/decisions.md` 附录 Q-2）。
 
 ⚠️ **引用宿主内部实现只写不变量，不钉压缩符号名**：`SHELL/` 与 `PM/` 交付的是压缩产物，标识符每版重新编号，同一个字母串换一版可能指向完全不同的模块——所以本文只写「返回什么 / 导出什么 / 挂在哪个钩子上」。要复核时就按它引用的包名在产物里搜：`package.json` 的 `dsh.client.external` 白名单里那些 `@deepseek-ai/*` 名字在压缩中被逐字保留，搜到再读导出形状。压缩名最多作为一行例证出现，不作定位手段。
+
+⚠️ **CSS Module 哈希只能从 asar 取，不能按 npm 包抄**：同一个 commit 的两次构建（侧栏包自身的 build 戳两侧都是 `0.2.2-rc.5-3f85d88`），包内 `client.js` 的类名前缀在 asar 与 registry tarball 上**不同**。实测三对：`PM/` 的页面模块 asar `w6M7KW_` / npm `X_2TxG_`（各 567 处，逐字节比对后差异**全部**落在这 6 个字符上，其余字节相同）；侧栏 `SidebarRoot` 模块 asar `kB3qhq_` / npm `hHd-Xa_`（268 处）；侧栏 `HeaderLeadingControls` 模块 asar `xoYuoq_` / npm `IW6AQa_`（5 处）。`SHELL/` 是例外：前端 `dist/assets` 在 asar 与 npm 包上字节相同，§3 的 `_tabs_1lga9_1` / `_switch_1ik0f_5` 两侧一致。**哈希种子随构建而异**，所以按 npm 包重采会写出一组真机上从不存在的选择器；复核哈希一律读 asar（2026-11-19 复核时确认）。
 
 截图：[宿主插件页首屏](../assets/host-plugins-page.png)（1440×920，2026-11-08；页面骨架本身未变）。
 
