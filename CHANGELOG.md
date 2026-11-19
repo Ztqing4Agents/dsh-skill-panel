@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-11-19
+
 ### Changed
 
 - **内置插件默认图标对齐宿主**：「已安装」列表中的内置插件区块及详情页头部，在缺少图标或图标加载失败时不再显示首字母头像，改为展示与宿主「插件」页一致的默认插件图标，且列表与详情页头部统一为框内 `36×36` 尺寸（外框、行高及普通技能行不变；技能行、市场卡片与安装确认弹窗维持原有头像策略）。
@@ -79,7 +81,8 @@
 - **字节保真写入**：切换本地或已安装技能开关时，仅精确修改目标 `SKILL.md` 的 `disable-model-invocation` 字段，完整保留原有换行符（CRLF/LF）、BOM 与行序。
 - **软链只读保护与边界提示**：符号链接引入的技能标记为「软链·只读」并禁用写操作；页脚统计并提示位于项目级或其他未扫描目录中的技能数量。
 
-[Unreleased]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v0.1.0...v1.0.0

@@ -1,6 +1,6 @@
 {
   "name": "@ztqing4agents/dsh-skill-panel",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "type": "module",
   "description": "Skill panel for the DSH GUI: built-in, local and market-installed skills in one list, each with its own switch.",
   "icon": "assets/icon.svg",
