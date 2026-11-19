@@ -60,13 +60,15 @@ test('K40 check:client 绿：重打一次与 client.js 逐字节相同', async (
   assert.match(gate.stdout, /matches src\/client/, '报出与源码一致');
 });
 
-test('K40 check:docs 绿：16 份 0 warn', async () => {
+test('K40 check:docs 绿：0 warn（文档份数只增不减）', async () => {
   const gate = await runGate('check-docs.mjs');
   assert.equal(gate.code, 0, `check:docs 必须 exit 0（实际 ${gate.code}）：${gate.stdout}${gate.stderr}`);
   assert.match(gate.stdout, /check-docs: OK/, '门禁自报 OK');
   const summary = /check-docs: OK \((\d+) md files, (\d+) warn\)/.exec(gate.stdout);
   assert.ok(summary !== null, '门禁输出里带统计');
-  assert.equal(Number(summary[1]), 16, `文档恰好 16 份（实际 ${summary[1]}）`);
+  // `docs/releases/` 每发一版多一份文档，钉死总数会逼着每次发版改测试；「少一份」才是真回归
+  // （「多出一份没登记的 md」由 R1 自己挡，不需要靠计数）。
+  assert.ok(Number(summary[1]) >= 16, `文档份数只增不减（至少 16 份，实际 ${summary[1]}）`);
   assert.equal(Number(summary[2]), 0, `警告为 0（实际 ${summary[2]}）`);
 });
 
@@ -866,7 +868,7 @@ test('K115 check:docs 认这份新契约：installed-detail.md 在白名单里�
   assert.match(text, /K110–K115/, '验收节指向 K110–K115');
   const gate = await runGate('check-docs.mjs');
   assert.equal(gate.code, 0, `check:docs 必须 exit 0：${gate.stdout}${gate.stderr}`);
-  assert.match(gate.stdout, /16 md files, 0 warn/, '文档 16 份、0 警告');
+  assert.match(gate.stdout, /\d+ md files, 0 warn/, '文档门禁 0 警告（份数随 docs/releases/ 增长，不钉死）');
 });
 
 test('K115 契约自洽：§3.7 头注说的市场条数与共用 guard 的名单，跟两张表一致', async () => {

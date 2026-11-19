@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 /**
- * 发布前的三条断言：`prepublishOnly` 的最后一关（不联网、不装依赖）。
+ * 发布前的四条断言：`prepublishOnly` 的最后一关（不联网、不装依赖）。
  *
  *   1. tag ↔ 版本号：HEAD 上有 tag 时，它必须逐字等于 `v<package.json.version>`（没有 tag 就跳过并说明）；
  *   2. 宿主声明：`engines.dsh` 与七条 `@deepseek-ai/dsh-*` peer 同串、peer 集合无增无减，
  *      且 `supportedHosts` 的每一版都被该区间匹配——**默认模式与 `includePrerelease` 两种都测**，
  *      因为 npm 走默认模式、宿主走 `includePrerelease: true`，一侧绿不代另一侧绿（`AGENTS.md` 硬约束 18）；
  *   3. 发布通道：版本号带 `-` 时只接受 `npm publish --tag beta`——`npm_config_tag` 不是 `beta`
- *      （空、`latest`、`next`、`alpha`、大小写变体）一律红，与 `docs/contracts/decisions.md` 附录 Z-13 同口径。
+ *      （空、`latest`、`next`、`alpha`、大小写变体）一律红，与 `docs/contracts/decisions.md` 附录 Z-13 同口径；
+ *   4. Release 文档：`git tag -l` 里每个 `vX.Y.Z` tag 都要有 `docs/releases/<tag>.md`（文件名与 tag 逐字一致）；
+ *      git 不可用 / 没有这类 tag 时与第 1 条同口径——跳过并说明，不当成硬失败。
  *
  * semver 实现按 `scripts/semver-lite.mjs` 的顺序取用：仓库 `node_modules/semver` → 宿主
  * `app.asar` 里的 `dsh/node_modules/semver` → 本仓库最小实现（走兜底会显式打印告警）。
@@ -15,12 +17,12 @@
  * 用法：node scripts/check-version.mjs
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { assertHostPeers, peerRange, requiredHostPeers, supportedHosts } from './hosts.mjs';
-import { loadSemver, SEMVER_LITE_NOTE } from './semver-lite.mjs';
+import { compareVersions, loadSemver, SEMVER_LITE_NOTE } from './semver-lite.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
@@ -143,6 +145,35 @@ if (pkg.version.includes('-')) {
   say(`3. 发布通道：${pkg.version} 不带预发布标记，跳过`);
 }
 
+/* ------------------------------------------------- 4. 每版 tag 都有 Release 文档 */
+
+/** Release 日志的 tag 形状：与 `git tag` 逐字一致的 `vX.Y.Z`（预发布 tag 不进这条）。 */
+const RELEASE_TAG = /^v\d+\.\d+\.\d+$/;
+
+say('4. release 文档：每个形如 vX.Y.Z 的 tag 都要有 docs/releases/<tag>.md');
+const allTags = gitLines(['tag', '-l']);
+if (allTags === null) {
+  say('   git 不可用（不是 git 仓库或 git 不在 PATH），跳过');
+} else {
+  const releaseTags = allTags
+    .filter((tag) => RELEASE_TAG.test(tag))
+    .sort((left, right) => compareVersions(left, right));
+  if (releaseTags.length === 0) {
+    say('   没有形如 vX.Y.Z 的 tag，跳过');
+  } else {
+    for (const tag of releaseTags) {
+      const relative = `docs/releases/${tag}.md`;
+      if (existsSync(join(ROOT, relative))) {
+        say(`   ${relative}  ✓`);
+      } else {
+        say(`   ${relative}  缺失`);
+        failures.push(`4. release 文档：缺 ${relative}——先写它（Release 正文五段式见 docs/contracts/decisions.md 附录 W-4，`
+          + '文件名与 tag 必须逐字一致）');
+      }
+    }
+  }
+}
+
 /* ------------------------------------------------------------------ 结论 */
 
 if (failures.length > 0) {
@@ -150,4 +181,4 @@ if (failures.length > 0) {
   for (const failure of failures) console.error(`  ✗ ${failure}`);
   process.exit(1);
 }
-say('\ncheck-version: 三条断言通过');
+say('\ncheck-version: 四条断言通过');

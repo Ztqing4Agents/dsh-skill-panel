@@ -124,12 +124,12 @@ const headings = (f) => lines(f).flatMap((l) => {
 /* -------------------------------------------------------------- R1 whitelist */
 
 const ALLOW_EXACT = new Set(['AGENTS.md', 'README.md', 'README.en.md', 'CHANGELOG.md']);
-const ALLOW_PREFIX = ['docs/contracts/', 'docs/reference/'];
+const ALLOW_PREFIX = ['docs/contracts/', 'docs/reference/', 'docs/releases/'];
 const allowed = (f) => ALLOW_EXACT.has(f) || ALLOW_PREFIX.some((p) => f.startsWith(p));
 
 for (const f of files) {
   if (!allowed(f)) {
-    red('R1', `${f}: not on the doc whitelist (allowed: AGENTS.md / README.md / README.en.md / CHANGELOG.md / docs/contracts/** / docs/reference/**)`);
+    red('R1', `${f}: not on the doc whitelist (allowed: AGENTS.md / README.md / README.en.md / CHANGELOG.md / docs/contracts/** / docs/reference/** / docs/releases/**)`);
   }
 }
 
