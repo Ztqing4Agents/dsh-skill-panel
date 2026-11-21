@@ -6,9 +6,11 @@
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-11-21
+
 ### Changed
 
-- **技能市场卡片的描述改为优先显示中文描述**：与上游站点同一口径——卡片与详情页概览优先取平台的中文描述，中文缺失时才回落到作者原文；两段措辞不同的技能（普查样本里约 55%）升级后描述文案会随之变化，中文界面下不再出现英文原文段落。
+- **技能市场卡片的描述改为优先显示中文描述**：与上游站点同一口径——卡片与详情页概览优先取平台的中文描述，中文缺失时才回落到作者原文；两段措辞不同的技能（普查 400 行里过半）升级后描述文案会随之变化——中文界面下优先读到平台中文那一段；个别技能的中文槽位本身就是英文，这类技能仍显示英文，与站点一致。
   - **已知限制**：描述只有一段字符串，界面语言为英文时显示的也是这段中文描述；按界面语言挑字段要同时改动数据形状，本轮未做。
 - **详情页概览显示技能的中文译本**：上游为一部分技能提供官方中文版正文，本插件此前一律显示作者原文；现在概览优先取中文译本、译本缺失时回落原文，与上游站点的读数口径一致。安装仍只写作者原文，技能目录里不会出现译文。
 
@@ -92,7 +94,8 @@
 - **字节保真写入**：切换本地或已安装技能开关时，仅精确修改目标 `SKILL.md` 的 `disable-model-invocation` 字段，完整保留原有换行符（CRLF/LF）、BOM 与行序。
 - **软链只读保护与边界提示**：符号链接引入的技能标记为「软链·只读」并禁用写操作；页脚统计并提示位于项目级或其他未扫描目录中的技能数量。
 
-[Unreleased]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v1.1.3...HEAD
+[1.1.3]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v1.0.0...v1.1.0

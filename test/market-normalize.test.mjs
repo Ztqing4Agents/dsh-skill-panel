@@ -1024,7 +1024,10 @@ test('K149 summaryTextOf 自身：非对象不抛、恒返回字符串', () => {
  * - detail: `publisher?.name || owner.displayName` (its stats card)
  *
  * Why the second slot had to be added: `publisher` exists on enterprise rows only (77 of
- * 400 sampled), so every other row was named by `namespace` - which for a clawhub or
+ * 400 sampled - re-counted 2026-11-21: all 77 sit on `source: enterprise` rows, while the
+ * 123 community rows and 200 clawhub rows of the same sample carry no `publisher` key at
+ * all; "123/400" in an earlier note was that community row count, not a `publisher` count),
+ * so every other row was named by `namespace` - which for a clawhub or
  * community row is an account id (`user_07c3fda9`), not a person. Reading `ownerName`
  * first prints the GitHub handle the upstream actually carries (`loonghao`), and the detail
  * side prints the account's display name (`Hal`) instead of the id.
