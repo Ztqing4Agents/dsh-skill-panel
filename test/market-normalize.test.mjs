@@ -3,7 +3,8 @@
  *
  * Contract: docs/contracts/market.md §7.4 (the field table, the five-item invariant
  * list, and the `saves`/`score`/`tags` rows) and §7.2 (per-source capability table);
- * case ids K31, K78, K82, K86.
+ * case ids K31, K78, K82, K86, K149 (the localized-first description chain, §7.4), K150
+ * (the four-step author chain and its two spellings, §7.4).
  *
  * U6: ClawHub's catalogue now arrives through the SkillHub mirror, so the ClawHub list and
  * search mappings were deleted and `fromClawhubMirrorItem` took their place (it reuses the
@@ -39,6 +40,7 @@ import {
   mirrorOwnerOf,
   skillhubIconUrl,
   sortByUpdatedDesc,
+  summaryTextOf,
   textOrNull,
   timestampOrNull,
 } from '../lib/market/normalize.js';
@@ -117,11 +119,11 @@ test('K31 SkillHub 列表条目缺字段：downloads/version/category 都是 nul
   assert.equal(item.summary, '', 'summary 是唯一的空串字段（卡片整段不渲染）');
 });
 
-test('K31 author 三级回落：publisher → namespace.displayName → owner', () => {
+test('K31 author 回落：publisher → namespace.displayName → namespace.handle（ownerName / owner.displayName 那两格见 K150）', () => {
   const base = { slug: 'x', namespace: { handle: 'h', displayName: 'Handle' } };
-  assert.equal(fromSkillhubListItem({ ...base, publisher: { name: 'Pub' } }).author, 'Pub', '第一级 publisher.name');
-  assert.equal(fromSkillhubListItem(base).author, 'Handle', '第二级 namespace.displayName');
-  assert.equal(fromSkillhubListItem({ slug: 'x', namespace: { handle: 'h' } }).author, 'h', '第三级 owner');
+  assert.equal(fromSkillhubListItem({ ...base, publisher: { name: 'Pub' } }).author, 'Pub', 'publisher.name 在场 ⇒ 用它');
+  assert.equal(fromSkillhubListItem(base).author, 'Handle', '缺 ⇒ namespace.displayName');
+  assert.equal(fromSkillhubListItem({ slug: 'x', namespace: { handle: 'h' } }).author, 'h', '再缺 ⇒ namespace.handle');
 });
 
 test('K31 SkillHub 详情：stats/latestVersion 落在正确字段上，形不对的条目返回 null', () => {
@@ -687,4 +689,657 @@ test('K95 all 混排里一条坏行不打断整页：其余行照出，末页判
     ['skillhub:ake:a', 'clawhub:ivangdavila:b', 'skillhub:acme:c'],
     '坏行只丢自己，前后行照常出（3 出来、2 丢掉）',
   );
+});
+
+/* ------------------------------- K149 · 描述取值链：本地化优先、原文兜底（U23） */
+
+/**
+ * The chain this block pins: `summaryTextOf()` resolves `description_zh → summary_zh →
+ * description → summary → ''`, and `clampLine(…, SUMMARY_MAX)` runs **after** that choice
+ * (`docs/contracts/market.md` §7.4).
+ *
+ * Two key sets, two chains, one function: a list row spells the pair `description` /
+ * `description_zh`, a detail body's `skill` spells it `summary` / `summary_zh` - the
+ * upstream's own site resolves `description_zh || description` and `summary_zh ||
+ * summary`. Fixing one chain and forgetting the other leaves the detail page blank for the
+ * same skill, so every order test below runs both.
+ *
+ * The payloads are **verbatim captures** (2026-11-21) of
+ * `GET /api/skills?keyword=ppt-generator-skill` and
+ * `GET /api/v1/skills/ppt-generator-skill?namespace=user_3b34947d`, trimmed to the keys the
+ * mapper reads. They are frozen here on purpose: the bug is a *shape* - an empty original
+ * slot next to a filled localized one - and this skill is its live specimen (`description`
+ * is `''` while `description_zh` carries the whole sentence), which is exactly what made
+ * the card draw no description line at all.
+ *
+ * The three payloads keep their double quotes because they were dumped straight out of the
+ * capture: hand-retyping a 155-char Chinese sentence is how a fixture stops being real.
+ */
+const K149_ZH = "智能 PPT 生成助手。根据用户描述的主题、行业、风格，自动生成漂亮的 PPT 文件。支持所有行业（商务、教育、科技、医疗、金融、创意等），支持中英文双语，支持用户提供的模板或 AI 自动配色。触发词：做PPT、生成PPT、制作幻灯片、make ppt、create presentation、帮我做个PPT。";
+
+/** The real list row whose `description` is empty and whose `description_zh` is full. */
+const K149_ROW = {
+  "slug": "ppt-generator-skill",
+  "name": "ppt-generator-skill",
+  "description": "",
+  "description_zh": "智能 PPT 生成助手。根据用户描述的主题、行业、风格，自动生成漂亮的 PPT 文件。支持所有行业（商务、教育、科技、医疗、金融、创意等），支持中英文双语，支持用户提供的模板或 AI 自动配色。触发词：做PPT、生成PPT、制作幻灯片、make ppt、create presentation、帮我做个PPT。",
+  "category": "office-efficiency",
+  "iconUrl": "https://cloudcache.tencent-cloud.com/qcloud/ui/static/other_external_resource/62f73a9b-1aca-4f8e-921d-6102e258c768.png",
+  "version": "1.0.2",
+  "downloads": 906369,
+  "stars": 377,
+  "score": 100000,
+  "subCategories": [
+    {
+      "key": "office-ppt",
+      "name": "PPT 生成"
+    }
+  ],
+  "updated_at": 1795236444888,
+  "source": "community",
+  "namespace": {
+    "canonicalName": "@user_3b34947d/ppt-generator-skill",
+    "displayName": "user_3b34947d",
+    "handle": "user_3b34947d",
+    "publicSlug": "ppt-generator-skill"
+  }
+};
+
+/** A real row where **both** slots are filled, with different wording (442 / 77 chars). */
+const K149_PRO_ROW = {
+  "slug": "ppt-generator-skill-pro",
+  "name": "ppt-generator-skill-pro",
+  "description": "智能 PPT 生成助手，致力于帮用户生成高质量PPT。触发词：做PPT、生成PPT、制作幻灯片、make ppt、create presentation。",
+  "description_zh": "全网最稳定，最不吃模型的智能 PPT 生成助手，致力于帮用户生成高质量PPT。产品亮点：\n【1】 完美解决文本布局溢出，布局错乱问题；\n【2】弱模型友好：不依赖模型生成代码，仅需要生成文本content.json即可输出稳定的PPT；\n【3】PPT布局支持15种不同的页面风格，10多种主题风格，覆盖科技、商务、办公等10几个主题场景；\n【4】用户友好：支持封面、目录、双栏对比、文本款列表、时间轴卡片、数据卡片、图表显示、动态曲线、大型数据卡片、总结页面、状态看板等罕见元素，生成的PPT支持图表二次编辑；\n【5】稳定性显著提高，一般CLAW驱动下均可生成稳定的PPT，亲测有效。\n【6】生成的PPT效果参见github: https://github.com/Yazooliu/ppt-generator-skill/tree/main 欢迎Star\n\\n\n想知道生成的效果如何，非常简单。下载技能包后直接运行 python generate.py content.json即可！",
+  "category": "office-efficiency",
+  "iconUrl": "https://cloudcache.tencent-cloud.com/qcloud/ui/static/other_external_resource/c5e5faab-b8e1-489d-a489-8b56ffc52c07.png",
+  "version": "1.0.3",
+  "downloads": 12105,
+  "stars": 1,
+  "score": 60331.679631123014,
+  "subCategories": [
+    {
+      "key": "office-ppt",
+      "name": "PPT 生成"
+    }
+  ],
+  "updated_at": 1795237665823,
+  "source": "community",
+  "namespace": {
+    "canonicalName": "@user_aefa3102/ppt-generator-skill-pro",
+    "displayName": "user_aefa3102",
+    "handle": "user_aefa3102",
+    "publicSlug": "ppt-generator-skill-pro"
+  }
+};
+
+/** The real detail body of `K149_ROW.slug` - note `contentZhAvailable: false` next to a full `summary_zh`. */
+const K149_DETAIL = {
+  "contentZhAvailable": false,
+  "namespace": {
+    "canonicalName": "@user_3b34947d/ppt-generator-skill",
+    "displayName": "user_3b34947d",
+    "handle": "user_3b34947d",
+    "publicSlug": "ppt-generator-skill"
+  },
+  "latestVersion": {
+    "changelog": "Initial release",
+    "createdAt": 1775118549508,
+    "version": "1.0.2"
+  },
+  "skill": {
+    "slug": "ppt-generator-skill",
+    "displayName": "ppt-generator-skill",
+    "summary": "",
+    "summary_zh": "智能 PPT 生成助手。根据用户描述的主题、行业、风格，自动生成漂亮的 PPT 文件。支持所有行业（商务、教育、科技、医疗、金融、创意等），支持中英文双语，支持用户提供的模板或 AI 自动配色。触发词：做PPT、生成PPT、制作幻灯片、make ppt、create presentation、帮我做个PPT。",
+    "category": "office-efficiency",
+    "iconUrl": "https://cloudcache.tencent-cloud.com/qcloud/ui/static/other_external_resource/62f73a9b-1aca-4f8e-921d-6102e258c768.png",
+    "stats": {
+      "comments": 0,
+      "downloads": 906369,
+      "installs": 1378,
+      "stars": 377,
+      "versions": 3
+    },
+    "subCategories": [
+      {
+        "key": "office-ppt",
+        "name": "PPT 生成"
+      }
+    ],
+    "updatedAt": 1795236444888,
+    "hasOverview": false,
+    "overviewMd": ""
+  }
+};
+
+test('K149 列表路径：description 为空、description_zh 有值 ⇒ 取中文槽位（真实行 ppt-generator-skill）', () => {
+  // The shape that opened this case: the original slot is an empty string, not a missing key.
+  assert.equal(K149_ROW.description, '', '夹具前提：原文槽位是空串（本次 bug 的形态）');
+  assert.equal(K149_ROW.description_zh, K149_ZH, '夹具前提：中文槽位有整句');
+
+  const item = fromSkillhubListItem(K149_ROW);
+  assert.equal(item.summary, K149_ZH, 'summary 逐字取 description_zh（不是空串，也不是 name）');
+  assert.equal(item.summary.length > 0, true, '卡片因此画得出描述行');
+  assert.equal(typeof item.summary, 'string', '仍是字符串（渲染侧据此决定整行渲染与否）');
+});
+
+test('K149 详情路径：skill.summary 为空、summary_zh 有值 ⇒ 取中文槽位（同一条技能的真实详情）', () => {
+  assert.equal(K149_DETAIL.skill.summary, '', '夹具前提：详情侧原文槽位也是空串');
+  assert.equal(K149_DETAIL.skill.summary_zh, K149_ZH, '夹具前提：详情侧中文槽位有同一句');
+  assert.equal('description' in K149_DETAIL.skill, false, '详情侧没有 description* 键（只测列表就漏了详情页）');
+
+  const item = fromSkillhubDetail(K149_DETAIL);
+  assert.equal(item.summary, K149_ZH, 'summary 逐字取 summary_zh');
+  // The flag sitting next to those two slots is *not* an availability signal: it reads false
+  // here while `summary_zh` holds the full sentence, so keying off it would blank the card.
+  assert.equal(K149_DETAIL.contentZhAvailable, false, '夹具前提：contentZhAvailable 为 false 而中文槽位是满的');
+  assert.notEqual(item.summary, '', '那个标志为 false 时描述照样有值（拿它判可用性会把卡片再打空一次）');
+});
+
+test('K149 两条链对同一条技能给出同一句：列表与详情逐字相等', () => {
+  const viaList = fromSkillhubListItem(K149_ROW);
+  const viaDetail = fromSkillhubDetail(K149_DETAIL);
+  assert.equal(viaList.summary, viaDetail.summary, '同一技能、两套键名 ⇒ 同一个 summary');
+  assert.equal(viaList.summary, K149_ZH, '两路都是那句中文');
+  assert.equal(viaList.id, viaDetail.id, '两条链的身份也一致（同一张卡片）');
+});
+
+test('K149 两槽位都有值 ⇒ 取 *_zh（中文优先，本次有意改变的行为）', () => {
+  const en = 'The author wrote this sentence in English.';
+  const zh = '作者用中文写的同一句话。';
+
+  // List spelling.
+  assert.equal(
+    fromSkillhubListItem({ slug: 'both', description: en, description_zh: zh, namespace: { handle: 'ake' } }).summary,
+    zh,
+    '列表：两个槽位都有值 ⇒ 中文槽位',
+  );
+  // Detail spelling - same rule, different keys.
+  assert.equal(
+    fromSkillhubDetail({ skill: { slug: 'both', summary: en, summary_zh: zh }, namespace: { handle: 'ake' } }).summary,
+    zh,
+    '详情：两个槽位都有值 ⇒ 中文槽位',
+  );
+  // Not "original first, localized as a fallback": the original is present and loses.
+  assert.notEqual(
+    fromSkillhubListItem({ slug: 'both', description: en, description_zh: zh }).summary,
+    en,
+    '原文槽位在场也不会被选中（顺序写反这条会红）',
+  );
+
+  // Real specimen: both slots filled with different wording, so the order is visible.
+  const pro = fromSkillhubListItem(K149_PRO_ROW);
+  assert.equal(K149_PRO_ROW.description.length > 0, true, '夹具前提：真实行的原文槽位也有值');
+  assert.notEqual(K149_PRO_ROW.description, K149_PRO_ROW.description_zh, '夹具前提：两槽位措辞不同');
+  assert.equal(pro.summary.startsWith('全网最稳定'), true, `中文槽位胜出（开头是「${pro.summary.slice(0, 6)}」）`);
+  assert.equal(pro.summary.includes('致力于帮用户生成高质量PPT。触发词'), false, '不是原文槽位那一句');
+});
+
+test('K149 只有原文槽位有值 ⇒ 取它（两套拼法共用一条链，链尾也认）', () => {
+  const fromList = (raw) => fromSkillhubListItem({ slug: 's', namespace: { handle: 'ake' }, ...raw }).summary;
+
+  assert.equal(fromList({ description: '原文仅此一份', description_zh: '' }), '原文仅此一份', '列表：description 有值、description_zh 空 ⇒ 取 description');
+  assert.equal(fromList({ description: '原文仅此一份', description_zh: '   ' }), '原文仅此一份', '空白不算值（与 textOrNull 同一条口径）');
+  assert.equal(fromList({ description_zh: '', summary_zh: '', description: '  ', summary: '纯原文' }), '纯原文', '链尾的 summary 在列表行上同样认（同一函数、两套拼法）');
+
+  // The detail side's tail: an enterprise row whose `summary_zh` is empty because `summary`
+  // itself already reads as Chinese - keeping `summary` in the chain is for this branch.
+  assert.equal(
+    fromSkillhubDetail({ skill: { slug: 'ent', summary: '提供跨引擎检索，无需 API Key', summary_zh: '' } }).summary,
+    '提供跨引擎检索，无需 API Key',
+    '详情：summary 有值、summary_zh 空 ⇒ 取 summary',
+  );
+  assert.equal(
+    fromSkillhubDetail({ skill: { slug: 'ent', description: '跨键名兜底', summary_zh: '' } }).summary,
+    '跨键名兜底',
+    '详情：只有 description 时也认（详情侧没有这个键的真实形态，但链是同一串）',
+  );
+
+  // Both slots filled with the same wording (the common enterprise shape): no visible change.
+  const same = '提供16个搜索引擎(7国内直连+9国际)跨引擎检索、自动去重与多源交叉验证,无需API Key,附零依赖脚本';
+  assert.equal(
+    fromSkillhubDetail({ skill: { slug: 'ent', summary: same, summary_zh: same } }).summary,
+    same,
+    '两槽位逐字相同时取谁都一样（企业行最常见的形态，改序对它们零影响）',
+  );
+});
+
+test('K149 四个槽位全空 ⇒ 严格空串（不是 null / undefined，卡片据此整段不渲染）', () => {
+  const empty = { description: '', description_zh: '', summary: '', summary_zh: '' };
+  const viaList = fromSkillhubListItem({ slug: 'bare', namespace: { handle: 'ake' }, ...empty });
+  assert.equal(viaList.summary, '', '列表：四槽全空 ⇒ 空串');
+  assert.equal(typeof viaList.summary, 'string', '是字符串而不是 null');
+  assert.notEqual(viaList.summary, null, '不是 null');
+  assert.notEqual(viaList.summary, undefined, '不是 undefined');
+
+  const viaDetail = fromSkillhubDetail({ skill: { slug: 'bare', ...empty } });
+  assert.equal(viaDetail.summary, '', '详情：四槽全空 ⇒ 空串');
+  assert.equal(typeof viaDetail.summary, 'string', '详情侧同样是字符串');
+
+  const blank = { description: '  ', description_zh: '\t', summary: '\n', summary_zh: '   ' };
+  assert.equal(fromSkillhubListItem({ slug: 'bare', namespace: { handle: 'ake' }, ...blank }).summary, '', '只有空白 ⇒ 空串');
+});
+
+test('K149 不回落 name / slug：displayName 缺失时名字走 slug，summary 不跟着兜', () => {
+  const item = fromSkillhubListItem({ slug: 'a-very-descriptive-skill-name', namespace: { handle: 'ake' } });
+  assert.equal(item.displayName, 'a-very-descriptive-skill-name', '名字仍然回落 slug（既有口径不变）');
+  assert.equal(item.summary, '', 'summary 不拿 slug 兜（照搬 slug 当描述是编出来的文案）');
+
+  const named = fromSkillhubListItem({ slug: 's', name: '一句话讲完的技能名', namespace: { handle: 'ake' } });
+  assert.equal(named.displayName, '一句话讲完的技能名', '有 name 时名字用它');
+  assert.equal(named.summary, '', 'name 在场也不进 summary（两者是不同字段）');
+});
+
+test('K149 先选后截：中文槽位超长、原文很短 ⇒ 截断落在中文串上（真实行 ppt-generator-skill-pro）', () => {
+  // 442 chars of Chinese next to a 77-char original: the budget must be spent on the string
+  // the card actually shows. Truncating first and choosing after (or truncating the
+  // original slot) would hand back the short 77-char sentence instead.
+  assert.equal(K149_PRO_ROW.description_zh.length > SUMMARY_MAX, true, '夹具前提：中文槽位超过 400');
+  assert.equal(K149_PRO_ROW.description.length < 100, true, '夹具前提：原文槽位很短');
+
+  const pro = fromSkillhubListItem(K149_PRO_ROW);
+  assert.equal(pro.summary.length, SUMMARY_MAX, `截断到 ${SUMMARY_MAX} 字符`);
+  assert.equal(pro.summary.endsWith('...'), true, '超长以 ASCII ... 结尾');
+  assert.equal(pro.summary.startsWith('全网最稳定'), true, '截的是中文槽位开头那一句');
+  assert.equal(pro.summary.includes('\n'), false, '换行先折成空格再算长度');
+  assert.equal(pro.summary.length > K149_PRO_ROW.description.length, true, '结果不是那条短原文（先选后截）');
+  assert.notEqual(pro.summary, clampLine(K149_PRO_ROW.description, SUMMARY_MAX), '与「只读原文槽位」的结果不同');
+
+  // A marker makes the same point without depending on which real row is at hand: the
+  // original is short *and* identifiable, so any leak of it into the result shows up.
+  const marked = fromSkillhubListItem({
+    slug: 'long-zh',
+    description: 'ORIGINAL-MARKER',
+    description_zh: '中'.repeat(600),
+    namespace: { handle: 'ake' },
+  });
+  assert.equal(marked.summary.startsWith('中'), true, '取的是中文槽位');
+  assert.equal(marked.summary.includes('ORIGINAL-MARKER'), false, '原文槽位没有混进结果');
+  assert.equal(marked.summary.length, SUMMARY_MAX, '预算花在中文串上');
+
+  // Boundary: exactly at the budget nothing is cut, one past it something is.
+  const atLimit = fromSkillhubListItem({ slug: 'at', description_zh: 'x'.repeat(SUMMARY_MAX) });
+  assert.equal(atLimit.summary.length, SUMMARY_MAX, '正好 400 ⇒ 不截断');
+  assert.equal(atLimit.summary.endsWith('...'), false, '没有省略号');
+  const pastLimit = fromSkillhubListItem({ slug: 'past', description_zh: 'x'.repeat(SUMMARY_MAX + 1) });
+  assert.equal(pastLimit.summary.endsWith('...'), true, '401 ⇒ 截断');
+  assert.equal(pastLimit.summary.length <= SUMMARY_MAX, true, `永不超 ${SUMMARY_MAX}`);
+});
+
+test('K149 相邻字段零回归：真实行的 tags / downloads / saves / score / category / updatedAt / version / 包型 / 键全不动', () => {
+  // `MarketItem` carries no `priceKind` (this upstream publishes no price field at all), so
+  // the neighbours the summary change could have disturbed are the ones asserted here.
+  const item = fromSkillhubListItem(K149_ROW);
+  assertItemShape(item, 'K149 列表');
+  assert.equal(item.sourceId, 'skillhub', 'sourceId 仍按行折叠');
+  assert.equal(item.id, 'skillhub:user_3b34947d:ppt-generator-skill', 'id 三元组不变');
+  assert.equal(item.owner, 'user_3b34947d', 'owner 取 namespace.handle');
+  assert.equal(item.slug, 'ppt-generator-skill', 'slug 原样');
+  assert.equal(item.displayName, 'ppt-generator-skill', 'displayName 取 name');
+  assert.equal(item.iconUrl, K149_ROW.iconUrl, 'iconUrl 原样透传');
+  assert.equal(item.version, '1.0.2', 'version 取 raw.version');
+  assert.equal(item.downloads, 906369, 'downloads 原样');
+  assert.equal(item.saves, 377, 'saves 取 stars');
+  assert.equal(item.score, 100000, 'score 原样');
+  assert.deepEqual(item.tags, ['PPT 生成'], 'tags 取 subCategories[].name');
+  assert.equal(item.updatedAt, 1795236444888, 'updated_at 转 epoch 毫秒');
+  assert.equal(item.category, 'office-efficiency', 'category 原样');
+  assert.equal(item.packageKind, 'files', 'SkillHub 是逐文件包');
+
+  const detail = fromSkillhubDetail(K149_DETAIL);
+  assertItemShape(detail, 'K149 详情');
+  assert.equal(detail.id, item.id, '详情与列表是同一张卡片的键');
+  assert.equal(detail.downloads, 906369, '详情 downloads 取 skill.stats.downloads');
+  assert.equal(detail.saves, 377, '详情 saves 取 skill.stats.stars');
+  assert.equal(detail.version, '1.0.2', '详情 version 取 latestVersion.version');
+  // The detail chain prefers `latestVersion.createdAt` over `skill.updatedAt`, so the value here
+  // is the release date, not the row's own update stamp. That order predates the description
+  // fix (this case only proves the field is still a filled epoch ms, not which slot won).
+  assert.equal(typeof detail.updatedAt, 'number', '详情 updatedAt 仍是 epoch 毫秒');
+  assert.notEqual(detail.updatedAt, null, '详情 updatedAt 没有掉成 null');
+  assert.deepEqual(detail.tags, ['PPT 生成'], '详情 tags 同形');
+  assert.equal(detail.category, 'office-efficiency', '详情 category 同形');
+  assert.equal(detail.iconUrl, item.iconUrl, '详情图标与列表同一张');
+});
+
+test('K149 summaryTextOf 自身：非对象不抛、恒返回字符串', () => {
+  for (const raw of [null, undefined, 'text', 42, true, [], [1, 2]]) {
+    assert.equal(summaryTextOf(raw), '', `${JSON.stringify(raw)} ⇒ 空串，不抛`);
+  }
+  assert.equal(summaryTextOf({}), '', '没有描述键 ⇒ 空串');
+  assert.equal(summaryTextOf({ unrelated: 'x' }), '', '无关键不受影响');
+  assert.equal(summaryTextOf({ description_zh: '中文' }), '中文', '对象就按链取');
+  assert.equal(typeof summaryTextOf({ description: 42, summary: {} }), 'string', '非字符串值被跳过，返回值仍是字符串');
+});
+
+/* --------------------------- K150 · 署名四级回落：ownerName / owner.displayName（U24） */
+
+/**
+ * The chain this block pins (`docs/contracts/market.md` §7.4): `publisher.name` →
+ * **list `ownerName` / detail `raw.owner.displayName`** → `namespace.displayName` →
+ * `namespace.handle`, i.e. the order the site itself prints:
+ *
+ * - list: `publisher?.name || ownerName` (the site's own `skillAuthor`)
+ * - detail: `publisher?.name || owner.displayName` (its stats card)
+ *
+ * Why the second slot had to be added: `publisher` exists on enterprise rows only (77 of
+ * 400 sampled), so every other row was named by `namespace` - which for a clawhub or
+ * community row is an account id (`user_07c3fda9`), not a person. Reading `ownerName`
+ * first prints the GitHub handle the upstream actually carries (`loonghao`), and the detail
+ * side prints the account's display name (`Hal`) instead of the id.
+ *
+ * The two endpoints name the same author **differently** and that is not a bug to
+ * "unify": `fpt-cli` is `loonghao` in the list and `Hal` on the detail page, exactly as the
+ * site shows it. Each path therefore reads its own slot - sharing one chain would have to
+ * pick one of the two and print something the site never prints.
+ *
+ * Payloads are verbatim captures (2026-11-21) of
+ * `GET /api/skills?keyword=fpt-cli`, `GET /api/skills?page=1&pageSize=100&sortBy=downloads`
+ * and the two detail bodies, trimmed to the keys the mapper reads. Double quotes are kept
+ * because they were dumped out of the capture.
+ */
+const K150_ROW = {
+  "slug": "fpt-cli",
+  "name": "Fpt Cli",
+  "ownerName": "loonghao",
+  "namespace": {
+    "canonicalName": "@user_07c3fda9/fpt-cli",
+    "displayName": "user_07c3fda9",
+    "handle": "user_07c3fda9",
+    "publicSlug": "fpt-cli"
+  },
+  "category": "professional",
+  "iconUrl": "https://cloudcache.tencent-cloud.com/qcloud/ui/static/other_external_resource/e9a58ede-ead5-43fd-9523-d1ba7f1b78cd.png",
+  "version": "1.0.4",
+  "downloads": 993,
+  "stars": 0,
+  "score": 100000,
+  "subCategories": [
+    {
+      "key": "pro-industry-research",
+      "name": "行业研究"
+    }
+  ],
+  "updated_at": 1795237382690,
+  "source": "clawhub",
+  "description": "This skill should be used when OpenClaw needs to install, configure, inspect, or operate `fpt-cli` for Autodesk Flow Production Tracking / ShotGrid workflows...",
+  "description_zh": "此技能用于在 OpenClaw 需要安装、配置、检查或操作 `fpt-cli` 以完成 Autodesk Flow Production Tracking / ShotGrid 工作流时。"
+};
+
+/** `fpt-cli` in detail: no `publisher`, `owner.displayName` is the human name. */
+const K150_DETAIL = {
+  "contentZhAvailable": true,
+  "slug": "fpt-cli",
+  "owner": {
+    "displayName": "Hal",
+    "handle": "user_07c3fda9",
+    "image": null
+  },
+  "namespace": {
+    "canonicalName": "@user_07c3fda9/fpt-cli",
+    "displayName": "user_07c3fda9",
+    "handle": "user_07c3fda9",
+    "publicSlug": "fpt-cli"
+  },
+  "latestVersion": {
+    "changelog": "Synced by skillhub pipeline",
+    "createdAt": 1777596728275,
+    "version": "1.0.4"
+  },
+  "skill": {
+    "slug": "fpt-cli",
+    "displayName": "Fpt Cli",
+    "summary": "This skill should be used when OpenClaw needs to install, configure, inspect, or operate `fpt-cli` for Autodesk Flow Production Tracking / ShotGrid workflows...",
+    "summary_zh": "此技能用于在 OpenClaw 需要安装、配置、检查或操作 `fpt-cli` 以完成 Autodesk Flow Production Tracking / ShotGrid 工作流时。",
+    "category": "professional",
+    "iconUrl": "https://cloudcache.tencent-cloud.com/qcloud/ui/static/other_external_resource/e9a58ede-ead5-43fd-9523-d1ba7f1b78cd.png",
+    "stats": {
+      "comments": 0,
+      "downloads": 993,
+      "installs": 25,
+      "stars": 0,
+      "versions": 1
+    },
+    "subCategories": [
+      {
+        "key": "pro-industry-research",
+        "name": "行业研究"
+      }
+    ],
+    "updatedAt": 1795237382690,
+    "overviewMd": "",
+    "hasOverview": false
+  }
+};
+
+/** An enterprise row: `publisher.name` is present, so both paths stop at the first slot. */
+const K150_PUB_ROW = {
+  "slug": "dev-god",
+  "name": "编程大神.Skill",
+  "ownerName": "u_42bbb65f",
+  "publisher": {
+    "name": "阿客实验室",
+    "logoUrl": null,
+    "verified": true,
+    "certifiedName": "阿客（北京）科技有限公司",
+    "orgId": "org-m3rw44qx"
+  },
+  "namespace": {
+    "canonicalName": "@ake/dev-god",
+    "displayName": "ake",
+    "handle": "ake",
+    "publicSlug": "dev-god"
+  },
+  "category": "dev-programming",
+  "iconUrl": "https://skillhub-1388575217.cos.accelerate.myqcloud.com/skill-icons/uploads/783809/35df42ddf263488b8514c8dc45d1edd7.png",
+  "version": "1.2.4",
+  "downloads": 12167508,
+  "stars": 140,
+  "score": 100000,
+  "subCategories": [
+    {
+      "key": "dev-code-gen",
+      "name": "代码生成"
+    },
+    {
+      "key": "dev-bug-fix",
+      "name": "Bug 修复"
+    },
+    {
+      "key": "dev-backend",
+      "name": "后端开发"
+    }
+  ],
+  "updated_at": 1795248527835,
+  "source": "enterprise",
+  "description": "【全栈能力】编程大神.Skill：面向复杂真实项目的高阶全栈编程助手。不止生成代码，而是从一句目标接手陌生代码库，拆解需求、补齐实现、追到根因、完成重构、联调前后端，并把结果推进到能运行、能验证、能交付。覆盖 Web、后端、脚本、iOS、安卓、鸿蒙 ArkUI、微信小程序及其他技术栈，支持中英文工程、疑难 Bug、跨模块任务和长任务续做；用构建、日志、真实入口、设备或接口证据说明结果。仅问概念时直接回答，要求落地时持续推进到验收或明确阻塞。",
+  "description_zh": "【全栈能力】编程大神.Skill：面向复杂真实项目的高阶全栈编程助手。不止生成代码，而是从一句目标接手陌生代码库，拆解需求、补齐实现、追到根因、完成重构、联调前后端，并把结果推进到能运行、能验证、能交付。覆盖 Web、后端、脚本、iOS、安卓、鸿蒙 ArkUI、微信小程序及其他技术栈，支持中英文工程、疑难 Bug、跨模块任务和长任务续做；用构建、日志、真实入口、设备或接口证据说明结果。仅问概念时直接回答，要求落地时持续推进到验收或明确阻塞。"
+};
+
+/** The same enterprise skill in detail - `publisher.name` again, `owner.displayName` never reached. */
+const K150_PUB_DETAIL = {
+  "contentZhAvailable": false,
+  "slug": "dev-god",
+  "owner": {
+    "displayName": "客叔",
+    "handle": "u_42bbb65f",
+    "image": null
+  },
+  "publisher": {
+    "name": "阿客实验室",
+    "logoUrl": null,
+    "verified": true,
+    "certifiedName": "阿客（北京）科技有限公司",
+    "orgId": "org-m3rw44qx"
+  },
+  "namespace": {
+    "canonicalName": "@ake/dev-god",
+    "displayName": "ake",
+    "handle": "ake",
+    "publicSlug": "dev-god"
+  },
+  "latestVersion": {
+    "changelog": "New version",
+    "createdAt": 1791925342870,
+    "version": "1.2.4"
+  },
+  "skill": {
+    "slug": "dev-god",
+    "displayName": "编程大神.Skill",
+    "summary": "【全栈能力】编程大神.Skill：面向复杂真实项目的高阶全栈编程助手。不止生成代码，而是从一句目标接手陌生代码库，拆解需求、补齐实现、追到根因、完成重构、联调前后端，并把结果推进到能运行、能验证、能交付。覆盖 Web、后端、脚本、iOS、安卓、鸿蒙 ArkUI、微信小程序及其他技术栈，支持中英文工程、疑难 Bug、跨模块任务和长任务续做；用构建、日志、真实入口、设备或接口证据说明结果。仅问概念时直接回答，要求落地时持续推进到验收或明确阻塞。",
+    "summary_zh": "【全栈能力】编程大神.Skill：面向复杂真实项目的高阶全栈编程助手。不止生成代码，而是从一句目标接手陌生代码库，拆解需求、补齐实现、追到根因、完成重构、联调前后端，并把结果推进到能运行、能验证、能交付。覆盖 Web、后端、脚本、iOS、安卓、鸿蒙 ArkUI、微信小程序及其他技术栈，支持中英文工程、疑难 Bug、跨模块任务和长任务续做；用构建、日志、真实入口、设备或接口证据说明结果。仅问概念时直接回答，要求落地时持续推进到验收或明确阻塞。",
+    "category": "dev-programming",
+    "iconUrl": "https://skillhub-1388575217.cos.accelerate.myqcloud.com/skill-icons/uploads/783809/35df42ddf263488b8514c8dc45d1edd7.png",
+    "stats": {
+      "comments": 0,
+      "downloads": 12167508,
+      "installs": 0,
+      "stars": 140,
+      "versions": 0
+    },
+    "subCategories": [
+      {
+        "key": "dev-code-gen",
+        "name": "代码生成"
+      },
+      {
+        "key": "dev-bug-fix",
+        "name": "Bug 修复"
+      },
+      {
+        "key": "dev-backend",
+        "name": "后端开发"
+      }
+    ],
+    "updatedAt": 1795248527835,
+    "overviewMd": "",
+    "hasOverview": false
+  }
+};
+
+test('K150 列表：只有 ownerName ⇒ 取它（真实行 fpt-cli：loonghao，不是 user_07c3fda9）', () => {
+  assert.equal('publisher' in K150_ROW, false, '夹具前提：clawhub 行没有 publisher');
+  assert.equal(K150_ROW.ownerName, 'loonghao', '夹具前提：ownerName 是 GitHub handle');
+  assert.notEqual(K150_ROW.ownerName, K150_ROW.namespace.displayName, '夹具前提：两格不同（否则这条测不出东西）');
+
+  const item = fromSkillhubListItem(K150_ROW);
+  assert.equal(item.author, 'loonghao', 'author 取 ownerName');
+  assert.notEqual(item.author, 'user_07c3fda9', '不再是 namespace 里那个账号 id（修前的样子）');
+  assert.equal(item.author, K150_ROW.ownerName, '与上游那一格逐字相等');
+});
+
+test('K150 详情：raw.owner.displayName ⇒ 取它（真实 fpt-cli：Hal，修前是 user_07c3fda9）', () => {
+  assert.equal('publisher' in K150_DETAIL, false, '夹具前提：详情没有 publisher');
+  assert.equal(K150_DETAIL.owner.displayName, 'Hal', '夹具前提：owner.displayName 是人名');
+  assert.equal('ownerName' in K150_DETAIL.skill, false, '夹具前提：ownerName 是列表专属键，详情没有');
+
+  const item = fromSkillhubDetail(K150_DETAIL);
+  assert.equal(item.author, 'Hal', 'author 取 raw.owner.displayName');
+  assert.notEqual(item.author, 'user_07c3fda9', '不再是 namespace 里那个账号 id（修前的样子）');
+});
+
+test('K150 publisher.name 压过第二格：enterprise 行列表与详情各一路（真实 dev-god）', () => {
+  // publisher wins even though both later slots are filled with something else.
+  assert.equal('publisher' in K150_PUB_ROW, true, '夹具前提：企业行带 publisher');
+  const viaList = fromSkillhubListItem(K150_PUB_ROW);
+  assert.equal(viaList.author, K150_PUB_ROW.publisher.name, '列表：author 取 publisher.name');
+  assert.notEqual(viaList.author, K150_PUB_ROW.ownerName, '不是 ownerName（那是账号 id）');
+  assert.notEqual(viaList.author, K150_PUB_ROW.namespace.displayName, '也不是 namespace.displayName');
+
+  const viaDetail = fromSkillhubDetail(K150_PUB_DETAIL);
+  assert.equal(viaDetail.author, K150_PUB_DETAIL.publisher.name, '详情：author 取 publisher.name');
+  assert.notEqual(viaDetail.author, K150_PUB_DETAIL.owner.displayName, '不是 owner.displayName');
+  assert.notEqual(viaDetail.author, K150_PUB_DETAIL.namespace.displayName, '也不是 namespace.displayName');
+
+  // A blank publisher is not a name: the chain keeps walking.
+  assert.equal(
+    fromSkillhubListItem({ slug: 'x', publisher: { name: '   ' }, ownerName: 'loonghao', namespace: { handle: 'ake' } }).author,
+    'loonghao',
+    'publisher.name 只有空白 ⇒ 落到 ownerName',
+  );
+  assert.equal(
+    fromSkillhubDetail({ skill: { slug: 'x' }, publisher: { name: '' }, owner: { displayName: 'Hal' }, namespace: { handle: 'ake' } }).author,
+    'Hal',
+    '详情侧同理：空的 publisher.name 不拦住 owner.displayName',
+  );
+});
+
+test('K150 列表后两格：ownerName 缺 ⇒ namespace.displayName，再缺 ⇒ namespace.handle', () => {
+  const of = (raw) => fromSkillhubListItem({ slug: 'x', ...raw }).author;
+
+  assert.equal(of({ ownerName: 'loonghao', namespace: { displayName: 'Ake', handle: 'ake' } }), 'loonghao', 'ownerName 在场 ⇒ 用它');
+  assert.equal(of({ namespace: { displayName: 'Ake', handle: 'ake' } }), 'Ake', 'ownerName 缺 ⇒ namespace.displayName');
+  assert.equal(of({ namespace: { handle: 'ake' } }), 'ake', 'displayName 也缺 ⇒ namespace.handle');
+  assert.equal(of({ ownerName: '   ', namespace: { displayName: 'Ake', handle: 'ake' } }), 'Ake', 'ownerName 只有空白 ⇒ 继续往下走');
+  assert.equal(of({ ownerName: 42, namespace: { handle: 'ake' } }), 'ake', 'ownerName 非字符串 ⇒ 跳过');
+});
+
+test('K150 详情后两格：owner.displayName 缺 ⇒ namespace.displayName，再缺 ⇒ namespace.handle', () => {
+  const of = (raw) => fromSkillhubDetail({ skill: { slug: 'x' }, ...raw }).author;
+
+  assert.equal(of({ owner: { displayName: 'Hal', handle: 'user_07c3fda9' }, namespace: { displayName: 'user_07c3fda9', handle: 'user_07c3fda9' } }), 'Hal', 'owner.displayName 在场 ⇒ 用它');
+  assert.equal(of({ namespace: { displayName: 'user_07c3fda9', handle: 'user_07c3fda9' } }), 'user_07c3fda9', 'owner 缺 ⇒ namespace.displayName');
+  assert.equal(of({ owner: { displayName: '  ' }, namespace: { displayName: 'Ake', handle: 'ake' } }), 'Ake', 'owner.displayName 只有空白 ⇒ 继续往下走');
+  assert.equal(of({ owner: { handle: 'u_1' }, namespace: { handle: 'ake' } }), 'ake', '详情不读 owner.handle（那不是署名格）');
+  assert.equal(of({ owner: 'text', namespace: { handle: 'ake' } }), 'ake', 'owner 不是对象 ⇒ 跳过，不抛');
+});
+
+
+test('K150 两路各认自己那一格：列表 ownerName / 详情 owner.displayName 不互串', () => {
+  // The same skill, two endpoints: the list prints the GitHub handle, the detail page the
+  // account's display name. Both are what the site shows, so both are pinned as they are.
+  const viaList = fromSkillhubListItem(K150_ROW);
+  const viaDetail = fromSkillhubDetail(K150_DETAIL);
+  assert.equal(viaList.author, 'loonghao', '列表：ownerName');
+  assert.equal(viaDetail.author, 'Hal', '详情：owner.displayName');
+  assert.notEqual(viaList.author, viaDetail.author, '同一技能两处署名本来就不一样（合并成一条链必然改掉其中一个）');
+
+  // Each chain ignores the other's slot, so a payload carrying the wrong key falls through
+  // instead of borrowing it.
+  assert.equal(
+    fromSkillhubListItem({ slug: 'x', owner: { displayName: '列表不该读到这一格' }, namespace: { handle: 'ake' } }).author,
+    'ake',
+    '列表不读 owner.displayName ⇒ 落到 namespace.handle',
+  );
+  assert.equal(
+    fromSkillhubDetail({ skill: { slug: 'x' }, ownerName: '详情不该读到这一格', namespace: { displayName: 'Ake', handle: 'ake' } }).author,
+    'Ake',
+    '详情不读顶层 ownerName ⇒ 落到 namespace.displayName',
+  );
+
+  // K149's description chain is untouched by this one: it still reads the localized slot on
+  // both real payloads of this block.
+  assert.equal(viaList.summary, K150_ROW.description_zh, '列表描述仍走 K149 的链（不受署名改动影响）');
+  assert.equal(viaDetail.summary, K150_DETAIL.skill.summary_zh, '详情描述仍走 K149 的链（不受署名改动影响）');
+  assert.notEqual(viaList.summary, '', '列表描述不是空串');
+  assert.notEqual(viaDetail.summary, '', '详情描述不是空串');
+});
+
+test('K150 四格全空 ⇒ author === null（不是空串，也不是 undefined）', () => {
+  // `null` is the contract: the card drops the clause when there is no name, and an empty
+  // string would read as "named with nothing".
+  for (const raw of [
+    { slug: 'anon' },
+    { slug: 'anon', namespace: {} },
+    { slug: 'anon', publisher: {} },
+    { slug: 'anon', ownerName: '   ', namespace: { displayName: '', handle: '  ' } },
+  ]) {
+    const item = fromSkillhubListItem(raw);
+    assert.equal(item.author, null, `列表 ${JSON.stringify(raw)} ⇒ author 为 null`);
+    assert.notEqual(item.author, '', '列表：不是空串');
+    assert.equal('author' in item, true, '列表：字段在（缺如为 null，不是缺席）');
+    assert.notEqual(item.author, undefined, '列表：不是 undefined');
+  }
+
+  for (const raw of [{ skill: { slug: 'anon' } }, { skill: { slug: 'anon' }, owner: {}, namespace: {} }]) {
+    const item = fromSkillhubDetail(raw);
+    assert.equal(item.author, null, `详情 ${JSON.stringify(raw)} ⇒ author 为 null`);
+    assert.notEqual(item.author, '', '详情：不是空串');
+    assert.notEqual(item.author, undefined, '详情：不是 undefined');
+  }
+
+  // Field set unchanged: `author` keeps its slot in the §7.4 table.
+  assert.equal(ITEM_FIELDS.includes('author'), true, '§7.4 的字段表里仍有 author');
+  assert.equal(fromSkillhubListItem({ slug: 'anon' }).author, null, '空对象仍然给出 null（不抛）');
 });

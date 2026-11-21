@@ -47,6 +47,14 @@
 | KI-3 | `SKILL.md` 本身是软链时写入被拒，但错误码是 `E_FILE_CHANGED`（`fstat` 口径取指纹、`lstat` 口径复核，软链下 inode 天然不同） | `lib/write-skill.js`：写前先 `lstat(file)`，软链直接 `409 E_SYMLINK_READONLY`；两次指纹复核统一 `lstat` 口径，不再混用 `fstat` | 错误码更准，fail-safe 行为不变（目标字节不变、软链不被替换） |
 | KI-1 | `E_BAD_NAME`/`E_BAD_PATH` 在 §8.1 标「行内原因」，但 `locale/*.json` 里没有对应文案 → 用户看到中文夹英文 | `locale/{zh,en}.json` 补 `error.E_BAD_NAME`/`error.E_BAD_PATH` 两键，`src/client/model.js` 的 `ROW_ERRORS` 收录两码（P0 全集 = `locale/*.json` 里除 `meta` 外的扁平键，含这两条） | 仅文案；两个码正常不可达（name/path 都源自已校验的 payload），属兜底 |
 
+**AB 组：上游对齐的口径分界——数据层跟站点、显示层跟产品（2026-11-21 用户裁决）**：
+
+| # | 结论 | 依据 | 代价 / 边界 |
+| --- | --- | --- | --- |
+| AB-1 | **数据层以 `skillhub.cn` 站点为准**：读哪些键、走哪条数据通道，一律对齐站点的取值表达式（例：描述取中文槽位、概览按 `contentZhAvailable` 带 `lang=zh`、署名取 `publisher?.name` 否则 `ownerName`） | 用户 2026-11-21 原话「我说的是数据上跟上游一致，而不是显示」；站点取值表达式的逐条证据在 `docs/contracts/market.md` §7.4（本节不复述） | 站点口径一变就跟着改（描述改中文优先、概览改读中文译本都是这条的直接结果）；**不得**以「我方链路更自洽」为由偏离数据层。已知且有意保留的数据层差异仍登记在 §7.4「站点读法与本站的未对齐处（记录，不改）」，两处互相引用、不重复描述 |
+| AB-2 | **显示层自有**：画什么、画成什么样由产品决定，不受站点约束 | 同一句话的后半句——「与站点一致」只是数据要求 | 卡片 chip 取 `subCategories` 而非站点的 `category`、英文界面分类名不用分类表的 `nameEn`、徽标（付费 / 需 API Key / 认证 / 安全）与评分呈现与否，都属显示层；**不得**以「与站点一致」为由改动显示层，也不因它与站点不同而判成缺陷 |
+| AB-3 | 判据怎么用（两条反例） | ① 署名按 uploader：`find-skills`（`indiv-guipi` 下的那条）`ownerName` 是 `root`，卡片就显示 `root`——不好看，但它是数据层 ⇒ 保留，**不换成** `upstream_owner_login`；② 卡片 chip 与站点不同 ⇒ 属显示层，不改 | 判断落在哪一层只问一句「这个值是读上来的，还是画上去的」：读上来的服从站点，画上去的服从产品 |
+
 ---
 
 ## 附录 E 市场轮决策登记

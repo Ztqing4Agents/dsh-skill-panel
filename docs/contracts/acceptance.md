@@ -277,6 +277,36 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 **红绿口径**：K148 进 `npm test`（L3 字符串渲染 + `styles.js` 规则断言）；第二项真正开草稿是**宿主侧行为**，真机只确认「**会话区切到创造模式草稿**（preset 名不上屏，故只验创造模式标记与输入区出现——`data-agent-preset` / `data-preset` 在真机上是空的，屏幕文字里也没有 `cordis`）」，不进自动化。
 **真机结果：通过（2026-11-13，真机 14/14）**：菜单两项、DOM 三层与四项刻度与宿主**逐项差 0**；**`ArrowDown` 开菜单**已验——`preventDefault` 生效（`defaultPrevented === true`）、**菜单已开时不重复 toggle**、其它键零行为；点法与键盘法各测一次：开菜单前 `scrollTop 300`、菜单开着仍 **300**、`Escape` 关掉 **700 ms 后仍是 300**（滚动补偿的坑未复现）；第二项切到创造模式草稿（preset 名不上屏，只验创造模式标记与输入区出现，见上句）。
 
+### D.11 市场卡片描述取值链（K149）
+
+上游把描述拆成「原文槽位 + 中文槽位」，且**两套拼法**：列表行是 `description` / `description_zh`，详情 `skill` 是 `summary` / `summary_zh`。取值链、顺序理由与代价见 `docs/contracts/market.md` §7.4。
+
+| # | 目标 | 断言 | 层 |
+| --- | --- | --- | --- |
+| **K149** | 描述本地化优先、原文兜底（列表 / 详情两条链） | ① **两条链分别钉**：列表 `description`/`description_zh` 与详情 `skill.summary`/`summary_zh` 各自成篇，且同一条技能两路给出**逐字相同**的一句；② `description_zh` 有值而 `description` 是**空串** ⇒ 取中文槽位（真实行 `ppt-generator-skill` 的 155 字逐字相等；其详情 `summary` 空、`summary_zh` 满，**`contentZhAvailable` 为 `false` 时照样取值**——不得拿这个标志判描述可用性）；③ 两槽位都有值 ⇒ 取 `*_zh`（**中文优先，本次有意改变的行为**，真实行 `ppt-generator-skill-pro` 的两槽位 442 / 77 字措辞不同）；④ 只有原文槽位有值 ⇒ 取它（列表 `description`、详情 `summary`，即企业行 `summary_zh` 空而 `summary` 本身已是中文的那一支；两槽位逐字相同时结果不变）；⑤ 四槽全空或只有空白 ⇒ **严格空串 `''`**（不是 `null` / `undefined`）；⑥ **先选后截**：`clampLine` / `SUMMARY_MAX` 在选定之后执行——442 字中文槽位配 77 字原文 ⇒ 结果是 **400 字中文串**（`...` 结尾、无换行残留），不是那条短原文；正好 400 字不截、401 字截；⑦ **不回落 `name` / `slug`**：`displayName` 缺时名字走 slug，`summary` 仍是空串；⑧ **相邻字段零回归**：`tags` / `downloads` / `saves` / `score` / `category` / `updatedAt` / `version` / `packageKind` / `id` 与字段集逐项不变 | L1 · `test/market-normalize.test.mjs` |
+
+**红绿口径**：K149 进 `npm test`（L1 纯函数，夹具是 2026-11-21 从 `api.skillhub.cn` 列表与详情两个端点取回的真实 payload，截断到映射用到的键）；不新增真机项——这一条改的是卡片描述行的**文本来源**，几何与上屏方式一点没动。
+
+### D.12 市场卡片署名取值链（K150）
+
+署名与站点同一顺序，但**两套拼法**：列表用 `publisher?.name || ownerName`（站点自己的 `skillAuthor`），详情状态卡用 `publisher?.name || owner.displayName`。字段表见 `docs/contracts/market.md` §7.4。
+
+| # | 目标 | 断言 | 层 |
+| --- | --- | --- | --- |
+| **K150** | 署名四级回落（列表 `ownerName` / 详情 `owner.displayName`） | ① **列表第二格**：`publisher` 缺、`ownerName` 有值 ⇒ 取它（真实 clawhub 行 `fpt-cli`：`loonghao`，不是 `namespace` 里的 `user_07c3fda9`）；② **详情第二格**：取 `raw.owner.displayName`（同一条技能的详情是 `Hal`——两个端点对同一作者的称呼本来就不同，各自照站点打印，**不许合并成一条链**）；③ **`publisher.name` 压过第二格**：enterprise 行列表与详情各一路（真实 `dev-god`：`阿客实验室`，不是 `ownerName` 的 `u_42bbb65f`、不是 `owner.displayName` 的 `客叔`）；`publisher.name` 只有空白不算名字，继续往下走；④ **后两格**：`ownerName` / `owner.displayName` 缺（或只有空白、或非字符串）⇒ `namespace.displayName`，再缺 ⇒ `namespace.handle`；详情不读 `owner.handle`，列表不读 `owner.displayName`，详情不读顶层 `ownerName`（各认自己那一格，不互串）；⑤ **全空 ⇒ `author === null`**（不是 `''`、不是 `undefined`，字段仍在）；⑥ **K149 不被带红**：同两份真实 payload 的 `summary` 仍取本地化槽位 | L1 · `test/market-normalize.test.mjs` |
+
+**红绿口径**：K150 进 `npm test`（L1 纯函数，夹具与 K149 同源：2026-11-21 抓取的真实列表行与详情体）；不新增真机项——改的是署名取值链，卡片的署名位置与排版未动。
+
+### D.13 市场概览的中文译本通道（K151）
+
+`lang=zh` 让 `/file` 改答 `<version>/skill_zh.md`（平台译文，**不在清单里**）。它只是**读数开关**：只服务详情概览，永不进安装。口径见 `docs/contracts/market.md` §7.4 的 `MarketDetail` 行与 §7.8 硬规矩 5。
+
+| # | 目标 | 断言 | 层 |
+| --- | --- | --- | --- |
+| **K151** | 概览读中文译本、安装只装原文 | ① **`contentZhAvailable === true`** ⇒ 一次 `detail` 共 **4 次**请求（详情 + 清单 + 原文 + 译本），第 4 次带 `lang=zh` 且 `path=SKILL.md`，`overview` 是译文正文（`## 目的`，不是 `## Purpose`）；② **回落两条**：译本 **404**（抛错）与 **0 字节空正文** 各一条 ⇒ `overview` 回落作者原文、**不抛错**、`files` / `declaredName` / `nameValid` 照常；③ **标志不是 `true` 就不读**：缺失 / 字符串 `"true"` / 数字 `1` / `false` 四条 ⇒ 只 **3 次**请求且**任何 URL 都不含 `lang`**（真实 `plant-care-expert` 的 `false` 形态同此）；④ **`declaredName` 恒取原文**：译文 frontmatter 的 `name` 与原文不同也不采纳；原文名字不合规时仍判不合规（译文里的合规名不能把它救回来）；⑤ **安装取件永不带 `lang`**：`fetchFile` 对清单四项发出的每个 URL 都不含 `lang=`，落盘字节以原文 frontmatter 开头、与作者原文逐字相同、不含译文正文；⑥ **咬住版**：上游桩对**任何**带 `lang` 的取件直接抛错，同一条适配器先读过译本（`detail` 那次确实带 `lang`）再跑整条 `install`，仍须成功——落盘只有清单里的文件 + 两份元数据（**没有 `skill_zh.md`**），取件集合与清单逐项相同 | L1/L2 · `test/market-overview-lang.test.mjs` |
+
+**红绿口径**：K151 进 `npm test`（`io` 桩驱动，不联网；夹具取 2026-11-21 的真实形态：`fpt-cli` 四条清单路径 + 标志真、`plant-care-expert` 标志假）；不新增真机项——译本只改概览文本，版面与几何未动。
+
 ### 真机才能验证的项（不进自动化测试）
 
 1. 像素几何：内边距、页签 34px、行高 64px、图标 48×48、开关 36×20（`HIDDER/AGENTS.md` 的教训：几何只能由真实浏览器量）。
