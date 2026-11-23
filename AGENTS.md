@@ -25,18 +25,18 @@ npm publish --//registry.npmjs.org/:_authToken=<token>   # 2FA 绑的是通行�
 | 路由表、写盘、错误码 | `docs/contracts/routes.md` | §3.3 §3.4 §8.1 |
 | 前端组件、状态机、命名与 i18n；已安装详情页 | `docs/contracts/client.md`、`docs/contracts/installed-detail.md` | §3.5 §3.6 §8.2–§8.5；详情页全文 |
 | 调用流程与未定事项 | `docs/contracts/flows.md` | §4 §5 |
-| 验收口径、夹具、用例编号 K1–K148 | `docs/contracts/acceptance.md` | 附录 D.5（K28–K61 K75–K78 K82–K115）、D.6（K62–K74）、D.7（K116–K125）、D.8（K126–K137）、D.9（K138–K147）、D.10（K148） |
+| 验收口径、夹具、用例编号 K1–K153 | `docs/contracts/acceptance.md` | 附录 D.5（K28–K61 K75–K78 K82–K115）、D.6（K62–K74）、D.7（K116–K125）、D.8（K126–K137）、D.9（K138–K147）、D.10（K148）、D.11（K149）、D.12（K150）、D.13（K151）、D.14（K152 K153） |
 | 决策登记（偏离 / 更正 / 假设） | `docs/contracts/decisions.md` | 附录 B |
 | 页面视觉刻度（px、令牌、`skc_` 类名、收拢顺序） | `docs/contracts/visual.md` | A.1–A.9 |
 | 技能市场（源适配器、数据流、市场刻度、安装链路） | `docs/contracts/market.md` | §7 附录 F 附录 G |
 | 市场面路由（清单见 §3.7）、安装链路与市场错误码 | `docs/contracts/market-routes.md` | §3.7 §8.6（本地面见 `docs/contracts/routes.md` §3.3 / §3.4） |
-| 宿主「插件」页长什么样（外部形状、稳定钩子、几何） | `docs/reference/host-plugin-page.md` | 带采集日期；宿主升级后整份重采，不在旧值上打补丁 |
+| 宿主「插件」页长什么样（外部形状、稳定钩子、几何） | `docs/reference/host-plugin-page.md` | 带采集日期；宿主升级后整份重采（例外：能用字节级 diff 证明某节形状未变时只重采指针，须在正文 1.2 写明依据），不在旧值上打补丁 |
 | 使用者能感知什么、怎么装、有哪些已知限制 | `README.md`、`README.en.md` | 只写使用者视角；中英两版同构、条目数须相等（`docs/contracts/decisions.md` 附录 W-2） |
 | 升级时我要注意什么 | `CHANGELOG.md`、`docs/releases/` | 记行为变化与迁移，不记改过哪些文件；Release 正文五段式见 `docs/contracts/decisions.md` 附录 W-4，CHANGELOG 体例（结构 / 读者 / 骨架 / 语义分层 / 措辞）见附录 W-5；逐版 Release 正文在 `docs/releases/`，文件与 tag 同名，如 `docs/releases/v1.1.1.md` |
 | 过去是什么、为什么这么定 | `git log`（`git log -S`） | 仓库里没有 `archive/`，历史交 git |
 | 现在卡在哪、还剩什么没验 | `.agents/work/BOARD.md` | 本地看板（列约定在文件头，过程产物在 wip/ 与 scratch/），不入库 |
 
-契约按**编号分区**：`§x.y` 与 `附录 X.n` 在全仓库唯一，正文里看到编号就按上表定位；编号是 `test/*.test.mjs` 头注的锚点（K1–K148），**不许重排或复用**（K33 / K58 / K60 / K80 已退役，号不复用）。
+契约按**编号分区**：`§x.y` 与 `附录 X.n` 在全仓库唯一，正文里看到编号就按上表定位；编号是 `test/*.test.mjs` 头注的锚点（K1–K153），**不许重排或复用**（K33 / K58 / K60 / K80 已退役，号不复用）。
 
 **新知识写哪**：可 grep 的断言 → 契约；不能做错的事 → 本文件「硬约束」；用户可感知的变化 → `CHANGELOG`；还没做的事 → 看板；**没定型的探索结论**才进项目记忆。文档里不放过程（PRD、测试报告、设计图）——已移出，见 commit `a8141eb`。
 
@@ -63,7 +63,7 @@ npm publish --//registry.npmjs.org/:_authToken=<token>   # 2FA 绑的是通行�
 2. **不要在 `lib/**` 或 `src/client/**` 写中文**（注释也不行）：`check:i18n` 直接 exit 1。
    界面文案一律进 `locale/*.json`，代码里只出现键名。
 3. **入口名与插件名都只在 `locale/*.json` 里改**（`panel.label` = 侧栏行标题，`meta.title` = 插件名，**两键可独立取值**：2026-11-17 起二者不同——侧栏 `技能`/`Skills`，插件名 `技能面板`/`Skill Panel`），代码零改动。
-4. **不写同名 `--dsw-*` 变量**，不引第二套样式系统。宿主类名是构建哈希，不许出现在选择器里；页骨架用 `skc_` 前缀，规则体逐字来自宿主「插件」页（`docs/contracts/visual.md`）。
+4. **不写同名 `--dsw-*` 变量**，不引第二套样式系统。宿主类名是构建哈希，不许出现在选择器里；页骨架用 `skc_` 前缀，规则体逐字来自宿主「插件」页（`docs/contracts/visual.md`）；**覆盖宿主 primitive 的规则不许靠加载顺序取胜**——一律双类选择器把特异性提到 (0,2,0)、取值不变，判据与两条边界见 A.9。
 5. **软链技能只读，三层同时拦**：扫描层给 `symlink` 事实 → 前端渲染只读标记不渲染开关 →
    写路由返回 `409 E_SYMLINK_READONLY`。任何一层被去掉都算回归。
 6. **写路由不得信任请求里的路径**：先按 name 重新扫描，`row.path !== path` 即 `409 E_STALE_PATH`。
@@ -83,7 +83,7 @@ npm publish --//registry.npmjs.org/:_authToken=<token>   # 2FA 绑的是通行�
 15. **`docs/contracts/acceptance.md` 的体积与键数门禁不回读、必须手改**：K115 正则还钉死 `installed-detail.md`(3 处)、`client.md`(2 处 `detail.*`)、`routes.md` §3.3「十六条 exact 路由」与 `market-routes.md` §3.7「市场面 N 条」——改措辞或改键数须与 `locale/`、`ROUTES` 同轮改，否则红。
 16. **契约文档 400 行满档**：加行须同轮合并同族短行；`check-docs` 的 R11 比 `wc -l` 多 1，要 0 warn 就 ≤399。引用「尚未创建」的仓库路径不能加反引号（R8 会校验存在）；文档里不许引 `.agents/work/` 下的瞬态产物（R13；不入库，必然腐化）——工作现场入口 `BOARD.md` 与 `BOARD-archive.md` 除外。
 17. **npm 包名（scoped `@ztqing4agents/dsh-skill-panel`）≠ 插件内部 id（短名 `dsh-skill-panel`）**：cordis `name`、16 条 `/api/dsh-skill-panel/*`、`NS`/`PANEL_ID`/`STYLE_ID`、`$DSH_HOME/dsh-skill-panel/`、patch 的 `insert[].id` 一律不动，只有 `client.js` 的装载 id 跟包名（宿主强制，`check-client` 守 `id == pkg.name`）——别「顺手统一」成一处。
-18. **宿主区间只有一个写法：`>=0.2.2-0 <0.3.0-0`，`engines.dsh` 与七条 `@deepseek-ai/dsh-*` peer 同串**：`-0` 是让预发布进门的写法、不许省；目标预发布的三段号还必须出现在比较子里——`>=0.2.0-rc.1 <0.3.0-0` 只带 `0.2.0` / `0.3.0` 两个 tuple，对 `0.2.1-rc.x` / `0.2.2-rc.x` 判 false。**宿主与 npm 是两套规则两套结果**：宿主走 `satisfies(..., { includePrerelease: true })`（同一条老区间对 `0.2.2-rc.5` 判 **true**，所以它从没在真机炸过，只在 npm 侧炸），npm / pnpm 的 peer 解析走默认模式（判 false ⇒ 消费者工程 `ERESOLVE`）；别拿一侧的结果推另一侧。改区间只改 `scripts/hosts.mjs` 一处（`npm run check` 的 `check:hosts` 守声明一致）。本地验宿主版本靠**锁文件**钉住、`npm ci` 冷装复现（宿主包不进 `devDependencies`：npm 自己按 peer 解析到当前 rc，用 `-D` 钉版本会随宿主每条 rc 线腐化且没人跟），`npm install <宿主包>@ver` 会写进 `dependencies` 一起发出去、禁止。换代触发、代价与发布纪律见 `docs/contracts/decisions.md` 附录 Z（Z-9–Z-14）。
+18. **宿主区间只有一个写法：`>=0.2.3-0 <0.3.0-0`，`engines.dsh` 与七条 `@deepseek-ai/dsh-*` peer 同串**：`-0` 是让预发布进门的写法、不许省；目标预发布的三段号还必须出现在比较子里——写成 `>=0.2.3`（省掉 `-0`）只带 `0.2.3` 一个 tuple、且没有预发布标识，对 `0.2.3-alpha.*` 判 false；`>=0.2.3-0 <0.3.0-0` 才放得进来。**宿主与 npm 是两套规则两套结果**：宿主走 `satisfies(..., { includePrerelease: true })`（把预发布标识一起纳入比较），npm / pnpm 的 peer 解析走默认模式（不纳入，判 false 就给消费者工程 `ERESOLVE`）；因此同一条区间在两侧可以给出相反结论——宿主侧已放行的宿主，npm 侧仍可能装不上，逐条实测留在附录 Z。别拿一侧的结果推另一侧。改区间只改 `scripts/hosts.mjs` 一处（`npm run check` 的 `check:hosts` 守声明一致）。本地验宿主版本靠**锁文件**钉住、`npm ci` 冷装复现（宿主包不进 `devDependencies`：npm 自己按 peer 解析到当前预发布，用 `-D` 钉版本会随宿主每条预发布线腐化且没人跟），`npm install <宿主包>@ver` 会写进 `dependencies` 一起发出去、禁止。换代触发、代价与发布纪律见 `docs/contracts/decisions.md` 附录 Z（Z-9–Z-15）。
 
 ## 四处容易踩的真机坑
 

@@ -21,6 +21,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { createStore } from '../src/client/state.js';
+import { flattenDoubling } from './helpers/skc-css.mjs';
 import { ROOT, loadClientModules, zhTranslator } from './helpers/ssr.mjs';
 import { mountHooks } from './helpers/hooks.mjs';
 
@@ -126,7 +127,9 @@ test('K99 × 只在有文字时渲染，且带可读的名字', async () => {
 });
 
 test('K99 样式：容器定位、按钮绝对定位、搜索框给自己让出 32px', async () => {
-  const css = await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8');
+  // 双类（`.skc_x.skc_x`）只提特异性、取值不变：先折叠回单类再读规则，别靠「复合选择器后半截」
+  // 恰好以 `.skc_x{` 结尾这种巧合去命中（A.9 的写法，见 helpers/skc-css.mjs）。
+  const css = flattenDoubling(await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8'));
   /** The declarations of one rule, as a normalised string. */
   const rule = (selector) => {
     const start = css.indexOf(`.${selector}{`);

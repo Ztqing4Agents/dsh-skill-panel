@@ -124,7 +124,7 @@ if (rows.length > 0) {
     }
   }
   say('   ─ 负向对照（信息项，不该被覆盖的版本）：');
-  for (const host of ['0.2.1-rc.5', '0.2.0-rc.2', '0.2.3-rc.1', '0.3.0-rc.1']) {
+  for (const host of ['0.2.2-rc.5', '0.2.1-rc.5', '0.2.0-rc.2', '0.3.0-rc.1']) {
     say(`   ${host.padEnd(width)}  ${String(semver.satisfies(host, peerRange) === true).padEnd(8)}  ${semver.satisfies(host, peerRange, { includePrerelease: true }) === true}`);
   }
 }

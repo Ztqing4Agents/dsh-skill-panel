@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 真机冒烟：把 2026-11-19 的 rc.5 手工复核固化成一条命令。
+ * 真机冒烟：把 2026-11-19 的 rc.5 手工复核固化成一条命令，0.2.3 起扩到七条判据。
  *
  * 判据（缺一不可）：
  *   H1 本机 `app.asar` 里的宿主版本 = `--host`（不给就比 `hosts.mjs` 的 `developmentHost`）
@@ -9,7 +9,19 @@
  *   H3 页面出现 `[data-skc-panel]`（面板真的挂载了，不是白屏）；
  *   H4 宿主「插件」页里本包卡片 `data-plugin-status` 不是 `disabled`
  *      （`inject` 与 `ctx.*` 对不上时整页 boot 失败、entry 被打成 disabled）；
- *   H5 控制台没有 error 级日志，尤其 `cannot get property … without inject`。
+ *   H5 控制台没有 error 级日志，且四条「模块表出事」的负判据原文一条都别出现：
+ *      `cannot get property "…" without inject`（读到未声明的服务）、
+ *      `client-modules: require("…") missed the module table`（同步 require 落空）、
+ *      `client-modules: cannot resolve "…"`（动态 import 落空）、
+ *      `loaded without registering "…" via __ModuleLoader__.load`（产物没注册自己）；
+ *   H6 shell 的静态种子表仍有 11 项、且含 `@deepseek-ai/dsh-client-ui-primitives`
+ *      —— 宿主自 0.2.3 起把 primitives 静态链接进 shell（包目录已不存在），
+ *      它一掉项我们就是整页白屏；这条比等真机白屏便宜，也解释得清「目录没了不等于模块没了」；
+ *   H7 十六条路由在**无凭据**下仍可达：宿主自 0.2.3 起把缺省的 `auth` 当 `required`，
+ *      没有 Peer 就由鉴权层回 401（宿主没有任何鉴权提供方时 503）；这里逐条发一个
+ *      「只读要 200、写路由必然 4xx」的请求并带 `credentials: 'omit'`，要求状态码不是
+ *      401 / 403 / 503 —— 写路由用必然被拒的坏参数（空 body / 非法枚举）判「不是被鉴权层
+ *      挡的」，不写盘、不联网。
  *
  * 隔离：自建 `DSH_HOME`（`mkdtemp`）+ 一个只装本包的 profile（`node_modules/<包名>` 软链到仓库根），
  * 用宿主自带的 `dsh web --no-open --port 0` 起实例，从 stdout 取带 token 的 URL。
@@ -30,7 +42,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { HOST_ASAR, readAsarJson } from './asar-read.mjs';
+import { HOST_ASAR, listAsarEntries, readAsarFile, readAsarJson } from './asar-read.mjs';
 import { CHROME, killTree, launch } from './cdp.mjs';
 import { developmentHost, supportedHosts } from './hosts.mjs';
 
@@ -92,6 +104,96 @@ const DSH_BIN = `${HOST_ASAR}/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js`;
 const BASE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'];
 const pkgName = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).name;
 
+/** H6 要读的 shell 产物所在的 asar 目录（`index-<hash>.js` 是 shell 本体）。 */
+const SHELL_DIR = 'dsh/node_modules/@deepseek-ai/dsh-web-frontend/dist/assets/';
+
+/**
+ * H6 的期望值：宿主 shell 里 `staticModules` 返回的 11 项平台种子模块。
+ *
+ * 与 `test/bundle-contract.test.mjs` 的 `SEED_MODULES` 逐项相同——那边守「产物只 require 这些」，
+ * 这边守「宿主真的还提供这些」。两处各存一份是故意的：一边读不到对方的存在理由（一个是产物契约、
+ * 一个是宿主读数），改一处就得同时改另一处，改漏了这边会红着说话。
+ */
+const SEED_MODULES = Object.freeze([
+  'react',
+  'react/jsx-runtime',
+  'react-dom',
+  'react-dom/client',
+  '@deepseek-ai/cordis',
+  'zod',
+  '@tanstack/react-virtual',
+  '@deepseek-ai/dsh-client-store',
+  '@deepseek-ai/dsh-client-ui-slots',
+  '@deepseek-ai/dsh-client-ui-primitives',
+  '@deepseek-ai/dsh-client-ui-dockkit',
+]);
+
+/**
+ * 从 shell 产物里取出静态种子表的条目名。
+ *
+ * 不认标识符名（`UV` 这类压缩名每次构建都换），只顺着「`staticModules:` 后面那个零参调用」
+ * 找到它的定义，再读 `Object.values({…})` 的对象字面量：取不到的键名一律按「形状变了」处理，
+ * 让判据红着说话，而不是静默当成「没有种子表」。
+ *
+ * @param {string} text - shell 产物全文。
+ * @returns {string[]|null} 条目名，顺序即登记顺序；定位失败返回 `null`。
+ */
+function seedModulesOf(text) {
+  const callAt = text.indexOf('staticModules:');
+  if (callAt < 0) return null;
+  const ref = /staticModules:\s*([A-Za-z_$][\w$]*)\s*\(\s*\)/.exec(text.slice(callAt, callAt + 200));
+  if (ref === null) return null;
+  const marker = `function ${ref[1]}(){return Object.values({`;
+  const at = text.indexOf(marker);
+  if (at < 0) return null;
+  const bodyAt = at + marker.length;
+  const endAt = text.indexOf('})}', bodyAt);
+  const body = text.slice(bodyAt, endAt < 0 ? bodyAt + 4096 : endAt);
+  const ids = [];
+  for (const match of body.matchAll(/(?:"([^"]+)"|([A-Za-z_$][\w$]*)):\s*(?:Ji|e1)\(/g)) {
+    ids.push(match[1] ?? match[2]);
+    if (ids.length > SEED_MODULES.length) break;
+  }
+  return ids;
+}
+
+/**
+ * H5 的负判据原文：这几句出现即「模块表 / 服务声明出问题」，逐条列出好定位。
+ * 第一句来自 shell 的 `ctx` 严格代理，后三句来自宿主 `dsh-client-modules` 的 throw 文本。
+ */
+const NEGATIVE_PATTERNS = Object.freeze([
+  { id: 'inject', text: 'cannot get property', hint: '读到 inject 未声明的服务（整页 boot 会失败）' },
+  { id: 'module-table', text: 'missed the module table', hint: '同步 require 没落在静态种子表里' },
+  { id: 'resolve', text: 'cannot resolve', hint: '动态 import 解析不到模块' },
+  { id: 'registering', text: 'loaded without registering', hint: '产物执行了却没注册自己的模块行' },
+]);
+
+/**
+ * H7 的十六条探针：每条都是「只读要 200、写路由必然 4xx」的请求，且不写盘、不联网。
+ *
+ * 写路由一律发空 body：它们在读到第一个字段时就返回 `400`，永远走不到落盘；只读路由挑
+ * 不需要上游的那些（`list` / `health` / `market/installed`），其余带一个非法枚举值让它
+ * 在参数白名单处就停。`expected` 是「这条路由自己给出的答案」，不是鉴权层给出的。
+ */
+const ANONYMOUS_PROBES = Object.freeze([
+  { route: 'list', method: 'GET', path: '/api/dsh-skill-panel/list', expected: 200 },
+  { route: 'toggle', method: 'POST', path: '/api/dsh-skill-panel/toggle', body: {}, expected: 400 },
+  { route: 'providerToggle', method: 'POST', path: '/api/dsh-skill-panel/provider-toggle', body: {}, expected: 400 },
+  { route: 'health', method: 'GET', path: '/api/dsh-skill-panel/health', expected: 200 },
+  { route: 'detail', method: 'GET', path: '/api/dsh-skill-panel/detail?name=NOT_A_NAME', expected: 400 },
+  { route: 'marketBootstrap', method: 'GET', path: '/api/dsh-skill-panel/market/bootstrap?source=bogus', expected: 400 },
+  { route: 'marketList', method: 'GET', path: '/api/dsh-skill-panel/market/list?sort=bogus', expected: 400 },
+  { route: 'marketDetail', method: 'GET', path: '/api/dsh-skill-panel/market/detail?source=all&owner=x&slug=y', expected: 400 },
+  { route: 'marketInstalled', method: 'GET', path: '/api/dsh-skill-panel/market/installed', expected: 200 },
+  { route: 'marketInstall', method: 'POST', path: '/api/dsh-skill-panel/market/install', body: {}, expected: 400 },
+  { route: 'marketVersions', method: 'GET', path: '/api/dsh-skill-panel/market/versions?source=all&owner=x&slug=y', expected: 400 },
+  { route: 'marketUpdate', method: 'POST', path: '/api/dsh-skill-panel/market/update', body: {}, expected: 400 },
+  { route: 'marketIcons', method: 'POST', path: '/api/dsh-skill-panel/market/icons', body: {}, expected: 400 },
+  { route: 'marketFavorite', method: 'POST', path: '/api/dsh-skill-panel/market/favorite', body: {}, expected: 400 },
+  { route: 'add', method: 'POST', path: '/api/dsh-skill-panel/add', body: {}, expected: 400 },
+  { route: 'remove', method: 'POST', path: '/api/dsh-skill-panel/remove', body: {}, expected: 400 },
+]);
+
 /**
  * 环境缺件：这不是「判据没通过」，单独一条分支，打印「跳过」并 exit 2，不混进 N/M 的计数。
  *
@@ -129,11 +231,13 @@ const tail = (text, lines = 20) => text.split('\n').filter((line) => line.trim()
 
 const results = [];
 const consoleErrors = [];
+/** H7 开始前记下的条数：它之后进来的 4xx 网络日志是探针自己故意打出来的，不该混进 H5 的读数与报表。 */
+let probeNoiseFrom = null;
 
 /**
  * 记一条判据。
  *
- * @param {string} id - 判据编号（H1–H5）。
+ * @param {string} id - 判据编号（H1–H7）。
  * @param {string} name - 判据内容。
  * @param {boolean} ok - 是否通过。
  * @param {unknown} actual - 实测值。
@@ -157,9 +261,14 @@ function report() {
   }
   const passed = results.filter((result) => result.ok).length;
   console.log(`\n${passed}/${results.length} 通过`);
-  if (consoleErrors.length > 0) {
-    console.log(`\n控制台 error 级日志（${consoleErrors.length} 条）：`);
-    for (const line of consoleErrors.slice(0, 12)) console.log(`  ${line}`);
+  const own = probeNoiseFrom === null ? consoleErrors : consoleErrors.slice(0, probeNoiseFrom);
+  const noise = probeNoiseFrom === null ? 0 : consoleErrors.length - probeNoiseFrom;
+  if (own.length > 0) {
+    console.log(`\n控制台 error 级日志（${own.length} 条）：`);
+    for (const line of own.slice(0, 12)) console.log(`  ${line}`);
+  }
+  if (noise > 0) {
+    console.log(`\n另有 ${noise} 条 4xx 网络日志来自 H7 的无凭据探针（预期内，不是回归）。`);
   }
 }
 
@@ -173,6 +282,23 @@ if (!judge('H1', `本机宿主 = 声明的开发基线 ${declaredHost}`, hostVer
   report();
   process.exit(1);
 }
+
+/* ------------------------------------------------ H6 shell 静态种子表 */
+
+const shellNames = listAsarEntries(HOST_ASAR)
+  .filter((path) => path.startsWith(SHELL_DIR) && /^index-[^/]+\.js$/.test(path.slice(SHELL_DIR.length)));
+const shellName = shellNames.length === 1 ? shellNames[0] : null;
+const shellText = shellName === null ? null : readAsarFile(HOST_ASAR, shellName)?.toString('utf8') ?? null;
+const seedIds = shellText === null ? null : seedModulesOf(shellText);
+const missingSeeds = seedIds === null ? SEED_MODULES : SEED_MODULES.filter((id) => !seedIds.includes(id));
+judge('H6', 'shell 静态种子表仍是 11 项且含 @deepseek-ai/dsh-client-ui-primitives',
+  shellName !== null && seedIds !== null && seedIds.length === SEED_MODULES.length && missingSeeds.length === 0,
+  {
+    shell: shellName ?? `期望恰好一份 ${SHELL_DIR}index-<hash>.js，实际 ${shellNames.length} 份`,
+    seeds: seedIds,
+    missing: missingSeeds,
+  },
+  { seeds: SEED_MODULES });
 
 /* --------------------------------------------------------- 隔离环境与实例 */
 
@@ -397,13 +523,68 @@ try {
   judge('H4', '宿主插件卡片 data-plugin-status 不是 disabled',
     cardReady === true && typeof card?.status === 'string' && card.status !== 'disabled', card, { status: 'running（不是 disabled）' });
 
-  /* H5 控制台 */
-  const injectHits = consoleErrors.filter((line) => /without inject/i.test(line));
-  judge('H5', '控制台无 error 级日志（尤其 without inject）', consoleErrors.length === 0, {
-    count: consoleErrors.length,
-    inject: injectHits,
-    sample: consoleErrors.slice(0, 5),
-  }, { count: 0 });
+  /* H5 控制台：任一 error 级日志即红，另把四条「模块表出事」的原文单独列出来 */
+  const negativeHits = NEGATIVE_PATTERNS
+    .map((pattern) => ({
+      id: pattern.id,
+      hint: pattern.hint,
+      lines: consoleErrors.filter((line) => line.toLowerCase().includes(pattern.text.toLowerCase())),
+    }))
+    .filter((hit) => hit.lines.length > 0);
+  judge('H5', '控制台无 error 级日志（without inject / missed the module table / cannot resolve / loaded without registering）',
+    consoleErrors.length === 0, {
+      count: consoleErrors.length,
+      negative: negativeHits,
+      sample: consoleErrors.slice(0, 5),
+    }, { count: 0 });
+
+  /* H7 十六条路由在无凭据下仍可达（不带 cookie，所以 required 会回 401） */
+  probeNoiseFrom = consoleErrors.length;
+  const probes = await browser.evaluate(`(async () => {
+    const probes = ${JSON.stringify(ANONYMOUS_PROBES.map(({ route, method, path, body }) => ({ route, method, path, body })))};
+    const answers = [];
+    for (const probe of probes) {
+      try {
+        const init = { method: probe.method, credentials: 'omit' };
+        if (probe.body !== undefined) {
+          init.headers = { 'content-type': 'application/json' };
+          init.body = JSON.stringify(probe.body);
+        }
+        const response = await fetch(probe.path, init);
+        let code = null;
+        try {
+          code = (await response.json())?.code ?? null;
+        } catch {
+          code = null;
+        }
+        answers.push({ route: probe.route, status: response.status, code });
+      } catch (error) {
+        answers.push({ route: probe.route, status: -1, code: String(error) });
+      }
+    }
+    return answers;
+  })()`);
+  const authBlocked = probes.filter((answer) => answer.status === 401 || answer.status === 403 || answer.status === 503);
+  const wrongStatus = probes.filter((answer, index) => {
+    const { expected } = ANONYMOUS_PROBES[index];
+    return expected === 200 ? answer.status !== 200 : !(answer.status >= 400 && answer.status < 500);
+  });
+  const brokenEnvelope = probes.filter((answer) => typeof answer.code !== 'string'
+    || (answer.code !== 'OK' && !answer.code.startsWith('E_')));
+  judge('H7', '十六条路由在无凭据（auth: anonymous）下逐条可达：只读 200、写路由 4xx，没有 401/403/503',
+    probes.length === ANONYMOUS_PROBES.length && authBlocked.length === 0
+      && wrongStatus.length === 0 && brokenEnvelope.length === 0,
+    {
+      blocked: authBlocked,
+      wrongStatus: wrongStatus.map((answer) => ({
+        route: answer.route,
+        status: answer.status,
+        expected: ANONYMOUS_PROBES.find((probe) => probe.route === answer.route)?.expected,
+      })),
+      envelope: brokenEnvelope,
+      answers: probes,
+    },
+    { routes: ANONYMOUS_PROBES.length, blocked: 0 });
 
   report();
   exitCode = results.every((result) => result.ok) ? 0 : 1;

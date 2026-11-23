@@ -12,7 +12,7 @@
 
 ## 3.7 市场路由清单
 
-市场面 9 条 **exact** 路由，前缀 `/api/dsh-skill-panel/market/*`。它们与 #1–#4、#14 **共用同一个 `guard()`**（loopback 围栏 → 方法），共用 `writeJson` 的 `{code,data,message}` 信封与 `no-store`，但**不共用 `collect()`**：本地扫描是磁盘面，市场是网络面，混在一起会让「市场超时」连累「已安装」页签。
+市场面 9 条 **exact** 路由，前缀 `/api/dsh-skill-panel/market/*`。它们与 #1–#4、#14 **共用同一个 `guard()`**（loopback 围栏 → 方法），共用 `writeJson` 的 `{code,data,message}` 信封与 `no-store`，但**不共用 `collect()`**：本地扫描是磁盘面，市场是网络面，混在一起会让「市场超时」连累「已安装」页签。访问策略也不在此处另立：九条与其余七条一起逐条声明 `auth`，取值、理由与两道闸只有一处真源——`docs/contracts/routes.md` §3.3.5。
 
 #### 3.7.1 九条路由
 

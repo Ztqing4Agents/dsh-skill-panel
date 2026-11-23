@@ -6,6 +6,14 @@
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-11-23
+
+### Changed
+
+- **【不兼容】宿主支持面换代际至 DSH `0.2.3`**：`peerDependencies` 与 `engines.dsh` 统一调整为 `>=0.2.3-0 <0.3.0-0`，正式支持面为 DSH `0.2.3` 系列（本版只在 `0.2.3-alpha.2` 上做过真机验证）；不再声明支持 `0.2.2` 系列。
+  - **旧宿主指引**：仍在使用 DSH `0.2.2` 系列（含 `0.2.2-rc.*`）的用户请安装 **`1.1.3`**——该版本可继续正常使用，但不再接收后续修复；待宿主升级到 `0.2.3` 及以上，再升级本插件。
+- **接口访问策略显式化**：DSH 自 `0.2.3` 起为每条 HTTP 路由新增访问策略，缺省值是「必须携带已登录凭据」——没有凭据的请求（脚本、隔离环境、非浏览器调用）会被宿主直接挡下。本插件的十六条接口现在逐条声明为**匿名访问**，把 `1.1.3` 的实际可达性写下来：安全边界仍是本机回环围栏加宿主的来源校验，浏览器里的使用方式没有任何变化。
+
 ## [1.1.3] - 2026-11-21
 
 ### Changed
@@ -94,7 +102,8 @@
 - **字节保真写入**：切换本地或已安装技能开关时，仅精确修改目标 `SKILL.md` 的 `disable-model-invocation` 字段，完整保留原有换行符（CRLF/LF）、BOM 与行序。
 - **软链只读保护与边界提示**：符号链接引入的技能标记为「软链·只读」并禁用写操作；页脚统计并提示位于项目级或其他未扫描目录中的技能数量。
 
-[Unreleased]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v1.1.3...HEAD
+[Unreleased]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v1.1.4...HEAD
+[1.1.4]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v1.1.0...v1.1.1

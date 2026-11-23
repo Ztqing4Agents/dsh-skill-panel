@@ -12,8 +12,11 @@
  *                                        （137 + `.skc_pluginIconImg`〔插件位内容 36：
  *                                        列表块与插件页头同一颗，块自身不加类、也没有
  *                                        行高补偿规则〕，见 Y-3）
- *   per-hook rule counts                 .skc_addGroup 1 / .skc_addPrimary 3 /
- *                                        .skc_addMore 2 / .skc_detailDanger 2
+ *   per-hook rule counts                 .skc_addGroup 1 / .skc_addPrimary 5 /
+ *                                        .skc_addMore 4 / .skc_detailDanger 4
+ *                                        （0.2.3 起覆盖宿主 primitive 的规则一律双类
+ *                                        `.skc_x.skc_x`，同一条规则里类名出现两次；
+ *                                        类名总数不受影响）
  *   the four addMenu readings            K148: 320 / calc(100vw - 48px) / 72 /
  *                                        gap 2 / 12·18 with -webkit-line-clamp:2
  *
@@ -27,7 +30,16 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { join } from 'node:path';
 
+import {
+  flattenDoubling,
+  primitiveClassNames,
+  ruleBlocks,
+  specificityOf,
+  subjectCompounds,
+} from './helpers/skc-css.mjs';
+import { ROOT } from './helpers/ssr.mjs';
 import { cn, injectStyles } from '../src/client/styles.js';
 // The stylesheet itself is not exported as text; it is asserted through the DOM hook
 // and through the class names the components ask for, which is what the gate cares
@@ -536,9 +548,9 @@ test('K136 类名总数与既有挂点的规则条数（U20 起；U22 添加菜�
   // 注：不能要求「每个挂点只出现一次」：`.skc_addPrimary` 本来就有三条规则
   // （基础形状 / 圆角修正 / 页头内的修正），`skc_addMore` 与 `skc_detailDanger` 各两条。
   const counts = (selector) => (css.match(new RegExp(`\\.${selector}(?![A-Za-z0-9_])`, 'g')) ?? []).length;
-  const expected = { skc_addGroup: 1, skc_addPrimary: 3, skc_addMore: 2, skc_detailDanger: 2 };
+  const expected = { skc_addGroup: 1, skc_addPrimary: 5, skc_addMore: 4, skc_detailDanger: 4 };
   for (const [selector, want] of Object.entries(expected)) {
-    assert.equal(counts(selector), want, `.skc_${selector.slice(5)} 的规则条数是 ${want}（实际 ${counts(selector)}）`);
+    assert.equal(counts(selector), want, `.${selector} 的出现次数是 ${want}（实际 ${counts(selector)}）`);
   }
   const classes = [...new Set([...css.matchAll(/\.(skc_[A-Za-z0-9_]+)/g)].map((match) => match[1]))];
   assert.equal(classes.length, 138, `skc_ 类名总数是 138（实际 ${classes.length}）：U22 的添加菜单加了 .skc_addMenu / .skc_addMenuItem / .skc_addMenuDescription，插件位再加一个 .skc_pluginIconImg（两处插件位共用的 36 内容）`);
@@ -550,7 +562,8 @@ test('K136 类名总数与既有挂点的规则条数（U20 起；U22 添加菜�
 });
 
 test('K148 添加菜单的四条宿主刻度（逐字取宿主「插件」页那个菜单）', () => {
-  const css = capturedCss();
+  // 双类写法只提特异性：折叠回单类再读规则，别依赖 `.skc_addMenu{` 恰好是复合选择器的尾巴。
+  const css = flattenDoubling(capturedCss());
   // 卡片宽：宿主 320，窄屏夹到视口减 48（两边各 24 的页边距）。
   assert.match(css, /\.skc_addMenu\{[^}]*width: 320px/, '菜单卡片宽 320px');
   assert.match(css, /\.skc_addMenu\{[^}]*max-width: calc\(100vw - 48px\)/, '窄屏时 max-width 是 calc(100vw - 48px)');
@@ -566,4 +579,58 @@ test('K148 添加菜单的四条宿主刻度（逐字取宿主「插件」页那
   assert.match(css, /\.skc_addMenuDescription\{[^}]*font-size: 12px; line-height: 18px/, '副行字号与行高成对钉在 12/18');
   assert.match(css, /\.skc_addMenuDescription\{[^}]*-webkit-line-clamp: 2(?![0-9])/, '副行最多两行');
   assert.match(css, /\.skc_addMenuDescription\{[^}]*-webkit-box-orient: vertical/, '-webkit-box 方向是 vertical（否则没有截断）');
+});
+
+test('K154 传给 primitive 的 skc_ 类：碰上宿主的属性就必须双类（A.9 的可 grep 断言）', () => {
+  // 0.2.3 起 primitives 的 CSS 由 renderer 在挂载时装进 <style>，可能落在我们的 <style> 之后：
+  // 同特异性下宿主胜，声明静默丢失（1.1.4 的 ⓘ 就是 20px 盒被 10px×2 的 padding 吃空内容宽）。
+  // 判据取 `visual.md` A.9 的那条：**给 primitive 的类**，只要规则里出现宿主也会声明的属性
+  // （padding / height / width / border-radius / font-size / color / background），这条规则就
+  // 不许停在 (0,1,0)——要么 `.skc_x.skc_x` 双类，要么靠祖先再带一个类。裸单类即红，唯一的口子
+  // 是下面那张**带证据且会自动过期**的例外表（宿主的规则不在本仓库，`npm test` 也不许依赖宿主）。
+  //
+  // 类集合是**推导**来的（`className={cn('x')}` 出现在从 primitives 导入的标签上），不是手抄
+  // 清单：手抄的清单会和代码一起腐化。推导为空时这里直接红，免得「一个类都没扫到」被读成全绿。
+  const css = capturedCss();
+  const classes = primitiveClassNames(join(ROOT, 'src', 'client'));
+  assert.ok(classes.length >= 8, `扫到 ${classes.length} 个传给 primitive 的类（太少 ⇒ 推导坏了，不是合规）`);
+  assert.ok(classes.includes('skc_infoButton'), '推导里必须有 ⓘ 那个类（K152 修的就是它）');
+
+  /** A.9 点名的七个属性，带连字符的派生（padding-right / background-color …）也算。 */
+  const HOST_TOUCHED = /(?:^|;)\s*(?:padding|height|width|border-radius|font-size|color|background)(?:-[\w-]+)?\s*:/;
+  const declarations = (body) => body.split(';').map((one) => one.trim()).filter((one) => one !== '');
+
+  // 例外必须有证据：A.9 的判据是「这条声明会不会和宿主 primitive 撞同一属性」，撞了才必须双类；
+  // 宿主的规则不在本仓库（`npm test` 不依赖宿主），所以「查过、确认不撞」这件事只能写成带日期
+  // 的豁免，并且照 `check-docs` 的体例**自动过期**：谁把它改成双类，这条豁免立刻变红要求删除。
+  const HOST_NEUTRAL = new Map([
+    ['skc_pageTabList', '宿主 `.j-N4uq_tabs` 只声明 padding / border-radius / background / display / position（0.2.3-alpha.2 的 shell stylesheets 表，2026-11-23 读自 app.asar）；本类只设 width / min-width ⇒ 不撞属性'],
+  ]);
+  for (const [name, reason] of HOST_NEUTRAL) {
+    assert.ok(classes.includes(name), `${name} 不再传给 primitive ⇒ 删掉这条豁免（当初的理由：${reason}）`);
+    assert.equal(new RegExp(`\\.${name}\\.${name}`).test(css), false,
+      `${name} 已经双类化 ⇒ 删掉这条豁免（当初的理由：${reason}）`);
+  }
+
+  const violations = [];
+  for (const { selector, body } of ruleBlocks(css)) {
+    if (!HOST_TOUCHED.test(body)) continue;
+    for (const member of selector.split(',')) {
+      const one = member.trim();
+      const compound = subjectCompounds(one)[0] ?? '';
+      for (const name of classes) {
+        if (HOST_NEUTRAL.has(name)) continue;
+        if (new RegExp(`\\.${name}(?![\\w-])`).test(compound) === false) continue;
+        const [ids, weight] = specificityOf(one);
+        if (ids > 0 || weight >= 2) continue;
+        const touched = declarations(body).filter((line) => HOST_TOUCHED.test(`;${line}`));
+        violations.push({ className: name, selector: one, touched });
+      }
+    }
+  }
+
+  assert.deepEqual(violations, [],
+    `单类规则碰了宿主也会声明的属性（改成 .skc_x.skc_x，取值不变）：\n${violations
+      .map((one) => `  ${one.className} ← \`${one.selector}\` 设了 ${one.touched.join(' / ')}`)
+      .join('\n')}`);
 });

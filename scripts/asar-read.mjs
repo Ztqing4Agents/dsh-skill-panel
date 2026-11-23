@@ -6,8 +6,16 @@
  *   - `scripts/semver-lite.mjs` 兜底时把宿主自带的 `semver` 解出来用。
  *
  * asar 的布局（与 `@electron/asar` 的读法一致）：
- *   0–15 字节是 pickle 头，偏移 12 处是 JSON 目录表的字节长度；
- *   目录表从偏移 16 开始；普通文件的 `offset` 是相对「目录表结束处」的偏移。
+ *   0–7 是 pickle 头：偏移 4 处是 `headerSize`（目录表那一块的总长）；
+ *   8–15 是目录表的 pickle 头：偏移 12 处是 JSON 文本的字节长度；
+ *   目录表从偏移 16 开始；**数据区起点 = `8 + headerSize`**（= `align4(16 + jsonLength)`，
+ *   因为 `headerSize` = `align4(8 + jsonLength)`，含两个 u32 与末尾的 4 字节对齐填充）；
+ *   普通文件的 `offset` 是相对数据区起点的偏移。
+ *
+ * 数据区起点**必须**这样算，不能用 `16 + jsonLength`：后者少掉了末尾的对齐填充，
+ * `jsonLength % 4 !== 0` 时整份偏移就差 1–3 字节，于是读出来的是错位的字节。
+ * 这个 bug 只在 `jsonLength % 4 !== 0` 时暴露——1.1.3 那会儿 `check-version` 还是绿的，
+ * 说明当时的 `jsonLength` 恰好是 4 的倍数；0.2.3-alpha.2 不是。
  *
  * 版本不同的机器可以把宿主换成别的路径（`DSH_APP_ASAR`），默认是 macOS 的安装位置。
  */
@@ -34,6 +42,7 @@ function open(asarPath) {
   }
   const buffer = readFileSync(asarPath);
   const jsonLength = buffer.readUInt32LE(12);
+  const headerSize = buffer.readUInt32LE(4);
   const header = JSON.parse(buffer.subarray(16, 16 + jsonLength).toString('utf8'));
   const index = new Map();
   /** 递归收集普通文件；`unpacked` 的内容不在 asar 里，直接跳过。 */
@@ -45,7 +54,7 @@ function open(asarPath) {
     }
   };
   walk(header, '');
-  const result = { buffer, dataStart: 16 + jsonLength, index };
+  const result = { buffer, dataStart: 8 + headerSize, index };
   opened.set(asarPath, result);
   return result;
 }

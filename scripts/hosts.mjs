@@ -10,7 +10,7 @@
  * `--write` 才回写文件。手改 `package.json` 里的区间会被 `npm run check` 的第五门拦下。
  *
  * 区间里的 `-0` 不是笔误：semver 的 prerelease 规则要求「目标 tuple 的预发布标识出现在
- * 比较子里」，`>=0.2.2` 会把 `0.2.2-rc.1` 挡在门外；`>=0.2.2-0` 才让它进得来。
+ * 比较子里」，`>=0.2.3` 会把 `0.2.3-alpha.2` 挡在门外；`>=0.2.3-0` 才让它进得来。
  */
 
 /**
@@ -23,11 +23,7 @@
  * 往这里加一个区间内但没验过的版本，两道门都会放行。
  */
 export const supportedHosts = Object.freeze([
-  '0.2.2-rc.1',
-  '0.2.2-rc.2',
-  '0.2.2-rc.3',
-  '0.2.2-rc.4',
-  '0.2.2-rc.5',
+  '0.2.3-alpha.2',
 ]);
 
 /**
@@ -38,10 +34,10 @@ export const supportedHosts = Object.freeze([
  * （模板与理由见 `docs/contracts/decisions.md` Z-14）：npm 拦不住任何人装旧版本，`deprecate` 是唯一
  * 能让「装到旧版的人当场看到指引」的机制，而门禁守不到这一步（它看不见「上一代」）。
  */
-export const peerRange = '>=0.2.2-0 <0.3.0-0';
+export const peerRange = '>=0.2.3-0 <0.3.0-0';
 
 /** 开发基线：本机 `app.asar` 里那份宿主，`scripts/test-compat.mjs` 默认与它比对。 */
-export const developmentHost = '0.2.2-rc.5';
+export const developmentHost = '0.2.3-alpha.2';
 
 /** 必须随包声明的宿主 peer，一个不多、一个不少。 */
 export const requiredHostPeers = Object.freeze([

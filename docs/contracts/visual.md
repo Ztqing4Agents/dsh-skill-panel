@@ -9,7 +9,7 @@
 2026-11-09 从原单文件契约拆出（`git show a8141eb:docs/system_design.md`），编号 A.1–A.9 保持原值。**编号 A.1–A.9 保持原值**——`test/styles.test.mjs`、`test/view-skeleton.test.mjs` 的头注按 `A.x` 锚定本文件。市场页的刻度不在本文件：`A.10` 空着不用，市场刻度（筛选栏 / 网格 / 卡片 / 详情 / 确认弹窗）统一放在 `docs/contracts/market.md` 附录 F（本文件行数上限所致）。
 
 > **唯一允许的取值来源**：`--dsw-*` 令牌 + 宿主 primitive 组件。本文件里的 px 是**字号/行高/尺寸刻度**（DSH 没有 typography token，见 `HIDDER/docs/reference/settings-ui.md` §6），不是颜色。
-> 所有规则体逐字来自 `[PM-CSS]`（`EX/dsh-client-ui-plugin-manager/lib/client.js` 内 `PluginManagerPage.module.css` 的 `css` 字符串）或 `SHELL/index-CSAdOBx6.css`，只把类名前缀换成 `skc_`、把局部变量换成 `--skc-*`。**不允许在别处再声明同名 `--dsw-*` 变量。**
+> 所有规则体逐字来自 `[PM-CSS]`（`EX/dsh-client-ui-plugin-manager/lib/client.js` 内 `PluginManagerPage.module.css` 的 `css` 字符串）或 `SHELL/index-B_7bmv2h.css`（0.2.3-alpha.2 起 primitives 的 CSS 已不在 `.css` 文件里：它在 `SHELL/index-B8miqkaN.js` 的 `meta.stylesheets` 表上，由 renderer 在挂载时安装），只把类名前缀换成 `skc_`、把局部变量换成 `--skc-*`。**不允许在别处再声明同名 `--dsw-*` 变量。**
 
 ## A.1 页面外壳
 
@@ -370,8 +370,8 @@ font-size: 13px; line-height: 20px; display: inline-flex;
 | 状态文案 | **12px / 18px** / `label-tertiary`；有更新 `business-primary`、失败 `error-primary` | `.skc_status[data-tone]`（= 宿主 `.updatesNote`，页头只有这一句） |
 | 刷新按钮 | 高 32px，padding 0 12px，13px/20px，`radius-md`；**只在「已安装」页签出现**（页头工具条整行 `hidden={!onInstalled}`，市场页签没有这一行） | `.skc_addButton` |
 | 添加组菜单 | 宽 **320px**（`max-width: calc(100vw - 48px)`）；菜单项**高 72px**（`box-sizing:border-box`、`gap:10px`、`padding:6px 12px`）；项内文字块竖排 `gap:2px`、副行 **12/18** `label-secondary`、**两行截断**（`max-height:36px` + `-webkit-line-clamp:2` + `overflow-wrap:anywhere`）；chevron 图标 **12px**；`align="end"` ⇒ 菜单右缘 = `.skc_addGroup` 右缘（实测**差 0px**，判据 \|差\| ≤ 1px）、**向左生长**（左缘比添加组左缘多出 **16px**）、菜单 `top` − 添加组 `bottom` = **+4px**；菜单项恰好**两项** | `.skc_addMenu` / `.skc_addMenu [role='menuitem']` / `.skc_addMenuItem` / `.skc_addMenuDescription`——**逐字取宿主**的 `.addMenu` / `.addMenuItem` / `.addMenuDescription`（`PluginManagerPage.module.css`）；`align="end"` 那组数真机量于 2026-11-12（K136），菜单两项与几何形态见 K148 |
-| 页签总高 | **34px** = 30px tab + 2px×2（`SegmentedTabs size="sm"`） | `SHELL` `._tabs_1lga9_1[data-size=sm]` |
-| 页签文字 | 14px / 20px，选中 500（sm 档） | `._tab_1lga9_1` |
+| 页签总高 | **34px** = 30px tab + 2px×2（`SegmentedTabs size="sm"`） | `SHELL` stylesheets 表 `.j-N4uq_tabs[data-size=sm] .j-N4uq_tab{height:30px}` + `--segmented-tabs-inset:2px`（0.2.3-alpha.2 读数；旧指针 `._tabs_1lga9_1` 随类名方案已失效） |
+| 页签文字 | 14px / 20px，选中 500（sm 档） | `.j-N4uq_tab`（0.2.3-alpha.2；旧 `._tab_1lga9_1` 已失效） |
 | 区标题 | 14px / 22px / 500 | `.skc_groupTitle` |
 | 列表 gap / 行外扩 | 2px / `margin:0 -8px` | `.skc_cards` / `.skc_card` |
 | 行内 gap / padding | 14px / 8px → 行高 **64px**（48 图标 + 8×2；内置插件块共用同一颗 48 框，实测 head 64 / padding 8，与技能行逐字相同） | `.skc_cardHead` |
@@ -385,6 +385,8 @@ font-size: 13px; line-height: 20px; display: inline-flex;
 | 错误行 | `StateDot state="error"` + 13/20 tertiary 文字 + `role="alert"` + outline 重试按钮 | `.skc_failure`（宿主结构） |
 | 行内失败原因 | 12px / 18px / error 色 / `pre-wrap` | `.skc_reason` |
 | **市场页** | 筛选栏 / 网格 / 卡片 / 详情 / 确认弹窗的刻度 | 见 `docs/contracts/market.md` 附录 F（本表不重复维护市场行） |
+| **覆盖宿主 primitive 的规则** | **一律双类选择器**（`.skc_x.skc_x`，特异性 (0,2,0)），取值一字不改；单类 `.skc_x` 只用于我们自画、不与 primitive 共用同一元素的容器 | 判据：「这条声明会不会和宿主 primitive 的类撞同一属性」（`padding` / `height` / `width` / `border-radius` / `font-size` / `color` / `background`）——会 ⇒ 必须双类，**不许靠加载顺序取胜**（`0.2.3` 起 primitives 的 CSS 由 renderer 在应用挂载时插入，可能落在我们的 `<style>` 之后，同特异性下宿主胜）。两条边界：① 双类只在**这两个类都是我们自己加在该元素上**时成立（如传给 `Button` 的 `className`），否则选择器永远匹配不上；② **不许拿宿主哈希类凑特异性**（`[class*="sm"]` / `.j-N4uq_tab` 之类）——那同时违反 `AGENTS.md` 硬约束 4 |
 
+> 查法（那条规则的判据不是人眼过的）：`grep -nE 'className: *"skc_' src/client/*.jsx` 取「传给 primitive 的 className」集合，再在 `styles.js` 里逐个确认它们以 `.skc_x.skc_x` 形态出现；单类形态出现在该集合里即返工。
 > **固定尺寸的盒子必须显式写 `box-sizing: border-box`**（宿主那套 CSS 是逐条声明的，没有全局 reset）。2026-11-09 真机验收量到过 50×50 / 行高 66px：`.skc_cardIcon` 带 0.5px 边框、又是 content-box，盒子被撑大了 2px。
 > 该规则现在**逐字回归宿主原件**（边框回来、圆角用 `radius-lg`），所以 `box-sizing: border-box` 比以往更必要：少了它，48px 会立刻变成 50px、行高 66px（锚点：`src/client/styles.js` 的 `.skc_cardIcon`，回归见 `test/styles.test.mjs`）。

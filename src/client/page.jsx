@@ -730,6 +730,19 @@ export function SkillsPage({ t = identityTranslate, store, api, agent = null }) 
     if (body !== null) body.scrollTop = 0;
   }, [state.tab, store]);
 
+  // The add menu's anchor lives in the toolbar, and the toolbar is not on screen whenever
+  // the installed list is not: the market tab replaces the whole header row, and the
+  // provider page or a skill's own page replaces the list. The open flag is page state and
+  // outlives its anchor, so it is dropped at the same moment - a flag left true re-opens
+  // the menu by itself when the toolbar is mounted again. The remembered offset goes with
+  // it: it belongs to the list this menu was opened on, and keeping it would let the next
+  // close pull whatever is on screen back to that offset.
+  useEffect(() => {
+    if (state.tab === TAB_INSTALLED && detailKey === null && state.pluginDetail === null) return;
+    addMenuTop.current = 0;
+    setAddMenu(false);
+  }, [state.tab, state.pluginDetail, detailKey]);
+
   const groups = toGroups(state.payload);
   const counts = state.payload?.counts;
   const excluded = Number.isInteger(counts?.excluded) ? counts.excluded : 0;

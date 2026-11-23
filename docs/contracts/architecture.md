@@ -20,7 +20,7 @@
 
 | # | 难点 | 方案 | 依据 |
 | --- | --- | --- | --- |
-| 1 | 页面必须「与宿主插件页 1:1」，但宿主样式类名是每次构建变化的 module hash（`w6M7KW_*`、`_tabs_1lga9_1`、`_switch_1ik0f_5`） | 三条路分开走：**能拿到组件就用宿主的 primitives 组件**（SegmentedTabs / Switch / Button / Tooltip / Toast / StateDot / 图标）；**拿不到组件就把规则体逐字转写**成自有前缀 `skc_` 的类；**绝不 write 第二套样式系统**（不引 Tailwind/MUI/antd） | `HIDDER/docs/reference/settings-ui.md` §9「Host class names are build-hashed; none may appear in your selectors」；`EX/dsh-client-ui-plugin-manager/lib/client.js` 内 `PluginManagerPage.module.css` 的 `css` 字符串（下称 **[PM-CSS]**）；`PRD` §1 硬约束 |
+| 1 | 页面必须「与宿主插件页 1:1」，但宿主样式类名是每次构建变化的 module hash（页面侧 `w6M7KW_*`；primitives 一侧 `0.2.3-alpha.2` 起是 `<hash>_<local>`，如 `j-N4uq_tabs` / `_8r5xTa_switch`，更早是 `_<local>_<hash>`） | 三条路分开走：**能拿到组件就用宿主的 primitives 组件**（SegmentedTabs / Switch / Button / Tooltip / Toast / StateDot / 图标）；**拿不到组件就把规则体逐字转写**成自有前缀 `skc_` 的类；**绝不 write 第二套样式系统**（不引 Tailwind/MUI/antd） | `HIDDER/docs/reference/settings-ui.md` §9「Host class names are build-hashed; none may appear in your selectors」；`EX/dsh-client-ui-plugin-manager/lib/client.js` 内 `PluginManagerPage.module.css` 的 `css` 字符串（下称 **[PM-CSS]**）；`PRD` §1 硬约束 |
 | 2 | 侧栏入口要打开**全局页**（不属于任何会话），而不是设置页/抽屉 | 用 shell 自己的两座位：`sidebar.panellist`（行）+ `main`（keyed 页面）。shell 会接管行盒子、标签、选中高亮、折叠轨、页面切换 | `EX/dsh-client-ui-plugin-manager/lib/client.js` 的 `slots.inject("sidebar.panellist", …)` 与 `slots.inject("main", …)`（`PANEL_ID = "plugins"`）；`EX/dsh-client-ui-layout/README.md`「Global panels occupy the root-scoped `main` keyed slot … `ctx.layout.selectPanel(id)`」 |
 | 3 | 「打开任意会话即回到会话正文」 | **不需要我们实现**：workspace 打开会话走 `openSession → replaceMain(…, "reveal")` → `ctx.layout.selectPanel(null)` | `PROF` 外的宿主包 `EX/dsh-client-ui-workspace/lib/client.js`（`openSession(target)` / `replaceMain` 内 `if (panel === "reveal") this.ctx.layout.selectPanel(null)`） |
 | 4 | 分区判据必须可单测、可复现 | 判定与合并全部收敛成**纯函数**（`classify.js`：`rankOf` / `classifySkill` / `mergeCatalog`），I/O 全部在边界模块 | `PRD` §3.1.2、§3.5（A1/A2 可直接喂 fixture） |
@@ -69,7 +69,7 @@
 
 - **`exports["./client"]` 是硬契约**：宿主按 `clientExportOf(pkgName, pkg.exports)` 取它，缺失即 `client-modules: <pkg> declares dsh.client but exports no "./client" bundle`（`EX/dsh-client-modules/lib/index.js`）。只接受字符串，或 `{ default: string }`；不接受 `{import, require}` 之外的嵌套形态。
 - **`dsh.client` 的合法字段**只有四个：`platform`（必填字符串）、`inject`（字符串数组）、`external`（字符串数组）、`immediately`（布尔）。多写/类型错会在扫描时抛错（`parseDshClient`，`EX/dsh-client-modules/lib/index.js`）。
-- `immediately: true` 的语义是**启动时预取该 bundle**（`SHELL/index-Ciz7DZxv.js` 的 `prefetchImmediateTier()`：`manifest.plugins.filter(e => e.immediately).map(e => this.modules.prefetch(e.id))`），不是「立即 apply」。我们取 `true`，与 `PROF/dsh-hidder/package.json`、`PROF/@montersy123/dsh-skill-market/package.json` 一致（首屏侧栏行不等一个网络瀑布）。
+- `immediately: true` 的语义是**启动时预取该 bundle**（`SHELL/index-B8miqkaN.js` 的 `prefetchImmediateTier()`：`manifest.plugins.filter(e => e.immediately).map(e => this.modules.prefetch(e.id))`），不是「立即 apply」。我们取 `true`，与 `PROF/dsh-hidder/package.json`、`PROF/@montersy123/dsh-skill-market/package.json` 一致（首屏侧栏行不等一个网络瀑布）。
 - `inject` 只影响 **bundle 加载顺序**（boot graph 让被请求者排在消费者之前，`EX/dsh-client-modules/lib/index.js` 的 `graphRow`/排序注释）。真正的座位等待由 `ctx.slots.inject(...)` 完成（见 1.2.3），所以 `inject` 写少了也不会崩，写多了只是多拉几个已在图里的包。这里只列我们真正依赖的三个。
 - **Host 半部不需要 `dsh.client`，Client 半部不需要 `main`**：`main`/`exports["."]` 给 Host（cordis 加载 ESM 插件），`exports["./client"]` 给浏览器。
 
@@ -128,7 +128,7 @@ ctx.slots.inject('main', () => ctx.slots.register({
 
 #### 1.2.4 Bundle 运行时 `require` 能拿到什么（决定「不许 import 任意包」）
 
-浏览器端 `factory(require)` 的解析顺序是：**平台 seed → 其它插件的 client 模块（`dsh.client` 图）→ 抛错**（`EX/dsh-client-modules/lib/client.js` 的 `import(specifier)`：先 `this.seed.has(specifier)`，再 `graphRows`）。平台 seed 的键是固定 11 个：
+浏览器端 `factory(require)` 的解析顺序是：**平台 seed → 其它插件的 client 模块（`dsh.client` 图）→ 抛错**（`EX/dsh-client-modules` 的浏览器半部：先命中已注册的模块记录（平台 seed 在启动时按 `staticModules` 预先注册），再按 boot 图取行，两者都没有才抛 `missed the module table` / `cannot resolve`——不钉压缩后的属性名）。平台 seed 的键是固定 11 个：
 
 ```
 react, react/jsx-runtime, react-dom, react-dom/client, @deepseek-ai/cordis, zod,
@@ -137,7 +137,7 @@ react, react/jsx-runtime, react-dom, react-dom/client, @deepseek-ai/cordis, zod,
 @deepseek-ai/dsh-client-ui-dockkit
 ```
 
-依据：`SHELL/index-Ciz7DZxv.js` 里那个 `return{react:…,"react/jsx-runtime":…,…,"@deepseek-ai/dsh-client-ui-dockkit":…}` 的 seed 工厂（宿主传给 `__ModuleLoader__.create` 的 map；压缩名每版都换，按 `dsh-client-ui-dockkit` 搜就能命中）。
+依据：`SHELL/index-B8miqkaN.js` 里那个 `return{react:…,"react/jsx-runtime":…,…,"@deepseek-ai/dsh-client-ui-dockkit":…}` 的 seed 工厂（宿主传给 `__ModuleLoader__.create` 的 map；压缩名每版都换，按 `dsh-client-ui-dockkit` 搜就能命中）。**这张表是 11 项的静态基线**：`0.2.3-alpha.2` 起 primitives 不再以独立包出现在 `dsh/node_modules/@deepseek-ai/` 下，但它仍是这张表的成员（连同它的 CSS，随 `meta.stylesheets` 由 renderer 安装）——**目录缺席不等于模块不可用**，判这件事要读这张表，不能看目录。
 
 因此：**客户端代码只允许 `require` 上面 11 个**（我们实际用 `react`、`react/jsx-runtime`、`@deepseek-ai/dsh-client-ui-primitives`），其它一律走 `ctx.*` 服务或 `fetch` 自己的路由。市场半部不引入任何新的 `require`：一切都是本插件自己的路由，网络能力全在 Host 侧（`lib/market/upstream.js` 用 `node:https`），详见 `docs/contracts/market.md` §7。
 
@@ -261,7 +261,7 @@ ledger.readAll() ─────────────────┘   （R5�
 
 #### 1.5.3 用到的 primitives 导出（逐个核实存在）
 
-`EX/dsh-client-ui-primitives` 通过 seed 暴露 `@deepseek-ai/dsh-client-ui-primitives`（seed 键见 1.2.4），导出名在本机 shell 里逐个命中：
+`@deepseek-ai/dsh-client-ui-primitives` 由 shell 的 11 项静态 seed 表暴露（键见 1.2.4）：自 `0.2.3-alpha.2` 起它**不再以独立包出现在 `EX/` 下**（包目录已不存在，模块与样式随 `meta.stylesheets` 一并由 renderer 装），判可用性只能读那张表、不能看目录（依据见 1.2.4）。导出名在本机 shell 的 seed 表里逐个命中：
 
 | 用途 | 导出名 | 关键 props（宿主用法） |
 | --- | --- | --- |
@@ -274,7 +274,7 @@ ledger.readAll() ─────────────────┘   （R5�
 | 侧栏行图标 | `IconSkillOutlineRegular` | `{size}` |
 | ⓘ / 刷新 / 箭头 / 软链标记 / 警告 | `IconInfoOutlineRegular`(11)、`IconRefreshOutlineRegular`(13)、`IconChevronDownOutlineRegular`、`IconLinkOutlineRegular`、`IconWarningOutlineRegular` | `{size, "aria-hidden"?}` |
 
-依据：`EX/dsh-client-ui-plugin-manager/lib/client.js`（SegmentedTabs / Switch / Button / Tooltip / StateDot / Toast 的真实调用点，见 §3.3 各条引注）；导出名在 `SHELL/index-Ciz7DZxv.js` 中存在（如 `IconSkillOutlineRegular`、`IconLinkOutlineRegular`、`StateDot`、`Toast`）。
+依据：`EX/dsh-client-ui-plugin-manager/lib/client.js`（SegmentedTabs / Switch / Button / Tooltip / StateDot / Toast 的真实调用点，见 §3.3 各条引注）；导出名在 `SHELL/index-B8miqkaN.js` 中存在（如 `IconSkillOutlineRegular`、`IconLinkOutlineRegular`、`StateDot`、`Toast`）。
 
 行图标（`.skc_cardIcon`）的**技能位不取 primitives**：它是首字母头像（技能名首字母 + 按名字散列的粉彩色块），色板与散列在 `src/client/avatar.js`，刻度见 `docs/contracts/visual.md` A.5 / A.9。**插件位**（内置插件块与插件页头）是例外：没有图标时画宿主 primitives 给这个面的那张图形（`PluginArtworkDefault` 36；两处插件位同图同尺寸），口径见 `docs/contracts/client.md` §3.9.2 第 7 条。
 
@@ -344,7 +344,7 @@ ledger.readAll() ─────────────────┘   （R5�
 | `scripts/check-i18n.mjs` | `zh.json`/`en.json` 键集一致；`src/client/**` 与 `lib/**` 中**禁止 CJK 字面量**；`panel.label` 键存在 |
 | `scripts/check-docs.mjs`、`scripts/check-board.mjs` | 文档门禁（白名单 / 头注 / 章节 / 锚点 / 引用 / 零行号 / 体积 R10–R12 / 用例落点 R14，自测在 `test/docs-gate.test.mjs`）与看板门禁（格式 + 依据锚点，无 `.agents/work/` 时跳过） |
 | `scripts/hosts.mjs`、`scripts/sync-hosts.mjs`、`scripts/semver-lite.mjs` | 宿主真源：`supportedHosts` / `peerRange` / `developmentHost` / `requiredHostPeers` 与 `assertHostPeers()`；`sync-hosts` 就是第五门 `check:hosts`——**默认只读校验**（`package.json` 与两条 README 漂移即红），**回写必须显式 `--write`**；`semver-lite` 是前两者与 `check-version` 共用的最小 semver 实现（含 `includePrerelease` 口径） |
-| `scripts/check-version.mjs`、`scripts/test-compat.mjs`、`scripts/asar-read.mjs`、`scripts/cdp.mjs` | 发布前三断言（tag 逐字等于 `v<package.json version>`、`engines` 与 peer 同串且覆盖 `supportedHosts`、预发布禁发 `latest`）与真机冒烟 H1–H5（`--host <ver>`，隔离 `DSH_HOME` 起实例；不进本地门禁）；后两只只在冒烟脚本内用——读 `app.asar` 与零依赖 CDP 驱动 |
+| `scripts/check-version.mjs`、`scripts/test-compat.mjs`、`scripts/asar-read.mjs`、`scripts/cdp.mjs` | 发布前三断言（tag 逐字等于 `v<package.json version>`、`engines` 与 peer 同串且覆盖 `supportedHosts`、预发布禁发 `latest`）与真机冒烟 H1–H7（`--host <ver>`，隔离 `DSH_HOME` 起实例；不进本地门禁）；后两只只在冒烟脚本内用——读 `app.asar` 与零依赖 CDP 驱动 |
 
 ### 2.5 测试（QA 拥有）
 
@@ -368,22 +368,22 @@ react-dom@18.3.1          —— renderToStaticMarkup 结构测试（运行时�
 @types/react-dom@~18.3.1  —— 同上
 ```
 
-`peerDependencies`（声明我们依赖宿主提供什么，不安装；七条宿主包共用一条**代际区间** `>=0.2.2-0 <0.3.0-0`，**字面量与 `package.json` 逐字一致**；改区间只改 `scripts/hosts.mjs` 一处——`check:hosts` **只校验**（默认只读，漂移即红），要补齐声明得显式 `node scripts/sync-hosts.mjs --write`）：
+`peerDependencies`（声明我们依赖宿主提供什么，不安装；七条宿主包共用一条**代际区间** `>=0.2.3-0 <0.3.0-0`，**字面量与 `package.json` 逐字一致**；改区间只改 `scripts/hosts.mjs` 一处——`check:hosts` **只校验**（默认只读，漂移即红），要补齐声明得显式 `node scripts/sync-hosts.mjs --write`）：
 
 ```
 @deepseek-ai/cordis                    >=4.0.1                                    —— Host 半部 ctx
-@deepseek-ai/dsh-host-webserver        >=0.2.2-0 <0.3.0-0                       —— ctx.webServer.register
-@deepseek-ai/dsh-skill                 >=0.2.2-0 <0.3.0-0                       —— ctx.skills.snapshot
-@deepseek-ai/dsh-session               >=0.2.2-0 <0.3.0-0                       —— ctx.sessions.list（解析 cwd）
-@deepseek-ai/dsh-client-locale         >=0.2.2-0 <0.3.0-0                       —— ctx.locale.register/bind
-@deepseek-ai/dsh-client-ui-layout      >=0.2.2-0 <0.3.0-0                       —— main 座位
-@deepseek-ai/dsh-client-ui-sidebar     >=0.2.2-0 <0.3.0-0                       —— sidebar.panellist 座位
-@deepseek-ai/dsh-client-ui-primitives  >=0.2.2-0 <0.3.0-0                       —— 控件与图标（经 seed）
+@deepseek-ai/dsh-host-webserver        >=0.2.3-0 <0.3.0-0                       —— ctx.webServer.register
+@deepseek-ai/dsh-skill                 >=0.2.3-0 <0.3.0-0                       —— ctx.skills.snapshot
+@deepseek-ai/dsh-session               >=0.2.3-0 <0.3.0-0                       —— ctx.sessions.list（解析 cwd）
+@deepseek-ai/dsh-client-locale         >=0.2.3-0 <0.3.0-0                       —— ctx.locale.register/bind
+@deepseek-ai/dsh-client-ui-layout      >=0.2.3-0 <0.3.0-0                       —— main 座位
+@deepseek-ai/dsh-client-ui-sidebar     >=0.2.3-0 <0.3.0-0                       —— sidebar.panellist 座位
+@deepseek-ai/dsh-client-ui-primitives  >=0.2.3-0 <0.3.0-0                       —— 控件与图标（经 seed）
 react                                  ^18.2.0
 react-dom                              ^18.2.0
 ```
 
-依据：`PROF/@michengai/dsh-skills-manager/package.json` 与 `PROF/@linxin666/dsh-client-ui-skill-explorer/package.json` 的 peer 集合（我们只取真正用到的子集）。四条口径：①**区间只在一处维护**——`scripts/hosts.mjs` 的 `supportedHosts` / `peerRange` 是真源，`npm run check` 的第五门 `check:hosts`（`scripts/sync-hosts.mjs`，默认只校验、`--write` 才回写）守 `package.json` 与两条 README 的声明与它一致，改别处即红；②**`-0` 不许省**——写成 `>=0.2.2` 会把 `0.2.2-rc.*` 全部挡在门外（预发布只有其 `major.minor.patch` 出现在比较子里才可比较，`-0` 就是把它显式放进来的写法）；③**宿主与 npm 是两套比较器**——宿主 `satisfies(..., { includePrerelease: true })`、npm / pnpm 走默认模式，同一条区间两侧可以给出不同结论，声明必须以「npm 侧装得上」为准（两侧语义与逐条实测见 `docs/contracts/decisions.md` 附录 Z 的 Z-8）；④换代际的触发与代价见同附录 Z-9–Z-14。
+依据：`PROF/@michengai/dsh-skills-manager/package.json` 与 `PROF/@linxin666/dsh-client-ui-skill-explorer/package.json` 的 peer 集合（我们只取真正用到的子集）。四条口径：①**区间只在一处维护**——`scripts/hosts.mjs` 的 `supportedHosts` / `peerRange` 是真源，`npm run check` 的第五门 `check:hosts`（`scripts/sync-hosts.mjs`，默认只校验、`--write` 才回写）守 `package.json` 与两条 README 的声明与它一致，改别处即红；②**`-0` 不许省**——写成 `>=0.2.3` 会把 `0.2.3-alpha.*` 全部挡在门外（预发布只有其 `major.minor.patch` 出现在比较子里才可比较，`-0` 就是把它显式放进来的写法）；③**宿主与 npm 是两套比较器**——宿主 `satisfies(..., { includePrerelease: true })`、npm / pnpm 走默认模式，同一条区间两侧可以给出不同结论，声明必须以「npm 侧装得上」为准（两侧语义与逐条实测见 `docs/contracts/decisions.md` 附录 Z 的 Z-8）；④换代际的触发与代价见同附录 Z-9–Z-15；当前支持面是 `0.2.3` 代际，`supportedHosts` 里只列真机验过的版本（清单见 `scripts/hosts.mjs`）。
 
 市场面同样**不新增任何 dependency / devDependency**：`node:https`、`node:crypto`、`node:fs/promises` 都是 node 内置；没有 zip 读取器（`package:'zip'` 那条路已不存在）。
 

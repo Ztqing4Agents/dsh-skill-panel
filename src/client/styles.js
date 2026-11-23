@@ -9,6 +9,14 @@
  * second copy would outlive an uninstall.
  *
  * The one transparent literal (`border-color:#0000`) is the host's own.
+ *
+ * Every rule that overrides a host primitive we hand a class to is written with the
+ * class twice (`.skc_x.skc_x`, specificity 0,2,0) and the same values. Since 0.2.3 the
+ * primitives' CSS is installed by the renderer while the page mounts, i.e. after this
+ * stylesheet, so at equal specificity the host would win and the declaration would be
+ * lost silently - a 20px box padded by 10px on each side has no room left for its icon.
+ * Raising specificity is the only fix that keeps the values; a single-class rule on such
+ * an element is the same bug waiting to happen (docs/contracts/visual.md A.9).
  */
 /** Prefix every class of this page carries, so no host class name is reused. */
 const PREFIX = 'skc_';
@@ -103,7 +111,7 @@ padding-top: calc(var(--skc-page-top-inset) + var(--dsh-frame-top-clearance, 0px
 color: var(--dsw-alias-label-secondary);
 align-items: center; gap: 4px; margin: 4px 0 0; font-size: 13px; line-height: 20px; display: flex;
 }
-.skc_infoButton{ width: 20px; height: 20px; color: var(--dsw-alias-label-caption); flex: none; padding: 0 }
+.skc_infoButton.skc_infoButton{ width: 20px; height: 20px; color: var(--dsw-alias-label-caption); flex: none; padding: 0 }
 .skc_toolbar{
 white-space: nowrap; flex-wrap: wrap; flex: 0 auto; order: 2;
 justify-content: flex-end; align-items: center; gap: 8px 16px; min-width: 0; display: flex;
@@ -113,17 +121,17 @@ justify-content: flex-end; align-items: center; gap: 8px 16px; min-width: 0; dis
 .skc_status{ color: var(--dsw-alias-label-tertiary); margin: 0; font-size: 12px; line-height: 18px }
 .skc_status[data-tone="info"]{ color: var(--dsw-alias-state-business-primary) }
 .skc_status[data-tone="error"]{ color: var(--dsw-alias-state-error-primary) }
-.skc_addButton, .skc_addPrimary, .skc_addMore{
+.skc_addButton.skc_addButton, .skc_addPrimary.skc_addPrimary, .skc_addMore.skc_addMore{
 border-radius: var(--dsw-radius-md); height: 32px; padding: 0 12px; font-size: 13px; line-height: 20px;
 }
 .skc_addGroup{ flex: none; align-items: stretch; display: inline-flex }
-.skc_addPrimary{ border-top-right-radius: 0; border-bottom-right-radius: 0 }
-.skc_addMore{
+.skc_addPrimary.skc_addPrimary{ border-top-right-radius: 0; border-bottom-right-radius: 0 }
+.skc_addMore.skc_addMore{
 border-left: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary-foreground) 30%, transparent);
 border-top-left-radius: 0; border-bottom-left-radius: 0; width: 32px; padding: 0;
 }
-.skc_addMenu{ width: 320px; max-width: calc(100vw - 48px) }
-.skc_addMenu [role='menuitem']{ height: 72px; box-sizing: border-box; gap: 10px; padding: 6px 12px }
+.skc_addMenu.skc_addMenu{ width: 320px; max-width: calc(100vw - 48px) }
+.skc_addMenu.skc_addMenu [role='menuitem']{ height: 72px; box-sizing: border-box; gap: 10px; padding: 6px 12px }
 .skc_addMenuItem{ display: flex; flex-direction: column; gap: 2px; white-space: normal }
 .skc_addMenuDescription{
 display: -webkit-box; max-height: 36px; overflow: hidden; overflow-wrap: anywhere;
@@ -256,7 +264,7 @@ width: 32px; min-width: 32px; padding-inline: 0;
 .skc_marketSearchField{
 min-width: 120px; flex: 1; align-items: center; display: flex; position: relative;
 }
-.skc_marketSearch{
+.skc_marketSearch.skc_marketSearch{
 padding-right: 32px; box-sizing: border-box; width: 100%; min-width: 0;
 }
 .skc_marketSearch input::-webkit-search-cancel-button{ -webkit-appearance: none; appearance: none; display: none }
@@ -431,13 +439,13 @@ font-size: 12px; line-height: 18px;
 margin: 0; color: var(--dsw-alias-label-tertiary); font-family: var(--ds-font-family-code);
 font-size: 12px; line-height: 18px;
 }
-.skc_detailDanger{
+.skc_detailDanger.skc_detailDanger{
 --dsh-button-outline-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent);
 --dsh-hairline-width: 1px;
 color: var(--dsw-alias-state-error-primary); height: 28px; padding: 0 10px;
 border-radius: 8px; gap: 4px; font-size: 12px; line-height: 18px;
 }
-.skc_detailDanger:disabled{ opacity: .4 }
+.skc_detailDanger.skc_detailDanger:disabled{ opacity: .4 }
 .skc_detailBodyBox{
 max-height: 60vh; padding: 12px 0; overflow-y: auto;
 border-top: .5px solid color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent);
@@ -470,7 +478,7 @@ font-size: 13px; line-height: 20px; display: inline-flex;
 .skc_callDesc{ margin: 0; color: var(--dsw-alias-label-tertiary); font-size: 11.5px; line-height: 16px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
 .skc_detailBody{ font-size: 13px; line-height: 20px }
 
-.skc_marketDialog{ width: min(480px, 100vw - 32px) }
+.skc_marketDialog.skc_marketDialog{ width: min(480px, 100vw - 32px) }
 .skc_marketConfirmBody{ flex-direction: column; gap: 12px; display: flex }
 .skc_marketConfirmHead{ align-items: center; gap: 14px; display: flex }
 .skc_marketSkeletonChip{ border-radius: var(--dsw-radius-lg); width: 64px; height: 26px }

@@ -3,16 +3,18 @@
 > 类型：参考
 > 读者：要复刻宿主页面形状的人——改 `src/client/styles.js`、`page.jsx`、`row.jsx` 之前对照本节读数
 > 真源：宿主产物本身（`app.asar` 内的 `@deepseek-ai/dsh-client-ui-plugin-manager`）；本文只是它的采集副本
-> 更新触发：宿主升级到新的 `0.2.x-rc` 后**整份重采**，不在旧表上打补丁
+> 更新触发：宿主升级到新的 `0.2.x` 后**默认整份重采**，不在旧表上打补丁；唯一例外见 1.2——能用字节级 diff 证明某一节形状未变时，只重采证据指针与读数，并在 1.2 写明依据，不把旧值重抄成「新采」
 > 规模上限：600
-> 采集日期：2026-11-15
+> 采集日期：2026-11-23
 > 一次采集：§1–§6 的原始采集日期：2026-11-08（基线宿主 `0.2.2-rc.1`）
 > 二次采集：§7「插件详情页」于 2026-11-10 用 node 读 asar 补采（同日二核，见 `docs/contracts/decisions.md` 附录 Q）
 > 三次采集：§8「添加插件与卸载两条流程」于 2026-11-12 用 node 读 asar 采集（同源 `0.2.2-rc.1`）
 > 四次采集：§8.1「添加插件菜单」于 2026-11-13 复采（**同一版宿主** `0.2.2-rc.1`；这一版装了 `dsh-client-ui-agent-preset`，菜单从一项变两项）
 > 五次采集：全文于 2026-11-15 按宿主 `0.2.2-rc.3` 整份重采。rc.3 的 asar 带 TS/TSX/CSS 源码，读数优先取源码声明值；rc.1 留下的「px 未逐值采集」「`cardLink` 待取色」两处在本轮落实
-> 来源版本：DeepSeek Harness `0.2.2-rc.3`（`/Applications/DeepSeek Harness.app/Contents/Resources/app.asar`）
 > 六次复核（2026-11-19，宿主 `0.2.2-rc.5`）：在同一 `app.asar` 上重跑 §1 的五条计数（**8 / 2 / 5 / 3 / 5**，与五次采集逐条相等），并按 §1 的采集纪律核对 §2–§5 的形状读数与 §7.3 的图标契约——三类类名哈希、页头四段稳定钩子、§4 的几何令牌、`PM/lib/client.js` 的 357 239 B（rc.5 侧 sha256 前 12 位 `ab4d7b1c98bf`）与 `PluginManagerPage.module.css` 的 2318 行 / 50 181 B 全部相同，**正文一字未改**。§7 / §8 的真机读数未逐条重采，其有效性由「`PM`、`SHELL`、`THEME`、`LAYOUT`、`SRV` 这些包与前端产物在 rc.3 与 rc.5 上逐文件相同」保证。
+> 七次采集（2026-11-23，宿主 `0.2.3-alpha.2`）：**只重采读数与指针，不重抄形状**。重采的是 §1 五条探针、§1.1 的 `PM/` 与 `SHELL/`、§3 的类名方案、§7 的字节数与 sha、§8 的来源文件字节数；§2 骨架 / §4 几何 / §5 交互的形状与 §8 的流程形状**没有重采**，依据见 1.2。
+> 来源版本：DeepSeek Harness `0.2.3-alpha.2`（`/Applications/DeepSeek Harness.app/Contents/Resources/app.asar`，整包 215 113 994 B；`Info.plist` 的 `CFBundleShortVersionString` 与 asar 内 `dsh/package.json` 的 `version` 双证一致）
+> 读数来源版本：§1 / §1.1 / §3 / §7 与 §8 的字节数采于 `0.2.3-alpha.2`；§2 / §4 / §5 与 §8 的**形状**仍是 `0.2.2-rc.3` 的采集值，理由见上一条与 1.2
 
 只描述**宿主长什么样**，不写「我们应该怎么用」——复刻口径在 `docs/contracts/visual.md`。
 
@@ -22,20 +24,25 @@ asar 是「头部 JSON + 拼接内容」的容器，不是目录；整包 `grep 
 
 ```bash
 A="/Applications/DeepSeek Harness.app/Contents/Resources/app.asar"
-grep -ac updatesNote              "$A"   # 页头状态文案类（本文 3 节）：rc.3 = rc.5 = 8
-grep -ac _tabs_1lga9_1            "$A"   # 页签容器的构建哈希（本文 3 节）：rc.3 = rc.5 = 2
-grep -ac -- --bundle-progress-size "$A"  # 打开进度占位宽（本文 4 节）：rc.3 = rc.5 = 5
-grep -ac AddPluginMenu            "$A"   # 添加菜单组件（本文 8.1）：rc.3 = rc.5 = 3
-grep -ac InstallDialog            "$A"   # 安装弹窗（本文 8.2）：rc.3 = rc.5 = 5
+grep -ac updatesNote              "$A"   # 页头状态文案类（本文 3 节）：rc.3 = rc.5 = 8；0.2.3-alpha.2 = 8
+grep -ac _tabs_1lga9_1            "$A"   # 页签容器的构建哈希（本文 3 节）：rc.3 = rc.5 = 2；**0.2.3-alpha.2 = 0（已死，见下）**
+grep -ac -- --bundle-progress-size "$A"  # 打开进度占位宽（本文 4 节）：rc.3 = rc.5 = 5；0.2.3-alpha.2 = 5
+grep -ac AddPluginMenu            "$A"   # 添加菜单组件（本文 8.1）：rc.3 = rc.5 = 3；0.2.3-alpha.2 = 3
+grep -ac InstallDialog            "$A"   # 安装弹窗（本文 8.2）：rc.3 = rc.5 = 5；0.2.3-alpha.2 = 5
+grep -ao j-N4uq_tabs "$A" | wc -l        # 第二条的继任者（新类名方案，**出现次数**口径）：0.2.3-alpha.2 = 4
 ```
 
 本文任何一条测量都可用「重跑上面五条 + 重新截同一页」复核。宿主升级后**五条全为 0** 说明整份已失效，按 `来源版本` 重采；只有个别条数变化时按对应节重读。
+
+⚠️ **个别探针归零不等于「组件没了」，先分清是组件消失还是探针自己腐化**。0.2.3-alpha.2 就是后者：`_tabs_1lga9_1` 归零，而页签照常渲染——原因是 primitives 的 CSS Module 类名方案从 `_<local>_<hash>` 换成了 `<hash>_<local>`（同一条更名写在 `0.2.2-rc.2` 的 `client-module-metadata` 升级指南里），新前缀是 `j-N4uq_`；`_switch_1ik0f_5` 同样归零（继任者 `._8r5xTa_switch`）。这一类必须回读 1.1 的产物、按包名把组件找出来再判，**停在计数上就会把「探针腐化」误读成「宿主整页改形」**。
+
+⚠️ **两个计数指标不许混**：`grep -ac` 数的是**命中行数**，`grep -ao … | wc -l` 数的是**出现次数**。压缩产物是单行，同一份 asar 上「页面哈希 568 次」与「1 行」是同一个事实。本文 §1 的探针用行数口径（与历次采集同口径），§3 的类名前缀用出现次数口径，两处不可直接比较。
 
 ⚠️ **`grep -a` 只能用来搜 ASCII**：同一份 asar 上 `grep -ac "卸载"` 是 **0**（假阴性），而 `grep -ac "uninstall"` 有 161 —— grep 按字节匹配，对 UTF-8 中文会静默漏检。**搜中文、确认「某界面不存在」一律用 node 读 asar**（切片规则见 1.1 的 `EX/` 行），否则「0 命中」只是采集方法在骗人（2026-11-10 踩过，结论见 `docs/contracts/decisions.md` 附录 Q-2）。
 
 ⚠️ **引用宿主内部实现只写不变量，不钉压缩符号名**：`SHELL/` 与 `PM/` 交付的是压缩产物，标识符每版重新编号，同一个字母串换一版可能指向完全不同的模块——所以本文只写「返回什么 / 导出什么 / 挂在哪个钩子上」。要复核时就按它引用的包名在产物里搜：`package.json` 的 `dsh.client.external` 白名单里那些 `@deepseek-ai/*` 名字在压缩中被逐字保留，搜到再读导出形状。压缩名最多作为一行例证出现，不作定位手段。
 
-⚠️ **CSS Module 哈希只能从 asar 取，不能按 npm 包抄**：同一个 commit 的两次构建（侧栏包自身的 build 戳两侧都是 `0.2.2-rc.5-3f85d88`），包内 `client.js` 的类名前缀在 asar 与 registry tarball 上**不同**。实测三对：`PM/` 的页面模块 asar `w6M7KW_` / npm `X_2TxG_`（各 567 处，逐字节比对后差异**全部**落在这 6 个字符上，其余字节相同）；侧栏 `SidebarRoot` 模块 asar `kB3qhq_` / npm `hHd-Xa_`（268 处）；侧栏 `HeaderLeadingControls` 模块 asar `xoYuoq_` / npm `IW6AQa_`（5 处）。`SHELL/` 是例外：前端 `dist/assets` 在 asar 与 npm 包上字节相同，§3 的 `_tabs_1lga9_1` / `_switch_1ik0f_5` 两侧一致。**哈希种子随构建而异**，所以按 npm 包重采会写出一组真机上从不存在的选择器；复核哈希一律读 asar（2026-11-19 复核时确认）。
+⚠️ **CSS Module 哈希只能从 asar 取，不能按 npm 包抄**：同一个 commit 的两次构建，包内 `client.js` 的类名前缀在 asar 与 registry tarball 上**不同**。实测三对（0.2.3-alpha.2，出现次数口径）：`PM/` 的页面模块 asar `w6M7KW_` / npm `X_2TxG_`（各 **568** 处，rc.5 为 567，逐字节比对后差异**全部**落在这 6 个字符上，其余字节相同）；侧栏 `SidebarRoot` 模块 asar `kB3qhq_` / npm `hHd-Xa_`（各 **284** 处，rc.5 为 268）；侧栏 `HeaderLeadingControls` 模块 asar `xoYuoq_` / npm `IW6AQa_`（各 **5** 处，与 rc.5 相同）。`SHELL/` 是例外：前端 `dist/assets` 在 asar 与 npm 包上字节相同——**但 0.2.3-alpha.2 起 primitives 的类名方案换了**（见 3 节），拿旧前缀去核「两侧一致」只会得到两个 0，那不代表产物不同。**哈希种子随构建而异**，所以按 npm 包重采会写出一组真机上从不存在的选择器；复核哈希一律读 asar。
 
 截图：[宿主插件页首屏](../assets/host-plugins-page.png)（1440×920，2026-11-08；页面骨架本身未变）。
 
@@ -46,20 +53,39 @@ grep -ac InstallDialog            "$A"   # 安装弹窗（本文 8.2）：rc.3 =
 | 记号 | 实际路径 | 说明 |
 | --- | --- | --- |
 | `EX/` | `/Applications/DeepSeek Harness.app/Contents/Resources/app.asar` 内的 `dsh/node_modules/@deepseek-ai/` | asar 是「头部 JSON + 拼接内容」，不是目录：`u32@4 = headerSize`、`u32@12 = jsonLen`、JSON 从 byte 16 起、内容区 = `8 + headerSize` |
-| `PM/` | `EX/dsh-client-ui-plugin-manager`（源码在 `PM/src/client/**`，产物是 `PM/lib/client.js`） | 插件页本体：`PluginManagerPage.tsx`、`PluginManagerPage.module.css`（2318 行、50 181 B）、`manager-store.ts`、`locales.ts`、`versions.tsx`、`detail-store.ts`、`header-scroll.ts`、`presentation.ts` |
+| `PM/` | `EX/dsh-client-ui-plugin-manager`（源码在 `PM/src/client/**`，产物是 `PM/lib/client.js`） | 插件页本体：`PluginManagerPage.tsx`、`PluginManagerPage.module.css`（0.2.3-alpha.2 为 **2325 行、50 273 B**；rc.5 为 2318 行、50 181 B）、`manager-store.ts`、`locales.ts`、`versions.tsx`、`detail-store.ts`、`header-scroll.ts`、`presentation.ts` |
 | `PMK/` | `EX/dsh-client-ui-plugin-market` | 「发现」页签的注册方（`plugins.tab` 的 `discover` 项） |
 | `PRESET/` | `EX/dsh-client-ui-agent-preset` | 添加菜单第二项的注入方（`CreatePluginMenuItem`） |
 | `THEME/` | `EX/dsh-client-ui-theme`（`THEME/src/styles/base.css`、`design-platform.css`） | 令牌（半径字号）与明暗两套静态色板 |
 | `LAYOUT/` | `EX/dsh-client-ui-layout`（`LAYOUT/src/client/AppFrame.module.css`） | 外壳框架；`--dsh-frame-top-clearance` 的声明处 |
 | `SRV/` | `EX/dsh-plugin-manager/lib/types/` | 服务端结果类型与拒绝码（`failure.js`、`index.js`、`versions.js` 等） |
-| `SHELL/` | `EX/dsh-web-frontend/dist/assets`（`index-Ciz7DZxv.js`、`index-CSAdOBx6.css`） | 前端 shell 与 primitives 产物（`SegmentedTabs`、`Switch`、`Button`、`DetailDocument` 的 CSS 都在这里），单行压缩，按唯一字串 grep |
+| `SHELL/` | `EX/dsh-web-frontend/dist/assets`（0.2.3-alpha.2：`index-B8miqkaN.js` 1 216 682 B / sha256 前 12 位 `025a0b9c7169`，`index-B_7bmv2h.css` 4 185 B，`vendor-DV2921Zo.css` 27 312 B；rc.5 是 `index-Ciz7DZxv.js` / `index-CSAdOBx6.css`） | 前端 shell 与 primitives 产物，单行压缩，按唯一字串 grep。**0.2.3-alpha.2 起 primitives 的 CSS 不在任何 `.css` 文件里**：它以 `meta.stylesheets` 的形式挂在 shell JS 内的 `{"src/SegmentedTabs.module.css":{text:…}}` 表上，由 renderer 在应用挂载时安装；类名随之变成 `<hash>_<local>`（见 3 节）。宿主注入给 `__ModuleLoader__.create` 的 11 项静态 seed 表也在这个文件里 |
 | `PROF/` | `~/.dsh/profiles/desktop/node_modules/` | 本机已装插件 |
 | `HIDDER/` | `~/<plugins-dir>/dsh-hidder/` | 用户自己的插件；`HIDDER/docs/reference/host-selectors.md`、`HIDDER/docs/reference/settings-ui.md`、`HIDDER/spec.md` 有宿主真实取值 |
 | `PRD` | `git show a8141eb:docs/PRD.md` | 上游产品规格。2026-11-09 作为过程产物移出工作树，正文里的 `PRD §x` 引用保留以便追溯 |
 
-> 宿主版本双证（2026-11-15 复核）：`/Applications/DeepSeek Harness.app/Contents/Info.plist` 的 `CFBundleShortVersionString` 与 asar 内 `dsh/package.json` 的 `version` 同为 `0.2.2-rc.3`；整包 210 011 763 B。本文所有宿主读数采集于该版本。
+> 宿主版本双证（2026-11-23 复核）：`/Applications/DeepSeek Harness.app/Contents/Info.plist` 的 `CFBundleShortVersionString` 与 asar 内 `dsh/package.json` 的 `version` 同为 `0.2.3-alpha.2`；整包 215 113 994 B。但**并非本文每一节都采于该版本**，逐节归属见 1.2。
+
+### 1.2 本轮（0.2.3-alpha.2）采了什么、没采什么
+
+宿主从 `0.2.2-rc.5` 升到 `0.2.3-alpha.2`，按上面的「更新触发」本该整份重采。本轮**没有整份重采**：先做了一次字节级比对，能定位的变动只有几处，把未变的部分再抄一遍只会让旧值看起来像新采的读数。
+
+| 节 | 本轮 | 依据 |
+| --- | --- | --- |
+| §1 探针表 | **重采**：五条按新 asar 重跑，并对归零的那条给出死因 | 见 1 节的命令块与两条警告 |
+| §1.1 `PM/` / `SHELL/` | **重采**：产物文件名、字节数、sha、primitives CSS 的新位置 | asar 切片的字节数与 sha256 |
+| §3 类名方案 | **重采**：页面与侧栏三对哈希仍在（568 / 284 / 5），primitives 换成 `<hash>_<local>` | asar 与 npm tarball 两侧各数一遍，逐对相等 |
+| §7 字节数与 sha | **重采**：`PM/lib/client.js` 357 239 → **404 195 B** | 1 节的采集纪律 |
+| §2 骨架 / §4 几何 / §5 交互的形状 | **未重采，形状不变** | `PM/PluginManagerPage.module.css` 与 rc.5 逐行 diff：**只有一条新增规则** `.failure ul`（`margin:0`、`padding-left:16px`、`font-size:13px`、`line-height:20px`，共 7 行），骨架 / 页头 / 卡片 / 详情页的规则体一行未动；`PM/lib/client.js` 里 `data-plugin-*` 钩子族、`packageStatus` 的四档状态值、卡片结构（`card cardLink` + `data-plugin-package` + `data-plugin-status`）均在 |
+| §6 控件来源 | **未重采，只补一句** | primitives 仍是 11 项静态 seed 之一；变的只是它的 CSS 从「包内 `.module.css`」改成「shell JS 里的 stylesheets 表」 |
+| §7 详情页真机读数 / §8 流程形状 | **未重采**（§7 只换字节数，§8 只换来源文件字节数） | 真机读数仍是 2026-11-10 那轮，宿主升级后要按 §1 的采集环境重跑一遍才算数 |
+| §8.1 / §8.2 两个组件探针 | 间接核对：`AddPluginMenu` 3 行、`InstallDialog` 5 行，与 rc.3 / rc.5 相同 | 组件仍在，不等于内部形状逐条复核过 |
+
+**下一轮该补的**：§7 / §8 的真机读数（页头收拢的四段插值、`Menu` 的行为、`Switch` 的焦点环），以及新类名方案下的几何复测。
 
 ## 2 页面骨架
+
+> 本节形状于 `0.2.3-alpha.2` **未重采**，读数仍是 `0.2.2-rc.3` 的采集值；依据（页面 CSS 只多一条 `.failure ul`）见 1.2。
 
 - 入口是侧栏的 `插件` 行（`sidebar.panellist` 槽，图标 `IconPluginPinwheelOutlineRegular`），点开占满主区整页，没有右侧抽屉、没有二级页。
 - 页头（`pageHead`）：左 `h1`「插件」（20/28/500）+ 副标题「安装、启用和配置插件」（13/20、secondary）+ ⓘ 按钮（`ghost/sm`，盒 20×20、`IconInfoOutlineRegular` 11、`aria-label`「插件说明」，tooltip 300ms）；右侧操作组（`toolbar`，`gap: 8px 16px`）依次是状态句 `updatesNote`、`刷新`（`outline/sm`，进行中把图标换成 `StateDot state="ongoing" size={13}`，带 `aria-busy`）、`＋ 添加插件 ⌄`（细节见 8.1）。**整条工具条带 `hidden={!onInstalled}`**：它只在「已安装」页签渲染。
@@ -71,7 +97,11 @@ grep -ac InstallDialog            "$A"   # 安装弹窗（本文 8.2）：rc.3 =
 
 ## 3 类名与稳定钩子
 
-- 页面类名是**构建哈希**：`w6M7KW_*`（page 与全部子模块）、`_tabs_1lga9_1`（页签容器，来自 primitives）、`_switch_1ik0f_5`（开关，来自 primitives）。这三个哈希在 rc.3 与 rc.1 上相同（CSS 模块内容未变），但每次构建都可能变，所以任何选择器里出现它们次日就会失效。
+- 页面类名是**构建哈希**，0.2.3-alpha.2 实测三类：
+  - 页面与全部子模块：`w6M7KW_*`（与 rc.5 同前缀，出现 568 次）。
+  - 侧栏两处：`SidebarRoot` 用 `kB3qhq_*`（284 次）、`HeaderLeadingControls` 用 `xoYuoq_*`（5 次），前缀与 rc.5 相同。
+  - primitives 的两类**方案已换**：0.2.2 及更早是 `_<local>_<hash>`（`_tabs_1lga9_1`、`_switch_1ik0f_5`），0.2.3-alpha.2 起是 `<hash>_<local>`——页签 `j-N4uq_tabs` / `j-N4uq_tab` / `j-N4uq_indicator`、开关 `._8r5xTa_switch`。旧前缀在整包里 0 命中（换名依据见 `0.2.2-rc.2` 的 `client-module-metadata` 升级指南）。
+- 两条推论：① 任何选择器里出现这些哈希，次日就会失效；② **别拿类名前缀反推宿主版本**——旧前缀归零既可能是改版，也可能是单纯改名（见 1 节的第二条警告，0.2.3-alpha.2 就栽在这条上）。
 - 真正稳定的钩子是**宿主自己写出来给脚本用的**，rc.3 已有一整套，量几何、写断言都按这套定位：
 
 | 钩子 | 落点 |
@@ -99,6 +129,8 @@ grep -ac InstallDialog            "$A"   # 安装弹窗（本文 8.2）：rc.3 =
 
 ## 4 度量刻度（宿主自用值，源码声明值优先）
 
+> 本节形状于 `0.2.3-alpha.2` **未重采**；依据见 1.2。页签那一行的**证据指针**已在 `docs/contracts/visual.md` 换成新类名。
+
 | 项 | 值 |
 | --- | --- |
 | 页面左右内缩 | `clamp(24px, 4vw, 48px)`；`max-width: 767px` 时固定 20px |
@@ -119,6 +151,8 @@ grep -ac InstallDialog            "$A"   # 安装弹窗（本文 8.2）：rc.3 =
 
 ## 5 交互与状态形状
 
+> 本节形状于 `0.2.3-alpha.2` **未重采**；依据见 1.2。**例外一条已知变更**：primitives 的 `Menu` 新增「激活另一个 `aria-haspopup` 触发器时也触发 `onClose`」，本节未记它，因为尚未真机复核。
+
 - **行本身是链接**：`li.card.cardLink` 带 `position: relative`，标题按钮用 `::after { inset: 0 }` 铺满整张卡当点击面，尾部控件单独 `z-index: 1` 浮在上层。
   - 按下：`.cardLink:active` → `--dsw-alias-interactive-bg-active`（亮 `rgba(38, 49, 72, 0.1)` / 暗 `rgba(255, 255, 255, 0.14)`）。
   - 悬停：`@media (hover: hover)` 里 `.cardLink:hover` → `--dsw-alias-interactive-bg-hover`（亮 `rgba(38, 49, 72, 0.06)` = `#2631480f` / 暗 `rgba(255, 255, 255, 0.08)` = `#ffffff14`）。**两个态是两个不同令牌**，不是同一个色上下调。
@@ -134,13 +168,13 @@ grep -ac InstallDialog            "$A"   # 安装弹窗（本文 8.2）：rc.3 =
 
 ## 6 控件由浏览器 seed 提供
 
-`SegmentedTabs` / `Switch` / `Button` / `Tooltip` / `Toast` / `StateDot` / `Tag` / `Modal` / `Menu` / `MenuItemButton` / `Input` / `Checkbox` / `TerminalBlock` / `DetailDocument` / 全部图标都是 `@deepseek-ai/dsh-client-ui-primitives` 的导出，运行时由宿主注入的 seed 提供；node 侧 import 不到（产物在 `SHELL/` 里），测试需要替身。
+`SegmentedTabs` / `Switch` / `Button` / `Tooltip` / `Toast` / `StateDot` / `Tag` / `Modal` / `Menu` / `MenuItemButton` / `Input` / `Checkbox` / `TerminalBlock` / `DetailDocument` / 全部图标都是 `@deepseek-ai/dsh-client-ui-primitives` 的导出。它在浏览器里由 shell 注入的**静态 seed 表**提供（0.2.3-alpha.2 共 11 项，primitives 是其中之一；表在 `SHELL/index-B8miqkaN.js` 里交给 `__ModuleLoader__.create`），**不以独立包出现在 `dsh/node_modules` 下**——目录缺席不代表模块不可用；样式也在同一张表上随 `meta.stylesheets` 由 renderer 安装，**安装时机是应用挂载、不是页面加载**：注入的 `<style>` 在文档顺序上可能落在插件自建的 `<style>` 之后，因此**同特异性下宿主胜**（2026-11-23 真机：插件 `.skc_infoButton{padding:0}` 被宿主 `.sm{padding:0 10px}` 压掉，ⓘ 图标计算宽 0、整个不显示）。node 侧 import 不到（包仍在 npm 上，但 asar 里没有它的目录），测试需要替身。
 
-## 7 插件详情页（采集 2026-11-10，二次采集；五次采集按 rc.3 源码整份复核）
+## 7 插件详情页（采集 2026-11-10，二次采集；五次采集按 rc.3 源码整份复核；七次只更新字节数与证据指针）
 
 > 采集环境（二次采集）：`app.asar` 内 `dsh/lib/bin.js` + `ELECTRON_RUN_AS_NODE` 起 `dsh web --no-open --port 0`，隔离 `DSH_HOME`；视口 **1440×920**、`Emulation.setDeviceMetricsOverride` 强制 **DPR 1**（像素与 CSS px 一一对应）。读数用 `getComputedStyle` + `getBoundingClientRect`，深色用 `Emulation.setEmulatedMedia` 切换后同一元素再读。宿主升级后按 1 节的采集环境整份重采。
-> 目标文件：`PM/lib/client.js`（`@deepseek-ai/dsh-client-ui-plugin-manager` 的客户端产物），rc.3 实测 **357 239 B**（二次采集时同一文件在 `0.2.2-rc.1` 上是 438 450 B；两次都是 node 读 asar 的字节数，**不要用 grep 搜中文**，理由见 1 节的警告）。rc.3 起详情页的 markdown 正文由 primitives 的 `DetailDocument` 渲染，刻度落在 `SHELL/` 的 CSS 里。
-> 五次采集的读数有两套来源：**声明值**（`PM/PluginManagerPage.module.css` 与 `SHELL/` 的 CSS，逐字）与**真机值**（二次采集的 `getComputedStyle`，标注「真机」）。两者不冲突时以声明值为准。
+> 目标文件：`PM/lib/client.js`（`@deepseek-ai/dsh-client-ui-plugin-manager` 的客户端产物），0.2.3-alpha.2 实测 **404 195 B**（sha256 前 12 位 `680eb926e264`；rc.5 为 357 239 B，`0.2.2-rc.1` 为 438 450 B——三次都是 node 读 asar 的字节数，**不要用 grep 搜中文**，理由见 1 节的警告）。rc.3 起详情页的 markdown 正文由 primitives 的 `DetailDocument` 渲染，刻度落在 `SHELL/` 与 primitives 的 stylesheets 表里。
+> 五次采集的读数有两套来源：**声明值**（`PM/PluginManagerPage.module.css` 与 `SHELL/` 的 CSS，逐字；0.2.3-alpha.2 起 primitives 那一半改从 `SHELL/index-B8miqkaN.js` 的 stylesheets 表读）与**真机值**（二次采集的 `getComputedStyle`，标注「真机」）。两者不冲突时以声明值为准。
 
 区块顺序（自上而下，真机截图与产物一致）：
 
@@ -255,13 +289,13 @@ locale 键值（逐字，来自该包的 zh 表）：
 
 1. 隔离 profile 只写 `dsh.profile.bundles` 时，宿主「插件」页**不列**第三方包；必须同时在该 `package.json` 里写 `dependencies: {"dsh-skill-panel": "link:<仓库绝对路径>"}`。
 2. 该组的卡片常在首屏外（1440×920 下 y≈883），要先滚到底再点；刚装完的包会被 `data-plugin-highlight` 闪一下，别把它当成常态样式。
-3. 宿主类名是构建哈希（`w6M7KW_*`），语义片段（`[class*="crumb"]`）能凑合，但 3 节那套 `data-plugin-*` 钩子才是正确入口。
+3. 宿主类名是构建哈希（`w6M7KW_*`），语义片段（`[class*="crumb"]`）能凑合，但 3 节那套 `data-plugin-*` 钩子才是正确入口。0.2.3-alpha.2 起 primitives 的类名换成 `<hash>_<local>`，`[class*="_switch_"]` / `[class*="_tab_"]` 这类旧写法会**静默量空**（不报错，只是选不到）。
 4. 在 `<html>` 上模拟 `data-platform=darwin` 会让整轮静默挂死（宿主外壳也读它）；要验 darwin 分支只在 `.skc_page` 上打属性。
 5. 页头是**吸顶 + 几何插值**的：截图前先 `scrollTop = 0`，否则量到的 `title`/`intro` 位置是插值中间态。
 
 ## 8 添加插件与卸载两条流程（采集 2026-11-12，**§8.1 于 2026-11-13 复采、全文于 2026-11-15 按 rc.3 复核**）
 
-> 采集方法：**node 逐字节读 asar**（1 节那条「`grep` 搜中文会静默漏检」的警告在这儿一样成立）。来源文件都在包里、且都是 TS 源码：`PM/src/client/PluginManagerPage.tsx`（94 051 B）、`PM/src/client/manager-store.ts`（78 429 B）、`PM/src/client/locales.ts`（173 664 B）、`PM/src/client/versions.tsx`（23 475 B）；服务端拒绝码在 `SRV/` 的 `failure.js`（990 B）与 `index.js`（96 905 B）。本节只写符号名与键名，不写行号坐标（坐标换一版构建就失效）。
+> 采集方法：**node 逐字节读 asar**（1 节那条「`grep` 搜中文会静默漏检」的警告在这儿一样成立）。来源文件都在包里、且都是 TS 源码，括号内为 0.2.3-alpha.2 的字节数（rc.3 采集时依次是 94 051 / 78 429 / 173 664 / 23 475）：`PM/src/client/PluginManagerPage.tsx`（96 737 B）、`PM/src/client/manager-store.ts`（78 429 B，未变）、`PM/src/client/locales.ts`（175 122 B）、`PM/src/client/versions.tsx`（23 475 B，未变）；服务端拒绝码在 `SRV/` 的 `failure.js`（990 B，未变）与 `index.js`（97 724 B）。本节只写符号名与键名，不写行号坐标（坐标换一版构建就失效）；**流程形状本轮未重采**，只更新了字节数（见 1.2）。
 
 ### 8.1 添加入口：工具条第三位的 `AddPluginMenu`
 

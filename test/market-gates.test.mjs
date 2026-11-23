@@ -18,6 +18,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
+import { flattenDoubling } from './helpers/skc-css.mjs';
 import { ROOT } from './helpers/ssr.mjs';
 
 const exec = promisify(execFile);
@@ -111,7 +112,9 @@ test('K40 styles.js 里没有宿主构建哈希类名（形如 abc123_）', asyn
 });
 
 test('K40 市场刻度逐条落地：网格 280/12、卡片竖排 14、cardOpen 铺满、cardEnd 浮起', async () => {
-  const css = await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8');
+  // 读「某条规则的声明」：先把双类（`.skc_x.skc_x`，A.9 的特异性写法）折叠回单类，再找规则，
+  // 否则匹配到的是复合选择器的**后半截**——加一个类或一个属性选择器就会静默读错块。
+  const css = flattenDoubling(await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8'));
   const ruleOf = (selector) => {
     const index = css.indexOf(`${selector}{`);
     return index === -1 ? '' : css.slice(index, css.indexOf('}', index) + 1);
@@ -319,7 +322,9 @@ test('K41 点击边界按页签划：市场页有 cardOpen 手段，已安装行
 });
 
 test('K81 点击层级：一个动作位，其余都在点击层之下', async () => {
-  const css = await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8');
+  // 读「某条规则的声明」：先把双类（`.skc_x.skc_x`，A.9 的特异性写法）折叠回单类，再找规则，
+  // 否则匹配到的是复合选择器的**后半截**——加一个类或一个属性选择器就会静默读错块。
+  const css = flattenDoubling(await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8'));
   const ruleOf = (selector) => {
     const index = css.indexOf(`${selector}{`);
     return index === -1 ? '' : css.slice(index, css.indexOf('}', index) + 1);
@@ -355,7 +360,9 @@ test('K81 点击层级：一个动作位，其余都在点击层之下', async (
 });
 
 test('K83 标签 chip 的刻度逐字落地（描边、无颜色字面量、可省略）', async () => {
-  const css = await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8');
+  // 读「某条规则的声明」：先把双类（`.skc_x.skc_x`，A.9 的特异性写法）折叠回单类，再找规则，
+  // 否则匹配到的是复合选择器的**后半截**——加一个类或一个属性选择器就会静默读错块。
+  const css = flattenDoubling(await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8'));
   const ruleOf = (selector) => {
     const index = css.indexOf(`${selector}{`);
     return index === -1 ? '' : css.slice(index, css.indexOf('}', index) + 1);
@@ -428,7 +435,9 @@ test('K81 包装层不得掉下点击层：头部/正文/标签/三段都没有 
   // `position` on a sibling wrapper paints that wrapper in the positioned layer, i.e. above
   // the layer - clicks on it would then land on a node with no handler ("looks clickable,
   // does nothing"). `position: relative` is as fatal here as `position: absolute`.
-  const css = await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8');
+  // 读「某条规则的声明」：先把双类（`.skc_x.skc_x`，A.9 的特异性写法）折叠回单类，再找规则，
+  // 否则匹配到的是复合选择器的**后半截**——加一个类或一个属性选择器就会静默读错块。
+  const css = flattenDoubling(await readFile(join(ROOT, 'src', 'client', 'styles.js'), 'utf8'));
   const ruleOf = (selector) => {
     const index = css.indexOf(`${selector}{`);
     return index === -1 ? '' : css.slice(index, css.indexOf('}', index) + 1);
