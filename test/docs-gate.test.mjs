@@ -82,10 +82,21 @@ async function tree(files) {
   return { dir, cleanup };
 }
 
-/** Run the gate against a temp tree. @returns {{status: number, out: string}} */
-function runGate(dir) {
+/**
+ * Run the gate against a temp tree.
+ *
+ * `env` lets a case take tools out of the child's reach: pointing `PATH` at a directory that
+ * does not exist makes the gate's `execFileSync('git', &#8230;)` fail with ENOENT, which is how
+ * the git-less fallback branch gets exercised (K155). The gate itself is started by absolute
+ * path, so node does not need `PATH`.
+ *
+ * @param {string} dir - the tree to check (`--root`).
+ * @param {NodeJS.ProcessEnv} [env] - child environment; defaults to this process's.
+ * @returns {{status: number, out: string}} exit status and combined output.
+ */
+function runGate(dir, env = process.env) {
   try {
-    const out = execFileSync(process.execPath, [GATE, '--root', dir], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const out = execFileSync(process.execPath, [GATE, '--root', dir], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env });
     return { status: 0, out };
   } catch (error) {
     return { status: error.status ?? 1, out: `${error.stdout ?? ''}${error.stderr ?? ''}` };
@@ -432,5 +443,47 @@ test('R5 参考类：缺「来源版本」必须红（外部升级是第一过�
     assert.match(out, /RED\s+R5 .*来源版本/);
   } finally {
     await cleanup();
+  }
+});
+
+test('K155 git-less 兜底分支：不读 test/.build/，但也没有变成全盲', async () => {
+  // 没有 git 时 `testModules` 走 `walkFiles(test, '.mjs')` 兜底。`test/.build` 与 `test/.tmp` 是
+  // .gitignore 的临时区：`test/helpers/ssr.mjs` 在并行用例里建一个 bundle 目录又立刻删掉，把它们
+  // 算进「测试模块」会让门禁去读别人正在删的文件——2026-11-23 的冷装复核里 K125 就是这么偶发红的。
+  // 两条断言咬住这件事的两端：临时区不许进兜底（①），豁免也不许把兜底变成全盲（②）。
+  // 环境：把 PATH 指到一个不存在的目录，`git` 必定不可见 ⇒ 兜底分支是唯一能走的路。
+  const EXAMPLE = ['docs', 'contracts', 'example.md'].join('/');
+  const GOOD = ['§', '3.', '2.4'].join('');   // 运行期拼：本文件自己也被门禁按 R7 扫，别留字面锚点
+  const header = (ref) => `/**\n * 示例测试：${EXAMPLE} ${ref}\n */\nimport test from 'node:test';\ntest('示例', () => {});\n`;
+  const noGit = (dir) => ({ ...process.env, PATH: join(dir, 'no-such-bin-dir') });
+
+  const hidden = {
+    ...BASELINE,
+    'test/a.test.mjs': header(GOOD),
+    'test/.build/bundle-x/entry.mjs': header(badRef(99, 9)),
+  };
+  {
+    const { dir, cleanup } = await tree(hidden);
+    try {
+      const { status, out } = runGate(dir, noGit(dir));
+      assert.equal(status, 0, out);
+      assert.match(out, /check-docs: OK/, out);
+      assert.equal(out.includes(badRef(99, 9)), false, '临时区里的假锚点没有被读');
+    } finally {
+      await cleanup();
+    }
+  }
+
+  {
+    const visible = { ...hidden, 'test/b.test.mjs': header(badRef(99, 9)) };
+    const { dir, cleanup } = await tree(visible);
+    try {
+      const { status, out } = runGate(dir, noGit(dir));
+      assert.equal(status, 1, out);
+      assert.ok(out.includes('test/b.test.mjs'), `兜底分支必须汇报合法位置的坏锚点：${out}`);
+      assert.ok(out.includes(badRef(99, 9)), `报错要点名那个悬空编号：${out}`);
+    } finally {
+      await cleanup();
+    }
   }
 });

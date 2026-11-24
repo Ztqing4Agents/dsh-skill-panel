@@ -12,8 +12,8 @@ npm run check:docs   # 文档门禁：白名单/头注/章节/锚点/引用/零�
 npm run check:board  # 看板格式与依据锚点（无 .agents/work/ 时跳过）
 npm run check:docs:standards   # 标准文档门禁：dev-docs-standards 的 vendored 副本，交付前当第二意见；不进 npm run check，升级方式见脚本头注
 npm run check        # 上面四道 + check:hosts：宿主声明须与 scripts/hosts.mjs 一致（共五门）
-npm test             # node --test test/（测试由 QA 维护）；真机冒烟另跑 npm run test:compat [-- --host <ver>]，隔离 DSH_HOME 起实例，不进本地门禁
-npm publish --//registry.npmjs.org/:_authToken=<token>   # 2FA 绑的是通行密钥（CLI 的 --otp 只吃 TOTP）⇒ 必须用勾了 "Bypass two-factor authentication" 的 granular token，一次性传参，token 不进仓库、不进对话；本次发版若抬了宿主代际，同轮 npm deprecate 旧代际版本（模板与理由见 docs/contracts/decisions.md Z-14）
+npm test             # node --test "test/*.test.mjs"（测试由 QA 维护；Node 24 不再展开目录参数，glob 两端都稳）；真机冒烟另跑 npm run test:compat [-- --host <ver>]，隔离 DSH_HOME 起实例，不进本地门禁
+git tag v<version> && git push origin v<version>   # 正式发布只有这条路：push v* tag 触发 .github/workflows/publish.yml（npm 可信发布 / OIDC，无长期 token；prepublishOnly 自带 check+test+check-version，CI 里别重复跑）；本地 `npm publish` 降为应急且不受支持（仍需一次性 bypass token：2FA 绑通行密钥、CLI 的 --otp 只吃 TOTP，token 不进仓库、不进对话）；抬宿主代际的那次发版，同轮人工跑一次 npm deprecate 旧代际版本（模板与理由见 docs/contracts/decisions.md Z-14）
 ```
 
 ## 文档地图
@@ -25,7 +25,7 @@ npm publish --//registry.npmjs.org/:_authToken=<token>   # 2FA 绑的是通行�
 | 路由表、写盘、错误码 | `docs/contracts/routes.md` | §3.3 §3.4 §8.1 |
 | 前端组件、状态机、命名与 i18n；已安装详情页 | `docs/contracts/client.md`、`docs/contracts/installed-detail.md` | §3.5 §3.6 §8.2–§8.5；详情页全文 |
 | 调用流程与未定事项 | `docs/contracts/flows.md` | §4 §5 |
-| 验收口径、夹具、用例编号 K1–K153 | `docs/contracts/acceptance.md` | 附录 D.5（K28–K61 K75–K78 K82–K115）、D.6（K62–K74）、D.7（K116–K125）、D.8（K126–K137）、D.9（K138–K147）、D.10（K148）、D.11（K149）、D.12（K150）、D.13（K151）、D.14（K152 K153） |
+| 验收口径、夹具、用例编号 K1–K155 | `docs/contracts/acceptance.md` | 附录 D.5（K28–K61 K75–K78 K82–K115）、D.6（K62–K74）、D.7（K116–K125）、D.8（K126–K137）、D.9（K138–K147）、D.10（K148）、D.11（K149）、D.12（K150）、D.13（K151）、D.14（K152–K155） |
 | 决策登记（偏离 / 更正 / 假设） | `docs/contracts/decisions.md` | 附录 B |
 | 页面视觉刻度（px、令牌、`skc_` 类名、收拢顺序） | `docs/contracts/visual.md` | A.1–A.9 |
 | 技能市场（源适配器、数据流、市场刻度、安装链路） | `docs/contracts/market.md` | §7 附录 F 附录 G |
@@ -36,7 +36,7 @@ npm publish --//registry.npmjs.org/:_authToken=<token>   # 2FA 绑的是通行�
 | 过去是什么、为什么这么定 | `git log`（`git log -S`） | 仓库里没有 `archive/`，历史交 git |
 | 现在卡在哪、还剩什么没验 | `.agents/work/BOARD.md` | 本地看板（列约定在文件头，过程产物在 wip/ 与 scratch/），不入库 |
 
-契约按**编号分区**：`§x.y` 与 `附录 X.n` 在全仓库唯一，正文里看到编号就按上表定位；编号是 `test/*.test.mjs` 头注的锚点（K1–K153），**不许重排或复用**（K33 / K58 / K60 / K80 已退役，号不复用）。
+契约按**编号分区**：`§x.y` 与 `附录 X.n` 在全仓库唯一，正文里看到编号就按上表定位；编号是 `test/*.test.mjs` 头注的锚点（K1–K155），**不许重排或复用**（K33 / K58 / K60 / K80 已退役，号不复用）。
 
 **新知识写哪**：可 grep 的断言 → 契约；不能做错的事 → 本文件「硬约束」；用户可感知的变化 → `CHANGELOG`；还没做的事 → 看板；**没定型的探索结论**才进项目记忆。文档里不放过程（PRD、测试报告、设计图）——已移出，见 commit `a8141eb`。
 

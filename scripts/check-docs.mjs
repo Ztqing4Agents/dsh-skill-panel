@@ -87,12 +87,30 @@ const textOf = (f) => {
 const text = { get: textOf, has: (f) => existsSync(join(ROOT, f)) };
 const lines = (f) => textOf(f).split('\n');
 
-/** Every file under `dir` whose name ends with `suffix`, as repo-relative paths. */
+/**
+ * Every file under `dir` whose name ends with `suffix`, as repo-relative paths.
+ *
+ * Dot entries are skipped, which is what the git branch of `testModules` sees: `test/.build`
+ * and `test/.tmp` are gitignored scratch space (`test/helpers/ssr.mjs` writes a bundle into
+ * `.build` and removes it again while the suite runs in parallel). Walking them here would
+ * let this gate open a file a concurrent test is in the middle of deleting - an ENOENT that
+ * says nothing about the tree and everything about the timing.
+ *
+ * A file that vanishes between `readdirSync` and `statSync` is skipped for the same reason;
+ * every other stat failure is a real problem and still throws.
+ */
 function walkFiles(dir, suffix, out = []) {
   if (!existsSync(dir)) return out;
   for (const entry of readdirSync(dir)) {
+    if (entry.startsWith('.')) continue;
     const abs = join(dir, entry);
-    const st = statSync(abs);
+    let st;
+    try {
+      st = statSync(abs);
+    } catch (error) {
+      if (error.code === 'ENOENT') continue;
+      throw error;
+    }
     if (st.isDirectory()) walkFiles(abs, suffix, out);
     else if (entry.endsWith(suffix)) out.push(relativePath(abs));
   }
@@ -113,7 +131,9 @@ const testModules = (() => {
   } catch {
     // A tree without git — the gate's own self-tests, or an exported copy — still has its
     // test files on disk. Walk them so the anchor and case checks can run there too.
-    return walkFiles(join(ROOT, 'test'), '.mjs').sort();
+    // Same rule as the git branch: a path that is gone by the time the walk ends is not
+    // part of the tree this gate reports on.
+    return walkFiles(join(ROOT, 'test'), '.mjs').filter((f) => existsSync(join(ROOT, f))).sort();
   }
 })();
 const headings = (f) => lines(f).flatMap((l) => {

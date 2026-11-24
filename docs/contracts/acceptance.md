@@ -307,15 +307,16 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 
 **红绿口径**：K151 进 `npm test`（`io` 桩驱动，不联网；夹具取 2026-11-21 的真实形态：`fpt-cli` 四条清单路径 + 标志真、`plant-care-expert` 标志假）；不新增真机项——译本只改概览文本，版面与几何未动。
 
-### D.14 宿主 0.2.3 代际的兼容判据（K152–K154）与真机冒烟 H5–H7
+### D.14 宿主 0.2.3 代际的兼容判据（K152–K155）与真机冒烟 H5–H7
 
-宿主换到 `0.2.3` 代际（`>=0.2.3-0 <0.3.0-0`）后，有三件事只能由本项目自己守：asar 数据区的 4 字节对齐、十六条路由的访问策略、以及「primitives 的包目录消失但模块仍是 shell 静态种子」这条事实。前两件与「覆盖 primitive 的规则不许靠加载顺序取胜」这条纪律进 `npm test`（K152–K154）；「注入与模块表」的负判据、静态种子表、无凭据可达性只能是真机判据（`node scripts/test-compat.mjs` 的 H5 / H6 / H7），不进本地门禁。
+宿主换到 `0.2.3` 代际（`>=0.2.3-0 <0.3.0-0`）后，有三件事只能由本项目自己守：asar 数据区的 4 字节对齐、十六条路由的访问策略、以及「primitives 的包目录消失但模块仍是 shell 静态种子」这条事实。前两件与「覆盖 primitive 的规则不许靠加载顺序取胜」这条纪律进 `npm test`（K152–K155）；「注入与模块表」的负判据、静态种子表、无凭据可达性只能是真机判据（`node scripts/test-compat.mjs` 的 H5 / H6 / H7），不进本地门禁。
 
 | # | 目标 | 断言 | 层 |
 | --- | --- | --- | --- |
 | **K152** | asar 数据区起点 = `8 + u32@4`（4 字节对齐），不是 `16 + jsonLength` | 自造四份迷你 asar，`jsonLength % 4` 分别为 0 / 1 / 2 / 3：后三档逐条断言 `readAsarFile` 读回原字节（含空文件与前导斜杠）、`readAsarJson` 取回对象、`dataStart = 8 + headerSize = align4(16 + jsonLength)`；**同一份夹具用旧公式 `16 + jsonLength` 读必须得到错位字节**（`JSON.parse` 抛错），对齐档位则两条公式给出同一起点——把「bug 只在 `jsonLength % 4 ≠ 0` 时暴露」钉成可执行的前提；缺 asar / 缺文件 / 非 JSON 一律回 `null` | L2 · `test/asar-read.test.mjs` |
 | **K153** | 十六条 exact 路由逐条显式 `auth: 'anonymous'` | 条数 = 16 且全部 `kind: 'exact'`；逐条 `'auth' in route` 且取值 `anonymous`；注册路径集合与 `ROUTES` 常量逐个相等（漏注册、多余路由都红）；同一个谓词另跑三份副本——删掉一条 `auth`、加一条不带 `auth` 的路由、全表换 `required`——三种形态各自被点名 | L1 · `test/routes-auth.test.mjs` |
 | **K154** | 传给 primitive 的 `skc_` 类：规则碰上宿主的属性时必须双类 | 从 `src/client/*.jsx` **推导**「给 primitive 的 className」集合（导入自 primitives 的标签 + 它自己的 `className={cn('x')}`，表达式只取字符串字面量；集合为空即红）；对每条声明了 A.9 七个属性（`padding` / `height` / `width` / `border-radius` / `font-size` / `color` / `background` 及其派生）的规则，其**主题选择器**命中该集合时特异性必须 ≥ (0,2,0)——双类 `.skc_x.skc_x` 或祖先再带一个类；只改 `transform` 之类的单类（如 `skc_marketCrumbIcon`）不受影响；**例外必须带证据**（A.9 的判据是「会不会撞同一属性」，宿主的规则不在本仓库），且照门禁体例**自动过期**——某类一旦改成双类，它的豁免立刻红着要求删除；另跑四份副本自检（折叠掉 `infoButton` / `marketDialog` 的双类、给 `marketSearch` 加一条裸单类、给非 primitive 类加裸规则）——前三者各自被点名、最后一个不误报 | L1 · `test/styles.test.mjs` |
+| **K155** | git-less 兜底分支不读 test/.build/，也不许变成全盲 | 用 `--root <临时树>` + `mkdtemp` 造树：test/ 下放一份带**合法**锚点的 .test.mjs，test/.build/bundle-x/ 下放一份带**假**锚点的 entry.mjs，并把 `PATH` 指向不存在的目录（`git` 不可见 ⇒ 走 `walkFiles(test)` 兜底）⇒ `check-docs: OK` 且 exit 0，输出里不出现那个假锚点；把假锚点搬进另一份 .test.mjs（同一环境）⇒ 必须红、点名该文件与编号。另跑两份改动副本自检：删掉 `walkFiles` 的 dot 跳过 ⇒ 前半条红（报出 .build 里那个文件）；兜底 `return []` ⇒ 后半条红（`OK` 变 `0 !== 1`） | L2 · `test/docs-gate.test.mjs` |
 
 **H5–H7（真机，`npm run test:compat`；文案与实现以 `scripts/test-compat.mjs` 为准）**
 

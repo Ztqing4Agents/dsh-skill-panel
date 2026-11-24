@@ -1,0 +1,72 @@
+# Publish this package on a version tag, through npm trusted publishing (OIDC).
+#
+# Pushing a `v<version>` tag is the whole release trigger: it is the only path that
+# publishes. `check-version` runs before anything is installed, so a tag that disagrees
+# with `package.json` fails in seconds instead of after a full install and test pass.
+#
+# This file's NAME is part of the package's trusted-publisher record on npmjs.com
+# (Settings -> Trusted publishing: repository `Ztqing4Agents/dsh-skill-panel`, workflow
+# `publish.yml`, and `npm publish` ticked under "Allowed actions"). Renaming or moving it
+# breaks publishing until that record is updated - the failure looks like a plain 404 on
+# publish, with nothing in the log pointing at the workflow name.
+#
+# Three settings here are load-bearing rather than stylistic:
+#
+#   1. No `registry-url` on setup-node. It writes
+#      `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` into .npmrc; with the variable
+#      unset that expands to an empty token, npm then authenticates with that (empty)
+#      token instead of doing the OIDC exchange, and the publish dies with E404.
+#   2. No `NODE_AUTH_TOKEN` anywhere - not even an empty string. Its presence alone makes
+#      npm take the token path and skip OIDC, which fails with ENEEDAUTH.
+#   3. Node 24. Trusted publishing needs npm >= 11.5.1; Node 22 ships npm 10.x, which has
+#      no OIDC support at all.
+#
+# Both actions are pinned by commit SHA (the `v4` tag resolved on 2026-11-23), not by the
+# tag itself: a tag can be moved, a SHA cannot.
+
+name: publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write   # the OIDC token npm exchanges for a short-lived publish credential
+
+# One publish at a time, and never cancel one that is already running: half a publish is
+# worse than a queued one.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+        with:
+          # check-version decides "a tag points at HEAD" with `git tag --points-at HEAD`.
+          # A shallow clone without tags would answer "no tag" and skip that assertion
+          # instead of failing the run.
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4
+        with:
+          node-version: 24
+
+      # Fail fast, before the install: this asserts the tag is v<package.json version>.
+      # On this runner there is no host app.asar, so the semver implementation falls back
+      # to scripts/semver-lite.mjs (one warning line, exit 0) - the assertions still run.
+      - name: tag matches package.json
+        run: node scripts/check-version.mjs
+
+      - run: npm ci
+
+      # No `npm run check` / `npm test` here: `prepublishOnly` already runs both, plus
+      # check-version again. Repeating them would only double the CI time.
+      # A prerelease version would fail inside prepublishOnly by design (no `--tag beta`
+      # here); this repo ships stable versions, so the step stays plain.
+      - run: npm publish --provenance --access public

@@ -4,7 +4,8 @@
  * machine-checkable — a column index, not prose.
  *
  * The board is gitignored (`.agents/work/`), so a fresh clone has none: that is not a
- * failure, it prints `skip` and exits 0. Everything else here is structural. The same
+ * failure, it prints `skip` (with the same `0 warn` tail K125 reads) and exits 0.
+ * Everything else here is structural. The same
  * rules apply to `BOARD-archive.md`, the overflow of the completed table, so the history
  * side cannot rot either.
  *
@@ -36,7 +37,7 @@ const BOARD = join(ROOT, BOARD_REL);
 
 if (!existsSync(WORK_DIR)) {
   // A fresh clone has no work scene at all: nothing to check, and never red.
-  console.log('check-board: skip (no .agents/work/)');
+  console.log('check-board: skip (no .agents/work/); 0 warn');
   process.exit(0);
 }
 

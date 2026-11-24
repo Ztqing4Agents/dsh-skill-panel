@@ -371,7 +371,7 @@ react-dom@18.3.1          —— renderToStaticMarkup 结构测试（运行时�
 `peerDependencies`（声明我们依赖宿主提供什么，不安装；七条宿主包共用一条**代际区间** `>=0.2.3-0 <0.3.0-0`，**字面量与 `package.json` 逐字一致**；改区间只改 `scripts/hosts.mjs` 一处——`check:hosts` **只校验**（默认只读，漂移即红），要补齐声明得显式 `node scripts/sync-hosts.mjs --write`）：
 
 ```
-@deepseek-ai/cordis                    >=4.0.1                                    —— Host 半部 ctx
+@deepseek-ai/cordis                    >=4.2.0-0                                  —— Host 半部 ctx（0.2.3 代际的 cordis 是 4.2.0-alpha.1）
 @deepseek-ai/dsh-host-webserver        >=0.2.3-0 <0.3.0-0                       —— ctx.webServer.register
 @deepseek-ai/dsh-skill                 >=0.2.3-0 <0.3.0-0                       —— ctx.skills.snapshot
 @deepseek-ai/dsh-session               >=0.2.3-0 <0.3.0-0                       —— ctx.sessions.list（解析 cwd）
