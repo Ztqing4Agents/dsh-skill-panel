@@ -13,7 +13,7 @@ npm run check:board  # 看板格式与依据锚点（无 .agents/work/ 时跳过
 npm run check:docs:standards   # 标准文档门禁：dev-docs-standards 的 vendored 副本，交付前当第二意见；不进 npm run check，升级方式见脚本头注
 npm run check        # 上面四道 + check:hosts：宿主声明须与 scripts/hosts.mjs 一致（共五门）
 npm test             # node --test "test/*.test.mjs"（测试由 QA 维护；Node 24 不再展开目录参数，glob 两端都稳）；真机冒烟另跑 npm run test:compat [-- --host <ver>]，隔离 DSH_HOME 起实例，不进本地门禁
-git tag v<version> && git push origin v<version>   # 正式发布只有这条路：push v* tag 触发 .github/workflows/publish.yml（npm 可信发布 / OIDC，无长期 token；prepublishOnly 自带 check+test+check-version，CI 里别重复跑）；本地 `npm publish` 降为应急且不受支持（仍需一次性 bypass token：2FA 绑通行密钥、CLI 的 --otp 只吃 TOTP，token 不进仓库、不进对话）；抬宿主代际的那次发版，同轮人工跑一次 npm deprecate 旧代际版本（模板与理由见 docs/contracts/decisions.md Z-14）
+git tag v<version> && git push origin v<version>   # 正式发布只有这条路：push v* tag 触发 .github/workflows/publish.yml（npm 可信发布 / OIDC，无长期 token；prepublishOnly 自带 check+test+check-version，CI 里别重复跑；末尾一步顺带用 `scripts/release-body.mjs` 从 `docs/releases/` 下与 tag 同名的正文生成建 GitHub Release——漏了就用同一条命令手工补 `gh release create`）；本地 `npm publish` 降为应急且不受支持（仍需一次性 bypass token：2FA 绑通行密钥、CLI 的 --otp 只吃 TOTP，token 不进仓库、不进对话）；抬宿主代际的那次发版，同轮人工跑一次 npm deprecate 旧代际版本（模板与理由见 docs/contracts/decisions.md Z-14）
 ```
 
 ## 文档地图
