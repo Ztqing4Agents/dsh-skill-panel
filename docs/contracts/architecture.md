@@ -345,6 +345,7 @@ ledger.readAll() ─────────────────┘   （R5�
 | `scripts/check-docs.mjs`、`scripts/check-board.mjs` | 文档门禁（白名单 / 头注 / 章节 / 锚点 / 引用 / 零行号 / 体积 R10–R12 / 用例落点 R14，自测在 `test/docs-gate.test.mjs`）与看板门禁（格式 + 依据锚点，无 `.agents/work/` 时跳过） |
 | `scripts/hosts.mjs`、`scripts/sync-hosts.mjs`、`scripts/semver-lite.mjs` | 宿主真源：`supportedHosts` / `peerRange` / `developmentHost` / `requiredHostPeers` 与 `assertHostPeers()`；`sync-hosts` 就是第五门 `check:hosts`——**默认只读校验**（`package.json` 与两条 README 漂移即红），**回写必须显式 `--write`**；`semver-lite` 是前两者与 `check-version` 共用的最小 semver 实现（含 `includePrerelease` 口径） |
 | `scripts/check-version.mjs`、`scripts/test-compat.mjs`、`scripts/asar-read.mjs`、`scripts/cdp.mjs` | 发布前三断言（tag 逐字等于 `v<package.json version>`、`engines` 与 peer 同串且覆盖 `supportedHosts`、预发布禁发 `latest`）与真机冒烟 H1–H7（`--host <ver>`，隔离 `DSH_HOME` 起实例；不进本地门禁）；后两只只在冒烟脚本内用——读 `app.asar` 与零依赖 CDP 驱动 |
+| `scripts/release-body.mjs` | GitHub Release 正文生成器：由 `docs/releases/` 下与 tag 同名的正文去掉标题与五行注记，收尾句文档已有则不补；工作流的建 Release 步骤与手工补建共用同一条命令（见 `docs/contracts/decisions.md` 附录 Z 的 Z-16） |
 
 ### 2.5 测试（QA 拥有）
 
@@ -383,7 +384,7 @@ react                                  ^18.2.0
 react-dom                              ^18.2.0
 ```
 
-依据：`PROF/@michengai/dsh-skills-manager/package.json` 与 `PROF/@linxin666/dsh-client-ui-skill-explorer/package.json` 的 peer 集合（我们只取真正用到的子集）。四条口径：①**区间只在一处维护**——`scripts/hosts.mjs` 的 `supportedHosts` / `peerRange` 是真源，`npm run check` 的第五门 `check:hosts`（`scripts/sync-hosts.mjs`，默认只校验、`--write` 才回写）守 `package.json` 与两条 README 的声明与它一致，改别处即红；②**`-0` 不许省**——写成 `>=0.2.3` 会把 `0.2.3-alpha.*` 全部挡在门外（预发布只有其 `major.minor.patch` 出现在比较子里才可比较，`-0` 就是把它显式放进来的写法）；③**宿主与 npm 是两套比较器**——宿主 `satisfies(..., { includePrerelease: true })`、npm / pnpm 走默认模式，同一条区间两侧可以给出不同结论，声明必须以「npm 侧装得上」为准（两侧语义与逐条实测见 `docs/contracts/decisions.md` 附录 Z 的 Z-8）；④换代际的触发与代价见同附录 Z-9–Z-15；当前支持面是 `0.2.3` 代际，`supportedHosts` 里只列真机验过的版本（清单见 `scripts/hosts.mjs`）。
+依据：`PROF/@michengai/dsh-skills-manager/package.json` 与 `PROF/@linxin666/dsh-client-ui-skill-explorer/package.json` 的 peer 集合（我们只取真正用到的子集）。四条口径：①**区间只在一处维护**——`scripts/hosts.mjs` 的 `supportedHosts` / `peerRange` 是真源，`npm run check` 的第五门 `check:hosts`（`scripts/sync-hosts.mjs`，默认只校验、`--write` 才回写）守 `package.json` 与两条 README 的声明与它一致，改别处即红；②**`-0` 不许省**——写成 `>=0.2.3` 会把 `0.2.3-alpha.*` 全部挡在门外（预发布只有其 `major.minor.patch` 出现在比较子里才可比较，`-0` 就是把它显式放进来的写法）；③**宿主与 npm 是两套比较器**——宿主 `satisfies(..., { includePrerelease: true })`、npm / pnpm 走默认模式，同一条区间两侧可以给出不同结论，声明必须以「npm 侧装得上」为准（两侧语义与逐条实测见 `docs/contracts/decisions.md` 附录 Z 的 Z-8）；④换代际的触发与代价见同附录 Z-9–Z-16；当前支持面是 `0.2.3` 代际，`supportedHosts` 里只列真机验过的版本（清单见 `scripts/hosts.mjs`）。
 
 市场面同样**不新增任何 dependency / devDependency**：`node:https`、`node:crypto`、`node:fs/promises` 都是 node 内置；没有 zip 读取器（`package:'zip'` 那条路已不存在）。
 
