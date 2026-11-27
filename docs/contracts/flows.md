@@ -8,8 +8,6 @@
 
 编号 §4 / §5 保持原值（原件见 `git show a8141eb:docs/system_design.md`）。
 
----
-
 ## 4 调用流程
 
 ### 4.1 打开/刷新（list）
@@ -61,7 +59,7 @@ sequenceDiagram
     end
 ```
 
-### 4.2 开关（本地/已安装真目录 + 软链拒绝分支）
+### 4.2 开关（本地 / 已安装真目录 / 内置 provider / 软链拒绝）
 
 ```mermaid
 sequenceDiagram
@@ -119,9 +117,7 @@ sequenceDiagram
     end
 ```
 
-### 4.3 内置技能（provider 开关）与软链行的差异
-
-- **内置行**：`POST provider-toggle` → 归一化 `(provider,name)` → 重新 `mergeCatalog` 断言该身份仍是 `partition:'builtin'` 且 `readonlyReason:'provider-store'` → 写自有存储 → 返回 `{disabled}`。**没有路径可校验，也没有文件被碰**。
+- **内置行（provider 开关）**：`POST provider-toggle` → 归一化 `(provider,name)` → 重新 `mergeCatalog` 断言该身份仍是 `partition:'builtin'` 且 `readonlyReason:'provider-store'` → 写自有存储 → 返回 `{disabled}`。**没有路径可校验，也没有文件被碰**。
 - **软链行**：客户端**根本不发请求**（`row.writable === false` ⇒ 不渲染 `EnableSwitch`，渲染 `ReadonlyTag`）；服务端仍保留拒绝（双保险），错误码 `E_SYMLINK_READONLY`，前端文案 `error.E_SYMLINK_READONLY`。
 
 ### 4.4 初始化（Host 半部）
@@ -266,8 +262,6 @@ sequenceDiagram
 
 唯一的例外窗口：台账写失败时目录保留（否则用户装好的技能凭空消失），返回 `500 E_INSTALL_IO` 并在 `message` 里说明「技能已落位、台账未写」——后果只是卡片显示未安装，下次安装会被同名检查拦下，不产生坏数据。分阶段失败码全表见 `docs/contracts/market-routes.md` §3.7.4。
 
----
-
 ### 4.7 更新检测与覆盖安装
 
 ```mermaid
@@ -386,8 +380,6 @@ sequenceDiagram
 | D1 | `SkillSummary` 不暴露 `rank` | 用 `source`/`provider` 反推（1.4.3），第三方 provider 一律按 600 | 只有当某个 provider 自报 rank ≠ 600 时，同名裁决可能与模型实际拿到的不一致；验证方法见文末 A1/A2 |
 | D2 | PRD 两句「rank 小者胜」与「内置永远胜出」在 bundled(600) vs user(400) 时互斥 | 取 **rank 小者胜**，理由见 `docs/contracts/decisions.md` Q-B | 若用户坚持「内置永远显示为内置」，需要在 `mergeCatalog` 里加一条覆盖规则，改动 1 个函数 |
 | D3 | 页头停靠用「克隆量测 + 插值」在真机上是否稳定 | 照 port 宿主实现 | 若抖动，降级阶梯：① 去掉逐部件插值，只保留 sticky + `data-compact` 的 padding/分隔线切换；② 再不行退回纯 `position:sticky` + 静态 28px。每一级都要在真机对着宿主插件页比对后再决定 |
-
----
 
 ## 验收
 

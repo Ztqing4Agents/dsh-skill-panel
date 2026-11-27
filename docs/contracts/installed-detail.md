@@ -8,8 +8,6 @@
 
 `docs/contracts/client.md` §3.9.2 只留指针。点击边界见 `AGENTS.md` 硬约束 9，刻度见 `docs/contracts/visual.md` A.5。
 
----
-
 ## 定位：与市场详情不是同一个东西
 
 | 项 | 已安装详情（本页） | 市场详情 |
@@ -95,6 +93,7 @@ store.checkRun = {id: number, status: 'idle'|'running'|'done'}   // 一轮自动
 | `closeDetail()` | `detail = null`（滚动位置由页面的 paint effect 写回） |
 
 **打开详情先取正文、最多等 150 ms**：点行（或插件页里的行）后页面先发 `skillDetail`，用 `Promise.race` 与 150 ms 计时器比速度——数据先到就 `openDetail(row, data)`，详情**首帧就是终态**；超时才 `openDetail(row)` 走上面那条 `loading` 路径，并把同一笔在飞的请求交给 `loadDetail(row, inFlight)` 复用（不发第二遍）。取数失败同样立刻带着 `error` 进详情，不让用户白等。理由是去抖：`loading` 占位（一行 `detail.loading`）与实体正文高度不同，先画占位再换正文会把正文盒下面的**包含的技能 / 版本 / 来源信息**整体下推（QA 实测 50px、`LayoutShift` 0.0074–0.0122）。**不给行加 `onPointerDown` 之类的旁路**：每行仍只有一个 `onClick`（硬约束 9）。
+
 | `rememberDetailScroll(top)` | 只记 `detailScrollTop`（打开前调一次，此时行还在屏幕上） |
 | `checkStart(identities)` | 每个 identity 的条目置 `busy: true`（缺条目则建 `phase:'running'`），`checkRun = {id: ++n, status:'running'}` |
 | `checkLanded(entries)` | 按 identity 合并 `{phase, candidate, latest, versions, total, at, reason}` 并置 `busy:false`；**不校验当前详情是谁**——晚到的答案属于它的 identity |
@@ -211,8 +210,6 @@ store.checkRun = {id: number, status: 'idle'|'running'|'done'}   // 一轮自动
 ## 不做
 
 版本回退仍是看板 M6 的活口：卸载可用，回退没有入口。覆盖安装走后端的更新链路（本页只给「更新」按钮），所以「重装」不是这里的事；`查看仓库 ↗`（`_meta.json` 里没有仓库地址）、收藏入口（按 L-5 不做，后端保留）、编辑正文 / 重命名 / 移动（写侧只改一行 frontmatter，见 `docs/contracts/routes.md` §3.4）都没有入口。版本列表只给候选行按钮，历史行纯文本——**不做回退**。
-
----
 
 ## 验收
 

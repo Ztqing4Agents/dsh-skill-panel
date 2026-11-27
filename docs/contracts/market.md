@@ -10,8 +10,6 @@
 
 市场面**只连一个 origin**：`https://api.skillhub.cn`（ClawHub 的目录、详情与安装包都由它的镜像接口 `source=clawhub` 提供）。浏览器不直连上游（SkillHub 的列表响应没有 `access-control-allow-origin`），一切网络都在 Host 侧的 `lib/market/upstream.js`。
 
----
-
 ## 7 源适配器与市场数据流
 
 ### 7.1 `MarketSource` 契约与四条铁律
@@ -146,8 +144,6 @@ sort 映射（`sort` 四个值，路由层已白名单化；**默认仍是 `reco
 3. `overview` 不含 frontmatter 分隔行（`---`）与 `name:` 之类的头字段。
 4. `files` 里 `path` 一律通过 `isSafeRelativePath`；`path` 与 `size` 是详情页唯一需要的两项。
 5. `updatedAt` 只影响排序：卡片、详情、事实表**都不显示任何时间**。
-
----
 
 ### 7.5 图标管道（两段式，列表永不等补齐）
 
@@ -328,8 +324,6 @@ R2 与 R3 的分界就是「有没有动过磁盘」：动手之前失败一律 
 
 **头像位的两种内容**：`iconUrl !== null` 时头像盒里渲染 `<img src={iconUrl}>`——占满盒子（`width:100%; height:100%`）、`object-fit:contain`（图标常带透明边或非正方形，`cover` 会裁掉形状）、圆角 `calc(var(--dsw-radius-lg) - .5px)` 即落在 0.5px 描边**内侧**（与既有 `background-clip:padding-box` 是同一套几何，改错会在描边处露出 1px 白边）；`iconUrl === null` 与**图片加载失败**（`onError`，按 URL 记录、不重试）都回落 `avatar.js` 的首字母头像。两种内容共用同一个 48×48 盒子，切换**不改变**行高、节距与网格列宽——「有图标」只是换盒内内容，不新增容器。两个源的 `iconUrl` 都是上游的绝对 `https` 图片，走同一个 `<img>`；`lucide:` 与 `/skill-icons/…` 两种旧形态不存在（随 `clawhub.ai` 与两条代理路由一起退场），图标不再需要本机转发或额外着色逻辑。
 
----
-
 ## 附录 G 市场半部文件清单
 
 Host 半部（`lib/market/`，纯 node ESM，无构建）：
@@ -366,8 +360,6 @@ Client 半部（`src/client/`，纯逻辑模块 node 可直接 import）：
 1. **不新增依赖**：`node:https` / `node:zlib` / `node:crypto` / `node:fs/promises` 全是内置；`dependencies` 恒空。
 2. **客户端不新增 require**：仍只用平台 seed 的 `react` / `react/jsx-runtime` / primitives，`inject` 见 `AGENTS.md` 硬约束 11。
 3. **不新增座位**：安装成功的 toast 复用既有 `shell.overlay`，市场页仍是 `main` 槽里的同一个全局页。
-
----
 
 ## 验收
 

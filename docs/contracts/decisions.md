@@ -8,8 +8,6 @@
 
 编号 附录 B 保持原值（原件见 `git show a8141eb:docs/system_design.md`）。
 
----
-
 ## 附录 B 决策登记：与 PRD 的偏离与更正
 
 > PRD 已于 2026-11-09 移出仓库（过程产物），原件见 commit `a8141eb`；下表「PRD 原文」列保留原文以便追溯，判定仍然有效。
@@ -55,8 +53,6 @@
 | AB-2 | **显示层自有**：画什么、画成什么样由产品决定，不受站点约束 | 同一句话的后半句——「与站点一致」只是数据要求 | 卡片 chip 取 `subCategories` 而非站点的 `category`、英文界面分类名取分类表的 `nameEn`（2026-11-27 用户裁决「英文界面分类名要显示英文」，见 `docs/contracts/market.md` §7.4 ⑤）、徽标（付费 / 需 API Key / 认证 / 安全）与评分呈现与否，都属显示层；**不得**以「与站点一致」为由改动显示层，也不因它与站点不同而判成缺陷 |
 | AB-3 | 判据怎么用（两条反例） | ① 署名按 uploader：`find-skills`（`indiv-guipi` 下的那条）`ownerName` 是 `root`，卡片就显示 `root`——不好看，但它是数据层 ⇒ 保留，**不换成** `upstream_owner_login`；② 卡片 chip 与站点不同 ⇒ 属显示层，不改 | 判断落在哪一层只问一句「这个值是读上来的，还是画上去的」：读上来的服从站点，画上去的服从产品 |
 
----
-
 ## 附录 E 市场轮决策登记
 
 > 2026-11-09 技能市场轮。每条都带来源（PRD 原文 / 宿主读数 / 队长裁决 / 设计结论），没有一条是「我觉得」。市场面的完整契约在 `docs/contracts/market.md`，路由与安装链路在 `docs/contracts/market-routes.md` §3.7。
@@ -68,8 +64,6 @@
 | E-3 | PRD §9.1「`<name>` = 包内 `SKILL.md` 的 `name`，必须符合 kebab-case」＋ 待拍板项「不合规时是否用 slug 顶替」 | 真实包确实会声明不合规的名字：`ivangdavila/design` 声明 `Design`（大写），SkillHub 的展示名是 `编程大神.Skill` | **硬失败**：`422 E_SKILL_NAME_INVALID`，`data.declaredName` 回显原文，**不改名、不用 slug 顶替**（判名文法 `^[a-z0-9]+(?:-[a-z0-9]+)*$` 就是宿主加载器的 `SKILL_NAME`，声明 `Design` 的包装进去宿主也不会加载，所以这是对齐宿主而非保守）。安装顺序改为「先取 `SKILL.md` 再取其余」，这类失败只花 1 次文件请求；详情页在装前就用 `installTo` 给出「会装到哪」，名字不合规时显示不能安装的说明 |
 | E-4 | 「市场刻度与适配器契约写进现有契约」 | `architecture.md` 已 393 行、`visual.md` 已 317 行；`类型：规范` 的 400 行上限由门禁钉死，改头注绕不过去 | **新开 `docs/contracts/market.md`**（`类型：规范`、上限 400）承载 §7 适配器与数据流 + 附录 F 视觉刻度 + 附录 G 文件清单；两份旧文件只加指针（`architecture.md` +4 行 → 397，守住 400）。`visual.md` 的 `A.10` 编号**弃用不占号**，市场刻度只在附录 F 维护，两处不重复。**2026-11-18 续**：同一手法再用一次——市场面的 9 条路由、安装链路与 §8.6 错误码从 `routes.md` 整体搬进 `docs/contracts/market-routes.md`（`类型：规范`、上限 400），编号 `§3.7` / `§8.6` 原样跟随、不重排；`routes.md` 只留本地面 7 条与一行指针，`K40` 的「`§3.7` / `§8.6` 全仓库恰好一处」因此仍成立 |
 
----
-
 ## 附录 H 首字母瓦片对齐 skillhub.cn
 
 > 2026-11-09 用户第三轮反馈：「我看了 https://www.skillhub.cn/skills?sortBy=score 其没有图标的，也是用首字母图标，我想跟他对齐」。追问「哪些对齐、哪些不对齐」的回答是**「除了圆角外，其他都对齐」**。站点数据由 CDP 读计算样式实测，不是目测。
@@ -79,8 +73,6 @@
 | F-1 | 12 组粉彩底 + 深色字，色相 30° 等分，字母对比度 4.95–6.62（`visual.md` A.5 原表） | 无图标条目只有 **6 组**：底色是该 accent 的 10%（天空那组 12%），字色是该 accent 的**实色**；滚动 25 屏没有出现第七组。天空组底色 `rgba(90,200,250,.12)` 与字色 `#32ADE6` 不是同一个值，照抄 | 色板换成这 6 组（`SKC_AVATAR_TONES` 12 → 6，形状 `{bg, ink}` 不变）。散列（FNV-1a）与首字规则本来就跟站点一致，不动 |
 | F-2 | 字母 ≥4.5:1 对比度是一条硬判据（`styles.test.mjs` 与 `visual.md` A.5 都按它写） | 这 6 组的字母对底色只有约 **2–3:1**（橙/黄系最吃紧），站点就长这样 | **主动放弃 ≥4.5:1 判据**，改由「与站点逐值一致」当判据。这是本轮唯一一处我们明知降低可读性仍照抄的地方：用户拿站点当参照，对齐的价值高于这条自定阈值。已写进 `visual.md` A.5 与 A.9，避免后人再按 4.5:1 去「修正」 |
 | F-3 | 瓦片 48×48、`radius-lg`（16px）、26px/500 首字母 | 瓦片 40×40、圆角 8px、字号 14px、字重 700、`font-family: Outfit, -apple-system, …` | 字号字重按 14/40 比例投到 48px 盒：**17px / 700**（16.8 舍入）。**圆角保持 16px、尺寸保持 48×48**——用户明确「除了圆角外，其他都对齐」，且 `.skc_cardIcon` 是「已安装」页签 11 行共用的容器，改尺寸会让行高回归。`Outfit` 字体不引入（不自造字体依赖），沿用系统字体栈 |
-
----
 
 ## 附录 I 已安装技能图标同步轮
 
@@ -92,8 +84,6 @@
 | I-2 | **已安装页签主动解析一次**（参考项目**不做**这一步） | 参考项目只对「本会话浏览过的」条目显示图标，没浏览过的一律字母；队长加严要求「有台账身份、本会话没浏览过」的技能也取一次 | 图标循环上移到 `page.jsx`（面板打开期间恒挂载），`iconBatch` 同时产出两半候选：市场缺图的条目 + 已安装行里有身份却没问过的行。失败静默、每源 ≤12、总 ≤24，与路由限制同源 |
 | I-4 | **已安装行的标题用上游标题**（`names[key]` → 本地 `metadata.displayName` → `row.name`），**kebab 名退到 tooltip** | 用户报告「已安装的技能，技能标题并不是 skillhub 的标题」：列表显示 `dev-expert-pro`，SkillHub 上叫「编程专家Pro.Skill」。用户认的是市场里的那个名字 | 标题走与图标同一条缓存链（`market/list` 的 `displayName` 种子 + `POST market/icons` 回来的 `names`），**会话内、不落盘**；`row.name` 仍是 tooltip（它是模型调用技能用的字符串，不能从界面上消失）。容器、字号、单行省略一律不动——只换文字内容 |
 | I-3 | **手工 / 别的工具装的技能没有身份，因此没有图标** | `_meta.json` 里 `source` 是已知源 id 才认（那是本插件安装器写下的印记）。本机实测 `clawhub-wpank--ui-design` 的 `ownerId` 是 ClawHub 内部 Convex id，当 `ownerHandle` 查详情 **404**；目录名里的 `clawhub-wpank--` 前缀又把工具名一起吞了，切出来的 handle 是垃圾 | `upstream === null` ⇒ 字母瓦片。**不从目录名反推**、不按名字 join 台账、不用 slug 猜 owner。README「已知限制」写明，用户可感知的后果是「这类技能永远显示首字母」 |
-
----
 
 ## 待明确 / 假设
 
@@ -119,8 +109,6 @@
 | A7 | P1/P2 全部不做（搜索、状态筛选、来源 tooltip、同名遮蔽提示、项目级根） | PRD §3.2 P1/P2；设计里只留不冲突的钩子（`Row.rule`/`Row.confidence` 已在 payload 里，P1 加 tooltip 不需要改 Host） |
 | A8 | 客户端不需要 `localStorage`（页签状态用模块级 store） | 满足 P0-3「离开页面再回来保持」；整页 reload 后回到「已安装」是宿主同款行为 |
 
----
-
 ## 附录 J 市场卡片重做轮（2026-11-09）
 
 > 参考项目 `montersy123/dsh-skill-market` 的卡片结构（作者行 / 等宽三段 / 收藏按钮）。每条都带来源，市场面的完整契约在 `docs/contracts/market.md` §7，路由在 `docs/contracts/market-routes.md` §3.7。
@@ -134,8 +122,6 @@
 | J-5 | 缺段的格子：占位还是不占位 | 若缺段就让后面的段左移，一张缺「收藏」的卡会把「评分」挪到第二格，同屏立刻错位 | **槽位占位、内容不出现**：三格轨道恒在（同列的 x 坐标在任何两张卡上相同），空格里没有图标、没有数字、没有 `0`、没有破折号，读屏也读不到（`aria-hidden`）；三格全缺时整行不渲染（否则卡片中部剩三格空白） |
 | J-6 | 作者行显示 `@owner/slug` 还是 publisher 中文名 | 用户原话的例子逐字是 `@indiv-integrator/dev-expert-pro`（= `@` + owner + `/` + slug），而这两个字段两源必填（路由白名单就要求），`author`（publisher 显示名）反而可能缺失 | **`@owner/slug`**（`authorTextOf` 三级回落：`owner/slug` → `owner` → `author`）；`market.metaAuthor` 文案 `@{author}` 一个字不改，插值换成 handle。代价：卡片不再出现 publisher 中文名，它仍在详情事实表的「作者」行 |
 
----
-
 ## 附录 K 市场工具栏间距（2026-11-09）
 
 > 用户指着「技能市场」工具栏右侧那一组（搜索框右端 + `SkillHub ⌄` + `推荐 ⌄`）说「间距有些问题」。实测在隔离实例里做完再定，逐条结论见下表；刻度表在 `docs/contracts/market.md` 附录 F，`test/market-gates.test.mjs` 逐条守着这几个值。
@@ -146,7 +132,6 @@
 | K-2 | 两个同级菜单要不要同字重 | 只有来源菜单带了 `skc_marketSelect`，排序菜单没带：实测 `SkillHub` 是 500、`推荐` 是 400（同为 12px），同排两个同级控件看着不是一套。这是「只抄了半套」的实现漏，不是设计选择 | **两个菜单同带 `skc_marketSelect`**：字重统一 500、`max-width:240px` 统一生效；`text-overflow:ellipsis` 的标签类本来就两边都有 |
 | K-3 | 搜索框有词时的清空按钮 | `Input` 的 `type="search"` 没被 `appearance` 收口，Blink 会在输入框内自己画一枚取消按钮，与面板自绘的清空按钮并排出现（实测：框内一枚原生 ×、框外 8px 又一枚自绘 ×） | **只留自绘那个**（它带 `aria-label` / `title`，可本地化、可被读屏念到）：`.skc_marketSearch input::-webkit-search-cancel-button` 关掉原生按钮。宿主市场页没有对应规则，这条算本面板自己的收口 |
 | K-4 | 两个菜单之间的空隙要不要也等于搜索框那一段 | 用户 2026-11-10 复评：两个菜单中间看着是「所有来源」与搜索框之间那段的 **2 倍**。实测（1320×940、内容宽 944）：搜索框边框→来源菜单左沿 **8**、来源菜单左沿→「所有来源」**10**；来源菜单右沿→「默认排序」**18**。原因是 ghost 按钮不画盒子：第二段实际是 `gap 8 + 排序菜单自己的 10px 内边距`，而第一段贴着搜索框的边框读。盒子等距（8 / 8）不等于看着等距 | **只让排序菜单抵消一次 gap**：`.skc_marketSelectTrailing{margin-left:-8px}`，两段读成 8 / 10，盒子相邻而不重叠（接缝命中测试：右沿 −1px 命中来源菜单、+1px 命中排序菜单），搜索框那一段仍是 8px 不动。不选宿主的「两个菜单都 −8」——那会把搜索框与来源菜单也贴成 0，正是 K-1 否掉的那一版 |
----
 
 ## 附录 L 市场卡片重排（U5，2026-11-09）
 
@@ -159,8 +144,6 @@
 | L-3 | 标签从哪来、要不要转小写 | SkillHub `subCategories: [{key, name}]`（`dev-god` = 代码生成 / Bug 修复 / 后端开发，实测正好三枚）；ClawHub `topics: string[]`（`buzzmark` = social-media / content-scheduling / linkedin / instagram / mcp，混着 `Marketing`、`Email`）。**ClawHub 的 `tags` 是 `{latest: version}`，不是标签** | SkillHub 取 `.name` 且**保留大小写**；ClawHub 取前 3 并**转小写**（同源内 kebab 与 Title Case 混排，统一才像一套；不做 title-case，否则 `mcp`→`Mcp`）。≤3 条、单条 ≤24 字符、同值去重、缺 = `[]` |
 | L-4 | 空标签行的卡片高度 | 同屏不混源；SkillHub 少数条目 `subCategories` 为空 | **空数组整行不渲染**：占位会让「有标签」与「没标签」无法区分，且是谎报；差的一行由 grid 的 `stretch` 补成底部空白，验收① 管的是 x 不是 y |
 | L-5 | 卡片上的收藏开关 | 用户决定：「本版不要收藏开关，只显示上游收藏数」 | 拆**客户端写侧**（卡片按钮 / `marketFavoriteToggle·Ok·Fail` / `api.marketFavorite` / toast 的 `favorite-failed` / 4 个 `market.favorite*` 键 / `BookmarkMark`）；**后端一条不删**（store / 路由 / `bootstrap` 两键 / 两个 `error.E_FAVORITE_*` 文案），**读侧 `favorites` + `marketFavoritesLoaded` 也留**（将来要接回 UI 时零 Host 改动）。K80 退役、号不复用 |
-
----
 
 ## 附录 N ClawHub 数据源改走 SkillHub 镜像（2026-11-09）
 
@@ -180,8 +163,6 @@
 | **N-10** | 版本口径 | 卡片 / 详情 / 安装三处**都取镜像版本**。镜像可能滞后上游真最新（实测 `self-improving-agent` 镜像 3.0.24 / 上游 4.0.5） | 取舍：**一致性优先于新鲜度**——用户要「全部交由镜像」，三处同数比「卡片旧、包装新」可解释。要装官方最新版只能去 ClawHub 官网（`CHANGELOG` 已写明） |
 | **N-11** | 两条图片代理为什么删 | 它们的唯一上游是 `clawhub.ai`（`lucide:<Name>` 与 `/api/v1/skill-icons/<hash>` 两种形态）。镜像给的是 cloudcache 的绝对 `https`，`<img>` 直连可画（U6 真机 24/24 有图已证），不需要本机转发；`_meta.json` 也不存图标地址，**没有旧缓存要照顾** | 删两条路由（13 → 11）与 `upstream.js` 的 8 个常量、2 个工厂、`normalize.js` 的 3 个 URL 函数；`icons()` 与 `market/icons` 留下服务已安装行 |
 
----
-
 ## 附录 O 筛选向 skillhub.cn 靠拢（2026-11-10）
 
 > 用户原话：「ClawHub 顶部的类别是不是应该有，另外，你看下镜像站的 skillhub 和 clawhub 及其所有来源，是怎么排的（比如所有来源），我想完全向它靠拢」。逐值对照见下表；用例见 `docs/contracts/acceptance.md` 的 K98 与 `docs/contracts/market.md` §7。
@@ -195,8 +176,6 @@
 | O-5 | 旧游标怎么办 | 站点每次改筛选都重新拉第一页 | 契约写死「任何筛选变化必清 `cursor`」；**游标形状仍是 `{page}`**，不加筛选签名（客户端已经清，加签名只盖 bug 不修 bug）。~~「必清 `items`」~~ **（2026-11-10 由 M10 改写：筛选变更保留 `items` 直出，见附录 P）** |
 | O-6 | 「不限 API Key」过滤 | 站点有 | **本轮不做**（用户明确排除），也不预留占位 UI |
 
----
-
 ## 附录 P 重取期间旧列表直出（U13 / M10，2026-11-10）
 
 > 用户原话：「只要是刷新都会，右上角刷新，切换页签，搜索都会」（U13）；「可以落实，我发现确实还有这个问题」（M10，指切来源/排序）。判据与用例见 `docs/contracts/acceptance.md` 的 K101–K108（U13 四条 / M10 四条）与 `test/market-view.test.mjs`、`test/state.test.mjs` 的对应用例；表里每组数字都是隔离实例上逐帧（页内 `requestAnimationFrame`）实测的。
@@ -209,8 +188,6 @@
 | P-4 | 为什么不再「收窄骨架高度」 | 骨架 6 张（2 行）、真实列表 12/24 张（4/8 行），高度随内容变；要「高度不变」得在骨架期量旧高度再撑住，多一份状态与一套失效点 | 不选。保留旧列表的收益相同、代价更小；「陈旧但稳定」的窗口就是一次请求 |
 | P-5 | 筛选后落在什么位置 | 改前靠「列表消失 → 骨架变矮 → 浏览器夹取」，落点由内容长度决定：实测切分类/排序落在 **0**、换来源那次落在 **228**（短页预取补页），同一条交互两种落点 | **自己决定落点：paint 之前瞬时写 0。** 面板用 `useLayoutEffect`，依赖只有四个查询输入 `source`/`category`/`sort`/`keyword` 拼成的键，键变了就把 `.skc_pageBody` 的 `scrollTop` 写 0（不做平滑、不 `scrollTo`、不等夹取）：跳变是那一帧的初始状态，不是动画。键没变（翻页、加载态、详情往返、刷新）一律不碰 —— 刷新的「保住你原来的位置」是 U13 的既定语义，与这条不冲突。参考实现 [dsh-market](https://github.com/dsh-market/dsh-market) 的市场页组件 `MarketSection.tsx` 正是这么做的（筛选键驱动的 `useLayoutEffect` 里 `el.scrollTop = 0`，注释写明 instant 不用 pagination 的 smooth，让跳变发生在 paint 之前），我们的容器没有宿主那种 sticky floor，所以目标就是 0 而不是「记住的 floor」 |
 
----
-
 ## 附录 Q 已安装详情页的设计参照（U1，2026-11-10；同日二核改写）
 
 > 结论先行：宿主**确有**「插件详情页」，本轮已按它的**结构与顺序**重排已安装详情的头部。先前那条「本机宿主没有这一页」是**错的**，错因是采集方法而不是宿主：`grep` 对 asar 里的中文静默漏检。该结论作废，采集口径同步改成「只用 node 读 asar」。
@@ -222,8 +199,6 @@
 | Q-3 | 本轮按宿主重排头部 | 面包屑「技能」（对 `crumbRoot`，不是 `backToList`）→ 图标行右侧「卸载（`disabled` 占位，无 onClick）+ 开关」→ 名称 + 版本（`v{version}`）+ 作者（`@owner/slug`，仅 `upstream` 非空）+ 描述；来源信息移到页尾。真实卸载仍是看板 M6（C-3「可见的不可点」先例） |
 | Q-4 | 余项：**px 未逐值采集** | 宿主详情页的类名是构建哈希、样式在另一份产物里，本轮只对齐结构与顺序（用户也只要「先这样」）；详情页的确切 px/色值与 `.cardLink:hover` 一样标「待真机取色」（`docs/contracts/visual.md` A.5）；**其中 hover 的色值已由 Q-5 收口，现在只剩 px**。下次若采到样式，按 `docs/reference/host-plugin-page.md` 头注「整份重采」，不在旧的 §7 上补值 |
 | Q-5 | Q-4 的两项余项于 2026-11-15 **落实**（宿主 `0.2.2-rc.3`），按 Q-4 说的整份重采而非补值 | ①rc.3 的 asar 带 CSS 模块源码，详情页刻度不再只能靠真机：声明值与二次采集的真机值并列在 `docs/reference/host-plugin-page.md` §7；②行底色是**令牌**不是字面量——hover = `--dsw-alias-interactive-bg-hover`（亮 `rgba(38, 49, 72, .06)` = `#2631480f`、暗 `rgba(255, 255, 255, .08)` = `#ffffff14`），active = `--dsw-alias-interactive-bg-active`（亮 `.1` = `#2631481a`、暗 `.14` = `#ffffff24`），**两者是不同令牌**。结论：hover 我们一直绑的就是宿主那个令牌（`docs/contracts/visual.md` A.5）；`:active` 改前绑 hover 令牌是**已知偏离**——按下比宿主浅一档，改法只是在 A.5 把那一行的令牌名换掉——**用户 2026-11-15 裁决跟改，已执行**：`src/client/styles.js` 的 `.skc_card:active` 改成 `--dsw-alias-interactive-bg-active`，产物随之 177491 → 177492 B，`docs/contracts/visual.md` A.5 的注与 CSS 块同轮同步。令牌可用性实测（2026-11-15）：该令牌自 `0.1.5-rc.3` 起就有、`0.2.0-rc.2` / `0.2.1-rc.1` / `0.2.2-rc.1` 与 rc.3 四版值一致，且宿主与 client-ui 包版本锁步，故 `engines.dsh: ">=0.2.1"` 已覆盖，不抬下限、不加 `var()` fallback |
-
----
 
 ## 附录 R 更新检测对齐宿主（U19，2026-11-12）
 
@@ -258,6 +233,7 @@
 | S-14 | **用户可见词汇从「删除」改回「卸载」**（推翻本附录 S-2） | 用户看了宿主「插件」详情页的真机截图后要求同词：宿主详情头那枚按钮就是 `uninstall`（zh「卸载」），我们上一轮为了「技能是磁盘上的目录」这个语义自己另起了「删除」，在同一个动作上出现了两套词。裁决：**宿主同词优先**——按钮、确认弹窗标题 / 正文 / 确认键、失败文案统一「卸载」。**键名一律不改**（`detail.uninstall`、`delete.{title,body,confirm,factDir}`、`error.E_DELETE_IO` 都只改**值**），所以字典仍是 **182** 键（U21 再加 11 个 git 形态的键 ⇒ **193**，见附录 T-10）、`check:i18n` 的键集一行不动；路由名 `remove` 与错误码 `E_DELETE_IO` 是内部标识、不面向用户，同样不改（改它们要动 `ROUTES`、两张码表与三条 K 用例，收益为零）。描述**行为**的词保留「删除」——「删除目录」「把目录删掉」说的是磁盘动作，不是界面上的那颗按钮 |
 | S-15 | **「技能市场」页签不再渲染页头工具条**（状态位 + 刷新 + 添加组整行都不在） | 宿主那条工具条是**整行** `hidden={!onInstalled}`；我们上一轮只在**按钮级**做条件（状态位与添加组按页签隐藏，刷新按钮仍单独留在市场页签），结果市场页签多出一枚没有任何对象可刷新的按钮。用户要求靠齐整行口径。后果如实登记：`marketReload()` 因此**失去了页头入口**（市场侧的重取只剩面板自己的 effect：切回页签 / 搜索 / 筛选变化，以及整页错误态的「重试」），它的「保留 `items` 与图标、只清分页与详情」语义仍然有效（那几行口径没变）。~~「`marketReload()` 这个 action 保留、只失去入口」的说法作废~~——用户随后裁决**直接删除**，见 S-16。契约落点见 `docs/contracts/client.md` §3.5 的组件树、§3.9.1 的「已删除」行与 §3.9.8，用例扩在 K137 |
 | S-16 | **`marketReload()` 删除，不留「预留」** | 市场页签撤掉页头工具条（S-15）之后这个 action 已经**零调用方**。用户裁决删掉而不是留着：市场重取本来就有两条真实 driver（面板自身的 effect：切回页签 / 搜索 / 筛选变化；整页错误态的「重试」），再留一个没人调、语义又与它们重叠的 action，就是第二个真相源——下一轮一定有人照它写代码，然后发现它不在任何调用链上。同轮连带：`state.js` 删 action（实现侧）、`docs/contracts/client.md` §3.9.3 动作表删行且 §3.9.1 那行改「已删除」、`acceptance.md` 的 **K49** 改成「市场页签没有页头刷新且 `marketReload` 已退役」、**K101** 的 driver 换成面板重取（断言值等价：`items` 留 1 条、`pages=0`、`listStatus='loading'`）。`clearedPaging` / `pages=0` 的口径不随之消失，只是现在挂在那两条 driver 上。K 号保留、不退役、不复用 |
+
 ## 附录 T GitHub 添加形态（U21，2026-11-12）
 
 > 上游 PRD 用**宿主自己的** `parseInstallSpec` 跑了 30 个样例（我另跑一遍复核，见 T-3 的更正）。用户原话：「完善添加技能的功能，对齐宿主，也就是补充 github 链接添加」。三条口径用户已拍板：只接 GitHub 链接 + `github:o/r` 简写、根 → 自动探测唯一 `SKILL.md`、本机 git 浅克隆后复用 U20 的拷贝管线。

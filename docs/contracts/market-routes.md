@@ -8,8 +8,6 @@
 
 本文件是市场面的路由契约：9 条 `/api/dsh-skill-panel/market/*` 路由（§3.7.1 的表 + §3.7.2–§3.7.7 的细则，含安装链路十四阶段）与它们的错误码全集（§8.6）。本地面 7 条路由、写盘实现与 §8.1 的统一信封见 `docs/contracts/routes.md` §3.3 / §3.4；两处编号在全仓库唯一，拆分前后未重排。
 
----
-
 ## 3.7 市场路由清单
 
 市场面 9 条 **exact** 路由，前缀 `/api/dsh-skill-panel/market/*`。它们与 #1–#4、#14 **共用同一个 `guard()`**（loopback 围栏 → 方法），共用 `writeJson` 的 `{code,data,message}` 信封与 `no-store`，但**不共用 `collect()`**：本地扫描是磁盘面，市场是网络面，混在一起会让「市场超时」连累「已安装」页签。访问策略也不在此处另立：九条与其余七条一起逐条声明 `auth`，取值、理由与两道闸只有一处真源——`docs/contracts/routes.md` §3.3.5。
@@ -125,8 +123,6 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 
 自有台账 `$DSH_HOME/dsh-skill-panel/installed.json` 的形状是 `{version:1, installs:[{source,owner,slug,name,version,installedAt,files,bytes}]}`：`installs[].name` 正是 `lib/ledger.js` 的 `own-record` 读取器要找的字段（`installs[].files` / `bytes` 与 install 出参同口径）。因此装完的技能必然命中 R5，`lib/classify.js` 一行不改。 包内容的安全边界（逐条，`files` 形态下没有压缩包要解）：清单非空且含 `SKILL.md`；路径过 `isSafeRelativePath` 且落在临时目录内（`isWithin`）；同一路径两次 ⇒ 拒绝整包；逐文件比 `size`（清单给了 `sha256` 再比摘要）；**永不执行**包内任何文件；只写清单里列出的 `path`；落位前磁盘上唯一的痕迹是点开头的临时目录（目录 0755、文件 0644）。
 
----
-
 #### 3.7.5 `market/icons` 的双源分发
 
 一条端点覆盖两个源：已安装行只有身份、没有市场列表载荷，而两源查图标的方式差一次请求（SkillHub 的 owner 就是 namespace，一次 detail；ClawHub 先按 `keyword=<slug>` 找那一行，见 `docs/contracts/market.md` §7.8 第 2 条）。`MarketSource.icons?(refs, io, {now})` 是**可选能力**（今天两源都有）：有它的源按自己的并发/预算/缓存实现，没有它的源整批条目 `null`（不进错误分支）。
@@ -144,8 +140,6 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 - **前置校验（路由层，顺序不许换）**：P0 `parseUpdateBody` 白名单 → P1 按 `name` **重新扫描**定位行（`404 E_NOT_FOUND`）→ P2 软链 `409 E_SYMLINK_READONLY` → P3 `row.path !== path` `409 E_STALE_PATH` → P4 越界 `409 E_NOT_WRITABLE` → P5 `_meta.json` 的 `source`/`ownerId`/`slug` 与请求**逐字相等**，否则 `409 E_NOT_MARKET_INSTALLED` → P6 `row.version === version` `409 E_ALREADY_UP_TO_DATE`（只比相等，不排序）→ P7 与 `install` **共用同一张锁表**与 `MAX_CONCURRENT_INSTALLS`（`429 E_INSTALL_BUSY`）。
 - **落盘十个阶段（U1–U10）、四条回滚路径与三条不变式见 `docs/contracts/market.md` §7.11**：实现在 `lib/market/install.js` 的 `update(ref, target)`，复用安装的暂存/元数据/回读/台账内部件。
 - **三个新码只描述「动过磁盘之后」的结局**：`E_UPDATE_RESTORED`（回滚成功，旧版本逐字节完整）/ `E_UPDATE_LOST`（目录已不在，旧版本留在 `.skc-backup-*`）/ `E_UPDATE_UNCONFIRMED`（新版本已落位回读通过，台账未写）。动手之前失败一律走 `E_INSTALL_IO` 与上游码——不许拿 `E_INSTALL_IO` 糊「已回滚」这种结论。
-
----
 
 ## 8.6 市场错误码
 
@@ -175,8 +169,6 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 | `E_INTERNAL` | 500 | 未预期异常（已 `logger.warn`） | 整页错误态 + 重试 |
 
 **唯一的信封例外**：市场路由失败时 `data` 可以携带一个小对象（`{path?, existing?, declaredName?, name?, source?, owner?, slug?}`），因为界面要显示「已装在哪」「包声明的是什么名字」。**#13 的失败不带 `data`**：它的界面只有一句 toast，不需要回传任何东西。其余路由的失败信封 `data` 恒 `null`（§8.1）。客户端可以忽略 `data`，只按 `code` 分支也不会错。
-
----
 
 ## 验收
 

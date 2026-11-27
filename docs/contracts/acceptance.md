@@ -8,8 +8,6 @@
 
 编号 附录 D.1–D.4 保持原值（原件见 `git show a8141eb:docs/system_design.md`）；D.5 为技能市场轮新增，编号接着 K27 往后。
 
----
-
 ## 附录 D 验收：分层、夹具与用例骨架
 
 ### D.1 三层分类：什么能被自动断言
@@ -102,7 +100,7 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | **K37** | 市场纯函数 | 手造 `MarketItem` 与 market 子状态 | `mergeBatches` **按来源顺序分块拼接**（第 1 轮 `[a1 a2 a3｜b1 b2 b3]`、第 2 轮尾部接 `[a4 a5｜b4]`），`existing` 恒在前、按 id 去重保留首次出现、**客户端不跨源重排**（传不传 `sort` 输出逐字相同）、短页照收；**短页 + `next !== null` 不算耗尽**；`installViewOf` 四态且运行时优先于台账；`emptyKindOf` 三分类；`metaSegments` 缺项少段；`visibleCategories` 选 ClawHub 整行隐藏；`chipList` / `detailFacts` | L1 · `test/market-model.test.mjs` |
 | **K38** | 市场首屏与卡片 | 页面 + 播种 store（骨架 / 卡片 / 三类失败 / 三种空态 / 工具栏） | 骨架 6 卡 6 chip + `role=status`；卡片头像 / 标题锚点 / 来源 Tag / 描述 / 元信息 / 安装按钮；安装四态文案；整页失败 / 追加失败 / 空态各就各位；工具栏来源锚点显示当前**范围**（默认「所有来源」，「所有来源」就是菜单第一项，范围共三项）；chips 数字位随 `total`/`count` 出现；到底与追加互斥 | L3 · `test/market-view.test.mjs` |
 | **K39** | 内嵌详情与确认弹窗 | 同上 + `marketDetailReady` / `marketInstallConfirm` | 返回面包屑、标题与版本 Tag、事实表六行（未知写「未知」、`installTo` 用 `code`）、概览交给宿主 `MarkdownText`、文件清单配 `fileSizeText`；详情加载 / 失败 / 空概览 / 空文件 / 坏声明名五种；确认弹窗 `role=dialog` + `aria-modal` + 三项事实 + 第三方提示 + 两按钮 | L3 · `test/market-view.test.mjs` |
-| **K40** | 三道门禁与市场刻度 | 仓库本身 | `check:i18n` / `check:client` / `check:docs` 全 exit 0（16 份 0 warn，份数由 `check:docs` 自报、K40 的测试逐字核这个数）、`§3.7` `§3.8` `§3.9` `§7` `§8.6` `附录 E` `附录 F` `附录 G` 各恰好一处、`styles.js` 无 `xxxxxx_` 形式的宿主哈希类名、附录 F 的十条新刻度逐条落在 `skc_market*` 上 | 门禁 · `test/market-gates.test.mjs` |
+| **K40** | 三道门禁与市场刻度 | 仓库本身 | `check:i18n` / `check:client` / `check:docs` 全 exit 0（0 warn；份数以 `check:docs` 自报为准，K40 只断言份数**只增不减**、不写死具体份数）、`§3.7` `§3.8` `§3.9` `§7` `§8.6` `附录 E` `附录 F` `附录 G` 各恰好一处、`styles.js` 无 `xxxxxx_` 形式的宿主哈希类名、附录 F 的十条新刻度逐条落在 `skc_market*` 上 | 门禁 · `test/market-gates.test.mjs` |
 | **K41** | 三条「不许再犯」+ 上游 origin 的边界 | 源码与产物 | 市场块无颜色字面量、`dependencies` 为空、点击边界按页签划（市场用 `cardOpen`，已安装行仍不是按钮）；**`src/client/**` 代码里一个 URL 都没有**（浏览器半部零直连，注释里提站点名不算）；**`lib/market/**` 里认上游主机的文件恰好两个、常量恰好两条**：`sources/mirror.js` 的 `ORIGIN = api.skillhub.cn`（市场面唯一 origin）与 `upstream.js` 的 COS 重定向白名单；`clawhub.ai` / `cdn.jsdelivr.net` 在 `lib/**` 与 `src/client/**` 里**零出现**；两个适配器只 import 那份 `ORIGIN`、不各写一份；`normalize.js` 零 origin | 门禁 · `test/market-gates.test.mjs` |
 | **K42** | 源注册表与装配 | 注册表本身 + 注入的假 io | 注册顺序 `skillhub → clawhub`、六个函数与 caps 齐备、描述符形状与 §7.2 一致、`makeMarketDeps` 注入 io 时不自建客户端；**两源 `packageKind` 都是 `files`**、**三个 scope 都是 `hasCategories: true`**，两个适配器都有 `categories`/`counts`（ClawHub 也有分类与计数） | L1 · `test/market-sources.test.mjs` |
 | **K43** | 上游出口与 302 白名单 | 常量 + 手工构造的 `location` | 四个超时与两个字节上限逐条对齐、只跟一跳、只跟 `*.cos.accelerate.myqcloud.com` 的 https、`createUpstream` 的四个键 | L1 · `test/market-upstream.test.mjs` |
@@ -183,8 +181,6 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 
 **红绿口径**：K28–K115 全部绿（**K33 / K58 / K60 / K80 已退役、号不复用**；K94–K109 的落点见上表末十六行）。编号是**增量**：新用例接在前一个之后，从不重排、不复用。**改值不改号**：既有用例只就地改写原有的那条断言，编号不动，**现行判据只以测试文件为准**（本表不复述断言细节，写在这里就会与代码打架）。**不进 `npm test` 的三条**是 K50 / K51 / K109（像素命中、真实上游、滚动容器与几何），由 agent 驱动无头浏览器在隔离 `DSH_HOME` 上验。用例总数与通过率**不写在这里**（每加一条就漂）；产物体积上限也不是 K 号，它是门禁（`test/bundle-contract.test.mjs`）。
 
----
-
 ### D.7 更新检测与覆盖安装用例编号（K116–K125）
 
 「已安装」页签的自动更新检测与详情页的「更新」动作（覆盖安装 + 失败回滚）。设计取舍见 `docs/contracts/decisions.md` 附录 R，规范见 `docs/contracts/market-routes.md` §3.7.7 §8.6、`docs/contracts/market.md` §7.10 §7.11 与 `docs/contracts/installed-detail.md`。K116 接 K115 往后排、全仓库唯一；**K33 / K58 / K60 / K80 已退役、号不复用**。
@@ -223,8 +219,6 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | **K72** | 标题优先级 `rowTitleOf` | ①`market.names[key]` 命中 ⇒ 上游标题；②无上游标题、`row.displayName` 非空 ⇒ 本地 `metadata.displayName`；③两者都无 ⇒ kebab `row.name`；④`row.upstream === null` 时**一次都不读缓存**（Proxy 记录零访问）；⑤空串/非字符串不算有值。配套 `nameFor`（只认非空字符串）、`nameSeeds`（无可播种 ⇒ `null`、幂等、不覆盖、**不写 `iconsTried`**）、`marketNamesReady`（可覆盖种子、`null` 不落键）、切来源/搜索保留 `names` 与图标（只清分页；原 `marketReload` 同口径，已按 S-16 删除） | L1 · `test/market-names.test.mjs` |
 | **K73** | 嵌套 `metadata.displayName` | 块内带引号/不带引号都读；**顶层 `display-name` 优先**（谁在前都算）；`metadata` 块里没有该键 ⇒ `undefined`；`metadata.summary: >` 块标量正文里的 `displayName:` 行**不得**被当成真键；BOM+CRLF 文件照读（读侧接字符串）；完全没有 `metadata` 块 ⇒ `undefined`；同一文件跑 `setDisableModelInvocation` 后仍只改开关那一行、行尾仍是纯 CRLF、嵌套标题与块标量原样 | L1 · `test/frontmatter.test.mjs` |
 | **K74** | 行标题渲染 | 传 `title` ⇒ 可见文字是 `title`、tooltip 是 `row.name`，且不新增可点区域；**不传 `title` 时与改动前逐字节相同**（tooltip 仍是本地 `displayName`）；长标题整串渲染、单行省略（`nowrap`/`ellipsis`/`hidden`），`.skc_cardTitle` 的字号/行高逐字未变、没有多行截断一类新声明；标题里的 HTML 元字符被转义 | L3 · `test/view-row.test.mjs` |
-
----
 
 ### D.8 添加/卸载技能用例编号（K126–K137）
 

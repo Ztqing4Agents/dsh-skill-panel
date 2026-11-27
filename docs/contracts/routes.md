@@ -8,8 +8,6 @@
 
 编号 §3.3 / §3.4 / §8.1 保持原值（原件见 `git show a8141eb:docs/system_design.md`）。证据记号定义见 `docs/reference/host-plugin-page.md` §1。
 
----
-
 ## 3.3 Host 路由清单
 
 十六条 **exact** 路由（`kind:'exact'`，`ctx.webServer.register(route)` 返回 disposer；重复注册同路径会抛错，见 `EX/dsh-host-webserver/README.md`「Registering routes」）。本地面 7 条（下表 #1–#4、#14、#17、#18；`#` 是历史编号，不重排也不复用，两条退役的图片端点不回收），市场面 9 条见 `docs/contracts/market-routes.md` §3.7。
@@ -134,8 +132,6 @@ const st = await lstat(file)                                           // ⑤ �
 - **旧宿主上该字段被忽略**：`0.2.2` 的 `WebRoute` 没有这个成员，多出来的属性不读也不校验，行为与 `1.1.3` 逐字相同。换代际前后接口的可达性没有变化，这条由 `scripts/test-compat.mjs` 的 H7 在隔离实例上按「无凭据请求逐条回 4xx／2xx 而不是 401／403／503」守着。
 - **为什么不写 `required`**：那会把「打开面板」变成「必须先拿到宿主 Peer」，本脚本与非浏览器消费者、隔离冒烟全要另配凭据；安全策略升级应当单独一轮做、单独配判据，不夹在宿主适配里。
 
----
-
 ## 3.4 开关写入实现
 
 本节是「开关改写一张已有的 `SKILL.md`」；市场侧的落盘（新装一个技能目录）是另一条路径，见 `docs/contracts/market-routes.md` §3.7.4。
@@ -195,8 +191,6 @@ return concat(bom, block, body.subarray(block.end))   // 其余字节一个不�
 
 市场面的 9 条 `market/*` 路由、安装链路十四阶段与市场错误码已拆到 `docs/contracts/market-routes.md`（§3.7 / §8.6）；本节只留本地面 7 条。
 
----
-
 ## 8.1 响应格式与错误码
 
 - 信封：`{ code: string, data: T|null, message: string }`。
@@ -225,8 +219,6 @@ return concat(bom, block, body.subarray(block.end))   // 其余字节一个不�
 
 市场路由（§3.7）的错误码见 `docs/contracts/market-routes.md` §8.6：那组的语义是「上游不可用 / 包不合规」，与本节「本地写盘失败」分开，客户端按 `code` 取不同文案与不同的重试动作。#17/#18 复用 `docs/contracts/market-routes.md` §8.6 的 `E_ALREADY_INSTALLED` / `E_SKILL_NAME_INVALID` / `E_PACKAGE_INVALID` / `E_INSTALL_BUSY`。**#17 的 git 形态另加 7 码**（全部一句中英、**不带 `{reason}`**，界面永不出现英文系统信息，因此单列一段而不占上表的行）：`E_GIT_SPEC_INVALID` 400（认不出这个输入——裸 `o/r`、相对路径、无 scheme、`/blob/`、`tree` 以外的第 3 段、超 2048、40 位 sha、`#path:` 与 `tree` 同时给）、`E_GIT_NOT_SUPPORTED` 400（形态对但不在支持面——非 `github.com`、SSH、tarball、URL 带凭据）、`E_GIT_REPO_NOT_FOUND` 404（仓库 / 分支 / 标签不存在，或需要登录）、`E_GIT_UNREACHABLE` 502（连不上 / 代理 / 证书 / 磁盘 / 权限 / 其它一切兜底——**文案必须是宽句**）、`E_GIT_TIMEOUT` 504（克隆 60s 超时）、`E_GIT_MISSING` 500（本机没有 git）、`E_ADD_AMBIGUOUS_SKILL` 422（仓库里有多个 `SKILL.md`：`data.candidates` 是**目录相对路径**数组，去重排序后 ≤10 条，另给 `data.candidateTotal`、**`data.owner` 与 `data.repo`**（客户端靠后两个把输入改写成 `github:<o>/<r>#path:<sub>`））。`LOCAL_STATUS` 因此由 4 键变 **11 键**（`asLocalError` 的三级查表不变，见 `docs/contracts/decisions.md` 附录 S-11） / `E_INSTALL_IO` 五个码（词表只有一份，`statusOfMarketError()` 直接用），**四个新码只登记在本表**——`docs/contracts/market-routes.md` §8.6 的二十个单码行保持不变，市场码表与 `MARKET_STATUS` 逐条对应的判据因此不受影响。
 
-
----
 
 ## 验收
 

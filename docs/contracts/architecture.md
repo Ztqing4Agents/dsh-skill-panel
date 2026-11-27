@@ -12,8 +12,6 @@
 
 > 证据记号（`EX/` `PROF/` `SHELL/` `HIDDER/`）与宿主版本见 `docs/reference/host-plugin-page.md` §1。
 
----
-
 ## 1 实现方案与框架选型
 
 ### 1.1 核心难点 → 方案 → 模式
@@ -278,8 +276,6 @@ ledger.readAll() ─────────────────┘   （R5�
 
 行图标（`.skc_cardIcon`）的**技能位不取 primitives**：它是首字母头像（技能名首字母 + 按名字散列的粉彩色块），色板与散列在 `src/client/avatar.js`，刻度见 `docs/contracts/visual.md` A.5 / A.9。**插件位**（内置插件块与插件页头）是例外：没有图标时画宿主 primitives 给这个面的那张图形（`PluginArtworkDefault` 36；两处插件位同图同尺寸），口径见 `docs/contracts/client.md` §3.9.2 第 7 条。
 
----
-
 ## 2 文件清单
 
 相对仓库根；标 **★** 的由构建产出并入库。
@@ -294,8 +290,7 @@ ledger.readAll() ─────────────────┘   （R5�
 | `client.js` ★ | **Client 半部产物**：`__ModuleLoader__.load` 外壳 + 全部页面代码（由 `scripts/build-client.mjs` 生成） |
 | `assets/icon.svg` | 插件列表图标（`package.json` 的 `icon` 指向它） |
 | `README.md` / `AGENTS.md` | 使用者视角（能力、安装、已知限制）与维护者视角（命令、真源文件地图、硬约束：不手改产物、不硬编码中文） |
-| `locale/zh.json` | 唯一中文文案真源（含 `meta.title` = 插件名、`panel.label`、全部 UI 键） |
-| `locale/en.json` | 英文真源，键集必须与 `zh.json` 完全一致（`check:i18n` 强制） |
+| `locale/{zh,en}.json` | 两语唯一文案真源（`zh.json` 含 `meta.title` = 插件名、`panel.label`、全部 UI 键）；两语键集必须完全一致，`check:i18n` 强制 |
 
 ### 2.2 Host 半部（`lib/`，纯 node ESM，无构建）
 
@@ -347,15 +342,9 @@ ledger.readAll() ─────────────────┘   （R5�
 | `scripts/check-version.mjs`、`scripts/test-compat.mjs`、`scripts/asar-read.mjs`、`scripts/cdp.mjs` | 发布前三断言（tag 逐字等于 `v<package.json version>`、`engines` 与 peer 同串且覆盖 `supportedHosts`、预发布禁发 `latest`）与真机冒烟 H1–H7（`--host <ver>`，隔离 `DSH_HOME` 起实例；不进本地门禁）；后两只只在冒烟脚本内用——读 `app.asar` 与零依赖 CDP 驱动 |
 | `scripts/release-body.mjs` | GitHub Release 正文生成器：由 `docs/releases/` 下与 tag 同名的正文去掉标题与五行注记，收尾句文档已有则不补；工作流的建 Release 步骤与手工补建共用同一条命令（见 `docs/contracts/decisions.md` 附录 Z 的 Z-16） |
 
-### 2.5 测试（QA 拥有）
+### 2.5 测试与文档
 
-全部用例在 `test/**/*.test.mjs`，`npm test` 一次跑完；**分层依据、夹具与用例编号见附录 D**（本设计只给口径，不给骨架）。
-
-### 2.6 文档
-
-本文件是架构与接口契约。「想知道什么该看哪份」的读者入口见 `AGENTS.md` 的文档地图；页面视觉刻度在 `docs/contracts/visual.md`；宿主页面形状（外部取值来源）在 `docs/reference/host-plugin-page.md`。
-
----
+全部用例在 `test/**/*.test.mjs`，`npm test` 一次跑完；**分层依据、夹具与用例编号见附录 D**（本设计只给口径，不给骨架）。本文件是架构与接口契约，「想知道什么该看哪份」的读者入口见 `AGENTS.md` 的文档地图；页面视觉刻度在 `docs/contracts/visual.md`，宿主页面形状（外部取值来源）在 `docs/reference/host-plugin-page.md`。
 
 ## 6 依赖包
 
@@ -365,8 +354,7 @@ ledger.readAll() ─────────────────┘   （R5�
 esbuild@0.25.0            —— 打包 client 半部；与 PROF/@michengai/dsh-skills-manager 同版本
 react@18.3.1              —— JSX 类型与本地渲染测试（运行时由宿主 seed 提供）
 react-dom@18.3.1          —— renderToStaticMarkup 结构测试（运行时由宿主 seed 提供）
-@types/react@~18.3.1      —— 编辑器补全（仅类型）
-@types/react-dom@~18.3.1  —— 同上
+@types/react@~18.3.1 / @types/react-dom@~18.3.1 —— 编辑器补全（仅类型）
 ```
 
 `peerDependencies`（声明我们依赖宿主提供什么，不安装；七条宿主包共用一条**代际区间** `>=0.2.3-0 <0.3.0-0`，**字面量与 `package.json` 逐字一致**；改区间只改 `scripts/hosts.mjs` 一处——`check:hosts` **只校验**（默认只读，漂移即红），要补齐声明得显式 `node scripts/sync-hosts.mjs --write`）：
@@ -380,15 +368,12 @@ react-dom@18.3.1          —— renderToStaticMarkup 结构测试（运行时�
 @deepseek-ai/dsh-client-ui-layout      >=0.2.3-0 <0.3.0-0                       —— main 座位
 @deepseek-ai/dsh-client-ui-sidebar     >=0.2.3-0 <0.3.0-0                       —— sidebar.panellist 座位
 @deepseek-ai/dsh-client-ui-primitives  >=0.2.3-0 <0.3.0-0                       —— 控件与图标（经 seed）
-react                                  ^18.2.0
-react-dom                              ^18.2.0
+react / react-dom                      ^18.2.0
 ```
 
 依据：`PROF/@michengai/dsh-skills-manager/package.json` 与 `PROF/@linxin666/dsh-client-ui-skill-explorer/package.json` 的 peer 集合（我们只取真正用到的子集）。四条口径：①**区间只在一处维护**——`scripts/hosts.mjs` 的 `supportedHosts` / `peerRange` 是真源，`npm run check` 的第五门 `check:hosts`（`scripts/sync-hosts.mjs`，默认只校验、`--write` 才回写）守 `package.json` 与两条 README 的声明与它一致，改别处即红；②**`-0` 不许省**——写成 `>=0.2.3` 会把 `0.2.3-alpha.*` 全部挡在门外（预发布只有其 `major.minor.patch` 出现在比较子里才可比较，`-0` 就是把它显式放进来的写法）；③**宿主与 npm 是两套比较器**——宿主 `satisfies(..., { includePrerelease: true })`、npm / pnpm 走默认模式，同一条区间两侧可以给出不同结论，声明必须以「npm 侧装得上」为准（两侧语义与逐条实测见 `docs/contracts/decisions.md` 附录 Z 的 Z-8）；④换代际的触发与代价见同附录 Z-9–Z-16；当前支持面是 `0.2.3` 代际，`supportedHosts` 里只列真机验过的版本（清单见 `scripts/hosts.mjs`）。
 
 市场面同样**不新增任何 dependency / devDependency**：`node:https`、`node:crypto`、`node:fs/promises` 都是 node 内置；没有 zip 读取器（`package:'zip'` 那条路已不存在）。
-
----
 
 ## 验收
 

@@ -8,8 +8,6 @@
 
 编号 §3.1 / §3.2 保持原值（原件见 `git show a8141eb:docs/system_design.md`）。证据记号 `EX/` `PROF/` `SHELL/` `HIDDER/` 的定义见 `docs/reference/host-plugin-page.md` §1。
 
----
-
 ## 3.1 类型总览（classDiagram）
 
 ```mermaid
@@ -150,8 +148,6 @@ classDiagram
     SkillsPage --> HeaderScroll : measures header
     PageStore --> PageState : snapshot
 ```
-
----
 
 ## 3.2 纯函数契约（QA 可直接单测）
 
@@ -307,8 +303,6 @@ locateSkillDir(root: string, subdir: string|null): {dir: string}   // ① 给了
 
 与 `src/client/model.js` 的 `deletable(row)`（`partition !== 'builtin'` ∧ `symlink !== true` ∧ `path !== null` ∧ `readonlyReason === null`）同属判据族，**无时钟、无网络、不写盘**：`classifyAddSpec` 连 I/O 都没有（纯，同步）；**`locateSkillDir` 是 `async` 且会读盘**（`lstat`/`readdir` 探测），「纯」在这里指**只读、不写、无时钟、无网络**，node 里用真目录或注入的假目录直测（见 `docs/contracts/decisions.md` 附录 T-13）。`shadowOf` 只读 `rankOf` 的那张表（**不改 `classifySkill` 的九级阶梯**），判据理由见 `docs/contracts/decisions.md` 附录 S-6。同族的编排入口 `createLocalSkills({skillsRoot, dshHome, store, withWriteLock, rescan, copy?})` 里 **`copy` 是可选依赖**（注入点 `planCopy` / `copyPlan` / `landSkill` / `tempDirOf`，缺省走 `lib/local/copy.js`）：它只用来把 S10 / S11 的失败点变成 node 里造得出来的输入，**注入不得改变守卫顺序（S0–S12）与错误码**，也不得绕过 `.skc-install-*` 的清理。
 
----
-
 ## 3.8 市场类型与归一化纯函数
 
 #### 3.8.1 `MarketItem` / `MarketDetail` / `MarketVersions` / `SourcePage`
@@ -380,8 +374,6 @@ mergeBatches(pages: {sourceId: string, items: MarketItem[]}[], options?: {existi
 
 - `existing` 原样保留在前；新一页的条目按 `pages` 给的**来源顺序整段拼接**（先第一个源那一页的全部，再第二个源的），已有项的相对顺序永不被打乱。**函数不排序**：`updated` 的页内顺序由适配器负责（`sortByUpdatedDesc`），跨源不重排。
 - 去重按 `marketKeyOf`：同一个 key 第二次出现即丢弃，**保留第一次出现的条目**；短页照收（n < limit 就只追加 n 条），「还有没有下一页」只看 `next === null`、不看本页条数；输入为空时返回 `existing` 的副本，函数不修改任何入参。
-
----
 
 ## 验收
 

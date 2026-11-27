@@ -8,8 +8,6 @@
 
 编号 §3.5 / §3.6 / §8.2–§8.5 保持原值（原件见 `git show a8141eb:docs/system_design.md`）。
 
----
-
 ## 3.5 Client 组件与状态契约
 
 ```
@@ -29,8 +27,6 @@ ClientPlugin.apply(ctx)
 
 **滚动偏移的不变式（两种，别当成一回事）**：**进详情再返回**⇒恢复原偏移（打开详情时记 `scrollTop`，返回逐项还原且不重拉，见 §3.9.1 与 §3.9.5）；**切页签不恢复**⇒离开「已安装」页签再回来会复位（列表页、插件页与两个滚动偏移全清，从列表顶重新开始），这是刻意的「一次页签访问＝一次独立读取」。两条都是既有行为，不是待办，也不许为「看起来更连贯」而对齐成一种。
 
----
-
 ## 3.6 视觉契约
 
 完整、可直接抄进代码的样式表见 **`docs/contracts/visual.md`**：类名↔宿主规则的映射逐条写在它的规则注释里（`[PM-CSS] .page`、`[PM-CSS] .cards / .card / …`、`SHELL` 这几类记号），本文不另存一份副本。
@@ -38,8 +34,6 @@ ClientPlugin.apply(ctx)
 
 `.skc_cardIcon` 的**容器是宿主 `.cardIcon` 原样式**（`.5px` `border-l3` 描边、`radius-lg` 圆角、48×48、`border-box`），不随头像需求改动（内置插件块共用这一颗 48 框）；变化都在内容层：宿主画通用技能图标，本面板的**技能位**画首字母、**插件位**（列表块与插件页头）画宿主那张默认插件图形 `PluginArtworkDefault`，**两处同图同尺寸**（框内 36；框各按我们的：列表块 48、页头 49），刻度见 visual.md A.9（第三态见 §3.9.2 第 7 条）。
 颜色不是样式表常量，而是 `avatar.js` 的 6 组色板（对齐 skillhub.cn 的 accent 10% 底 + 实色字，字母对比度约 2–3:1 是刻意取舍）经 `row.jsx` 以 `--skc-avatar-bg` / `--skc-avatar-ink` 行内传入（刻度见 `docs/contracts/visual.md` A.5）；`background-clip: padding-box` 保证粉彩底不盖住半透明描边。骨架复用同一个类，由 `.skc_skeletonIcon` 自己再写灰色底，加载态不出现彩色块、也不出现字母。
-
----
 
 ## 3.9 市场页组件与状态
 
@@ -210,8 +204,6 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 
 收藏的持久化在 `docs/contracts/market.md` §7.7；本页只负责「画对不对」：卡片上的「收藏 N」是上游 `saves`，与本地书签不同源、不互相修正（卡片上没有书签控件，集合与写路由仍在）。
 
----
-
 ### 3.9.7 添加技能弹窗与卸载确认
 
 - **添加入口**：`＋ 添加技能` 主按钮与 chevron 的菜单项都打开 `AddSkillDialog`；`state.payload === null`（还没读到列表）时两枚都禁用，添加请求在飞时两枚都禁用、主按钮文案转 `add.busy`。宿主同位是 `addGroup`（主按钮 + chevron），菜单项**不带描述副行**（宿主那条描述是为了区分 npm/Git/本地三种形态，我们只有一种）。
@@ -251,8 +243,6 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 | 技能名文法 | `^[a-z0-9]+(?:-[a-z0-9]+)*$`（宿主同文法） | `dev-docs-standards` |
 | 身份键 | `${provider}#${name}`（内存）；磁盘用 `{provider,name}` 数组 | `filesystem#ui-design` |
 
----
-
 ## 8.3 i18n 键约定
 
 - 命名空间 `NS = 'dsh-skill-panel'`；`locale/zh.json` / `locale/en.json` 是**唯一文案真源**，键集必须一致。
@@ -265,8 +255,6 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 - **键与值不在本文件维护**：真源是 `locale/{zh,en}.json`（`zh` 值逐字来自 `PRD` §3.3.5 与本设计），全字典键数以 `check:i18n` 输出为准（口径 = 扁平键 + `meta` 两项），新增键必须 zh/en 同轮加、由 `test/i18n.test.mjs` 的按名断言兜住。
 - 已退役的键不会再回来：`add.comingSoon`、`detail.uninstallSoon`、`detail.checkUnavailable`、`detail.checkIdle`、`detail.copy`、`detail.copied`、`plugin.copyCommand`、`status.count`、`status.offSuffix`、`market.placeholder`（缘由散见 `docs/contracts/decisions.md` 各附录）。
 
----
-
 ## 8.4 时间与其他
 
 - 日志与 `health` 里的时间一律 **ISO 8601 UTC**（`new Date().toISOString()`）；**界面上不显示任何时间**，只有两个例外：已安装详情的版本区块的「上次检查于 `HH:MM`」与展开列表的「发布于 `YYYY-MM-DD`」（`docs/contracts/installed-detail.md`，登记在 `docs/contracts/decisions.md` 附录 R-1）。
@@ -274,13 +262,9 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 - 布尔：YAML 侧接受 `true/false/yes/no/on/off/1/0`（大小写不敏感，宿主同文法，`EX/dsh-skill-filesystem/README.md`「Skill format」）；**写回只用 `true`/`false`**。
 - 数字：`counts` 全部是整数，缺失按 0（不做 `undefined` 透出）。日志：`ctx.logger.warn(error)` 记录，**不把路径之外的敏感内容打进日志**。
 
----
-
 ## 8.5 样式字面量单点
 
 尺寸与颜色字面量只允许出现在 `src/client/styles.js`（样式）与 `src/client/avatar.js`（6 组头像色板，含 `rgba()` 半透明底与实色字；全仓库仅此两处色值）；其它组件文件不得写颜色/尺寸（`size={11|13}` 这类图标尺寸除外）。市场样式同样只进 `styles.js`（类名 `skc_market*`，取值逐条来自 `docs/contracts/market.md` 附录 F）；**市场不新增任何颜色字面量**，也不改 `.skc_cardIcon` 的任何一条声明。上游图标用的 `.skc_marketIconImg` 只有四条声明（`width/height:100%`、`object-fit:contain`、`display:block`、`border-radius:calc(var(--dsw-radius-lg) - .5px)` 同心内圆角），不含色值；`contain` 是因为上游图标尺寸从 256×64 的横版 logo 到 1024×1024 都有，`cover` 会把横版裁成怪形状。分类 chip 的数量位用 `.skc_marketChipCount`（`margin-left:4px`、12px/18px、`var(--dsw-alias-label-secondary)`），**不改 chip 的高度与点击面积**，也不新增色值。锚点：`test/styles.test.mjs`；把刻度搬进组件时那条用例先红。
-
----
 
 ## 验收
 
