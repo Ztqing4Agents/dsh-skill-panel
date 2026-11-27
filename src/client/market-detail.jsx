@@ -84,7 +84,7 @@ export function MarketDetail({ detail, market, t, onBack, onRetry, onInstall }) 
       ) : null}
       {data === null ? null : (
         <>
-          <FactsTable rows={detailFacts(data, market, t)} />
+          <FactsTable rows={detailFacts(data, market, t, market?.locale)} />
           {data.nameValid === false
             ? <p className={cn('marketError')}>{t('market.nameInvalidNote')}</p>
             : null}

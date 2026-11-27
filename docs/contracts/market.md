@@ -74,7 +74,7 @@
 | 计数 | **每个 scope 各算各的**：13 次 `GET /api/skills?page=1&pageSize=1(&category=)[&source=]` 取 `data.total`（12 分类 + 1 个「全部」），并发 6、单项 6s、整体 10s、10 分钟缓存，**缓存 key = `sourceParam`（`all` 用空串）**；同一分类三档数字天然不同（`ai-agent` → 23,193 / 10,145 / 13,048），共用一份必有一处是假的。**每个 `count` 是该过滤条件的独立总数，不保证 12 类相加等于 `total`**（一条技能可归属多个分类），界面不得用「合计」校验它 | 同左，`source=community` | 同左，`source=clawhub` |
 | 一次 `list` 的上游请求数 | 1 | 1 | 1 |
 | 一次 `POST icons` 的上游请求数 | 每条一次 detail（**不带 `version`**，实测 0.26s）或一次列表查询，并发 6、6s 整批 | 同左（detail） | 同左（列表查询，行同时带图与标题） |
-| 一次 `detail` 的上游请求数 | 3–4（详情 + 清单 + `SKILL.md`，`contentZhAvailable` 为真时多一次 `lang=zh`，见 §7.8 硬规矩 5） | 3–4 | **4–5**（解析 namespace + 详情 + 清单 + `SKILL.md`[+ 译本]） |
+| 一次 `detail` 的上游请求数 | **3–4**（详情 + 清单 + `SKILL.md`，`contentZhAvailable` 为真时多一次 `lang=zh`）；`hasOverview` 为真且有短稿再 **+2** ⇒ **5**，短稿读不到而回落译本时最多 **6**（见 §7.8 硬规矩 5） | 同左 | **4–5**（多一次解析 namespace）；有短稿 **6**、回落最多 **7** |
 | 一次 `bootstrap?source=<scope>` 的上游请求数 | 冷缓存 **14**（分类表 1 + 计数 13），10 分钟内 0；**只算被问的那一档** | 同左 | 同左 |
 
 sort 映射（`sort` 四个值，路由层已白名单化；**默认仍是 `recommended`**，即站点的 `score`）：
@@ -127,15 +127,15 @@ sort 映射（`sort` 四个值，路由层已白名单化；**默认仍是 `reco
 | `saves` | 上游 | SkillHub `stars`（小整数，实测 37 / 99 / 158）／ClawHub **镜像 `stars`**（同一列，不另立字段）。**卡片把它显示成「收藏」**——这是上游的收藏数，与本地书签（§7.7）不是一个东西；缺失 `null`，绝不补 `0`，上游真给 `0` 就显示 `0` |
 | `score` | 上游 | SkillHub `score`（0–100000 连续分，实测 `95757.41562195931`）／ClawHub **镜像 `score`**（同口径）。**只作原料**：卡上的 4.0–5.0 是客户端 `ratingOf()` 的折算，Host 不解释、不格式化 |
 | `tags` | 上游 | **`string[]`，≤ 3 条、单条 ≤ 24 字符**；两源都取 `subCategories[].name`（保留大小写，中文分类名照用）；不保证有 ⇒ **`[]`**（列表型字段的缺值是空数组，不是 `null`） |
-| `updatedAt` | 上游 | epoch 毫秒，**只用于排序，不上屏** |
+| `updatedAt` | 上游 | epoch 毫秒，**只用于排序，不上屏**。详情链是 `latestVersion.createdAt`（版本发布时间，与站点语义一致）→ `skill.updatedAt`；**下划线的 `updated_at` 只存在于列表行**，详情体里没有这一格 |
 | `category` | 上游 | 两源都有：SkillHub 自带；ClawHub 来自镜像（详情端点没有，由适配器那次覆盖补上，见 §7.8） |
 | `packageKind` | 本地算 | 来自 `caps.package`，决定详情页「文件」从哪来 |
 
 **`summary` 为什么本地化优先**：上游把描述拆成「原文槽位 + 中文槽位」，两个槽位各有两种拼法——列表行是 `description` / `description_zh`，详情 `skill` 是 `summary` / `summary_zh`；站点自己的前端就按 `description_zh || description`、`summary_zh || summary` 取值（实测其产物 bundle），本插件跟同一条顺序，不另立一套。中文槽位是**始终填满**的那一个：2026-11-21 复算（口径：三 scope 各 200 行、按 `score` 降序、按 `source`+`namespace`+`slug` 去重得 400 行）里 `description_zh` 非空 400、`description` 非空 388（12 行空的全在 community），`description_en` 这个键不存在（0 行）；只读原文会让 `ppt-generator-skill` 这类卡片的描述行整段不渲染，详情路径同一条也是 `summary` 空、`summary_zh` 有值。详情侧的 `summary_zh` 在 enterprise 的样本行里实测会空（那几行的 `summary` 本身已是中文），所以链尾保留 `summary` 不删。代价写明：两槽位措辞不同者 208/400 ≈ 52%，**改序会让这 52% 的卡片显示另一段文字**（中文槽位更短、更接近站点上那一句；连续三次抽样均得 208，同分行在两次请求间的次序会浮动，故百分比只记到「过半」这一档）；反向个案也在（`han-deck-context` 的 `description_zh` 是英文、原文才是中文），这类行只能跟上游走。`MarketItem.summary` 仍是单字符串、Host 侧没有 locale，按界面语言挑字段要改数据形状，不属这一轮。
 
-**站点读法与本站的未对齐处（记录，不改）**：① 卡片那颗 chip 站点取 `category`（分类表的 `name`），本站取 `subCategories[].name`（本表 `tags`）——要对齐是前端的呈现选择，不动取值链；② 来源徽标站点按 `claim_state === 'claimed'`（缺该键时看 `verified`）把 ClawHub 行标成 SkillHub（clawhub 样本 200 行里 3 行），而本站 `sourceId` 同时是去重键、图标与收藏键、安装路由，只改徽标会拆坏身份；③ 详情概览站点先看 `skill.hasOverview` 走 `/api/v1/skills/<slug>/overview`（正文在它返回的 `url` 里），否则读 `SKILL.md`；**文件这条通道已对齐**：`contentZhAvailable` 为真时概览带 `lang=zh` 取中文译本、取不到回落原文（见 `MarketDetail` 的 `overview` 与 §7.8 第 5 条），只有 `/overview` 那条仍未接（要改详情页展示形态，等用户拍板）；④ 徽标与评分站点读 `labels`（`pricing_type` / `requires_api_key`）、`publisher.verified`、`securityReports.keen/sanbu.status`，评分读评测接口（`calcTotalScore` 五维均值）；本站这些键都不读，评分由 `score` 折算。另：`installs` 站点只在排序参数里出现，任何界面都不显示（本站不读，不算漏）。这条分界的口径裁决（数据层跟站点、显示层跟产品）见 `docs/contracts/decisions.md` 附录 B 的 AB 组。
+**站点读法与本站的未对齐处（逐条记录：①②④⑤ 有意不改，③ 已按用户裁决接上）**：① 卡片那颗 chip 站点取 `category`（分类表的 `name`），本站取 `subCategories[].name`（本表 `tags`）——要对齐是前端的呈现选择，不动取值链；② 来源徽标站点按 `claim_state === 'claimed'`（缺该键时看 `verified`）把 ClawHub 行标成 SkillHub（clawhub 样本 200 行里 3 行），而本站 `sourceId` 同时是去重键、图标与收藏键、安装路由，只改徽标会拆坏身份；③ **概览两条通道都已接（2026-11-27 用户裁决「与上游保持一致」）**：站点原文是 `TabOverview = skill.hasOverview ? CustomOverview : SkillFileOverview`，本站照此——`skill.hasOverview === true` 时先读 `/api/v1/skills/<slug>/overview`，正文不在 `content`（实测恒为空）而在该应答的 `url` 指向的 COS 对象里，**该 `url` 只在过既有 COS 白名单时才跟随**（不放宽）；拿到非空正文即用它，`/overview` 失败、无 `url`、`url` 未过白名单、正文为空时依次回落 `lang=zh` 译本 → 作者原文 → `summary`（见 `MarketDetail` 的 `overview` 与 §7.8 第 5 条），所有失败吸收成回落、不向上抛；④ 徽标与评分站点读 `labels`（`pricing_type` / `requires_api_key`）、`publisher.verified`、`securityReports.keen/sanbu.status`，评分读评测接口（`calcTotalScore` 五维均值）；本站这些键都不读，评分由 `score` 折算。⑤ **分类名：站点自己只读 `name`**（`nameEn` 只写不读，站点 bundle 里连「Office Efficiency」都 0 命中，i18n 词典也没有分类名），**本站英文界面取 `nameEn`**——`en` 走 `nameEn → name → key`，其余语言走 `name → nameEn → key`；上游 13 条分类全带真英文名（`办公效率 → Office Efficiency`、`开发编程 → Development`）。这是**本站有意偏离**（2026-11-27 用户裁决「英文界面分类名要显示英文」），语言取自宿主 `ctx.locale.getLocale().active` 并跟随 `subscribe`，不是按请求或按条目挑字段。另：`installs` 站点只在排序参数里出现，任何界面都不显示（本站不读，不算漏）。这条分界的口径裁决（数据层跟站点、显示层跟产品）见 `docs/contracts/decisions.md` 附录 B 的 AB 组。
 
-`MarketDetail`（`market/detail` 的 `data`）：`item`（上表）、`overview`（`stripFrontmatter` 后的正文，≤ 8000 字符。**取哪一份**：详情体的 `contentZhAvailable === true` 时先取 `GET /api/v1/skills/<slug>/file?path=SKILL.md&lang=zh`（302 → `<version>/skill_zh.md`，平台中文译本），取不到（404 / 空正文）或该标志缺失、不是 boolean 时用作者原文 `SKILL.md`，两份都空时回落 `summary`；`lang` 只是**读数开关**，`declaredName` 恒从作者原文的 frontmatter 读，安装取件（`fetchFile`）永不带 `lang`）、`declaredName`（`parseFrontmatter(<作者原文 SKILL.md>).name`，不合规也原样给出）、`nameValid`（`isSkillName(declaredName)`）、`installTo`（`nameValid ? join(skillsRoot, declaredName) : skillsRoot`，由路由补，适配器不碰磁盘）、`files[{path, size}]`（按清单顺序，`sha256` 不下发）、`filesComplete`（`files` 形态恒 `true`；zip 读不全的 `false` 分支不存在（zip 读取模块已随之一并删除），客户端的既有分支保留不动）。
+`MarketDetail`（`market/detail` 的 `data`）：`item`（上表）、`overview`（`stripFrontmatter` 后的正文，≤ 8000 字符。**取哪一份**：`skill.hasOverview === true` 时先取 `GET /api/v1/skills/<slug>/overview?namespace=` 并按应答的 `url` 取短稿（上段 ③ 的次序与白名单）；短稿拿不到（请求失败 / 无 `url` / `url` 未过白名单 / 正文为空）则回落到 `contentZhAvailable === true` 的 `GET /api/v1/skills/<slug>/file?path=SKILL.md&lang=zh`（302 → `<version>/skill_zh.md`，平台中文译本），再取不到（404 / 空正文）或该标志缺失、不是 boolean 时用作者原文 `SKILL.md`，三份都空时回落 `summary`；`lang` 只是**读数开关**，`declaredName` 恒从作者原文的 frontmatter 读，安装取件（`fetchFile`）永不带 `lang`）、`declaredName`（`parseFrontmatter(<作者原文 SKILL.md>).name`，不合规也原样给出）、`nameValid`（`isSkillName(declaredName)`）、`installTo`（`nameValid ? join(skillsRoot, declaredName) : skillsRoot`，由路由补，适配器不碰磁盘）、`files[{path, size}]`（按清单顺序，`sha256` 不下发）、`filesComplete`（`files` 形态恒 `true`；zip 读不全的 `false` 分支不存在（zip 读取模块已随之一并删除），客户端的既有分支保留不动）。
 
 `SourcePage`（`list`/`search` 的返回）：`{items: MarketItem[], next: string|null, total: number|null}`。`next` 是 `encodeCursor()` 产出的不透明串，客户端原样回传。
 
@@ -175,7 +175,7 @@ ClawHub 的**目录、详情、安装包**三条链路都由 SkillHub 的镜像�
 | 方法 | 端点（两源同形，ClawHub 多 `source=clawhub`） | 备注 |
 | --- | --- | --- |
 | `list` / `search` | `GET /api/skills?page&pageSize&sortBy&order&category&keyword[&source=]` | 同一端点带 `keyword` ⇒ 搜索也能翻页 |
-| `detail` | `GET /api/v1/skills/<slug>?namespace=&version=` + `/files` + `/file?path=SKILL.md[&lang=zh]` | `SKILL.md` 的正文就是概览，与 SkillHub 同一条路；`contentZhAvailable` 为真时才多取一次 `lang=zh`（见硬规矩 5） |
+| `detail` | `GET /api/v1/skills/<slug>?namespace=&version=` + `/files` + `/file?path=SKILL.md[&lang=zh]`；`skill.hasOverview` 为真时先加 `/overview` + 它 `url` 指的对象 | 概览优先作者短稿，取不到才读 `SKILL.md`（`contentZhAvailable` 为真时多取一次 `lang=zh`，见硬规矩 5） |
 | `plan` / `fetchFile` | `GET /api/v1/skills/<slug>/files?namespace=&version=` + `/file?path=&namespace=&version=`（302 → COS） | `package: 'files'`，与 SkillHub 同一套安装链路 |
 
 五条硬规矩（破一条就是事故或撒谎）：
@@ -184,7 +184,7 @@ ClawHub 的**目录、详情、安装包**三条链路都由 SkillHub 的镜像�
 2. **`namespace` 不能猜**：认领过的 ClawHub namespace 没有 `clawhub_` 前缀（实测 `find-skills` 在 `indiv-guipi` 里）。`detail`/`plan` 先做**一次** `keyword=<slug>&pageSize=20&source=clawhub` 的列表查询，按 **`slug` 与 `upstream_owner_login` 同时相等**取第一条，读它的 `namespace.handle`；零命中报 `E_SOURCE_BAD_RESPONSE`（502）——**宁可不给详情，也不把别人的包装到自己名下**。
 3. **`score` 只有列表有**：镜像 detail 的 `stats` 是 `{comments, downloads, installs, stars, versions}`。详情页的 `score` 用第 2 条那次查询的同一行补上（0 额外请求）；事实表不显示评分。
 4. **`version` 三处同源**：卡片用列表行的版本、详情用 detail 的版本、安装用 `plan()` 解析的版本，全部来自镜像。代价是可能**滞后上游真最新**（`decisions.md` 附录 N 的 N-10）；一致性优先于新鲜度。
-5. **`lang` 只给概览，永不进安装**：`lang=zh` 让 `/file` 改答 `<version>/skill_zh.md`（平台译文，**不在清单里**）。它只出现在 `detail` 的概览读数路径上（且仅在 `contentZhAvailable === true` 时），取不到就回落作者原文；安装走 `fetchFile`，签名里没有 `lang`，装进 `skills/<name>` 的永远是作者自己的文件。一次 `detail` 的上游请求数因此是 **3**（无中文）或 **4**（有中文），ClawHub 再加第 2 条那次解析（**4 / 5**）。
+5. **`lang` 只给概览，永不进安装**：`lang=zh` 让 `/file` 改答 `<version>/skill_zh.md`（平台译文，**不在清单里**）。它只出现在 `detail` 的概览读数路径上（且仅在 `contentZhAvailable === true` 时），取不到就回落作者原文；安装走 `fetchFile`，签名里没有 `lang`，装进 `skills/<name>` 的永远是作者自己的文件。一次 `detail` 的上游请求数因此是 **3**（无中文）或 **4**（有中文）；`skill.hasOverview === true` 的短稿再 **+2**（`/overview` + 它 `url` 指的对象）⇒ **5**，短稿读不到而回落译本时最多 **6**；ClawHub 再加第 2 条那次解析（**4 / 5**，有短稿 **6 / 7**）。
 
 **ClawHub 的分类与计数走同一条路**：`bootstrap?source=<scope>` 只算被问的那一档（14 次请求，与今天同一价钱），缓存按 `sourceParam` 分开（§7.9 第 3 条）；切 scope 才补算，首屏成本零回归。
 

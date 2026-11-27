@@ -616,9 +616,9 @@ test('K48 已安装页签零回归：页头按页签分工，行的可点边界�
 });
 
 /**
- * Every market action the store exposes, sorted (U20 收尾：`marketReload` 已删 → 30 个）。
- * A closed set on purpose: adding or removing one is a state-machine change and has to be
- * argued for here, not discovered by a count.
+ * Every market action the store exposes, sorted (U20 收尾：`marketReload` 已删 → 30 个；
+ * M14 加 `marketLocale` → 31 个）。A closed set on purpose: adding or removing one is a
+ * state-machine change and has to be argued for here, not discovered by a count.
  */
 const MARKET_ACTIONS = [
   'marketBootFallback',
@@ -642,6 +642,7 @@ const MARKET_ACTIONS = [
   'marketInstalledLoaded',
   'marketInstalledStale',
   'marketListFailed',
+  'marketLocale',
   'marketListLoading',
   'marketNamesReady',
   'marketNamesSeeded',
@@ -715,6 +716,45 @@ test('K49 「技能市场」页签没有页头刷新，store 里也没有 market
   });
   assert.ok(failed.includes(t('market.retry')), '整页错误态里有「重试」按钮');
   assert.equal(/aria-label="刷新"/.test(failed), false, '错误态也没有页头刷新');
+});
+
+test('K156 切语言后 chips 与详情事实表换列：同一份 categories，store 的 locale 一变就换一种文字', () => {
+  // The two columns come from `bootstrap`; which one is read is a store field (`market.locale`,
+  // written by `apply` from `ctx.locale`). Rendering the *same* store twice proves the column
+  // is read at render time - a mount-time read would keep the first language for ever.
+  const store = marketStore((s) => {
+    s.actions.marketBootReady({
+      sources: [{ id: 'all', labelKey: 'market.source.all', hasCategories: true, packageKind: 'files' }],
+      categories: [{ key: 'office-efficiency', name: '办公效率', nameEn: 'Office Efficiency', count: 12 }],
+      categoriesOk: true,
+      total: 120,
+      countsOk: true,
+    });
+    s.actions.marketLocale('zh');
+  });
+
+  const zhHtml = renderStore(store);
+  assert.ok(zhHtml.includes('>办公效率<'), '中文界面：分类 chip 读 name');
+  assert.equal(zhHtml.includes('Office Efficiency'), false, '中文界面不出现英文列');
+
+  store.actions.marketLocale('en');
+  const enHtml = renderStore(store);
+  assert.ok(enHtml.includes('>Office Efficiency<'), '英文界面：同一份数据换成 nameEn');
+  assert.equal(enHtml.includes('办公效率'), false, '英文界面不出现中文列');
+  assert.equal(enHtml.includes('skc_marketChipCount'), true, '换列不动数量位（数字照旧在）');
+
+  // The detail fact table reads the same column, so one skill is never named two ways.
+  store.actions.marketDetailOpen({ sourceId: 'skillhub', owner: 'ake', slug: 'dev-god', category: 'office-efficiency' });
+  store.actions.marketDetailReady({
+    item: { sourceId: 'skillhub', owner: 'ake', slug: 'dev-god', category: 'office-efficiency' },
+    installTo: '/tmp/skills/dev-god',
+  });
+  const detailEn = renderStore(store);
+  assert.ok(detailEn.includes('Office Efficiency'), '英文界面：详情事实表的分类名同列');
+  store.actions.marketLocale('zh');
+  const detailZh = renderStore(store);
+  assert.ok(detailZh.includes('办公效率'), '切回中文：详情事实表跟着换');
+  assert.equal(detailZh.includes('Office Efficiency'), false, '切回中文后英文列退场');
 });
 
 /* ------------------------------------------------- K54/K55/K56 · 数量、单源、contain */

@@ -387,8 +387,10 @@ test('K45 市场子状态的 action 数量是可核对的：收藏只剩读侧�
   const store = createStore();
   const names = Object.keys(store.actions);
   const market = names.filter((name) => name.startsWith('market'));
-  // U20 收尾：`marketReload()` 因「零调用方」被删（页头刷新已随工具条退场），31 → 30。
-  assert.equal(market.length, 30, '市场子状态共 30 个 action（U5 撤写侧 3 个，U20 加 marketInstalledStale 1 个、删 marketReload 1 个）');
+  // U20 收尾：`marketReload()` 因「零调用方」被删（页头刷新已随工具条退场），31 → 30；
+  // M14 加 `marketLocale`（分类 chip 按语言取槽，见 K156），30 → 31。
+  assert.equal(market.length, 31, '市场子状态共 31 个 action（U5 撤写侧 3 个，U20 加 marketInstalledStale 1 个、删 marketReload 1 个，M14 加 marketLocale 1 个）');
+  assert.equal(market.includes('marketLocale'), true, 'M14 的语言落点还在（chips 与分类名的取槽依据）');
   assert.equal(market.includes('marketReload'), false, 'marketReload 已删（零调用方的 action 不留）');
   assert.equal(market.includes('marketFavoritesLoaded'), true, '读侧 action 仍在（bootstrap 仍下发收藏）');
   // 添加技能成功后台账已过期（新目录还没进台账）：由这个 action 打标，安装页据此重读。
@@ -396,7 +398,7 @@ test('K45 市场子状态的 action 数量是可核对的：收藏只剩读侧�
   assert.equal(
     names.includes('addApplied'),
     true,
-    'addApplied 不带 market 前缀，所以不计入这 30 个（它归已安装页的 notice）',
+    'addApplied 不带 market 前缀，所以不计入这 31 个（它归已安装页的 notice）',
   );
   for (const gone of ['marketFavoriteToggle', 'marketFavoriteOk', 'marketFavoriteFail']) {
     assert.equal(market.includes(gone), false, `${gone} 已随卡片上的收藏开关一起撤除`);

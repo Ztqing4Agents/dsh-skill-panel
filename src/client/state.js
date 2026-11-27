@@ -46,6 +46,10 @@ function initialMarket() {
     categoriesOk: true,
     total: null,
     countsOk: true,
+    // The shell's active locale id: components never see `ctx`, and the category table has
+    // two columns (`name` / `nameEn`). `apply` writes it and follows `ctx.locale`; '' reads
+    // the column the site does.
+    locale: '',
     filters: { source: MARKET_DEFAULT_SOURCE, category: null, sort: 'recommended' },
     // The scope the current `categories` + counts belong to, and whether a scope change is
     // waiting for its numbers: only the chips row goes to skeleton, the cards stay put.
@@ -541,6 +545,20 @@ export function createStore() {
         total: null,
         countsOk: false,
       });
+    },
+    /**
+     * The shell's active locale changed (or was read for the first time).
+     *
+     * In the store, not in a component: a switch has to repaint what is on screen without a
+     * remount. An unchanged value writes nothing - the shell notifies on every snapshot
+     * bump, and republishing would churn the page for nothing.
+     * @param {string} id - the active locale id; anything else is treated as unknown.
+     * @returns {void}
+     */
+    marketLocale: (id) => {
+      const locale = typeof id === 'string' ? id : '';
+      if (state.market.locale === locale) return;
+      setMarket({ locale });
     },
     /**
      * The search box's current text, before any debounce is decided.

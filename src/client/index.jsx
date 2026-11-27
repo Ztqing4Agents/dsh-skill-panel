@@ -151,6 +151,42 @@ function uiDictionary(dictionary) {
 }
 
 /**
+ * The shell's active locale id, or an empty string when the seat does not say.
+ *
+ * Read through the already-declared `locale` service (no new `inject` entry), and defensive:
+ * an unexpected snapshot must cost the panel its column, never the boot.
+ * @param {object} ctx - client root context (declares `locale`).
+ * @returns {string} the active locale id, or ''.
+ */
+function activeLocaleOf(ctx) {
+  try {
+    const active = ctx.locale.getLocale()?.active;
+    return typeof active === 'string' ? active : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Follow locale switches for as long as the panel is mounted.
+ *
+ * The chips carry two columns of text, so a switch has to reach them: the value lands in the
+ * store the components already read, which is what makes them re-render.
+ * @param {object} ctx - client root context (declares `locale`).
+ * @param {Function} onSwitch - called on every locale change.
+ * @returns {Function} the unsubscribe.
+ */
+function watchLocale(ctx, onSwitch) {
+  try {
+    if (typeof ctx.locale.subscribe !== 'function') return () => {};
+    const off = ctx.locale.subscribe(onSwitch);
+    return typeof off === 'function' ? off : () => {};
+  } catch {
+    return () => {};
+  }
+}
+
+/**
  * Mount the skill center surfaces.
  * @param {object} ctx - client root context carrying slots and locale.
  * @returns {void}
@@ -164,6 +200,11 @@ export function apply(ctx) {
   const t = ctx.locale.bind(NS);
   const api = new SkillCenterApi();
   const disposers = [];
+  // Read once, then followed: the panel outlives tab switches, so a mount-time-only read
+  // would keep the old language until the whole page is rebuilt.
+  const rememberLocale = () => store.actions.marketLocale(activeLocaleOf(ctx));
+  rememberLocale();
+  disposers.push(watchLocale(ctx, rememberLocale));
   disposers.push(...registerPanel(ctx, { store, api, t, agent: agentCreatorOf(ctx) }));
   disposers.push(...registerToast(ctx, { store }));
   ctx.effect(() => () => {

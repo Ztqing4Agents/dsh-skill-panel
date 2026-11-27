@@ -273,7 +273,11 @@ export function MarketFilters({ market, t, onInput, onCommit, onFilter }) {
       </div>
       {chips.visible ? (
         <div className={cn('marketChips')} role="group" aria-label={t('market.categoriesLabel')}>
-          {chipList(chips.items, { total: market.total, countsOk: market.countsOk }).map((chip) => {
+          {chipList(chips.items, {
+            total: market.total,
+            countsOk: market.countsOk,
+            locale: market.locale,
+          }).map((chip) => {
             const count = countText(chip.count);
             return (
               <Pill

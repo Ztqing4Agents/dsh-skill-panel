@@ -147,17 +147,35 @@ export async function zhTranslator() {
  * inject`). That is the failure that once took the whole web boot down, and a plain
  * object fake can never reproduce it - so this is the only context factory the suite
  * offers, and `declared` comes from the module's own `inject` export.
+ *
+ * The locale seat answers the three things the host's `LocaleRuntime` answers for a reader:
+ * `register`, `bind`, `getLocale()` (a snapshot carrying `active`) and `subscribe()` (which
+ * the fake fires through {@link setLocale}, so a test can switch languages after `apply`).
  * @param {{inject?: string[], apply?: Function}} module - the bundle's exports.
  * @param {Function} [t] - translator the fake locale resolves with.
- * @returns {{ctx: object, registrations: object[], dictionaries: object[], cleanups: Function[]}} the fake.
+ * @param {{locale?: string}} [options] - the active locale id the fake starts on.
+ * @returns {{ctx: object, registrations: object[], dictionaries: object[], cleanups: Function[],
+ *   sessions: object[], setLocale: Function}} the fake.
  */
-export function strictContext(module, t = (key) => key) {
+export function strictContext(module, t = (key) => key, options = {}) {
   const declared = new Set(Array.isArray(module.inject) ? module.inject : []);
   const registrations = [];
   const dictionaries = [];
   const cleanups = [];
   /** Every `uiWorkspace.startSession(...)` call, so a test can count and read the args. */
   const sessions = [];
+  /** The locale seat's mutable half: one active id and the subscribers watching it. */
+  const localeState = { active: options.locale ?? '', revision: 0, listeners: new Set() };
+  /**
+   * Switch the fake's active locale and notify, the way the host's `setLocale` does.
+   * @param {string} id - the locale id to activate.
+   * @returns {void}
+   */
+  const setLocale = (id) => {
+    localeState.active = id;
+    localeState.revision += 1;
+    for (const listener of [...localeState.listeners]) listener();
+  };
   const services = {
     // The shell's session seat: the add menu's second row starts a Creator draft with it.
     // Only declared services exist on the strict ctx, so a page that forgets to declare it
@@ -174,6 +192,13 @@ export function strictContext(module, t = (key) => key) {
         return () => {};
       },
       bind: () => t,
+      getLocale: () => ({ active: localeState.active, locales: [], revision: localeState.revision }),
+      subscribe: (listener) => {
+        localeState.listeners.add(listener);
+        return () => {
+          localeState.listeners.delete(listener);
+        };
+      },
     },
     slots: {
       inject: (seat, callback) => {
@@ -201,7 +226,7 @@ export function strictContext(module, t = (key) => key) {
     },
     has: (_target, key) => key === 'effect' || declared.has(key),
   });
-  return { ctx, registrations, dictionaries, cleanups, sessions };
+  return { ctx, registrations, dictionaries, cleanups, sessions, setLocale };
 }
 
 /** Resolve a package dependency path, so tests never guess file locations. */

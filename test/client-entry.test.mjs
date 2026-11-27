@@ -101,6 +101,24 @@ test('apply 的清理函数会回收所有座位注册', () => {
   }
 });
 
+test('K156 apply 把宿主 active locale 写进 store，并订阅后续切换（不是只在挂载时读一次）', async () => {
+  const dictionary = await readDictionary('zh');
+  const { ctx, registrations, cleanups, setLocale } = strictContext(entry, translator(dictionary), { locale: 'zh' });
+  entry.apply(ctx);
+  const { store } = registrations.find(({ registration }) => registration.name === 'main').registration.inject();
+
+  assert.equal(store.getSnapshot().market.locale, 'zh', '挂载时就写一次（首帧的 chips 就是对的列）');
+  setLocale('en');
+  assert.equal(store.getSnapshot().market.locale, 'en', '订阅在生效：切换后 store 立刻跟上');
+  setLocale('zh');
+  assert.equal(store.getSnapshot().market.locale, 'zh', '来回切都跟得上');
+
+  for (const dispose of cleanups) if (typeof dispose === 'function') dispose();
+  setLocale('en');
+  assert.equal(store.getSnapshot().market.locale, 'zh', '销毁后不再写（订阅跟着 apply 一起回收）');
+  store.actions.marketLocale('');
+});
+
 /**
  * The commit artifact, loaded the way the shell loads it.
  *

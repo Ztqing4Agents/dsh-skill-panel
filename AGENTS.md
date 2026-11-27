@@ -25,7 +25,7 @@ git tag v<version> && git push origin v<version>   # 正式发布只有这条路
 | 路由表、写盘、错误码 | `docs/contracts/routes.md` | §3.3 §3.4 §8.1 |
 | 前端组件、状态机、命名与 i18n；已安装详情页 | `docs/contracts/client.md`、`docs/contracts/installed-detail.md` | §3.5 §3.6 §8.2–§8.5；详情页全文 |
 | 调用流程与未定事项 | `docs/contracts/flows.md` | §4 §5 |
-| 验收口径、夹具、用例编号 K1–K155 | `docs/contracts/acceptance.md` | 附录 D.5（K28–K61 K75–K78 K82–K115）、D.6（K62–K74）、D.7（K116–K125）、D.8（K126–K137）、D.9（K138–K147）、D.10（K148）、D.11（K149）、D.12（K150）、D.13（K151）、D.14（K152–K155） |
+| 验收口径、夹具、用例编号 K1–K160 | `docs/contracts/acceptance.md` | 附录 D.5（K28–K61 K75–K78 K82–K115）、D.6（K62–K74）、D.7（K116–K125）、D.8（K126–K137）、D.9（K138–K147）、D.10（K148）、D.11（K149）、D.12（K150）、D.13（K151）、D.14（K152–K155）、D.15（K156–K160） |
 | 决策登记（偏离 / 更正 / 假设） | `docs/contracts/decisions.md` | 附录 B |
 | 页面视觉刻度（px、令牌、`skc_` 类名、收拢顺序） | `docs/contracts/visual.md` | A.1–A.9 |
 | 技能市场（源适配器、数据流、市场刻度、安装链路） | `docs/contracts/market.md` | §7 附录 F 附录 G |
@@ -36,7 +36,7 @@ git tag v<version> && git push origin v<version>   # 正式发布只有这条路
 | 过去是什么、为什么这么定 | `git log`（`git log -S`） | 仓库里没有 `archive/`，历史交 git |
 | 现在卡在哪、还剩什么没验 | `.agents/work/BOARD.md` | 本地看板（列约定在文件头，过程产物在 wip/ 与 scratch/），不入库 |
 
-契约按**编号分区**：`§x.y` 与 `附录 X.n` 在全仓库唯一，正文里看到编号就按上表定位；编号是 `test/*.test.mjs` 头注的锚点（K1–K155），**不许重排或复用**（K33 / K58 / K60 / K80 已退役，号不复用）。
+契约按**编号分区**：`§x.y` 与 `附录 X.n` 在全仓库唯一，正文里看到编号就按上表定位；编号是 `test/*.test.mjs` 头注的锚点（K1–K160），**不许重排或复用**（K33 / K58 / K60 / K80 已退役，号不复用）。
 
 **新知识写哪**：可 grep 的断言 → 契约；不能做错的事 → 本文件「硬约束」；用户可感知的变化 → `CHANGELOG`；还没做的事 → 看板；**没定型的探索结论**才进项目记忆。文档里不放过程（PRD、测试报告、设计图）——已移出，见 commit `a8141eb`。
 
@@ -59,7 +59,7 @@ git tag v<version> && git push origin v<version>   # 正式发布只有这条路
 
 1. **不要手改 `client.js`**：它由 `npm run build` 生成，`npm run check:client` 会逐字节比对。
    改了源码必须重新 build 并提交产物，否则真机装的还是旧代码。`src/client/styles.js` 的 CSS 是模板字符串，
-   **注释里不能出现反引号**；`src/client/**` 的注释只留「为什么不能改」——注释同样吃 180000 B 的产物预算。
+   **注释里不能出现反引号**；注释**不进**产物（`minifyWhitespace` 连注释一起剥、`legalComments: 'none'`），`src/client/**` 的注释只留「为什么不能改」，为可读不为体积。
 2. **不要在 `lib/**` 或 `src/client/**` 写中文**（注释也不行）：`check:i18n` 直接 exit 1。
    界面文案一律进 `locale/*.json`，代码里只出现键名。
 3. **入口名与插件名都只在 `locale/*.json` 里改**（`panel.label` = 侧栏行标题，`meta.title` = 插件名，**两键可独立取值**：2026-11-17 起二者不同——侧栏 `技能`/`Skills`，插件名 `技能面板`/`Skill Panel`），代码零改动。

@@ -463,8 +463,42 @@ export function visibleCategories(market) {
 }
 
 /**
+ * Whether a locale id reads the English column of the category table.
+ *
+ * The subtag decides, not the whole id: a language pack may register `en-GB`, and every
+ * other locale reads `name` - the column the site reads - because the table has only two.
+ * @param {unknown} locale - the shell's active locale id.
+ * @returns {boolean} true for an English locale.
+ */
+export function localeIsEnglish(locale) {
+  if (typeof locale !== 'string') return false;
+  const id = locale.trim().toLowerCase();
+  return id === 'en' || id.startsWith('en-') || id.startsWith('en_');
+}
+
+/**
+ * The display name of one category, in the active locale.
+ *
+ * The one place the panel deviates from the site on purpose: the site reads `name` only,
+ * while the table ships a real English title in `nameEn` for all thirteen entries. Every
+ * chain ends on the key - ugly, but still a name the user can filter by.
+ * @param {object} category - `{key, name, nameEn}` from `bootstrap`.
+ * @param {unknown} [locale] - the shell's active locale id.
+ * @returns {string} the label, empty when the entry carries none of the three.
+ */
+export function categoryLabelOf(category, locale = '') {
+  const name = typeof category?.name === 'string' ? category.name : '';
+  const nameEn = typeof category?.nameEn === 'string' ? category.nameEn : '';
+  const key = typeof category?.key === 'string' ? category.key : '';
+  const chain = localeIsEnglish(locale) ? [nameEn, name, key] : [name, nameEn, key];
+  return chain.find((value) => value !== '') ?? '';
+}
+
+/**
  * The chips to draw, with the "all categories" chip first.
  * @param {object[]} categories - `{key, name, nameEn}` entries from `bootstrap`.
+ * @param {{locale?: string, countsOk?: boolean, total?: number|null}} [options] - the
+ *   active locale, whether the counts are trustworthy, and the grand total.
  * @returns {{value: string|null, label: string}[]} machine value plus display text;
  *   the `null` chip has no label of its own and is rendered from the dictionary.
  */
@@ -477,7 +511,7 @@ export function chipList(categories, options = {}) {
     { value: null, label: '', count: countOf(total) },
     ...items.map((category) => ({
       value: typeof category?.key === 'string' ? category.key : '',
-      label: category?.name || category?.nameEn || category?.key || '',
+      label: categoryLabelOf(category, options.locale),
       count: countOf(category?.count),
     })),
   ];
@@ -541,9 +575,10 @@ export function emptyKindOf(market) {
  * @param {object} detail - a MarketDetail (or null while loading).
  * @param {object} market - the market sub-state, for the category table.
  * @param {Function} t - translate function.
+ * @param {unknown} [locale] - the shell's active locale id; it picks the category column.
  * @returns {{label: string, value: string, code: boolean}[]} table rows.
  */
-export function detailFacts(detail, market, t) {
+export function detailFacts(detail, market, t, locale = '') {
   const item = detail?.item ?? {};
   const unknown = t('market.factUnknown');
   const categories = Array.isArray(market?.categories) ? market.categories : [];
@@ -561,7 +596,7 @@ export function detailFacts(detail, market, t) {
     },
     {
       label: t('market.factCategory'),
-      value: category === undefined ? unknown : (category.name || category.nameEn || category.key || unknown),
+      value: category === undefined ? unknown : (categoryLabelOf(category, locale) || unknown),
       code: false,
     },
     { label: t('market.factInstallTo'), value: text(detail?.installTo) ?? unknown, code: true },

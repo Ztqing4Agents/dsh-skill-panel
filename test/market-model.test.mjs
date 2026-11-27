@@ -21,11 +21,13 @@ import {
   MARKET_STAT_SLOTS,
   MARKET_DEFAULT_SOURCE,
   authorTextOf,
+  categoryLabelOf,
   chipList,
   countText,
   detailFacts,
   emptyKindOf,
   installViewOf,
+  localeIsEnglish,
   marketKeyOf,
   mergeBatches,
   metaSegments,
@@ -464,6 +466,66 @@ test('K37 chipList：第一个是「全部」空值 chip，其余用中文名，
   assert.equal(empty[0].value, null, '仍然是空值 chip');
   assert.equal(empty[0].label, '', '文案由字典给');
   assert.equal(empty[0].count, null, '没有 total 时不带数字');
+});
+
+test('K156 分类名的语言槽位：en 取 nameEn / 其余取 name / nameEn 空 ⇒ name / name 也空 ⇒ key', () => {
+  // The table is the upstream's own: every one of the thirteen entries carries a real English
+  // title in `nameEn` next to the Chinese `name` (`office-efficiency` is `Office Efficiency`),
+  // and our `bootstrap` passes both columns through. The site reads `name` only, so reading
+  // `nameEn` on an English UI is a deliberate, documented deviation - not an upstream rule.
+  const table = [
+    { key: 'office-efficiency', name: '办公效率', nameEn: 'Office Efficiency' },
+    { key: 'dev', name: '开发编程', nameEn: 'Development' },
+  ];
+  const labels = (locale) => chipList(table, { locale }).slice(1).map((chip) => chip.label);
+
+  assert.deepEqual(labels('en'), ['Office Efficiency', 'Development'], 'en：nameEn 胜出');
+  assert.deepEqual(labels('zh'), ['办公效率', '开发编程'], 'zh：name（站点那一列）');
+  assert.deepEqual(labels(''), ['办公效率', '开发编程'], '还没被告知语言时按站点那一列读（首帧不跳字）');
+  assert.deepEqual(labels('ja'), ['办公效率', '开发编程'], '别的语言包也读 name（上游没有第三列）');
+  assert.deepEqual(labels('en-GB'), ['Office Efficiency', 'Development'], '区域写法的 en 也算英文');
+
+  // The two tails, both languages: `nameEn` missing falls to `name`, and both missing falls
+  // to the key - a chip is never blank.
+  const tails = [
+    { key: 'zh-only', name: '仅中文' },
+    { key: 'bare' },
+    { key: 'empty', name: '', nameEn: '' },
+  ];
+  assert.deepEqual(
+    chipList(tails, { locale: 'en' }).slice(1).map((chip) => chip.label),
+    ['仅中文', 'bare', 'empty'],
+    'en：nameEn 空 ⇒ name，name 也空 ⇒ key（空串的 key 也在场，所以落 key）',
+  );
+  assert.deepEqual(
+    chipList(tails, { locale: 'zh' }).slice(1).map((chip) => chip.label),
+    ['仅中文', 'bare', 'empty'],
+    'zh：同一条链，只是前两格顺序相反',
+  );
+  assert.equal(categoryLabelOf({ key: 'bare' }, 'en'), 'bare', '三格全空只剩 key');
+  assert.equal(categoryLabelOf({}, 'en'), '', '连 key 都没有 ⇒ 空串（渲染侧不会画出空白 chip 文案）');
+  assert.equal(categoryLabelOf(null, 'en'), '', '非对象不抛');
+
+  // The two locales decide, not the value's shape.
+  assert.equal(localeIsEnglish('en'), true, 'en 是英文');
+  assert.equal(localeIsEnglish('EN'), true, '大小写不敏感');
+  assert.equal(localeIsEnglish('zh'), false, 'zh 不是');
+  assert.equal(localeIsEnglish(''), false, '未知不是');
+  assert.equal(localeIsEnglish(null), false, '非字符串不是');
+
+  // The detail fact table reads the same column, so one skill cannot be named twice.
+  const facts = detailFacts(
+    { item: { category: 'office-efficiency' }, installTo: '/tmp/skills/x' },
+    { categories: table },
+    (key) => key,
+    'en',
+  );
+  assert.equal(facts[4].value, 'Office Efficiency', '详情事实表的分类名跟着语言走');
+  assert.equal(
+    detailFacts({ item: { category: 'office-efficiency' } }, { categories: table }, (key) => key).at(4).value,
+    '办公效率',
+    '不传 locale 时仍是站点那一列（既有调用不受影响）',
+  );
 });
 
 test('K55 单源语义：市场一次只问一个源，缺省就是 MARKET_DEFAULT_SOURCE', () => {

@@ -107,7 +107,7 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 | **K42** | 源注册表与装配 | 注册表本身 + 注入的假 io | 注册顺序 `skillhub → clawhub`、六个函数与 caps 齐备、描述符形状与 §7.2 一致、`makeMarketDeps` 注入 io 时不自建客户端；**两源 `packageKind` 都是 `files`**、**三个 scope 都是 `hasCategories: true`**，两个适配器都有 `categories`/`counts`（ClawHub 也有分类与计数） | L1 · `test/market-sources.test.mjs` |
 | **K43** | 上游出口与 302 白名单 | 常量 + 手工构造的 `location` | 四个超时与两个字节上限逐条对齐、只跟一跳、只跟 `*.cos.accelerate.myqcloud.com` 的 https、`createUpstream` 的四个键 | L1 · `test/market-upstream.test.mjs` |
 | **K44** | 客户端 api 六个市场方法（含 `marketIcons`，批量的语义细节见 K57；`marketFavorite` 已下线——收藏没有 UI 入口） | 记录调用的 fetch 桩 | URL 文档相对且带 `market/` 前缀、空参数不发送、`version` 缺省不传、install 正文只有 `source/owner/slug/version`、`marketIcons` 正文是 `{items:[{source,owner,slug}]}`、失败信封的 `data` 交给调用方 | L1 · `test/api.test.mjs` |
-| **K45** | store 的 market 子状态与 33 个 action | `createStore()` | 初始筛选（`source:'skillhub'`、`total:null`、`countsOk:true`）、`marketSetFilter` 空操作过滤、关键词落定不闪骨架、`reload` 只清分页不清列表（重取期间旧列表直出）、首屏失败与追加失败语义不同、详情四步不丢列表、安装四步幂等、滚动值归一、boot 兜底、一源失败不影响另一源 | L1 · `test/state.test.mjs` |
+| **K45** | store 的 market 子状态与全部 market action（清单是闭集，写死在用例里） | `createStore()` | 初始筛选（`source:'skillhub'`、`total:null`、`countsOk:true`）、`marketSetFilter` 空操作过滤、关键词落定不闪骨架、`reload` 只清分页不清列表（重取期间旧列表直出）、首屏失败与追加失败语义不同、详情四步不丢列表、安装四步幂等、滚动值归一、boot 兜底、一源失败不影响另一源 | L1 · `test/state.test.mjs` |
 | **K46** | 安装成功复用浮层座位 | `marketInstallOk` 之后渲染 `ToastHost` | 顶层 `notice{kind:'install-ok'}` 存在 → 主行「已安装 <name> · 新会话生效」+ 副行 `skc_marketToastHint` 给路径；与 `refresh-failed` 按 `kind` 分流；`dismissNotice(seq)` 只关当前那一条 | L3 · `test/view-toast.test.mjs` |
 | **K47** | 详情往返不丢已加载页数 | 两页已加载 + 打开详情再返回 | 返回后 `items` / `cursors` / `pages` 不变、`scrollTop` 留在 store、卡片数不退回第一页 | L3 · `test/market-view.test.mjs` |
 | **K48** | 已安装页签零回归 | 两个页签各渲染一次 | 已安装页签有状态行与「添加技能」、不挂市场面板、行仍不可点（K22 照旧）；市场页签反之 | L3 · `test/market-view.test.mjs` |
@@ -323,6 +323,20 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 - **H5 负判据原文**：控制台 error 级日志必须 0 条，且下面四句（都摘自宿主 `system.ts` 的 throw 文本）一条都不许出现——`cannot get property "…" without inject`（读到 `inject` 未声明的服务，整页 boot 失败）、`client-modules: require("…") missed the module table`（同步 require 没落在静态种子表里）、`client-modules: cannot resolve "…"`（动态 import 解析不到）、`loaded without registering "…" via __ModuleLoader__.load`（产物执行了却没注册自己的模块行）。
 - **H6 shell 静态种子表**：取 asar 里唯一的 shell 产物 `index-<hash>.js`，顺 `staticModules:` 后的零参调用读 `Object.values({…})` 的键名，必须仍是 11 项且含 `@deepseek-ai/dsh-client-ui-primitives`（自 0.2.3 起该包不再落盘、被静态链接进 shell；掉一项就是整页白屏）。**负向自测**：临时副本里把该项改名，判据必须红；换回真 asar 必须转绿。
 - **H7 十六条路由无凭据可达**：逐条带 `credentials: 'omit'` 请求，三条只读要 200、十三条写路由要 4xx，且没有 401 / 403 / 503——把 K153 的策略锁成可观测行为；写路由用必然被拒的坏参数（空 body / 非法枚举）判「不是被鉴权层挡的」，不写盘、不联网。
+
+### D.15 英文界面分类名与详情短稿（K156–K160）
+
+两条 2026-11-27 的用户裁决各成一组：**英文界面分类名要显示英文**（有意偏离站点读法，口径见 `docs/contracts/market.md` §7.4 ⑤ 与 `docs/contracts/client.md` §3.9.1 第 6 条），以及**详情概览与上游保持一致**（有短稿先读 `/overview`，见 `docs/contracts/market.md` §7.4 的 `MarketDetail` 行与 §7.8 硬规矩 5）。编号接 K155 往后、全仓库唯一。
+
+| # | 目标 | 断言 | 层 |
+| --- | --- | --- | --- |
+| **K156** | 分类名按语言取槽：`en` 取 `nameEn`、其余取 `name`、两列都空取 `key` | ① 纯函数四分支：同一份 `{name, nameEn}` 表，`locale:'en'` ⇒ `nameEn`、`'zh'`/`''`/`'ja'` ⇒ `name`、`nameEn` 空 ⇒ `name`、`name` 也空 ⇒ `key`；`en-GB` 这类区域写法算英文（按语言子标签判）；`categoryLabelOf` 三格全空 ⇒ 空串且不抛；② 详情事实表的分类名走同一个函数（传 `locale` 就换列，不传仍是站点那一列）；③ 组件树跟随切换：同一份 `categories` 的**同一个 store** 渲染两次，`marketLocale('zh')` ⇒ 中文 chip、`marketLocale('en')` ⇒ 英文 chip（不是挂载时读一次），数量位不受影响；④ `apply` 挂载时读 `ctx.locale.getLocale().active` 写进 store、`ctx.locale.subscribe` 之后切换立刻跟上、销毁后不再写，且 **`inject` 不新增项**（仍 `slots`/`locale`/`uiWorkspace`） | L1 + L3 · `test/market-model.test.mjs` + `test/market-view.test.mjs` + `test/client-entry.test.mjs` |
+| **K157** | `hasOverview:true` ⇒ 多次请求，`overview` 等于短稿正文 | 请求清单恰为 详情 → 清单 → 作者原文 → `/overview` → 短稿 `url` 指的对象（共 **5** 次）；即便详情体 `contentZhAvailable:true` 也**不读译本**（一次 `lang` 都没有），`overview` 逐字等于短稿正文、不是 `SKILL.md`；`declaredName` / `nameValid` / `files` / `filesComplete` 不受影响；`/overview` 带 `namespace`、不带 `path` | L1 · `test/market-overview-short.test.mjs` |
+| **K158** | 短稿 `url` 不在白名单 ⇒ 一次都不去取，回落 `SKILL.md` | 三个变体（别的域名 / 同域但是 `http:` / 桶后缀形似 `….myqcloud.com.evil.test`）逐条：所有请求都落在 `api.skillhub.cn`，那个 `url` **一次都没被请求**；`/overview` 之后直接回落作者原文，没有半段短稿混进 `overview`，`declaredName` 照常 | L1 · `test/market-overview-short.test.mjs` |
+| **K159** | `/overview` 404 ⇒ 回落现有链路，不抛错 | 标志为真但 `/overview` 抛错：无译本 ⇒ 回落作者原文（4 次请求）；有译本 ⇒ 继续回落译本（5 次请求，最后一次带 `lang=zh`）——两条都 `doesNotThrow` 且 `declaredName` 照常 | L1 · `test/market-overview-short.test.mjs` |
+| **K160** | `hasOverview:false` ⇒ 与原链路逐字相同 | 无译本 3 次 / 有译本 4 次，**请求清单与 M15 之前完全一致**，且一次 `/overview` 请求都没有；标志写成字符串 `"true"` 或数字 `1` 也不算有短稿（只认布尔 `true`） | L1 · `test/market-overview-short.test.mjs` |
+
+**红绿口径**：K156–K160 全部进 `npm test`（假 `io` 驱动，不联网；短稿夹具取 2026-11-27 的真实形态：`shibo-bid-project-matcher` 的 `/overview` 应答、COS 主机与 `aa/bb/<md5>.md` 路径）。不新增真机项——两者都只改文本来源与文字列，版面与几何未动。
 
 ### 真机才能验证的项（不进自动化测试）
 
