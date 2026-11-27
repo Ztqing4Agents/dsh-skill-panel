@@ -249,7 +249,7 @@ test('A.5/A.9 48px 是「含边框」的外框：border-box + .5px 边框 + padd
   const body = ruleBody(capturedCss(), '.skc_cardIcon');
   assert.match(body, /(?:^|;)\s*box-sizing\s*:\s*border-box/, 'border-box：48px 含边框，否则 48 + .5×2 会撑成 49');
   assert.match(body, /(?:^|;)\s*border\s*:\s*\.5px\s+solid\b/, '.5px 边框在盒内（宿主原样，不是描边在外的 outline）');
-  assert.match(body, /(?:^|;)\s*background-clip\s*:\s*padding-box/, '底色裁到 padding-box：绘画区 47px，半透明边框不被粉彩盖住');
+  assert.match(body, /(?:^|;)\s*background-clip\s*:\s*padding-box/, '底色裁到 padding-box：绘画区 47@DPR 2 / 46@DPR 1，半透明边框不被粉彩盖住');
   assert.equal(
     /(?:^|;)\s*border-(?:width|style|color|top|right|bottom|left)\s*:/.test(body),
     false,

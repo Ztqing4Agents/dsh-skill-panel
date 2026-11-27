@@ -377,7 +377,7 @@ font-size: 13px; line-height: 20px; display: inline-flex;
 | 区标题 | 14px / 22px / 500 | `.skc_groupTitle` |
 | 列表 gap / 行外扩 | 2px / `margin:0 -8px` | `.skc_cards` / `.skc_card` |
 | 行内 gap / padding | 14px / 8px → 行高 **64px**（48 图标 + 8×2；内置插件块共用同一颗 48 框，实测 head 64 / padding 8，与技能行逐字相同） | `.skc_cardHead` |
-| 图标 | 外框 48×48、底色 47×47（`background-clip: padding-box`），`.5px` `border-l3`，`radius-lg`（16px）；**17px / 700** 大写首字母居中；**6 组** accent 10%（天空 12%）底 + accent 实色字按技能名散列，对齐 skillhub.cn，**字母对比度约 2–3:1（刻意放弃原 ≥4.5:1）** | `.skc_cardIcon`（色板与散列见 `src/client/avatar.js`，理由见 A.5 与 `decisions.md` 附录 H） |
+| 图标 | 外框 48×48、底色 47×47（DPR 2）/ 46×46（DPR 1）（`background-clip: padding-box`；`border-box` 48 减两侧边框——`.5px` 取整到整设备像素 = 1 / DPR CSS px，Retina 因此是 47，2026-11-27 两档都量了 `clientWidth`），`.5px` `border-l3`，`radius-lg`（16px）；**17px / 700** 大写首字母居中；**6 组** accent 10%（天空 12%）底 + accent 实色字按技能名散列，对齐 skillhub.cn，**字母对比度约 2–3:1（刻意放弃原 ≥4.5:1）** | `.skc_cardIcon`（色板与散列见 `src/client/avatar.js`，理由见 A.5 与 `decisions.md` 附录 H） |
 | **插件位**（列表块 `PluginBlock` / 页头 `detailTop`） | **两处同图同尺寸**：无图标或解码失败画 `PluginArtworkDefault`（`size={36}`），框内 **36×36** 居中（宿主卡片与详情头就是这张；宿主列表行那张 `PluginArtworkSubagent` 30 不采用）。框各按我们的：列表块 48（`radius-lg` 16 / `.5px` `border-l3`）、页头 49（48 内容盒）；两处都不挂粉彩底（粉彩只在画字母那一帧写） | `.skc_pluginIconImg`（与 `.skc_marketIconImg` 同挂，靠声明顺序把 100% 覆盖成 36）；**`.skc_marketIconImg` 的全局值仍是 100% 填满**，技能行与市场卡不变 |
 | 名称 / 描述 | 14/20/500 · 13/18 tertiary 单行（**已安装行**；市场卡描述三行，刻度在 `docs/contracts/market.md` 附录 F） | `.skc_cardTitle` / `.skc_cardDesc` |
 | 开关 | 36×20（`Switch`），左侧预留 14px + 8px | `.skc_bundleToggle` |

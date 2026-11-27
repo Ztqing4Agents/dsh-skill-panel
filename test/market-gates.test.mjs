@@ -168,7 +168,11 @@ test('K40 市场刻度逐条落地：网格 280/12、卡片竖排 14、cardOpen 
   assert.match(ruleOf('.skc_marketSourceMark'), /border-radius: var\(--dsw-radius-sm\)/, '来源图形用 radius-sm');
   assert.match(ruleOf('.skc_marketSkeletonStat'), /width: 56px; height: 12px/, '骨架三段 56×12（新刻度 ⑨）');
   assert.match(ruleOf('.skc_marketSkeletonStat'), /border-radius: var\(--dsw-radius-xs\)/, '骨架三段用 radius-xs');
-  assert.match(ruleOf('.skc_marketSkeletonTag'), /width: 48px; height: 19px/, '骨架标签与真件同盒 48×19（新刻度 ⑬）');
+  // The placeholder keeps the fixed 19px box; the real chip's `19` is only the Retina reading
+  // (its `.5px` hairline computes to 0.5px at DPR 2 and to 1px at DPR 1, so the same chip measures
+  // 19 or 20 and the card 197 or 198 — real-host readings, DPR forced at launch).
+  assert.match(ruleOf('.skc_marketSkeletonTag'), /width: 48px; height: 19px/,
+    '骨架标签固定 48×19（新刻度 ⑬）：19 是 Retina（DPR 2）与真件同盒，DPR 1 下真件 20');
   // U14: the clamp is a *value* change, not a new tick (market.md 附录 F: `.skc_marketDesc` 由
   // 1 行 → 2 行（U5）→ 3 行（U14）). The number stays pinned: 3 lines × 18px = the 54px box the
   // real-machine check measures, so a "just check that line-clamp exists" assertion would let a
@@ -393,8 +397,16 @@ test('K83 标签 chip 的刻度逐字落地（描边、无颜色字面量、可�
   assert.match(list, /list-style: none/, '标签行是 ul，去掉项目符号');
   const tag = ruleOf('.skc_marketTag');
   assert.match(tag, /border: \.5px solid var\(--dsw-alias-border-l2\)/, '描边 chip，且只用宿主令牌');
+  // M18: the chip is 19px high only while that hairline is allowed to round down — at DPR 2 the
+  // `.5px` computes to 0.5px (chip 19, card 197), at DPR 1 Chrome computes 1px (chip 20, card 198).
+  // So the declaration is the datum: rewriting it to `1px` to "match the number" would push the
+  // Retina chip to 20 as well, and a `border-*` longhand could override the shorthand silently.
+  assert.match(tag, /border: \.5px solid /, '.5px 描边仍是 .5px（改成 1px 会让 DPR 2 的 chip 也变 20）');
+  assert.equal(/border:\s*1px/.test(tag), false, '描边没有被改成 1px');
+  assert.equal(/border-(?:width|top|right|bottom|left)(?:-width)?\s*:/.test(tag), false,
+    '没有 border-* 长写覆盖 .5px 简写（简写是唯一真源）');
   assert.match(tag, /border-radius: var\(--dsw-radius-sm\)/, '圆角 radius-sm');
-  assert.match(tag, /padding: 1px 6px/, '内边距 1×6（19px 高）');
+  assert.match(tag, /padding: 1px 6px/, '内边距 1×6（19@DPR 2 / 20@DPR 1）');
   assert.match(tag, /font-size: 11px; line-height: 16px/, '11/16 一档小字');
   assert.match(tag, /white-space: nowrap/, '单枚不折行');
   assert.match(tag, /text-overflow: ellipsis/, '超长单枚省略');
