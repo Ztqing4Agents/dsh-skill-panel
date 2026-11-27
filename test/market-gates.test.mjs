@@ -775,9 +775,10 @@ test('K115 visual.md A.5 有整行可点的三条刻度与行底色的现取值�
   }
 });
 
-test('K115 体积门禁抬到 180000，locale 恰好 197 键（含 6 个 markdown.* chrome 标签）', async () => {
+test('K115 体积门禁抬到 190000，locale 恰好 197 键（含 6 个 markdown.* chrome 标签）', async () => {
   const bundleTest = await readFile(join(ROOT, 'test', 'bundle-contract.test.mjs'), 'utf8');
-  assert.match(bundleTest, /size < 180_000/, '产物上限是 180000 B');
+  assert.match(bundleTest, /size < 190_000/, '产物上限是 190000 B');
+  assert.equal(/size < 180_000/.test(bundleTest), false, '旧上限 180000 已经不在（不能两个都在）');
   assert.equal(/size < 175_000/.test(bundleTest), false, '旧上限 175000 已经不在（不能两个都在）');
   assert.equal(/size < 165_000/.test(bundleTest), false, '旧上限 165000 已经不在（不能两个都在）');
   assert.equal(/size < 150_000/.test(bundleTest), false, '旧上限 150000 已经不在（不能两个都在）');
@@ -889,9 +890,9 @@ test('K115 契约自洽：§3.7 头注说的市场条数与共用 guard 的名�
   assert.match(intro, /#14/, '§3.7 头注列举「共用 guard()」的本地路由时带上 #14（detail 也走同一个 guard）');
 });
 
-/* ---------------------- K125 · 门禁同步（D15：16 条 / 197 键 / 20 码 / 180000） ---------------------- */
+/* ---------------------- K125 · 门禁同步（D15：16 条 / 197 键 / 20 码 / 190000） ---------------------- */
 
-test('K125 门禁同步：16 条路由、197 键、§8.6 二十个码、产物 ≤ 180000、check:docs 与 check:board 0 warn', async () => {
+test('K125 门禁同步：16 条路由、197 键、§8.6 二十个码、产物 ≤ 190000、check:docs 与 check:board 0 warn', async () => {
   // 四件事都各有一个更细的用例（K35/K89/K115/K30）在守；这一条是「同一轮里必须一起绿」
   // 的合并判据——上一轮它们分四处漂，谁都没先红。
   const { ROUTES } = await import('../lib/routes.js');
@@ -918,10 +919,10 @@ test('K125 门禁同步：16 条路由、197 键、§8.6 二十个码、产物 �
   assert.equal(new Set(codes).size, codes.length, '一行一个码，没有重复');
 
   const bundleTest = await readFile(join(ROOT, 'test', 'bundle-contract.test.mjs'), 'utf8');
-  assert.match(bundleTest, /size < 180_000/, '体积门禁是 180000');
+  assert.match(bundleTest, /size < 190_000/, '体积门禁是 190000');
   const artifact = await readFile(join(ROOT, 'client.js'), 'utf8');
   const size = Buffer.byteLength(artifact);
-  assert.equal(size < 180_000, true, `产物 ${size} B 在 180000 以内`);
+  assert.equal(size < 190_000, true, `产物 ${size} B 在 190000 以内`);
   assert.equal(size > 40_000, true, `产物 ${size} B 不是空壳`);
 
   const docs = await runGate('check-docs.mjs');

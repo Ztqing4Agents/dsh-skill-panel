@@ -97,7 +97,7 @@ test('产物体积没有异常膨胀（防止误把依赖打进来）', async ()
   // and the code is reachable. U20 raised it once more, see below. Conditions stay the same
   // as before: the stylesheet keeps exactly one CSS comment (the K41 anchor), and any next
   // feature starts by reading `npm run build`'s byte count.
-  // 180 KB is the lead's call for U20 (add / delete skill: one dialog module with two
+  // 180 KB was the lead's call for U20 (add / delete skill: one dialog module with two
   // components, the toolbar's chevron menu, the detail header's second action and the
   // delete confirmation). Measured after the U20 follow-up round (menu alignment, the
   // uninstall dialog's own fact label, the two-stage status slot, and the market tab
@@ -105,8 +105,13 @@ test('产物体积没有异常膨胀（防止误把依赖打进来）', async ()
   // then U22's two-row add menu and its ArrowDown handler: **177498 B** (was 160041 B
   // before U20), i.e. ~2502 B of
   // headroom left. U22 raised the ceiling from 175000 on the user's say-so, because the
-  // host-parity menu (two rows with icons and hint lines) does not fit under the old one. The discriminator is unchanged:
-  // bundling react/react-dom instead of requiring them from the shell still lands near
-  // 190 KB, so ~19 KB of the ceiling separates a correct build from that mistake.
-  assert.equal(size < 180_000, true, `产物不超过 180 KB（实际 ${size} B，说明没有把 react 之类打进来）`);
+  // host-parity menu (two rows with icons and hint lines) does not fit under the old one.
+  // D21 (2026-11-27) raised it once more, 180 KB -> 190 KB, on the user's call: three rounds
+  // in a row had landed within 400 B of the old ceiling (178337 -> 179476 -> 179611, 389 B
+  // left), and every raise so far was the same story. The ceiling exists for one purpose -
+  // catching a build that bundles react/react-dom instead of requiring them from the shell -
+  // and 10 KB does not change what it catches. What it does change is the margin: that
+  // mistaken build has been estimated near 190 KB, i.e. right at the new ceiling, so the gate
+  // no longer has slack against it. Recorded as D21 in `docs/contracts/decisions.md`.
+  assert.equal(size < 190_000, true, `产物不超过 190 KB（实际 ${size} B，说明没有把 react 之类打进来）`);
 });
