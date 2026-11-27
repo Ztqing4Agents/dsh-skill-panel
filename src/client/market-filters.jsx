@@ -278,7 +278,7 @@ export function MarketFilters({ market, t, onInput, onCommit, onFilter }) {
             countsOk: market.countsOk,
             locale: market.locale,
           }).map((chip) => {
-            const count = countText(chip.count);
+            const count = countText(chip.count, market.locale);
             return (
               <Pill
                 key={chip.value === null ? 'category-all' : chip.value}

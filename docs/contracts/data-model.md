@@ -372,7 +372,7 @@ sortByUpdatedDesc(items): MarketItem[]      // 新的降序数组；null 时间�
 ```js
 // src/client/market-model.js —— 合并只在这里发生，纯函数、node 可直测
 marketKeyOf(item): string   // item.id，缺则 `${sourceId}:${owner}:${slug}`
-metaSegments(item) / authorTextOf(item) / statSegments(item) / ratingOf(item) / ratingTextOf(rating)   // 作者行的段（@owner/slug + 版本）／handle 三级回落／三格数字槽（**顺序 评分·下载·收藏**）／score 折 4.0–5.0／一位小数字符串
+metaSegments(item) / authorTextOf(item) / statSegments(item, locale?) / ratingOf(item) / ratingTextOf(rating) / countText(value, locale?)   // 作者行的段（@owner/slug + 版本）／handle 三级回落／三格数字槽（**顺序 评分·下载·收藏**，两格计数按 locale 缩写）／score 折 4.0–5.0／一位小数字符串（不走 Intl）／紧凑计数（locale 空则退回运行时默认）
 mergeBatches(pages: {sourceId: string, items: MarketItem[]}[], options?: {existing?: MarketItem[]}): MarketItem[]
 ```
 

@@ -410,11 +410,16 @@ export function ratingTextOf(rating) {
  * card of a row, so an item missing its saves cannot push its rating into slot two. A
  * slot that is not `present` is drawn as an empty span with no icon, no number and no
  * zero; when all three are absent the caller drops the whole line.
+ *
+ * The rating is the exception to the locale rule: it goes through `ratingTextOf` (a fixed
+ * `toFixed(1)`), because a scale reading must keep its dot in every language. Only the two
+ * counts are formatted per interface language.
  * @param {object} item - a MarketItem.
+ * @param {unknown} [locale] - the shell's active locale id, for the two counts.
  * @returns {{slot: string, present: boolean, value: string|null, labelKey: string,
  *   param: string}[]} one entry per slot, in `MARKET_STAT_SLOTS` order.
  */
-export function statSegments(item) {
+export function statSegments(item, locale = '') {
   const rating = ratingOf(item);
   return [
     {
@@ -427,14 +432,14 @@ export function statSegments(item) {
     {
       slot: 'downloads',
       present: Number.isFinite(item?.downloads),
-      value: countText(item?.downloads),
+      value: countText(item?.downloads, locale),
       labelKey: 'market.metaDownloads',
       param: 'count',
     },
     {
       slot: 'saves',
       present: Number.isFinite(item?.saves),
-      value: countText(item?.saves),
+      value: countText(item?.saves, locale),
       labelKey: 'market.metaSaves',
       param: 'count',
     },
@@ -518,16 +523,23 @@ export function chipList(categories, options = {}) {
 }
 
 /**
- * A compact count for a chip ("1.3M", "13K", and whatever the runtime's default locale
- * spells them as). Returns null for "there is no number", which the chip renders as
- * nothing at all - never a zero placeholder, never a dash.
- * @param {unknown} value - the count from bootstrap.
+ * A compact count for a chip or a card slot: English writes "2.5M" / "137K", Chinese
+ * switches to its own ten-thousand unit. Returns null for "there is no number", which the
+ * chip renders as nothing at all - never a zero placeholder, never a dash.
+ *
+ * The suffix follows the **interface** language, not the browser's: `locale` is the id the
+ * shell last wrote into the store, and an empty string keeps the old behaviour (the
+ * runtime's default locale) so a panel that has not been told yet still draws numbers.
+ * An unusable tag falls back to the plain number rather than dropping the figure.
+ * @param {unknown} value - the count from bootstrap or a market item.
+ * @param {unknown} [locale] - the shell's active locale id.
  * @returns {string|null} the formatted number, or null.
  */
-export function countText(value) {
+export function countText(value, locale = '') {
   if (!Number.isFinite(value) || value < 0) return null;
+  const tag = typeof locale === 'string' && locale.trim() !== '' ? locale.trim() : undefined;
   try {
-    return new Intl.NumberFormat(undefined, { notation: 'compact' }).format(value);
+    return new Intl.NumberFormat(tag, { notation: 'compact' }).format(value);
   } catch {
     return String(value);
   }

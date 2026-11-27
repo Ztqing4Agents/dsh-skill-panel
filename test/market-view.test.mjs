@@ -494,6 +494,8 @@ test('K38 工具栏：搜索框、来源与排序菜单、分类 chips；ClawHub
       total: 2540000,
       countsOk: true,
     });
+    // 数字后缀跟界面语言（K54）：这里把语言定成中文，期望值就不再依赖跑测试那台机器的默认语言。
+    store.actions.marketLocale('zh');
   });
   assert.ok(skillhub.includes('class="skc_marketToolbar"'), '有工具栏');
   assert.ok(skillhub.includes('placeholder="搜索技能…"'), '有搜索框');
@@ -508,14 +510,8 @@ test('K38 工具栏：搜索框、来源与排序菜单、分类 chips；ClawHub
   assert.ok(skillhub.includes('>默认排序<'), '排序锚点显示当前值「默认排序」（机器值仍是 recommended）');
   // 分类 chips 上的数字：`total` 挂在「全部」上，`count` 挂在各自 chip 上（K54）。
   assert.equal(matches(skillhub, /class="skc_marketChipCount"/g).length, 2, '「全部」与「开发工具」都带数字');
-  assert.ok(
-    skillhub.includes(`>${new Intl.NumberFormat(undefined, { notation: 'compact' }).format(2540000)}<`),
-    '「全部」的数字是 total 的紧凑写法',
-  );
-  assert.ok(
-    skillhub.includes(`>${new Intl.NumberFormat(undefined, { notation: 'compact' }).format(137000)}<`),
-    '分类自己的数字',
-  );
+  assert.ok(skillhub.includes('>254万<'), '「全部」的数字是 total 的紧凑写法（中文界面）');
+  assert.ok(skillhub.includes('>14万<'), '分类自己的数字');
 
   const clawhub = renderMarket((store) => {
     store.actions.marketBootReady({
@@ -725,10 +721,17 @@ test('K156 切语言后 chips 与详情事实表换列：同一份 categories，
   const store = marketStore((s) => {
     s.actions.marketBootReady({
       sources: [{ id: 'all', labelKey: 'market.source.all', hasCategories: true, packageKind: 'files' }],
-      categories: [{ key: 'office-efficiency', name: '办公效率', nameEn: 'Office Efficiency', count: 12 }],
+      categories: [{ key: 'office-efficiency', name: '办公效率', nameEn: 'Office Efficiency', count: 137000 }],
       categoriesOk: true,
-      total: 120,
+      total: 2540000,
       countsOk: true,
+    });
+    // One card, so the two count slots are on screen as well as the chips. The figures are
+    // picked so no language spells them the same as the chip numbers above.
+    const card = item({ downloads: 137000, saves: 12000 });
+    s.actions.marketPageAppended({
+      pages: [{ sourceId: 'skillhub', page: { items: [card], next: null } }],
+      merged: [card],
     });
     s.actions.marketLocale('zh');
   });
@@ -736,12 +739,17 @@ test('K156 切语言后 chips 与详情事实表换列：同一份 categories，
   const zhHtml = renderStore(store);
   assert.ok(zhHtml.includes('>办公效率<'), '中文界面：分类 chip 读 name');
   assert.equal(zhHtml.includes('Office Efficiency'), false, '中文界面不出现英文列');
+  assert.ok(zhHtml.includes('>254万<') && zhHtml.includes('>14万<'), '中文界面：chip 计数用万（全部 = total、分类 = count）');
+  assert.ok(zhHtml.includes('>1.2万<'), '中文界面：卡片收藏格同样用万（statSegments 传了 locale）');
 
   store.actions.marketLocale('en');
   const enHtml = renderStore(store);
   assert.ok(enHtml.includes('>Office Efficiency<'), '英文界面：同一份数据换成 nameEn');
   assert.equal(enHtml.includes('办公效率'), false, '英文界面不出现中文列');
   assert.equal(enHtml.includes('skc_marketChipCount'), true, '换列不动数量位（数字照旧在）');
+  assert.ok(enHtml.includes('>2.5M<') && enHtml.includes('>137K<'), '英文界面：chip 计数换成 2.5M / 137K（K54 的后缀规则随语言）');
+  assert.ok(enHtml.includes('>12K<'), '英文界面：卡片收藏格换成 12K');
+  assert.equal(enHtml.includes('万'), false, '英文界面一个「万」都没有（chips 与卡片一起换）');
 
   // The detail fact table reads the same column, so one skill is never named two ways.
   store.actions.marketDetailOpen({ sourceId: 'skillhub', owner: 'ake', slug: 'dev-god', category: 'office-efficiency' });

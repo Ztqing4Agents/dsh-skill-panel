@@ -115,7 +115,7 @@ export function MarketCard({ item, market, t, onOpen, onInstall }) {
   const key = marketKeyOf(item);
   const title = item.displayName || item.slug || '';
   const segments = metaSegments(item);
-  const stats = statSegments(item);
+  const stats = statSegments(item, market.locale);
   // One defensive read: the normalization rules (cap, dedupe, truncation) live in the Host
   // and are not copied here.
   const tags = Array.isArray(item.tags) ? item.tags : [];

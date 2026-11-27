@@ -180,18 +180,27 @@ test('K37 mergeBatches：页为空 / 参数缺失都不抛，已有项原样保�
   assert.deepEqual(mergeBatches([{ sourceId: 'x' }], {}), [], '页里没有 items 也不报错');
 });
 
-test('K54 countText：紧凑格式 + 四态（万 / M / 0 / null）', () => {
-  // 契约（client.md §3.9.1 第 6 条）：chips 上的数字用 `Intl.NumberFormat(undefined, {notation:'compact'})`，
-  // 也就是「跟随运行时默认语言」。所以断言分两层：格式跟随运行时；zh/en 的具体写法单独钉住，
-  // 证明这套格式化确实是用户要求的那个形状（中文 254万、英文 2.5M），而不是自己拼的字符串。
+test('K54 countText：紧凑格式跟随界面语言 + 四态（万 / M / 0 / null）', () => {
+  // 契约（client.md §3.9.1 第 6 条）：后缀跟**界面**语言，不跟浏览器语言——`locale` 是 `apply`
+  // 写进 store 的宿主 active locale。所以中文界面恒 `254万`、英文界面恒 `2.5M`，与跑测试的
+  // 机器语言无关（这台上是 en-US，早先的版本会因此出 2.5M）。
+  assert.equal(countText(2540000, 'zh'), '254万', '中文界面：254万');
+  assert.equal(countText(2540000, 'en'), '2.5M', '英文界面：2.5M');
+  assert.equal(countText(137000, 'zh'), '14万', '中文界面的四位以上单位（`万`，整数位）');
+  assert.equal(countText(137000, 'en'), '137K', '英文界面：137K');
+  // 没被告知语言时退回运行时默认（行为与 M14 之前逐字相同）：这是首帧不跳字的保证。
   const compact = (value) => new Intl.NumberFormat(undefined, { notation: 'compact' }).format(value);
-  assert.equal(countText(2540000), compact(2540000), '跟随运行时默认语言');
-  assert.equal(new Intl.NumberFormat('zh-CN', { notation: 'compact' }).format(2540000), '254万', '中文环境：254万');
-  assert.equal(new Intl.NumberFormat('en-US', { notation: 'compact' }).format(2500000), '2.5M', '英文环境：2.5M');
-  assert.equal(countText(0), compact(0), '真实的 0 照常显示（不是 null，也不是空）');
-  assert.equal(countText(7), compact(7), '小数字原样');
+  for (const empty of ['', '   ', undefined, null, 42]) {
+    assert.equal(countText(2540000, empty), compact(2540000), `${JSON.stringify(empty)} ⇒ 仍按运行时默认语言格式化`);
+  }
+  // 区域写法照旧能用；坏标签兜底成原数字而不是让整行消失。
+  // 区域写法照样透传：CLDR 的 en-GB 用窄式小写 `k`，这条断言同时证明标签是**原样**交给 Intl 的。
+  assert.equal(countText(137000, 'en-GB'), '137k', 'en-GB 按它自己的写法（小写 k）');
+  assert.equal(countText(2540000, 'not a locale'), '2540000', '坏标签 ⇒ 原数字（try/catch 的老约定）');
+  assert.equal(countText(0, 'en'), '0', '真实的 0 照常显示（不是 null，也不是空）');
+  assert.equal(countText(7, 'zh'), '7', '小数字原样');
   for (const value of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY, -1, '12', {}, []]) {
-    assert.equal(countText(value), null, `${JSON.stringify(value)} ⇒ null（不渲染任何数字）`);
+    assert.equal(countText(value, 'en'), null, `${JSON.stringify(value)} ⇒ null（不渲染任何数字）`);
   }
 });
 
@@ -205,7 +214,8 @@ test('K54 chipList 带数量：total 挂在「全部」上，每类自己的 cou
   assert.equal(chips.length, 4, '「全部」+ 三个分类');
   assert.equal(chips[0].count, 2540000, '「全部」显示 total');
   assert.deepEqual(chips.slice(1).map((chip) => chip.count), [137000, 0, null], '每类自己的 count；0 保留，null 表示没数');
-  assert.equal(countText(chips[1].count), new Intl.NumberFormat(undefined, { notation: 'compact' }).format(137000), '137000 会变成「14万」/「137K」这种紧凑写法');
+  assert.equal(countText(chips[1].count, 'zh'), '14万', '137000 在中文界面是「14万」');
+  assert.equal(countText(chips[1].count, 'en'), '137K', '同一个数字在英文界面是「137K」');
 
   const degraded = chipList(categories, { total: 2540000, countsOk: false });
   assert.deepEqual(degraded.map((chip) => chip.count), [null, null, null, null], 'countsOk:false 时一个数字都不给');
@@ -358,6 +368,13 @@ test('K79 statSegments：三格恒在，present 只由数值是否有限决定',
   assert.deepEqual(full.map((slot) => slot.present), [true, true, true], '三项齐全时三格都有内容');
   assert.deepEqual(full.map((slot) => slot.value), ['5.0', '12', '99'], '评分恒一位小数、计数走 compact');
 
+  // 语言只作用在两格计数上：同一个条目，zh 与 en 的下载 / 收藏写法不同，评分一字不变。
+  const zh = statSegments({ downloads: 137000, saves: 2540000, score: 55385 }, 'zh');
+  const en = statSegments({ downloads: 137000, saves: 2540000, score: 55385 }, 'en');
+  assert.deepEqual(zh.map((slot) => slot.value), ['4.6', '14万', '254万'], '中文界面：两格计数用万');
+  assert.deepEqual(en.map((slot) => slot.value), ['4.6', '137K', '2.5M'], '英文界面：两格计数用 K / M');
+  assert.equal(zh[0].value, en[0].value, '评分格不受语言影响（ratingTextOf 的 toFixed 口径）');
+
   const bare = statSegments({});
   assert.deepEqual(bare.map((slot) => slot.present), [false, false, false], '什么都没有时三格都 absent（页面据此整行不渲染）');
   assert.deepEqual(bare.map((slot) => slot.value), [null, null, null], 'absent 的格没有值（不是 0、不是破折号）');
@@ -396,7 +413,7 @@ test('K79 ratingTextOf：恒一位小数、恒用点，不依赖 locale', () => 
   process.env.LANG = 'de_DE.UTF-8';
   try {
     assert.equal(ratingTextOf(4.6), '4.6', '改环境语言也不影响（toFixed 与 locale 无关）');
-    assert.equal(statSegments({ score: 55385 })[0].value, '4.6', '整条链路都不走 locale');
+    assert.equal(statSegments({ score: 55385 }, 'de')[0].value, '4.6', '评分格连传进的 locale 都不看（只有两格计数走它）');
   } finally {
     process.env.LANG = previous;
   }
