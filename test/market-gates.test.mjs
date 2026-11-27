@@ -206,6 +206,26 @@ test('K40 市场刻度逐条落地：网格 280/12、卡片竖排 14、cardOpen 
   assert.match(titleRow, /align-self: flex-start/, '标题行不被 column 父级拉满（品牌图紧跟标题）');
   assert.match(titleRow, /max-width: 100%/, '标题行仍关在卡片内');
   assert.match(titleRow, /flex-wrap: nowrap/, '标题行不换行（换行容器会先把长标题换行、把品牌图挤到第二行）');
+  // M17: the skeleton's title bar is a percentage width, so its row must give it something to
+  // resolve against — a row sized by content (the base rule's `flex-start`) leaves
+  // `min(144px, 60%)` at 0 and the bar is invisible. The exception is keyed on the skeleton
+  // title, so the real card's row keeps the `flex-start` asserted above; the two declarations
+  // it leans on stay verbatim. The width itself is not measurable here (it needs a real
+  // engine) — the real-host judgement is in acceptance.md 附录 D 第 7/8 条: at 1440 with three
+  // columns min(144px, 60% x 148px) = 88.8, and the A.6 144 cap only bites once the main
+  // column reaches 240px (144 / 0.6).
+  const skeletonRow = ruleOf('.skc_marketTitleRow:has(> .skc_skeletonTitle)');
+  assert.match(skeletonRow, /align-self: stretch/, '骨架标题行撑满：百分比宽的骨架条要有确定的父宽（M17）');
+  const skeletonRowBody = skeletonRow.slice(skeletonRow.indexOf('{') + 1, skeletonRow.lastIndexOf('}'));
+  assert.deepEqual(
+    skeletonRowBody.split(';').map((part) => part.trim()).filter((part) => part !== ''),
+    ['align-self: stretch'],
+    '骨架例外只声明 align-self: stretch（不顺手改宽度 / display / position）',
+  );
+  assert.equal((titleRow.match(/align-self:/g) ?? []).length, 1,
+    '基规则里只有一处 align-self：真卡那行不许被这条例外顺带拉满');
+  assert.match(ruleOf('.skc_skeletonTitle'), /width: min\(144px, 60%\)/,
+    '骨架标题宽仍是 min(144px, 60%)——撑满父级后才有量可解析（M17 的另一半）');
 
   assert.match(ruleOf('.skc_marketDialog'), /min\(480px, 100vw - 32px\)/, '确认弹窗宽度用 min()');
   assert.match(ruleOf('.skc_marketSkeletonChip'), /width: 64px; height: 26px/, 'chip 骨架 64×26');

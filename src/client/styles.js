@@ -320,6 +320,10 @@ padding: 14px; flex-direction: column; display: flex; position: relative;
 flex-wrap: nowrap; align-items: center; gap: 8px; min-width: 0;
 align-self: flex-start; max-width: 100%; display: flex;
 }
+/* A skeleton bar is a percentage width, so its parent needs a definite width: a row sized by
+   content leaves min(144px, 60%) nothing to resolve against and the bar reads 0. Keyed on the
+   skeleton title, so the real card's row keeps its align-self: flex-start. */
+.skc_marketTitleRow:has(> .skc_skeletonTitle){ align-self: stretch }
 .skc_marketCardOpen{
 max-width: 100%; color: inherit; font: inherit; text-align: left; cursor: pointer;
 text-overflow: ellipsis; white-space: nowrap; background: 0 0; border: 0; padding: 0;

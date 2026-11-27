@@ -308,6 +308,8 @@ font-size: 13px; line-height: 20px; display: inline-flex;
 .skc_skeletonActions{ width: calc(36px + var(--skc-toggle-gap) + var(--skc-progress-size)); height: 20px }
 ```
 
+**骨架条的宽必须有确定的父宽**：`.skc_skeletonTitle` / `Description` 是百分比宽，父级若收缩包裹（column 里 `align-self: flex-start`，宽度由内容 max-content 决定）百分比没有可参照的量，条宽解析为 0。市场卡因此只把骨架那一行拉回撑满——`.skc_marketTitleRow:has(> .skc_skeletonTitle){ align-self: stretch }`（`src/client/styles.js` 的市场块）：选择器命中骨架行，真卡那行的 `flex-start` 一字不动，取值见 `docs/contracts/market.md` 附录 F。
+
 ## A.7 空态 / 错误态 / 行内原因 / 页脚
 
 ```css
