@@ -273,11 +273,11 @@ fixtures/skills-messy/       ← .DS_Store、点文件、无 frontmatter 目录�
 
 ### D.11 市场卡片描述取值链（K149）
 
-上游把描述拆成「原文槽位 + 中文槽位」，且**两套拼法**：列表行是 `description` / `description_zh`，详情 `skill` 是 `summary` / `summary_zh`。取值链、顺序理由与代价见 `docs/contracts/market.md` §7.4。
+上游把描述拆成「原文槽位 + 中文槽位」、**两套拼法**；形状与取值链见 `docs/contracts/data-model.md` §3.8.1 第 2 条，顺序理由与代价见 `docs/contracts/market.md` §7.4。
 
 | # | 目标 | 断言 | 层 |
 | --- | --- | --- | --- |
-| **K149** | 描述本地化优先、原文兜底（列表 / 详情两条链） | ① **两条链分别钉**：列表 `description`/`description_zh` 与详情 `skill.summary`/`summary_zh` 各自成篇，且同一条技能两路给出**逐字相同**的一句；② `description_zh` 有值而 `description` 是**空串** ⇒ 取中文槽位（真实行 `ppt-generator-skill` 的 155 字逐字相等；其详情 `summary` 空、`summary_zh` 满，**`contentZhAvailable` 为 `false` 时照样取值**——不得拿这个标志判描述可用性）；③ 两槽位都有值 ⇒ 取 `*_zh`（**中文优先，本次有意改变的行为**，真实行 `ppt-generator-skill-pro` 的两槽位 442 / 77 字措辞不同）；④ 只有原文槽位有值 ⇒ 取它（列表 `description`、详情 `summary`，即企业行 `summary_zh` 空而 `summary` 本身已是中文的那一支；两槽位逐字相同时结果不变）；⑤ 四槽全空或只有空白 ⇒ **严格空串 `''`**（不是 `null` / `undefined`）；⑥ **先选后截**：`clampLine` / `SUMMARY_MAX` 在选定之后执行——442 字中文槽位配 77 字原文 ⇒ 结果是 **400 字中文串**（`...` 结尾、无换行残留），不是那条短原文；正好 400 字不截、401 字截；⑦ **不回落 `name` / `slug`**：`displayName` 缺时名字走 slug，`summary` 仍是空串；⑧ **相邻字段零回归**：`tags` / `downloads` / `saves` / `score` / `category` / `updatedAt` / `version` / `packageKind` / `id` 与字段集逐项不变 | L1 · `test/market-normalize.test.mjs` |
+| **K149** | 描述本地化优先、原文兜底（列表 / 详情两条链） | ① **两条链分别钉**（两槽位的形状见 `docs/contracts/data-model.md` §3.8.1 第 2 条）：列表链与详情链各自成篇，且同一条技能两路给出**逐字相同**的一句；② `description_zh` 有值而 `description` 是**空串** ⇒ 取中文槽位（真实行 `ppt-generator-skill` 的 155 字逐字相等；其详情 `summary` 空、`summary_zh` 满，**`contentZhAvailable` 为 `false` 时照样取值**——不得拿这个标志判描述可用性）；③ 两槽位都有值 ⇒ 取 `*_zh`（**中文优先（有意如此）**，真实行 `ppt-generator-skill-pro` 的两槽位 442 / 77 字措辞不同）；④ 只有原文槽位有值 ⇒ 取它（列表 `description`、详情 `summary`，即企业行 `summary_zh` 空而 `summary` 本身已是中文的那一支；两槽位逐字相同时结果不变）；⑤ 四槽全空或只有空白 ⇒ **严格空串 `''`**（不是 `null` / `undefined`）；⑥ **先选后截**：`clampLine` / `SUMMARY_MAX` 在选定之后执行——442 字中文槽位配 77 字原文 ⇒ 结果是 **400 字中文串**（`...` 结尾、无换行残留），不是那条短原文；正好 400 字不截、401 字截；⑦ **不回落 `name` / `slug`**：`displayName` 缺时名字走 slug，`summary` 仍是空串；⑧ **相邻字段零回归**：`tags` / `downloads` / `saves` / `score` / `category` / `updatedAt` / `version` / `packageKind` / `id` 与字段集逐项不变 | L1 · `test/market-normalize.test.mjs` |
 
 **红绿口径**：K149 进 `npm test`（L1 纯函数，夹具是 2026-11-21 从 `api.skillhub.cn` 列表与详情两个端点取回的真实 payload，截断到映射用到的键）；不新增真机项——这一条改的是卡片描述行的**文本来源**，几何与上屏方式一点没动。
 

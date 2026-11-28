@@ -6,7 +6,7 @@
 > 更新触发：宿主改版（先重采 reference）或改任何 px / 令牌 / 类名时，同时改 `styles.js` 与本文件
 > 规模上限：400
 
-2026-11-09 从原单文件契约拆出（`git show a8141eb:docs/system_design.md`），编号 A.1–A.9 保持原值。**编号 A.1–A.9 保持原值**——`test/styles.test.mjs`、`test/view-skeleton.test.mjs` 的头注按 `A.x` 锚定本文件。市场页的刻度不在本文件：`A.10` 空着不用，市场刻度（筛选栏 / 网格 / 卡片 / 详情 / 确认弹窗）统一放在 `docs/contracts/market.md` 附录 F（本文件行数上限所致）。
+**编号 A.1–A.9 保持原值**——`test/styles.test.mjs`、`test/view-skeleton.test.mjs` 的头注按 `A.x` 锚定本文件。市场页的刻度不在本文件：`A.10` 空着不用，市场刻度（筛选栏 / 网格 / 卡片 / 详情 / 确认弹窗）统一放在 `docs/contracts/market.md` 附录 F（本文件行数上限所致）。
 
 > **唯一允许的取值来源**：`--dsw-*` 令牌 + 宿主 primitive 组件。本文件里的 px 是**字号/行高/尺寸刻度**（DSH 没有 typography token，见 `HIDDER/docs/reference/settings-ui.md` §6），不是颜色。
 > 所有规则体逐字来自 `[PM-CSS]`（`EX/dsh-client-ui-plugin-manager/lib/client.js` 内 `PluginManagerPage.module.css` 的 `css` 字符串）或 `SHELL/index-B_7bmv2h.css`（0.2.3-alpha.2 起 primitives 的 CSS 已不在 `.css` 文件里：它在 `SHELL/index-B8miqkaN.js` 的 `meta.stylesheets` 表上，由 renderer 在挂载时安装），只把类名前缀换成 `skc_`、把局部变量换成 `--skc-*`。**不允许在别处再声明同名 `--dsw-*` 变量。**

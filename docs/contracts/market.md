@@ -117,8 +117,8 @@ sort 映射（`sort` 四个值，路由层已白名单化；**默认仍是 `reco
 | `owner` | 上游 | SkillHub `namespace.handle`（实测含下划线）／ClawHub **镜像行的 `upstream_owner_login`**（原生 handle；缺则剥 `clawhub_` 前缀，剥不出来整条丢弃，见 §7.8） |
 | `slug` | 上游 | 两源的 `slug`；ClawHub 为空即**丢弃该条**（拼不出身份就装不上） |
 | `displayName` | 上游 | `name`／`displayName`；缺则回落 `slug`，再缺为空串 |
-| `iconUrl` | 上游 / 本地算 | 两种合法形态：① **绝对 `https:`**（可解析即接受，不做 host/path 白名单；`http:`、相对路径与非字符串归 `null`）；② `null`。`null` 与**加载失败**都是「回落首字母头像」，破图由浏览器侧 `onError` 兜住。`lucide:` 与 `/api/v1/skill-icons/<hash>` 两种形态不存在（随 `clawhub.ai` 一起退场） |
-| `summary` | 上游 | 折叠成一行、≤ 400 字符（超长截断）。**本地化优先、原文兜底**：`description_zh` → `summary_zh` → `description` → `summary` → `''`（`summaryTextOf()`；列表行一套字段名、详情 `skill` 另一套，`*_zh` 与另一半是同一个「本地化 / 原文」槽位的两种拼法） |
+| `iconUrl` | 上游 / 本地算 | 绝对 `https:` 或 `null`；形态判定（不做 host/path 白名单、`http:` 与相对路径归 `null`）与降级（缺值 / 加载失败都回落首字母，破图由 `onError` 兜住）见 `docs/contracts/data-model.md` §3.8.1 第 4 条 |
+| `summary` | 上游 | 折叠成一行、≤ 400 字符（超长截断）的**单字符串**；两槽位的形状与取值顺序见 `docs/contracts/data-model.md` §3.8.1 第 2 条，为什么本地化优先见本文件「`summary` 为什么本地化优先」那一段 |
 | `author` | 上游 | 四级回落，**与站点同一顺序**（站点 `skillAuthor` 取 `publisher?.name`，否则 `ownerName`；详情状态卡取 `publisher?.name`，否则 `owner.displayName`）：`publisher.name`（仅 enterprise 行有 `publisher`）→ 列表 `ownerName` / 详情 `owner.displayName` → `namespace.displayName` → `namespace.handle` |
 | `version` | 上游 | **缺失如实为 `null`**。ClawHub 卡片用列表行的 `version` 过 `versionLike()`（像 id 的串 ⇒ `null`）；**卡片 / 详情 / 安装三处都取镜像口径**，代价是可能滞后上游真最新（`decisions.md` 附录 N 的 N-10） |
 | `downloads` | 上游 | SkillHub `downloads`／ClawHub **镜像 `downloads`**（口径见 §7.8 第 2 条）；缺失 `null` |
@@ -129,7 +129,7 @@ sort 映射（`sort` 四个值，路由层已白名单化；**默认仍是 `reco
 | `category` | 上游 | 两源都有：SkillHub 自带；ClawHub 来自镜像（详情端点没有，由适配器那次覆盖补上，见 §7.8） |
 | `packageKind` | 本地算 | 来自 `caps.package`，决定详情页「文件」从哪来 |
 
-**`summary` 为什么本地化优先**：上游把描述拆成「原文槽位 + 中文槽位」，两个槽位各有两种拼法——列表行是 `description` / `description_zh`，详情 `skill` 是 `summary` / `summary_zh`；站点自己的前端就按 `description_zh || description`、`summary_zh || summary` 取值（实测其产物 bundle），本插件跟同一条顺序，不另立一套。中文槽位是**始终填满**的那一个：2026-11-21 复算（口径：三 scope 各 200 行、按 `score` 降序、按 `source`+`namespace`+`slug` 去重得 400 行）里 `description_zh` 非空 400、`description` 非空 388（12 行空的全在 community），`description_en` 这个键不存在（0 行）；只读原文会让 `ppt-generator-skill` 这类卡片的描述行整段不渲染，详情路径同一条也是 `summary` 空、`summary_zh` 有值。详情侧的 `summary_zh` 在 enterprise 的样本行里实测会空（那几行的 `summary` 本身已是中文），所以链尾保留 `summary` 不删。代价写明：两槽位措辞不同者 208/400 ≈ 52%，**改序会让这 52% 的卡片显示另一段文字**（中文槽位更短、更接近站点上那一句；连续三次抽样均得 208，同分行在两次请求间的次序会浮动，故百分比只记到「过半」这一档）；反向个案也在（`han-deck-context` 的 `description_zh` 是英文、原文才是中文），这类行只能跟上游走。`MarketItem.summary` 仍是单字符串、Host 侧没有 locale，按界面语言挑字段要改数据形状，不属这一轮。
+**`summary` 为什么本地化优先**：站点自己的前端按 `description_zh || description`、`summary_zh || summary` 取值（实测其产物 bundle），本插件跟同一条顺序，不另立一套（两槽位的形状与取值链见 `docs/contracts/data-model.md` §3.8.1 第 2 条）。中文槽位是**始终填满**的那一个：2026-11-21 复算（口径：三 scope 各 200 行、按 `score` 降序、按 `source`+`namespace`+`slug` 去重得 400 行）里 `description_zh` 非空 400、`description` 非空 388（12 行空的全在 community），`description_en` 这个键不存在（0 行）；只读原文会让 `ppt-generator-skill` 这类卡片的描述行整段不渲染，详情路径同一条也是 `summary` 空、`summary_zh` 有值。详情侧的 `summary_zh` 在 enterprise 的样本行里实测会空（那几行的 `summary` 本身已是中文），所以链尾保留 `summary` 不删。代价写明：两槽位措辞不同者 208/400 ≈ 52%，**改序会让这 52% 的卡片显示另一段文字**（中文槽位更短、更接近站点上那一句；连续三次抽样均得 208，同分行在两次请求间的次序会浮动，故百分比只记到「过半」这一档）；反向个案也在（`han-deck-context` 的 `description_zh` 是英文、原文才是中文），这类行只能跟上游走。`MarketItem.summary` 是**单字符串**（形状见 `docs/contracts/data-model.md` §3.8.1 第 2 条），Host 侧也没有 locale——所以上屏用哪一句只由取值链决定，界面语言不参与；要按语言挑字段就得改数据形状（`MarketItem` 加字段），本仓不做这个改动。
 
 **站点读法与本站的未对齐处（逐条记录：①②④⑤ 有意不改，③ 已按用户裁决接上）**：① 卡片那颗 chip 站点取 `category`（分类表的 `name`），本站取 `subCategories[].name`（本表 `tags`）——要对齐是前端的呈现选择，不动取值链；② 来源徽标站点按 `claim_state === 'claimed'`（缺该键时看 `verified`）把 ClawHub 行标成 SkillHub（clawhub 样本 200 行里 3 行），而本站 `sourceId` 同时是去重键、图标与收藏键、安装路由，只改徽标会拆坏身份；③ **概览两条通道都已接（2026-11-27 用户裁决「与上游保持一致」）**：站点原文是 `TabOverview = skill.hasOverview ? CustomOverview : SkillFileOverview`，本站照此——`skill.hasOverview === true` 时先读 `/api/v1/skills/<slug>/overview`，正文不在 `content`（实测恒为空）而在该应答的 `url` 指向的 COS 对象里，**该 `url` 只在过既有 COS 白名单时才跟随**（不放宽）；拿到非空正文即用它，`/overview` 失败、无 `url`、`url` 未过白名单、正文为空时依次回落 `lang=zh` 译本 → 作者原文 → `summary`（见 `MarketDetail` 的 `overview` 与 §7.8 第 5 条），所有失败吸收成回落、不向上抛；④ 徽标与评分站点读 `labels`（`pricing_type` / `requires_api_key`）、`publisher.verified`、`securityReports.keen/sanbu.status`，评分读评测接口（`calcTotalScore` 五维均值）；本站这些键都不读，评分由 `score` 折算。⑤ **分类名：站点自己只读 `name`**（`nameEn` 只写不读，站点 bundle 里连「Office Efficiency」都 0 命中，i18n 词典也没有分类名），**本站英文界面取 `nameEn`**——`en` 走 `nameEn → name → key`，其余语言走 `name → nameEn → key`；上游 13 条分类全带真英文名（`办公效率 → Office Efficiency`、`开发编程 → Development`）。这是**本站有意偏离**（2026-11-27 用户裁决「英文界面分类名要显示英文」），语言取自宿主 `ctx.locale.getLocale().active` 并跟随 `subscribe`，不是按请求或按条目挑字段。另：`installs` 站点只在排序参数里出现，任何界面都不显示（本站不读，不算漏）。这条分界的口径裁决（数据层跟站点、显示层跟产品）见 `docs/contracts/decisions.md` 附录 B 的 AB 组。
 
@@ -139,11 +139,8 @@ sort 映射（`sort` 四个值，路由层已白名单化；**默认仍是 `reco
 
 **不变式（逐条可断言）**：
 
-1. 上表每个字段都存在（不出现 `undefined`）；上游没给的一律 `null`，`downloads`、`saves`、`score` 绝不补 `0`、`version` 绝不补 `'latest'`、**`tags` 是 `[]`（列表型字段的缺值是空数组，不是 `null`）**。
-2. `id` 全仓库唯一；同一 `id` 出现两次时保留第一次出现的那条。
-3. `overview` 不含 frontmatter 分隔行（`---`）与 `name:` 之类的头字段。
-4. `files` 里 `path` 一律通过 `isSafeRelativePath`；`path` 与 `size` 是详情页唯一需要的两项。
-5. `updatedAt` 只影响排序：卡片、详情、事实表**都不显示任何时间**。
+1. 「缺 = null」与「不上屏时间」以 `docs/contracts/data-model.md` §3.8.1 的那一组逐条不变式为唯一真源（哪些字段不许补值、`tags` 的缺值、`id` 唯一性、`overview` 与时间的规则都在那里），本节不复述；本面只多一句：确认弹窗的事实表同样不上屏任何时间。
+2. `files` 里 `path` 一律通过 `isSafeRelativePath`；`path` 与 `size` 是详情页唯一需要的两项。
 
 ### 7.5 图标管道（两段式，列表永不等补齐）
 

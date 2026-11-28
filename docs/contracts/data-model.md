@@ -307,7 +307,7 @@ locateSkillDir(root: string, subdir: string|null): {dir: string}   // ① 给了
 
 #### 3.8.1 `MarketItem` / `MarketDetail` / `MarketVersions` / `SourcePage`
 
-四个类型的**形状与类型**在下面；每个字段的来源、缺失怎么补、为什么这么定，统一在 `docs/contracts/market.md` §7.4 的字段表，本节不复述。
+四个类型的**形状与类型**在下面；每个字段的来源、缺失怎么补、为什么这么定，统一在 `docs/contracts/market.md` §7.4 的字段表，本节不复述——**两个例外以本节为真源**（`market.md` §7.4 的那两行只留指针）：`summary` 的两槽位取值形状（下面第 2 条）与 `iconUrl` 的形态判定和降级（第 4 条）。
 
 ```ts
 // MarketItem —— 市场页唯一的渲染输入，也是去重键的来源
@@ -340,7 +340,7 @@ type MarketVersions = {
 「缺 = null」不变式（逐条可断言）：
 
 1. 每个字段都存在，不出现 `undefined`；上游没给的一律 `null`，`downloads`、`saves`、`score` 不补 `0`、`version` 不补 `'latest'`、`category` 不补 `''`、**`tags` 是 `[]` 不是 `null`**。
-2. `id` 全仓库唯一；同一 `id` 出现两次时保留第一次出现的那条（浏览器侧 `mergeBatches` 负责）；`installTo` 在 `nameValid === false` 时等于 `skillsRoot` 本身（不吃掉最后一级目录名），界面据此显示「不能安装」。`overview` 不含 frontmatter 分隔行与 `name:`/`description:` 头字段。
+2. `id` 全仓库唯一；同一 `id` 出现两次时保留第一次出现的那条（浏览器侧 `mergeBatches` 负责）；`installTo` 在 `nameValid === false` 时等于 `skillsRoot` 本身（不吃掉最后一级目录名），界面据此显示「不能安装」。`overview` 不含 frontmatter 分隔行与 `name:`/`description:` 头字段。**描述的两槽位**：上游把描述拆成「原文槽位 + 中文槽位」，两个槽位各有两种拼法——列表行 `description` / `description_zh`，详情 `skill` 是 `summary` / `summary_zh`；`summaryTextOf()` 按 `description_zh` → `summary_zh` → `description` → `summary` → `''` 取，所以 `MarketItem.summary` 是**折叠后的单字符串**（截断发生在选定之后，见 §3.8.2 第 2 条）。
 3. 卡片与详情**不显示任何时间**：`updatedAt` 只影响顺序。**唯一例外**：已安装详情的版本展开列表显示 `publishedAt`（上游 `createdAt`，格式化成 `YYYY-MM-DD`）——不同字段、不同页面，登记在 `docs/contracts/decisions.md` 附录 R-1。
 4. `iconUrl` 只有两种合法形态：① 绝对 `https:`（可解析即接受，**不做 host/path 白名单**——两个图床都是逐技能真图）；② `null`。`http:`、相对路径、空值与非字符串归 `null`；`null` 与**加载失败**都是「回落首字母头像」，破图由浏览器侧 `onError` 兜住。`lucide:FileText` 与 `/api/v1/skill-icons/<64hex>` 两种旧形态不存在（随 `clawhub.ai` 与两条代理路由一起退场）。
 
@@ -349,7 +349,7 @@ type MarketVersions = {
 ```js
 // lib/market/normalize.js —— 无 I/O、无时钟
 textOrNull(value): string|null / numberOrNull(value): number|null / finiteOrNull(value): number|null / timestampOrNull(value): number|null / mirrorOwnerOf(raw): string|null   // 空串与不可解析 → null；numberOrNull 取整、finiteOrNull 不截断（score 是连续分）；mirrorOwnerOf 取原生 ClawHub owner（upstream_owner_login → 剥 clawhub_ → null）
-clampLine(value, max) / clampBlock(value, max): string / tagListOf(value): string[]   // 单行折叠 / 保留换行，超长截断 / 标签：≤3 条、取 subCategories[].name、去重、保留大小写
+clampLine(value, max) / clampBlock(value, max): string / tagListOf(value): string[] / summaryTextOf(raw): string   // 单行折叠 / 保留换行，超长截断 / 标签：≤3 条、取 subCategories[].name、去重、保留大小写 / 描述两槽位取值链（description_zh → summary_zh → description → summary → 空串，永不 null），见 §3.8.1 第 2 条
 marketId(sourceId, owner, slug): string    // `${sourceId}:${owner ?? ''}:${slug ?? ''}`；marketItem(fields): MarketItem 补齐字段（上表）
 fromSkillhubListItem(raw, packageKind?): MarketItem|null / fromMirrorRow(raw): MarketItem|null   // 后者按 raw.source 折叠身份（两个适配器共用）
 fromSkillhubDetail(raw, packageKind?): MarketItem|null / fromClawhubMirrorItem(raw, packageKind?): MarketItem|null   // 镜像条目：复用 fromSkillhubListItem 的字段读取，owner 取 upstream_owner_login，id 重拼，version 过 versionLike
