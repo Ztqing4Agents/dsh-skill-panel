@@ -6,6 +6,10 @@
  *   2. `README.md` / `README.en.md` 的兼容行与 DSH 徽标（下限 = `supportedHosts[0]`）；
  *   3. `scripts/check-version.mjs` 的发布前断言、`scripts/test-compat.mjs` 的基线比对。
  *
+ * 别把这两层混成一层：`peerRange` 是**声明面**（npm 安装时按 peer 解析执行，区间外的宿主根本
+ * 装不上，用户侧不需要额外说明），`supportedHosts` 是**验证面**（人工在真机上跑过哪几版），
+ * 徽标下限取后者——所以「装得上」不等于「这一版验过」，两者不必然相等。
+ *
  * 校验与回写都由 `scripts/sync-hosts.mjs` 负责：默认只校验（声明漂移就 exit 1），
  * `--write` 才回写文件。手改 `package.json` 里的区间会被 `npm run check` 的第五门拦下。
  *
