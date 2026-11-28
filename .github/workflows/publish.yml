@@ -79,9 +79,10 @@ jobs:
       #     --title v1.2.3 --notes-file - --verify-tag
       #
       # The body is the release note in `docs/releases/<tag>.md` minus its `# vX.Y.Z` title
-      # (GitHub already shows the tag); the closing "full changelog" line is appended only
-      # when the note does not already end with it -- see scripts/release-body.mjs for the
-      # exact rule and docs/contracts/release-doc-standard.md for the note's shape.
+      # (GitHub already shows the tag); nothing is appended, so the online Release and the
+      # repository file differ by exactly that one heading line -- see
+      # scripts/release-body.mjs for the exact rule and docs/contracts/release-doc-standard.md
+      # for the note's shape (two-line footer: compare link, then the CHANGELOG link).
       # `--notes-file -` reads stdin, and `--title` is the bare tag, matching the existing
       # releases (v1.1.3, v1.1.4).
       - name: create the GitHub Release

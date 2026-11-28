@@ -2,15 +2,16 @@
  * 逐版 Release 正文（`docs/releases/*.md`）的结构对账。
  *
  * 体例见 `docs/contracts/release-doc-standard.md`：文件与 tag 逐字同名、一级标题只写纯版本号、
- * 章节按固定顺序、文末单行 Compare 链接 + 带版本锚点的 `CHANGELOG.md` 链接。这几条都能机械
- * 判定，所以钉成用例——「首尾相接的 Compare 链」与「锚点对着 `## [x.y.z] - YYYY-MM-DD`」一旦
- * 写错，读者点到的就是 404 或错误的那一节，而门禁不会替人看一眼。
+ * 章节按固定顺序、文末两行制（完整变更记录 + 详细变更日志）。这几条都能机械判定，所以钉成
+ * 用例——「首尾相接的 Compare 链」与「锚点对着 `## [x.y.z] - YYYY-MM-DD`」一旦写错，读者点到
+ * 的就是 404 或错误的那一节，而门禁不会替人看一眼。
  *
  * 这里只断言形状与引用，不断言正文措辞：体例的取舍（一句一条、分类归属）靠 review。
  *
- * 底部链接有两种合法形态（体例见该规范 9.3 的「底部链接」）：常见的
- * `compare/v<上一版>...v<本版>`，以及**首版例外**——没有上一版时链首指向 tag 页
- * `releases/tag/<tag>`。首版之外的版本一律走 Compare，且链首必须是上一版。
+ * 底部两行必须是**最后两行**：首行 `**完整变更记录**：` + Compare 链接（首版例外——没有上一版
+ * 时指向 `releases/tag/<tag>` 的 tag 页），且**行末两个空格**（否则 GitHub 上会与次行粘成一行）；
+ * 次行 `**详细变更日志**：` + 带版本锚点的 `CHANGELOG.md` 链接。首版之外的版本一律走 Compare，
+ * 且链首必须是上一版。
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -24,29 +25,32 @@ const RELEASES = join(ROOT, 'docs', 'releases');
 /** 章节顺序（缺失的章节跳过，出现即须按此顺序）。 */
 const CHAPTERS = ['破坏性变更', '新增', '改进', '修复', '移除', '注意事项'];
 
-/** 文末那一行（常规形态）：Compare 链接 + 带锚点的 CHANGELOG 链接。 */
-const BOTTOM_COMPARE = /^\*\*完整变更\*\*：\[v([0-9.]+)\.\.\.v([0-9.]+)\]\(https:\/\/github\.com\/Ztqing4Agents\/dsh-skill-panel\/compare\/v([0-9.]+)\.\.\.v([0-9.]+)\) · \[CHANGELOG\]\(https:\/\/github\.com\/Ztqing4Agents\/dsh-skill-panel\/blob\/main\/CHANGELOG\.md#([0-9]+---\d{4}-\d{2}-\d{2})\)$/;
+/** 文末第一行（常规形态）：`**完整变更记录**：` + Compare 链接，行末两个空格是软换行。 */
+const RECORD_COMPARE = /^\*\*完整变更记录\*\*：\[v([0-9.]+)\.\.\.v([0-9.]+)\]\(https:\/\/github\.com\/Ztqing4Agents\/dsh-skill-panel\/compare\/v([0-9.]+)\.\.\.v([0-9.]+)\)[ ]{2}$/;
 
-/** 文末那一行（首版例外）：链首是没有上一版时指向的 tag 页 + 同一个 CHANGELOG 锚点。 */
-const BOTTOM_TAG = /^\*\*完整变更\*\*：\[v([0-9.]+)\]\(https:\/\/github\.com\/Ztqing4Agents\/dsh-skill-panel\/releases\/tag\/v([0-9.]+)\) · \[CHANGELOG\]\(https:\/\/github\.com\/Ztqing4Agents\/dsh-skill-panel\/blob\/main\/CHANGELOG\.md#([0-9]+---\d{4}-\d{2}-\d{2})\)$/;
+/** 文末第一行（首版例外）：链首没有上一版，指向 tag 页，同样以两个空格结尾。 */
+const RECORD_TAG = /^\*\*完整变更记录\*\*：\[v([0-9.]+)\]\(https:\/\/github\.com\/Ztqing4Agents\/dsh-skill-panel\/releases\/tag\/v([0-9.]+)\)[ ]{2}$/;
+
+/** 文末第二行：带版本锚点的 `CHANGELOG.md` 链接。 */
+const DETAIL = /^\*\*详细变更日志\*\*：\[CHANGELOG\.md\]\(https:\/\/github\.com\/Ztqing4Agents\/dsh-skill-panel\/blob\/main\/CHANGELOG\.md#([0-9]+---\d{4}-\d{2}-\d{2})\)$/;
 
 /**
- * 解析文末那一行。
+ * 解析文末第一行。
  *
- * @param {string} line - 文档最后一行。
- * @returns {{from: string|null, to: string, urlFrom: string|null, urlTo: string, fragment: string}|null}
+ * @param {string} line - 文档倒数第二行。
+ * @returns {{from: string|null, to: string, urlFrom: string|null, urlTo: string}|null}
  *   `from` 为 `null` 表示走的是首版例外形态。
  */
-function parseBottom(line) {
-  const compare = BOTTOM_COMPARE.exec(line);
+function parseRecord(line) {
+  const compare = RECORD_COMPARE.exec(line);
   if (compare !== null) {
-    const [, from, to, urlFrom, urlTo, fragment] = compare;
-    return { from, to, urlFrom, urlTo, fragment };
+    const [, from, to, urlFrom, urlTo] = compare;
+    return { from, to, urlFrom, urlTo };
   }
-  const tag = BOTTOM_TAG.exec(line);
+  const tag = RECORD_TAG.exec(line);
   if (tag !== null) {
-    const [, text, url, fragment] = tag;
-    return { from: null, to: text, urlFrom: null, urlTo: url, fragment };
+    const [, text, url] = tag;
+    return { from: null, to: text, urlFrom: null, urlTo: url };
   }
   return null;
 }
@@ -116,35 +120,48 @@ test('章节顺序：出现的二级章节都在体例内且次序固定', async
   }
 });
 
-test('底部链接：单行收尾，Compare 版本首尾相接（首版指 tag 页），锚点对着 CHANGELOG 的版本节', async () => {
+test('底部两行：完整变更记录（行末两个空格软换行）+ 详细变更日志，Compare 首尾相接（首版指 tag 页）', async () => {
   const dates = await changelogDates();
   const tags = await releaseFiles();
   let previous = null;
   for (const [index, tag] of tags.entries()) {
     const lines = (await readFile(join(RELEASES, `${tag}.md`), 'utf8')).trimEnd().split('\n');
-    const bottom = parseBottom(lines[lines.length - 1]);
-    assert.ok(bottom, `${tag}.md 的末行不是约定的完整变更链接：${JSON.stringify(lines[lines.length - 1])}`);
-
+    const record = lines[lines.length - 2];
+    const detail = lines[lines.length - 1];
     const version = tag.replace(/^v/, '');
-    assert.equal(bottom.to, version, `${tag}.md 的链接终点写成了 v${bottom.to}`);
-    assert.equal(bottom.urlTo, version, `${tag}.md 的链接 URL 终点与链接文字不一致`);
+
+    assert.notEqual(record, undefined, `${tag}.md 只有一行底行——两行缺一不可`);
+    assert.equal(
+      record.endsWith('  '),
+      true,
+      `${tag}.md 的「完整变更记录」行末必须有两个空格，否则两行会在 GitHub 上粘成一行：${JSON.stringify(record.slice(-8))}`,
+    );
+    const head = parseRecord(record);
+    assert.ok(head, `${tag}.md 的倒数第二行不是约定的完整变更记录行：${JSON.stringify(record)}`);
+
+    const tail = DETAIL.exec(detail);
+    assert.ok(tail, `${tag}.md 的末行不是约定的详细变更日志行：${JSON.stringify(detail)}`);
+    const [, fragment] = tail;
+
+    assert.equal(head.to, version, `${tag}.md 的链接终点写成了 v${head.to}`);
+    assert.equal(head.urlTo, version, `${tag}.md 的链接 URL 终点与链接文字不一致`);
 
     if (index === 0) {
       // 首版例外：没有上一版可比，链首指向 tag 页——拿一个不存在的 tag 当链首就是必然 404。
       assert.equal(
-        bottom.from,
+        head.from,
         null,
-        `${tag} 是首版，链首该是 releases/tag/${tag}，不该是 compare/v${bottom.from}...`,
+        `${tag} 是首版，链首该是 releases/tag/${tag}，不该是 compare/v${head.from}...`,
       );
     } else {
-      assert.notEqual(bottom.from, null, `${tag} 不是首版，链首必须是上一版 ${previous} 的 Compare 区间`);
-      assert.equal(bottom.urlFrom, bottom.from, `${tag}.md 的 Compare URL 起点与链接文字不一致`);
-      assert.equal(`v${bottom.from}`, previous, `${tag}.md 的 Compare 起点该是上一版 ${previous}（现为 v${bottom.from}）`);
+      assert.notEqual(head.from, null, `${tag} 不是首版，链首必须是上一版 ${previous} 的 Compare 区间`);
+      assert.equal(head.urlFrom, head.from, `${tag}.md 的 Compare URL 起点与链接文字不一致`);
+      assert.equal(`v${head.from}`, previous, `${tag}.md 的 Compare 起点该是上一版 ${previous}（现为 v${head.from}）`);
     }
     previous = tag;
 
     const date = dates.get(version);
     assert.ok(date, `CHANGELOG.md 里没有 [${version}] 版本节，锚点无处可指`);
-    assert.equal(bottom.fragment, anchorOf(version, date), `${tag}.md 的 CHANGELOG 锚点与 [${version}] - ${date} 不匹配`);
+    assert.equal(fragment, anchorOf(version, date), `${tag}.md 的 CHANGELOG 锚点与 [${version}] - ${date} 不匹配`);
   }
 });

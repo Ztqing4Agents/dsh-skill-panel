@@ -3,25 +3,25 @@
 > 类型：规范
 > 读者：写某一版 Release 正文的人；以及手工补建 GitHub Release 的操作者
 > 真源：2026-11-28 用户拍板的体例，本文件即体例原文；落地侧由 `scripts/check-docs.mjs`、`scripts/release-body.mjs`、`scripts/check-version.mjs` 三处守
-> 更新触发：改体例、改 `docs/releases/` 的头注豁免范围、改 Release 正文切法时同轮改本文件
+> 更新触发：改体例、改底行链接写法、改 `docs/releases/` 的头注豁免范围或改 Release 正文切法时同轮改本文件
 > 规模上限：400
 
-本规范定义 `dsh-skill-panel` 逐版 Release 文档（`docs/releases/` 下与 Git tag 逐字同名的 `vX.Y.Z.md`）的标准体例。采用精炼、可扫读的**分类式 GitHub Release Notes** 结构，让用户在 10 秒内看懂版本变化，全量细节通过底部链接直达 GitHub Commit 对比与 `CHANGELOG.md`。
+本规范定义 `dsh-skill-panel` 逐版 Release 文档（`docs/releases/` 下与 Git tag 逐字同名的文件）的标准体例。采用精炼、可扫读的**分类式 GitHub Release Notes** 结构，让用户在 10 秒内看懂版本变化，全量细节通过底部链接直达 GitHub Commit 对比与 `CHANGELOG.md`。
 
-本规范取代 2026-11-17 起的「五段式」Release 正文口径（旧口径的登记仍在 `docs/contracts/decisions.md` 附录 W-4，现只留指针）；七份历史正文（`v1.0.0`–`v1.1.5`）已按本规范整份重写，条目事实取自 `CHANGELOG.md` 与 git tag，未改事实；`v0.1.0` 是后来补打 tag 时新增的一份，按本规范新写、不在重写之列。
+本规范取代 2026-11-17 起的「五段式」Release 正文口径（旧口径的登记仍在 `docs/contracts/decisions.md` 附录 W-4，现只留指针）：逐版正文已按本规范整份重写，条目事实取自 `CHANGELOG.md` 与 git tag，未改事实；底行自 2026-11-28 起改为两行制（完整变更记录 + 详细变更日志）。
 
 ## 9.1 核心原则与分工
 
-- **10 秒扫读，不复读 `CHANGELOG.md`**：Release 只提炼用户可感知的核心变化与必做动作，细节、边界条件与完整文案留给 `CHANGELOG.md`。
+- **10 秒扫读，不复读 `CHANGELOG.md`**：Release 只提炼用户可感知的核心变化与必做动作，细节、边界条件与完整文案留给 `CHANGELOG.md`（条目怎么写、怎么分类见 `docs/contracts/changelog-standard.md`）。
 - **有则写，无则省**：仅保留本版本实际涉及的分类，不留空章节，也不重复粘贴 `README.md` 中的通用安装教程。
 - **不混入长期限制**：不属于本版本新引入的长期设计边界（如功能暂未提供、宿主配色令牌限制）归入 `README.md`，不写进单版 Release。
-- **单一真源**：事实与 `CHANGELOG.md` 保持一致（条目怎么写、怎么分类见 `docs/contracts/changelog-standard.md`）；分类按用户直觉归属（例如从用户视角新增的交互能力可归入 `## 新增`）。
+- **单一真源**：事实与 `CHANGELOG.md` 保持一致；分类按用户直觉归属（例如从用户视角新增的交互能力可归入 `## 新增`）。
 
 ## 9.2 文件命名与头部格式
 
 - **路径与命名**：`docs/releases/` 下与 Git tag 逐字同名的文件（`v1.1.5` → `v1.1.5.md`）。
 - **标题**：一级标题仅写纯版本号 `# vX.Y.Z`，不加副标题；**不写发布日期行**（GitHub Release 页面自带发布时间）。
-- **一句概览（按需）**：仅大版本（如 `v1.0.0`）、首个版本（视同大版本），或本版条目在四条以上时，在标题下方写一句话总结；小补丁版本直接进入分类章节，避免与正文重复。
+- **一句概览（按需）**：仅大版本（如 `v1.0.0`）或变更条目达到四条及以上时，在标题下方写一句话总结；小补丁版本直接进入分类章节，避免与正文重复。
 - **不写仓库侧头注**：本目录整体豁免 `check-docs` 的 R2–R5，正文里不出现「类型 / 读者 / 真源 / 更新触发 / 规模上限」五行，也不写 `## 验收`——它们只对外表现为元信息，发布后无人读。
 
 ## 9.3 标准章节顺序
@@ -37,16 +37,20 @@
 | 5 | `## 移除` | 下线或删除的功能、接口或界面入口 |
 | 6 | `## 注意事项` | 可选；仅在**无破坏性变更但仍有操作提醒**（如覆盖更新需备份）或存在**本版直接相关的已知限制**时使用 |
 
-### 底部链接（必填，单行）
+### 底部链接（必填，两行）
 
-统一放在文末，单行展示 GitHub Compare 链接与带版本锚点的 `CHANGELOG.md` 链接：
-
-- **链首取上一版**：`compare/v<上一版>...v<本版>`，首尾必须相接——链首写错版本，读者点到的就是 404 或错误区间。
-- **首版例外**：本仓首版是 `v0.1.0`（未发 npm 的私有首发版，仍打了 tag），没有上一版可比，链首指向 tag 页 `releases/tag/v0.1.0`；`v1.0.0` 起一律 `compare/v<上一版>...v<本版>`。链首必须是真实存在的 tag，拿一个没打过的版本当链首，读者点到的就是一条必然 404 的链接。
+统一放在文末，分两行展示 GitHub Compare 链接与带版本锚点的 `CHANGELOG.md` 链接（**首行末尾加两个空格**确保换行）：
 
 ```markdown
-**完整变更**：[v1.1.4...v1.1.5](https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v1.1.4...v1.1.5) · [CHANGELOG](https://github.com/Ztqing4Agents/dsh-skill-panel/blob/main/CHANGELOG.md#115---2026-11-28)
+**完整变更记录**：[v1.1.4...v1.1.5](https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v1.1.4...v1.1.5)  
+**详细变更日志**：[CHANGELOG.md](https://github.com/Ztqing4Agents/dsh-skill-panel/blob/main/CHANGELOG.md#115---2026-11-28)
 ```
+
+三条判据：
+
+- **两行缺一不可**：首行是「完整变更记录」+ Compare 链接，次行是「详细变更日志」+ 带版本锚点的 `CHANGELOG.md` 链接；首行末尾少那两个空格，两行会在 GitHub 上粘成一行。
+- **链首取上一版**：`compare/v<上一版>...v<本版>`，首尾必须相接——链首写错版本，读者点到的就是 404 或错误区间。
+- **首版例外**：`v0.1.0` 是未发 npm 的私有首发版（仍打了 tag）、没有上一版可比，链首指向 tag 页 `releases/tag/v0.1.0`；`v1.0.0` 起一律用 Compare。
 
 ## 9.4 篇幅红线与写作规范
 
@@ -95,7 +99,8 @@
 
 - 一句话说明需要留意的风险或本版直接相关的限制。
 
-**完整变更**：[vPrev...vX.Y.Z](https://github.com/Ztqing4Agents/dsh-skill-panel/compare/vPrev...vX.Y.Z) · [CHANGELOG](https://github.com/Ztqing4Agents/dsh-skill-panel/blob/main/CHANGELOG.md#xyz---YYYY-MM-DD)
+**完整变更记录**：[vPrev...vX.Y.Z](https://github.com/Ztqing4Agents/dsh-skill-panel/compare/vPrev...vX.Y.Z)  
+**详细变更日志**：[CHANGELOG.md](https://github.com/Ztqing4Agents/dsh-skill-panel/blob/main/CHANGELOG.md#xyz---YYYY-MM-DD)
 ````
 
 ## 9.6 仓库门禁与发布脚本适配
@@ -104,14 +109,14 @@
 
 1. **`scripts/check-docs.mjs`**：将 `docs/releases/` 豁免于 R2–R5（不再强制要求内部五行头注与 `## 验收`），仍保留白名单、路径可达性与零行号校验。
 2. **`.docs-standards.json`**：将 `"docs/releases/**"` 加入 `exclude`，vendored 的标准门禁只把逐版正文当产品内容排除，契约与根文件仍全量受检。
-3. **`scripts/release-body.mjs`**：去掉首行 `# vX.Y.Z` 标题与紧随空行后原样输出正文（不再有五行头注要剥）；文末已有那句「全量变更见 `CHANGELOG.md` 的 [x.y.z] 节。」就不再补，缺了才补一句——保留这条兜底，手工补建的 Release 才不会丢掉 `CHANGELOG.md` 指向。
+3. **`scripts/release-body.mjs`**：去掉首行 `# vX.Y.Z` 标题与紧随空行后原样输出正文（正文里本就没有仓库侧头注要剥），**不追加任何收尾句**——仓库文件与线上 Release 正文 1:1 一致（2026-11-28 用户裁决，取代此前「末尾缺收尾句才补一句」的兜底）。
 
 ## 9.7 验收
 
-判据分两侧：结构一侧由门禁自动守，体例的取舍只能靠 review。
+判据分两侧：结构一侧由门禁与用例机械守，体例的取舍只能靠 review。
 
-- **白名单与引用仍然生效**：`node scripts/check-docs.mjs` 对 `docs/releases/` 只豁免 R2–R5；R1（白名单）、R7（`§x.y` 与附录锚点）、R8（反引号里的仓库路径必须存在、链接必须可达）、R9（禁止 `file:line`）、R13（禁止引 `.agents/work/` 瞬态产物）照旧——正文里写进一个不存在的路径，或把某句改成「见某文件的第 N 行」，门禁直接红。
+- **白名单与引用仍然生效**：`node scripts/check-docs.mjs` 对 `docs/releases/` 只豁免 R2–R5；R1（白名单）、R7（`§x.y` 与附录锚点）、R8（反引号里的仓库路径必须存在、链接必须可达）、R9（禁止 `file:line`）、R13（禁止引 `.agents/work/` 瞬态产物）照旧——正文里写进一个不存在的路径，或把某句改成带行号的引用，门禁直接红。
 - **豁免口径没有放松别处**：`.docs-standards.json` 的 `exclude` 只多一条 `docs/releases/**`；`node scripts/check-docs-standards.mjs` 的红条数应保持在改前的基线，契约与 `AGENTS.md` / `README.md` / `CHANGELOG.md` 一条也没被豁免掉。
 - **tag ↔ 文档硬闸未动**：`node scripts/check-version.mjs` 第 4 条断言每个形如 `vX.Y.Z` 的 tag 都有同名正文，缺了 exit 1，发不出去。
-- **切法可复现**：`node scripts/release-body.mjs v1.1.5` 的输出不带 `# v1.1.5` 标题，其余逐字保留——含标题下那句概览、分类章节里的缩进代码块与文末底部链接；文末缺收尾句才补一句，所以正文里底部链接常是倒数第二行、收尾句落在最后一行。这些都有自动用例：切法、补句与逐份正文的逐字对账在 `test/release-body.test.mjs`，文件命名、章节顺序与底部链接在 `test/release-docs.test.mjs`——改切法或改体例，先把这两份跑绿。
-- **体例判据只靠 review**：是否留空章节、每条是否只有一句话、分类归属贴不贴用户直觉——这几条无法自动断言，由写稿人与审稿人按 9.1–9.5 判断；门禁与用例保的是文件形状、章节次序与引用不腐化。
+- **1:1 切法可复现**：`node scripts/release-body.mjs v1.1.5` 的输出＝文档去掉 `# v1.1.5` 标题与紧随空行、去掉尾部空白后的原样内容，**末尾不补任何句子**——所以末行就是「详细变更日志」那一行，线上正文与仓库文件逐字相同。自动用例在 `test/release-body.test.mjs`（切法与逐份正文的逐字对账）与 `test/release-docs.test.mjs`（文件命名、章节次序、两行底行与链首形态）——改切法或改体例，先把这两份跑绿。
+- **体例判据只靠 review**：是否留空章节、每条是否只有一句话、分类归属贴不贴用户直觉、底行那句「完整变更记录」的措辞——这几条无法自动断言，由写稿人与审稿人按 9.1–9.5 判断；门禁与用例保的是文件形状、章节次序与引用不腐化。

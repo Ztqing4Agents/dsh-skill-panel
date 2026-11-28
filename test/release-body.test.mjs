@@ -1,13 +1,14 @@
 /**
- * `scripts/release-body.mjs` 的切法与收尾句。
+ * `scripts/release-body.mjs` 的切法：仓库正文与线上 Release 正文 1:1，只差一行标题。
  *
  * 为什么用子进程而不是 `import`：这个脚本的 CLI 段写在模块顶层，import 时
  * `process.argv[1]` 是测试文件本身、取不到 tag，脚本会打印用法并 `process.exit(2)`——
  * 直接把测试进程带走。这里按 `.github/workflows/publish.yml` 的真实调用方式跑，
- * 第二参数指向临时正文，切法与补句都能验。
+ * 第二参数指向临时正文，切法能逐字验。
  *
- * 体例本身见 `docs/contracts/release-doc-standard.md`：正文从 `# vX.Y.Z` 之后开始，
- * 文末那句「全量变更见 …」缺才补、有则不补。
+ * 体例本身见 `docs/contracts/release-doc-standard.md`：正文从 `# vX.Y.Z` 之后开始，文末是
+ * 「完整变更记录 / 详细变更日志」两行制。**脚本不追加任何收尾句**（2026-11-28 用户裁决）：
+ * 仓库里写什么，线上就是什么，多一个字都算分叉。
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -21,8 +22,9 @@ import { tempDir } from './helpers/tree.mjs';
 const SCRIPT = fileURLToPath(new URL('../scripts/release-body.mjs', import.meta.url));
 const RELEASES = fileURLToPath(new URL('../docs/releases/', import.meta.url));
 
-/** 收尾句的版本口径由脚本决定，测试只按同一句话断言。 */
-const closing = (version) => `全量变更见 \`CHANGELOG.md\` 的 [${version}] 节。`;
+/** 仓库正文的文末两行（首行末尾两个空格是软换行）。 */
+const RECORD = '**完整变更记录**：[v9.9.8...v9.9.9](https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v9.9.8...v9.9.9)  ';
+const DETAIL = '**详细变更日志**：[CHANGELOG.md](https://github.com/Ztqing4Agents/dsh-skill-panel/blob/main/CHANGELOG.md#999---2026-11-28)';
 
 /**
  * 跑一次 CLI。
@@ -57,7 +59,8 @@ test('切法：丢掉 `# vX.Y.Z` 标题与紧随空行，标题下那句概览�
     assert.equal(status, 0);
     assert.equal(stdout.startsWith('一句概览。'), true, `正文必须从概览句起：${JSON.stringify(stdout.slice(0, 40))}`);
     assert.equal(stdout.includes('# v9.9.9'), false, '标题不该出现在正文里');
-    assert.equal(stdout.endsWith(`${closing('9.9.9')}\n`), true, '缺收尾句时补在末尾');
+    // 逐字相等：多一句「全量变更见…」也算分叉，所以不写成 endsWith。
+    assert.equal(stdout, '一句概览。\n\n## 新增\n\n- 甲。\n');
   } finally {
     await cleanup();
   }
@@ -69,14 +72,13 @@ test('切法：正文首行是空行时，标题仍被剥掉（漏剥会让线�
     const { status, stdout } = runCli(['v9.9.9', file]);
     assert.equal(status, 0);
     assert.equal(stdout.includes('# v9.9.9'), false, `前导空行不该让标题漏进正文：\n${stdout}`);
-    assert.equal(stdout.startsWith('## 新增'), true);
-    assert.equal(stdout.endsWith(`${closing('9.9.9')}\n`), true);
+    assert.equal(stdout, '## 新增\n\n- 甲。\n');
   } finally {
     await cleanup();
   }
 });
 
-test('切法：分类章节、缩进代码块与底部链接逐字保留（不吞正文）', async () => {
+test('切法：两行制底行逐字保留——首行末两个空格不丢、次行不被当成多余空行吞掉', async () => {
   const body = [
     '## 破坏性变更',
     '',
@@ -90,53 +92,56 @@ test('切法：分类章节、缩进代码块与底部链接逐字保留（不�
     '',
     '- **某处塌陷**：宽度不再是 0。',
     '',
-    '**完整变更**：[v9.9.8...v9.9.9](https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v9.9.8...v9.9.9) · [CHANGELOG](https://github.com/Ztqing4Agents/dsh-skill-panel/blob/main/CHANGELOG.md#999---2026-11-28)',
+    RECORD,
+    DETAIL,
   ].join('\n');
   const { file, cleanup } = await note(`# v9.9.9\n\n${body}\n`);
   try {
     const { status, stdout } = runCli(['v9.9.9', file]);
     assert.equal(status, 0);
-    // 期望 = 原文去掉标题与空行 + 一个空行 + 收尾句；逐字相等才算「原样输出」。
-    assert.equal(stdout, `${body}\n\n${closing('9.9.9')}\n`);
+    // 期望 ＝ 原文去掉标题与紧随空行；末尾只多脚本补的那个换行符。
+    assert.equal(stdout, `${body}\n`);
+    const outLines = stdout.trimEnd().split('\n');
+    assert.equal(outLines[outLines.length - 2], RECORD, '首行的两个软换行空格必须原样留着');
+    assert.equal(outLines[outLines.length - 1], DETAIL, '次行必须原样留在末行');
   } finally {
     await cleanup();
   }
 });
 
-test('补句：文档已经以收尾句结尾时不再追加第二句', async () => {
-  const text = `# v9.9.9\n\n## 新增\n\n- 甲。\n\n${closing('9.9.9')}\n`;
+test('不补句：文档自带一句「全量变更见 …」时原样保留，不重复也不删', async () => {
+  const legacy = '全量变更见 `CHANGELOG.md` 的 [9.9.9] 节。';
+  const text = `# v9.9.9\n\n## 新增\n\n- 甲。\n\n${legacy}\n`;
   const { file, cleanup } = await note(text);
   try {
     const { status, stdout } = runCli(['v9.9.9', file]);
     assert.equal(status, 0);
-    const hits = stdout.split('\n').filter((line) => line === closing('9.9.9'));
-    assert.equal(hits.length, 1, `收尾句只该出现一次：\n${stdout}`);
-    assert.equal(stdout.endsWith(`${closing('9.9.9')}\n`), true);
+    assert.equal(stdout, `## 新增\n\n- 甲。\n\n${legacy}\n`, '仓库里写的那句要原样带过去，不多不少');
+    assert.equal(stdout.split('\n').filter((line) => line === legacy).length, 1, `那句只该出现一次：\n${stdout}`);
   } finally {
     await cleanup();
   }
 });
 
-test('补句：缺收尾句时补在最后一行，不插到中间也不重复', async () => {
-  const { file, cleanup } = await note('# v9.9.9\n\n## 新增\n\n- 甲。\n\n## 修复\n\n- 乙。\n');
+test('不补句：文档没写收尾句时也不追加，输出末行就是「详细变更日志」那行', async () => {
+  const { file, cleanup } = await note(`# v9.9.9\n\n## 新增\n\n- 甲。\n\n${RECORD}\n${DETAIL}\n`);
   try {
     const { status, stdout } = runCli(['v9.9.9', file]);
     assert.equal(status, 0);
-    const lines = stdout.trimEnd().split('\n');
-    assert.equal(lines[lines.length - 1], closing('9.9.9'));
-    assert.equal(lines.filter((line) => line === closing('9.9.9')).length, 1);
+    assert.equal(stdout.includes('全量变更见'), false, `不该凭空补一句收尾：\n${stdout}`);
+    assert.equal(stdout.trimEnd().split('\n').pop(), DETAIL, '末行必须还是仓库里的那一行');
   } finally {
     await cleanup();
   }
 });
 
-test('换行：CRLF 正文按 LF 输出，不留 \\r', async () => {
-  const { file, cleanup } = await note('# v9.9.9\r\n\r\n## 新增\r\n\r\n- 甲。\r\n');
+test('换行：CRLF 正文按 LF 输出，不留 \\r 也不改变末行', async () => {
+  const { file, cleanup } = await note(`# v9.9.9\r\n\r\n## 新增\r\n\r\n- 甲。\r\n\r\n${RECORD}\r\n${DETAIL}\r\n`);
   try {
     const { status, stdout } = runCli(['v9.9.9', file]);
     assert.equal(status, 0);
     assert.equal(stdout.includes('\r'), false, '输出里不该留 CR');
-    assert.equal(stdout.startsWith('## 新增'), true);
+    assert.equal(stdout, `## 新增\n\n- 甲。\n\n${RECORD}\n${DETAIL}\n`);
   } finally {
     await cleanup();
   }
@@ -170,12 +175,11 @@ test('失败路径：缺参数 exit 2；tag 形态非法、文件不存在、正
   }
 });
 
-test('对仓库里每一份逐版正文：输出不含标题，去掉末尾补句后与文档正文逐字相同', async () => {
+test('对仓库里每一份逐版正文：输出 ＝ 文档去掉 `# vX.Y.Z` 后的原文，末行是详细变更日志', async () => {
   const files = (await readdir(RELEASES)).filter((name) => name.endsWith('.md')).sort();
   assert.ok(files.length > 0, 'docs/releases/ 里应当有逐版正文');
   for (const name of files) {
     const tag = name.slice(0, -3);
-    const version = tag.replace(/^v/, '');
     const doc = await readFile(join(RELEASES, name), 'utf8');
     const { status, stdout } = runCli([tag]);
     assert.equal(status, 0, `${tag} 应当能生成正文`);
@@ -186,7 +190,17 @@ test('对仓库里每一份逐版正文：输出不含标题，去掉末尾补�
     let start = 1;
     while (start < lines.length && lines[start].trim() === '') start += 1;
     const wantBody = lines.slice(start).join('\n').trimEnd();
-    const tail = `\n\n${closing(version)}\n`;
-    assert.equal(stdout, `${wantBody}${tail}`, `${tag} 的正文与文档差在切法或补句上`);
+    assert.equal(stdout, `${wantBody}\n`, `${tag} 的正文与文档差在切法上（多一句或吞一行都算）`);
+  }
+});
+
+test('两份指定正文：v0.1.0 与 v1.1.5 的输出不含标题、不含补句，末行是详细变更日志', async () => {
+  for (const tag of ['v0.1.0', 'v1.1.5']) {
+    const { status, stdout } = runCli([tag]);
+    assert.equal(status, 0, `${tag} 应当能生成正文`);
+    assert.equal(stdout.includes(`# ${tag}`), false, `${tag} 的输出不该含一级标题`);
+    assert.equal(stdout.includes('全量变更见'), false, `${tag} 的输出不该含补的收尾句`);
+    const lastLine = stdout.trimEnd().split('\n').pop();
+    assert.match(lastLine, /^\*\*详细变更日志\*\*：\[CHANGELOG\.md\]\(https:\/\/github\.com\/Ztqing4Agents\/dsh-skill-panel\/blob\/main\/CHANGELOG\.md#[0-9]+---\d{4}-\d{2}-\d{2}\)$/, `${tag} 的末行不是详细变更日志行：${JSON.stringify(lastLine)}`);
   }
 });
