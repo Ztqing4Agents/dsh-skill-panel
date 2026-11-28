@@ -31,7 +31,7 @@ git tag v<version> && git push origin v<version>   # 正式发布只有这条路
 | 技能市场（源适配器、数据流、市场刻度、安装链路） | `docs/contracts/market.md` | §7 附录 F 附录 G |
 | 市场面路由（清单见 §3.7）、安装链路与市场错误码 | `docs/contracts/market-routes.md` | §3.7 §8.6（本地面见 `docs/contracts/routes.md` §3.3 / §3.4） |
 | 宿主「插件」页长什么样（外部形状、稳定钩子、几何） | `docs/reference/host-plugin-page.md` | 带采集日期；宿主升级后整份重采（例外：能用字节级 diff 证明某节形状未变时只重采指针，须在正文 1.2 写明依据），不在旧值上打补丁 |
-| 使用者能感知什么、怎么装、有哪些已知限制 | `README.md`、`README.en.md` | 只写使用者视角；中英两版同构、条目数须相等（`docs/contracts/decisions.md` 附录 W-2） |
+| 使用者能感知什么、怎么装、有哪些已知限制 | `README.md`、`README.en.md` | 只写使用者视角；骨架、双语同构、徽标同步与体量红线见 `docs/contracts/readme-standard.md` |
 | 升级时我要注意什么 | `CHANGELOG.md`、`docs/releases/` | 记行为变化与迁移，不记改过哪些文件；Release 正文体例见 `docs/contracts/release-doc-standard.md`（tag ↔ 文档硬闸等登记在 `docs/contracts/decisions.md` 附录 W-4），CHANGELOG 体例（结构 / 分类 / 写作骨架 / 标准模板）见 `docs/contracts/changelog-standard.md`；逐版 Release 正文在 `docs/releases/`，文件与 tag 同名，如 `docs/releases/v1.1.1.md` |
 | 过去是什么、为什么这么定 | `git log`（`git log -S`） | 仓库里没有 `archive/`，历史交 git |
 | 现在卡在哪、还剩什么没验 | `.agents/work/BOARD.md` | 本地看板（列约定在文件头，过程产物在 wip/ 与 scratch/），不入库 |

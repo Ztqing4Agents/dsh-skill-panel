@@ -35,7 +35,10 @@ const COMPAT_LINE = /^- \*\*DSH\*\*[:：][ \t]*`([^`]+)`[ \t]*$/;
 /** DSH 徽标：`![DSH](https://img.shields.io/badge/DSH-<encoded>-<color>)`。 */
 const BADGE = () => /!\[DSH\]\(https:\/\/img\.shields\.io\/badge\/DSH-([^)\s]*)\)/g;
 
-/** 要同步的两条 README，条目数必须相等（`docs/contracts/decisions.md` 附录 W-2）。 */
+/**
+ * 要同步的两条 README，条目数必须相等（`docs/contracts/decisions.md` 附录 W-2）。
+ * 这条由提交前自检与评审保证，本脚本不校验条目数——它只管徽标与可选兼容行。
+ */
 const READMES = ['README.md', 'README.en.md'];
 
 /**
