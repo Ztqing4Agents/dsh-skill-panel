@@ -215,7 +215,7 @@ sequenceDiagram
     Note over MP: next === null 即到底，显示「没有更多了」
 ```
 
-四条分支与两条失败分支的判据：切来源 / 切分类 / 切排序 / 换关键词 / 页头刷新 ⇒ 都清 `pages/cursors/exhausted/detail` 并重拉第一页，且都**保留 `items`**（旧列表直出，不换骨架、不滚回顶部）；答案落地时整表替换（首屏重取不带 `existing`）；首屏失败 ⇒ 整页错误态；追加失败 ⇒ 已有卡片留着，尾部给「重试」（`market/list` 用 HTTP 状态码表达失败，见 `docs/contracts/market-routes.md` §3.7.2）。市场一次只看一个来源，所以没有「部分源失败」这一支。
+四条分支与两条失败分支的判据：切来源 / 切分类 / 切排序 / 换关键词 ⇒ 都清 `pages/cursors/exhausted/detail` 并重拉第一页，且都**保留 `items`**（旧列表直出、不换骨架），`scrollTop` 按 `docs/contracts/client.md` §3.9.1 的落点复位到 **0**（筛选一变就是新查询，不保留原位置；**页头刷新随 U20 撤除，市场页没有这个驱动**，别照着别的页签把入口补回来）；答案落地时整表替换（首屏重取不带 `existing`）；**首屏失败按有没有可回填的快照分两支**（快照按 `source|category|sort|keyword` 存、会话内 LRU 8，见 `docs/contracts/client.md` §3.9.1）：本查询**没有**可回填的快照（从未成功过，或上次成功是空列表）⇒ 整页错误态 + 重试；本查询**有非空快照** ⇒ 保留上次的结果、列表上方只加一行「刷新失败，请重试」的陈旧行，卡片不换骨架也不回顶部；追加失败 ⇒ 已有卡片留着，尾部给「重试」（`market/list` 用 HTTP 状态码表达失败，见 `docs/contracts/market-routes.md` §3.7.2）。市场一次只看一个来源，所以没有「部分源失败」这一支。
 
 ### 4.6 市场安装
 

@@ -150,9 +150,9 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 | `E_BAD_QUERY` | 400 | 参数不过白名单（源未知、`sort`/`limit`/`cursor` 非法、`owner/slug/version` 不合规） | **有自己的文案** `error.E_BAD_QUERY`（#17/#18 与 #16 共用这一句）；下一步是刷新页面再看这张卡，正常不可达（参数源自 bootstrap 与已校验的条目） |
 | `E_BAD_REQUEST` | 400 | install 的 body 非法 / 超 64 KiB / 不是对象 | 行内原因 |
 | `E_SOURCE_UNKNOWN` | 400 | 来源不再在注册表里 | 客户端兜底文案（列表与详情实际用 `E_BAD_QUERY` 表达同一个事实，见 §3.7.2 第 1 条） |
-| `E_SOURCE_UNAVAILABLE` | 503 | 上游连不上 / 5xx / 限流 | 该源失败：部分源提示条；两源都失败才整页错误态 |
-| `E_SOURCE_TIMEOUT` | 504 | 连接或总超时（10s / 6s / 30s / 安装 120s 预算） | 同上 |
-| `E_SOURCE_BAD_RESPONSE` | 502 | 上游响应不是 JSON，或形状不符（字段改名、缺数组） | 同上（与超时分开，便于排查上游改动） |
+| `E_SOURCE_UNAVAILABLE` | 503 | 上游连不上 / 5xx / 限流 | 当前 scope 失败即整页错误态（可重试）；这一查询有上次的非空结果时例外——保留卡片 + 列表上方一行「刷新失败，请重试」（`docs/contracts/client.md` §3.9.1）。一次请求就是一页，没有「部分源提示条」这种半失败态 |
+| `E_SOURCE_TIMEOUT` | 504 | 连接或总超时（10s / 6s / 30s / 安装 120s 预算） | 同上：当前 scope 失败即整页错误态（可重试），没有半失败态 |
+| `E_SOURCE_BAD_RESPONSE` | 502 | 上游响应不是 JSON，或形状不符（字段改名、缺数组） | 同上：当前 scope 失败即整页错误态（可重试），没有半失败态（与超时分开，便于排查上游改动） |
 | `E_DOWNLOAD_FAILED` | 502 | 安装取包时网络失败（单文件下载阶段把 503/502 归一成这一条） | 卡片行内原因 + 「重试」 |
 | `E_PACKAGE_INVALID` | 422 | 包不合规：清单为空 / 没有 `SKILL.md` / 路径不安全（`..`、绝对路径、逃逸临时目录、同一路径两次）/ `size` 或 `sha256` 不符 / 版本不符 | 行内原因 + 「重试」 |
 | `E_SKILL_NAME_INVALID` | 422 | 包内 `SKILL.md` 声明的 `name` 不合 `^[a-z0-9]+(?:-[a-z0-9]+)*$` | 行内原因，回显 `data.declaredName`；**不改名、不用 slug 顶替** |
