@@ -169,7 +169,11 @@ const headOf = (f) => {
 const declaredLimit = new Map();
 
 for (const f of files) {
-  if (HEADLESS.has(f)) continue;
+  // `docs/releases/` is a published artefact, not an internal contract: its body is exactly
+  // what readers get on the GitHub Release page, so the five `>` meta lines and a `## 验收`
+  // section must not leak into it. The shape that replaces those checks lives in
+  // `docs/contracts/release-doc-standard.md`; R1 / R7 / R8 / R9 / R13 still apply there.
+  if (HEADLESS.has(f) || f.startsWith('docs/releases/')) continue;
   const head = headOf(f);
   if (!head['类型']) {
     red('R2', `${f}: missing head note (need 类型 / 读者 / 真源 / 更新触发 / 规模上限)`);
@@ -225,6 +229,24 @@ for (const f of files) {
 
 if (text.has('CHANGELOG.md')) {
   const ls = lines('CHANGELOG.md');
+
+  // Added 2026-11-28 (docs/contracts/changelog-standard.md §10.2 item 5 / §10.7), two rules only:
+  //
+  // (a) the first level-1 heading is `# Changelog` -- Keep a Changelog fixes that title, and a
+  //     file that opens with a version heading reads as if it has no changelog at all;
+  // (b) the file defines `[Unreleased]: <url>` somewhere -- without that line the `[Unreleased]`
+  //     heading renders as literal brackets on GitHub, and the reader loses the only pointer at
+  //     the diff since the last release. Unconditional on purpose: a CHANGELOG that carries no
+  //     compare links at all is exactly the rot this rule exists to catch, so a fixture that
+  //     omits them is the fixture that needs fixing, not the rule that needs loosening.
+  const title = ls.find((l) => /^# /.test(l));
+  if (title === undefined || title.trim() !== '# Changelog') {
+    red('R6', `CHANGELOG.md: 首个一级标题必须是 「# Changelog」（现为 ${JSON.stringify(title ?? '(没有一级标题)')}）`);
+  }
+  if (!ls.some((l) => /^\[Unreleased\]:\s*https?:\/\/\S+/.test(l.trim()))) {
+    red('R6', 'CHANGELOG.md: 缺 「[Unreleased]:」 对比链接定义行（正文里的 [Unreleased] 会渲染成原样方括号）');
+  }
+
   if (!ls.some((l) => l.trim() === '## [Unreleased]')) red('R6', 'CHANGELOG.md: missing 「## [Unreleased]」');
   for (const l of ls) {
     if (!l.startsWith('## [')) continue;

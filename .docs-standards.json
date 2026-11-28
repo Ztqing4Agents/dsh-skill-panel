@@ -1,6 +1,6 @@
 {
   "whitelist": ["README.md", "AGENTS.md", "CHANGELOG.md", "docs/**"],
-  "exclude": ["test/fixtures/**", "node_modules/**", ".agents/**", "README.en.md"],
+  "exclude": ["test/fixtures/**", "node_modules/**", ".agents/**", "README.en.md", "docs/releases/**"],
   "idPrefixes": ["U", "M", "V", "D"],
   "descriptionSource": "package.json"
 }

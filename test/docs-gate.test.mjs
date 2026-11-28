@@ -46,6 +46,11 @@ const REFERENCE = `# 示例参考
 正文。
 `;
 
+/**
+ * The baseline CHANGELOG keeps the compare-link block: since 2026-11-28 R6 asserts a
+ * `[Unreleased]:` definition unconditionally (`docs/contracts/changelog-standard.md`
+ * §10.2 item 5), so a fixture without one would red every case that mounts this tree.
+ */
 const CHANGELOG = `# Changelog
 
 ## [Unreleased]
@@ -55,6 +60,8 @@ const CHANGELOG = `# Changelog
 ### Added
 
 - 某功能。
+
+[Unreleased]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v0.1.0...HEAD
 `;
 
 /**
@@ -192,6 +199,42 @@ test('R5 时效：参考类缺采集日期红；超过 180 天只告警', async 
     } finally {
       await cleanup();
     }
+  }
+});
+
+/**
+ * `docs/releases/` 是发布产物：文件正文就是 GitHub Release 页面上的那段话，仓库侧的五行头注与
+ * `## 验收` 章节不该出现在里面（体例见 `docs/contracts/release-doc-standard.md`）。豁免只覆盖
+ * R2–R5，下面两个用例把「放行哪一侧、仍然拦哪一侧」一起钉住。
+ */
+const RELEASE_NOTE = `# v9.9.9
+
+## 新增
+
+- 某个用户可感知的新能力。
+
+**完整变更**：[v9.9.8...v9.9.9](https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v9.9.8...v9.9.9) · [CHANGELOG](https://github.com/Ztqing4Agents/dsh-skill-panel/blob/main/CHANGELOG.md#999---2026-11-28)
+`;
+
+test('R2–R5 豁免：docs/releases 的正文不带五行头注、也没有「## 验收」也不红', async () => {
+  const { dir, cleanup } = await tree({ ...BASELINE, 'docs/releases/v9.9.9.md': RELEASE_NOTE });
+  try {
+    const { status, out } = runGate(dir);
+    assert.equal(status, 0, out);
+    assert.match(out, /check-docs: OK/);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('R2–R5 豁免不外溢：同一段无头注正文放进 docs/contracts 仍须红', async () => {
+  const { dir, cleanup } = await tree({ ...BASELINE, 'docs/contracts/example.md': RELEASE_NOTE });
+  try {
+    const { status, out } = runGate(dir);
+    assert.equal(status, 1, out);
+    assert.match(out, /R2 docs\/contracts\/example\.md: missing head note/);
+  } finally {
+    await cleanup();
   }
 });
 
@@ -374,6 +417,55 @@ test('R6 CHANGELOG：非官方类目与坏版本号都必须红', async () => {
     } finally {
       await cleanup();
     }
+  }
+});
+
+/**
+ * R6 的两条字面断言（2026-11-28 起，见 `docs/contracts/changelog-standard.md` §10.2 第 1 / 5 条）：
+ * 一级标题固定 `# Changelog`；文末必须有 `[Unreleased]:` 定义行。两条都是**无条件**的——
+ * 一份从来没有对比链接的 CHANGELOG 恰恰是这两条要抓的腐化，所以下面第三个用例专门钉住
+ * 「整块链接都没写」也照红，免得日后有人把它当成「历史遗留、不算数」而放行。
+ */
+test('R6 标题：首个一级标题不是 `# Changelog`（含完全没有一级标题）必须红', async () => {
+  const variants = [
+    ['把标题改掉', CHANGELOG.replace('# Changelog', '# 变更日志')],
+    ['删掉标题行', CHANGELOG.replace('# Changelog\n\n', '')],
+  ];
+  for (const [what, changelog] of variants) {
+    const { dir, cleanup } = await tree({ ...BASELINE, 'CHANGELOG.md': changelog });
+    try {
+      const { status, out } = runGate(dir);
+      assert.equal(status, 1, `${what}之后该红：\n${out}`);
+      assert.match(out, /R6 CHANGELOG\.md: 首个一级标题必须是/, out);
+    } finally {
+      await cleanup();
+    }
+  }
+});
+
+test('R6 对比链接：有链接块但缺 `[Unreleased]:` 必须红', async () => {
+  const onlyVersions = CHANGELOG.replace(
+    '[Unreleased]: https://github.com/Ztqing4Agents/dsh-skill-panel/compare/v0.1.0...HEAD\n',
+    '',
+  ).replace('### Added\n\n- 某功能。\n', '### Added\n\n- 某功能。\n\n[0.1.0]: https://github.com/Ztqing4Agents/dsh-skill-panel/releases/tag/v0.1.0\n');
+  const { dir, cleanup } = await tree({ ...BASELINE, 'CHANGELOG.md': onlyVersions });
+  try {
+    const { status, out } = runGate(dir);
+    assert.equal(status, 1, `只剩版本链接、缺 [Unreleased]: 该红：\n${out}`);
+    assert.match(out, /R6 CHANGELOG\.md: 缺 「\[Unreleased\]:」/, out);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('R6 对比链接：整块对比链接都没写也必须红（无条件，不因「历史遗留」放行）', async () => {
+  const { dir, cleanup } = await tree({ ...BASELINE, 'CHANGELOG.md': CHANGELOG.replace(/\n\[Unreleased\]: \S+\n$/, '\n') });
+  try {
+    const { status, out } = runGate(dir);
+    assert.equal(status, 1, `一条链接都没有时该红：\n${out}`);
+    assert.match(out, /R6 CHANGELOG\.md: 缺 「\[Unreleased\]:」/, out);
+  } finally {
+    await cleanup();
   }
 });
 

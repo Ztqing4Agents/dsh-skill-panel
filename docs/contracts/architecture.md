@@ -340,7 +340,7 @@ ledger.readAll() ─────────────────┘   （R5�
 | `scripts/check-docs.mjs`、`scripts/check-board.mjs` | 文档门禁（白名单 / 头注 / 章节 / 锚点 / 引用 / 零行号 / 体积 R10–R12 / 用例落点 R14，自测在 `test/docs-gate.test.mjs`）与看板门禁（格式 + 依据锚点，无 `.agents/work/` 时跳过） |
 | `scripts/hosts.mjs`、`scripts/sync-hosts.mjs`、`scripts/semver-lite.mjs` | 宿主真源：`supportedHosts` / `peerRange` / `developmentHost` / `requiredHostPeers` 与 `assertHostPeers()`；`sync-hosts` 就是第五门 `check:hosts`——**默认只读校验**（`package.json` 与两条 README 漂移即红），**回写必须显式 `--write`**；`semver-lite` 是前两者与 `check-version` 共用的最小 semver 实现（含 `includePrerelease` 口径） |
 | `scripts/check-version.mjs`、`scripts/test-compat.mjs`、`scripts/asar-read.mjs`、`scripts/cdp.mjs` | 发布前三断言（tag 逐字等于 `v<package.json version>`、`engines` 与 peer 同串且覆盖 `supportedHosts`、预发布禁发 `latest`）与真机冒烟 H1–H7（`--host <ver>`，隔离 `DSH_HOME` 起实例；不进本地门禁）；后两只只在冒烟脚本内用——读 `app.asar` 与零依赖 CDP 驱动 |
-| `scripts/release-body.mjs` | GitHub Release 正文生成器：由 `docs/releases/` 下与 tag 同名的正文去掉标题与五行注记，收尾句文档已有则不补；工作流的建 Release 步骤与手工补建共用同一条命令（见 `docs/contracts/decisions.md` 附录 Z 的 Z-16） |
+| `scripts/release-body.mjs` | GitHub Release 正文生成器：由 `docs/releases/` 下与 tag 同名的正文去掉 `# vX.Y.Z` 标题与紧随空行、其余原样输出，文末收尾句文档已有则不补、缺才补；工作流的建 Release 步骤与手工补建共用同一条命令（体例见 `docs/contracts/release-doc-standard.md`，链路见 `docs/contracts/decisions.md` 附录 Z 的 Z-16） |
 
 ### 2.5 测试与文档
 

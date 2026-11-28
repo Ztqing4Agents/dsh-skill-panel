@@ -167,7 +167,7 @@ if (allTags === null) {
         say(`   ${relative}  ✓`);
       } else {
         say(`   ${relative}  缺失`);
-        failures.push(`4. release 文档：缺 ${relative}——先写它（Release 正文五段式见 docs/contracts/decisions.md 附录 W-4，`
+        failures.push(`4. release 文档：缺 ${relative}——先写它（Release 正文体例见 docs/contracts/release-doc-standard.md，`
           + '文件名与 tag 必须逐字一致）');
       }
     }

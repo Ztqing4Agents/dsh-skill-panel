@@ -78,10 +78,12 @@ jobs:
       #   node scripts/release-body.mjs v1.2.3 | gh release create v1.2.3 \
       #     --title v1.2.3 --notes-file - --verify-tag
       #
-      # The body is the release note in `docs/releases/<tag>.md` minus its repository-side
-      # header (title + the five `>` meta lines), plus the closing line -- see
-      # scripts/release-body.mjs for the exact rule. `--notes-file -` reads stdin, and
-      # `--title` is the bare tag, matching the existing releases (v1.1.3, v1.1.4).
+      # The body is the release note in `docs/releases/<tag>.md` minus its `# vX.Y.Z` title
+      # (GitHub already shows the tag); the closing "full changelog" line is appended only
+      # when the note does not already end with it -- see scripts/release-body.mjs for the
+      # exact rule and docs/contracts/release-doc-standard.md for the note's shape.
+      # `--notes-file -` reads stdin, and `--title` is the bare tag, matching the existing
+      # releases (v1.1.3, v1.1.4).
       - name: create the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

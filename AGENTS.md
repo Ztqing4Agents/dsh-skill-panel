@@ -13,7 +13,7 @@ npm run check:board  # 看板格式与依据锚点（无 .agents/work/ 时跳过
 npm run check:docs:standards   # 标准文档门禁：dev-docs-standards 的 vendored 副本，交付前当第二意见；不进 npm run check，升级方式见脚本头注
 npm run check        # 上面四道 + check:hosts：宿主声明须与 scripts/hosts.mjs 一致（共五门）
 npm test             # node --test "test/*.test.mjs"（测试由 QA 维护；Node 24 不再展开目录参数，glob 两端都稳）；真机冒烟另跑 npm run test:compat [-- --host <ver>]，隔离 DSH_HOME 起实例，不进本地门禁
-git tag v<version> && git push origin v<version>   # 正式发布只有这条路：push v* tag 触发 .github/workflows/publish.yml（npm 可信发布 / OIDC，无长期 token；prepublishOnly 自带 check+test+check-version，CI 里别重复跑；末尾一步顺带用 `scripts/release-body.mjs` 从 `docs/releases/` 下与 tag 同名的正文生成建 GitHub Release——漏了就用同一条命令手工补 `gh release create`）；本地 `npm publish` 降为应急且不受支持（仍需一次性 bypass token：2FA 绑通行密钥、CLI 的 --otp 只吃 TOTP，token 不进仓库、不进对话）；抬宿主代际的那次发版，同轮人工跑一次 npm deprecate 旧代际版本（模板与理由见 docs/contracts/decisions.md Z-14）
+git tag v<version> && git push origin v<version>   # 正式发布只有这条路：push v* tag 触发 .github/workflows/publish.yml（npm 可信发布 / OIDC，无长期 token；prepublishOnly 自带 check+test+check-version，CI 里别重复跑；末尾一步顺带用 `scripts/release-body.mjs` 从 `docs/releases/` 下与 tag 同名的正文生成建 GitHub Release——漏了就用同一条命令手工补 `gh release create`，正文体例见 `docs/contracts/release-doc-standard.md`）；本地 `npm publish` 降为应急且不受支持（仍需一次性 bypass token：2FA 绑通行密钥、CLI 的 --otp 只吃 TOTP，token 不进仓库、不进对话）；抬宿主代际的那次发版，同轮人工跑一次 npm deprecate 旧代际版本（模板与理由见 docs/contracts/decisions.md Z-14）
 ```
 
 ## 文档地图
@@ -32,7 +32,7 @@ git tag v<version> && git push origin v<version>   # 正式发布只有这条路
 | 市场面路由（清单见 §3.7）、安装链路与市场错误码 | `docs/contracts/market-routes.md` | §3.7 §8.6（本地面见 `docs/contracts/routes.md` §3.3 / §3.4） |
 | 宿主「插件」页长什么样（外部形状、稳定钩子、几何） | `docs/reference/host-plugin-page.md` | 带采集日期；宿主升级后整份重采（例外：能用字节级 diff 证明某节形状未变时只重采指针，须在正文 1.2 写明依据），不在旧值上打补丁 |
 | 使用者能感知什么、怎么装、有哪些已知限制 | `README.md`、`README.en.md` | 只写使用者视角；中英两版同构、条目数须相等（`docs/contracts/decisions.md` 附录 W-2） |
-| 升级时我要注意什么 | `CHANGELOG.md`、`docs/releases/` | 记行为变化与迁移，不记改过哪些文件；Release 正文五段式见 `docs/contracts/decisions.md` 附录 W-4，CHANGELOG 体例（结构 / 读者 / 骨架 / 语义分层 / 措辞）见附录 W-5；逐版 Release 正文在 `docs/releases/`，文件与 tag 同名，如 `docs/releases/v1.1.1.md` |
+| 升级时我要注意什么 | `CHANGELOG.md`、`docs/releases/` | 记行为变化与迁移，不记改过哪些文件；Release 正文体例见 `docs/contracts/release-doc-standard.md`（tag ↔ 文档硬闸等登记在 `docs/contracts/decisions.md` 附录 W-4），CHANGELOG 体例（结构 / 分类 / 写作骨架 / 标准模板）见 `docs/contracts/changelog-standard.md`；逐版 Release 正文在 `docs/releases/`，文件与 tag 同名，如 `docs/releases/v1.1.1.md` |
 | 过去是什么、为什么这么定 | `git log`（`git log -S`） | 仓库里没有 `archive/`，历史交 git |
 | 现在卡在哪、还剩什么没验 | `.agents/work/BOARD.md` | 本地看板（列约定在文件头，过程产物在 wip/ 与 scratch/），不入库 |
 
