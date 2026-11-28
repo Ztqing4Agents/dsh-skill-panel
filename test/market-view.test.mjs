@@ -30,15 +30,21 @@ import { mountHooks } from './helpers/hooks.mjs';
 
 /** The bundled client page. */
 let page;
-/** The bundled market card module (exports `MarketIcon`). */
+/** The bundled market card module (exports `MarketIcon`, `InstallAction`). */
 let card;
+/** The bundled market panel (mounted directly so a click can be fired into it). */
+let panel;
+/** The bundled confirmation dialogs (identity, so a tree walk can name the seat). */
+let confirm;
 /** The Chinese translator. */
 let t;
 
 before(async () => {
-  const modules = await loadClientModules(['page', 'card']);
+  const modules = await loadClientModules(['page', 'card', 'panel', 'confirm']);
   page = modules.page;
   card = modules.card;
+  panel = modules.panel;
+  confirm = modules.confirm;
   t = await zhTranslator();
 });
 
@@ -151,6 +157,63 @@ function matches(html, pattern) {
   return [...html.matchAll(pattern)].map((match) => match[1]);
 }
 
+/**
+ * Every element of an unrendered tree, depth first.
+ *
+ * A tree from `mountHooks` is a tree of *elements*: a component element is a leaf here (its
+ * own children have not been produced yet), which is exactly what lets a test reach the
+ * props the panel handed a child - `onConfirm`, `onUpdate` - without a DOM.
+ * @param {unknown} node - element, array, or text.
+ * @param {object[]} [found] - accumulator.
+ * @returns {object[]} the elements.
+ */
+function elementsOf(node, found = []) {
+  if (node === null || node === undefined || typeof node !== 'object') return found;
+  if (Array.isArray(node)) {
+    for (const child of node) elementsOf(child, found);
+    return found;
+  }
+  found.push(node);
+  elementsOf(node.props?.children, found);
+  return found;
+}
+
+/**
+ * The first element matching a predicate.
+ * @param {unknown} node - the tree.
+ * @param {(element: object) => boolean} predicate - what to look for.
+ * @returns {object|null} the element, or null.
+ */
+function findElement(node, predicate) {
+  for (const element of elementsOf(node)) {
+    if (predicate(element) === true) return element;
+  }
+  return null;
+}
+
+/**
+ * The first element of one bundled component type.
+ * @param {unknown} node - the tree.
+ * @param {Function} type - the component (from the same bundle, so identity holds).
+ * @returns {object|null} the element, or null.
+ */
+function findByType(node, type) {
+  return findElement(node, (element) => element.type === type);
+}
+
+/**
+ * The first market card of one id.
+ * @param {unknown} node - the tree.
+ * @param {string} id - the market key.
+ * @returns {object|null} the card element, or null.
+ */
+function findCard(node, id) {
+  return findElement(node, (element) => element.type === card.MarketCard && element.props?.item?.id === id);
+}
+
+/** Let the pending promise chain of one handler run to completion. */
+const flush = () => new Promise((resolve) => { setTimeout(resolve, 0); });
+
 test('K38 首屏骨架：分类 chip 占位 + 6 张卡骨架，带 status 播报与 aria-busy', () => {
   const html = renderMarket((store) => {
     store.actions.marketBootLoading();
@@ -237,11 +300,23 @@ test('K38 卡片可点只用一个手段：没有 <a>、卡片本身不是按钮
 });
 
 test('K38 已安装 / 安装中 / 失败三态：按钮文案与禁用、行内原因、播报', () => {
+  // M2: a ledger row only counts as installed when the route also said where its `SKILL.md`
+  // lives (`skillFile`), and a card that advertises no version cannot be compared with it - that
+  // pair is the "installed, no version to guess" state this case pins.
+  const installedItem = item({ version: null });
   const installedHtml = renderMarket((store) => {
-    store.actions.marketInstalledLoaded({ 'skillhub:ake:dev-god': { name: 'dev-god', version: '1.0.0', path: '/tmp/skills/dev-god', exists: true } });
+    store.actions.marketInstalledLoaded({
+      'skillhub:ake:dev-god': {
+        name: 'dev-god',
+        version: '1.0.0',
+        path: '/tmp/skills/dev-god',
+        skillFile: '/tmp/skills/dev-god/SKILL.md',
+        exists: true,
+      },
+    });
     store.actions.marketPageAppended({
-      pages: [{ sourceId: 'skillhub', page: { items: [item()], next: null } }],
-      merged: [item()],
+      pages: [{ sourceId: 'skillhub', page: { items: [installedItem], next: null } }],
+      merged: [installedItem],
     });
   });
   assert.ok(installedHtml.includes('>已安装<'), '台账说装过时按钮写「已安装」');
@@ -613,7 +688,8 @@ test('K48 已安装页签零回归：页头按页签分工，行的可点边界�
 
 /**
  * Every market action the store exposes, sorted (U20 收尾：`marketReload` 已删 → 30 个；
- * M14 加 `marketLocale` → 31 个）。A closed set on purpose: adding or removing one is a
+ * M14 加 `marketLocale` → 31 个；M2 加 `marketUpdateStart` / `marketInstalledVersion` /
+ * `marketUpdateFail` → 34 个）。A closed set on purpose: adding or removing one is a
  * state-machine change and has to be argued for here, not discovered by a count.
  */
 const MARKET_ACTIONS = [
@@ -637,6 +713,7 @@ const MARKET_ACTIONS = [
   'marketInstallStart',
   'marketInstalledLoaded',
   'marketInstalledStale',
+  'marketInstalledVersion',
   'marketListFailed',
   'marketLocale',
   'marketListLoading',
@@ -648,6 +725,8 @@ const MARKET_ACTIONS = [
   'marketSetFilter',
   'marketSetInput',
   'marketSetScroll',
+  'marketUpdateFail',
+  'marketUpdateStart',
 ].sort();
 
 test('K49 「技能市场」页签没有页头刷新，store 里也没有 marketReload（重取由面板自己驱动）', () => {
@@ -1664,4 +1743,786 @@ test('K107 换来源时 chips 行只有一行：旧数字留着就地换，不�
   });
   assert.equal(count(firstScreen, 'skc_marketSkeletonChip'), 6, '首屏仍有 6 根 chips 占位条');
   assert.equal(firstScreen.includes('role="group"'), false, '首屏没有真 chip 行');
+});
+
+/* ---------------------- K38 · M3：刷新失败时，屏上只多一行「这是上次的结果」 ---------------------- */
+
+/** The list the stale cases start from: two cards, one more page behind the cursor. */
+const STALE_ITEMS = [item({ id: 'skillhub:ake:alpha' }), item({ id: 'skillhub:ake:beta' })];
+
+/**
+ * A store holding one page of results for the current query, then failed a refresh.
+ * @param {{empty?: boolean}} [options] - land an empty first page instead.
+ * @returns {object} the store, in the post-failure state.
+ */
+function staleStore(options = {}) {
+  return marketStore((store) => {
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'skillhub', page: { items: options.empty === true ? [] : STALE_ITEMS, next: 'cursor-2' } }],
+      merged: options.empty === true ? [] : STALE_ITEMS,
+    });
+    store.actions.marketListLoading();
+    store.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 'upstream timed out' });
+  });
+}
+
+test('K38 陈旧结果：一行提示 + 上次的卡片，且不出整页错误态、不出尾部「加载失败」', () => {
+  const store = staleStore();
+  assert.equal(store.getSnapshot().market.listStatus, 'ready', '先确认 store 确实停在「有旧结果」的那条路');
+  const html = renderStore(store);
+
+  const banner = /<div class="skc_marketFailure"[^>]*data-skc-market-stale[^>]*>/.exec(html);
+  assert.notEqual(banner, null, '陈旧行在，且带着稳定标记（容器仍是 .skc_marketFailure）');
+  assert.ok(html.includes('刷新失败，请重试'), '那行说的是「刷新失败」（page.refreshError）');
+  assert.ok(html.includes('>重试<'), '带一个重试按钮');
+  assert.equal(matches(html, /data-skc-market-id="[^"]+"/g).length, 2, '上次的两张卡片都在');
+  assert.ok(html.includes('data-skc-market-id="skillhub:ake:alpha"'), '第一张还是上次那张');
+
+  // 反向：这是「旧结果 + 一行提示」，不是整页失败，也不是追加失败。
+  assert.equal(html.includes('无法连接技能市场'), false, '不出整页错误态文案（market.errorTitle）');
+  assert.equal(html.includes('加载失败，点此重试'), false, '不出尾部「加载失败，点此重试」（market.moreFailed，那条专属追加失败）');
+  assert.equal(matches(html, /role="alert"/g).length, 0, '整页错误态那一块用的是 role="alert"，这里一个都不该有');
+  assert.ok(
+    html.includes('<p class="skc_marketError" role="status">刷新失败，请重试</p>'),
+    '提示是 status 而不是 alert（读屏当场播报，不抢占）',
+  );
+});
+
+test('K38 陈旧结果下的重取：尾部不画骨架、不画「正在加载更多」，列表留在原位', () => {
+  const store = staleStore();
+  store.actions.marketListLoading();
+  const market = store.getSnapshot().market;
+  assert.equal(market.stale !== null, true, '重试期间仍是陈旧态（屏上还是旧结果）');
+  assert.equal(market.pages, 0, 'pages 归 0：这是一次第一页请求，不是追加');
+
+  const html = renderStore(store);
+  assert.equal(html.includes('正在加载更多'), false, '没有「正在加载更多」这一行');
+  assert.equal(matches(html, /skc_marketLoadMore/g).length, 0, '加载更多那一行不在');
+  assert.equal(matches(html, /skc_marketSkeletonAction/g).length, 0, '网格尾部没有追加骨架卡');
+  assert.equal(matches(html, /data-skc-market-id="[^"]+"/g).length, 2, '旧卡片仍留在屏上（不闪骨架）');
+  assert.equal(html.includes('data-skc-market-stale'), true, '提示行还在（这正是重试入口）');
+});
+
+test('K38 陈旧结果的重试真的重取第一页：从那一行点「重试」，列表被新答案替换、提示消失', async () => {
+  const store = staleStore();
+  const calls = [];
+  const api = {
+    ...API_STUB,
+    marketList: async (query) => {
+      calls.push(query);
+      return { items: [item({ id: 'skillhub:ake:gamma' })], next: null };
+    },
+  };
+  const mounted = mountHooks(panel.MarketPanel, { store, api, t });
+  const tree = mounted.render();
+  const retry = findElement(tree, (element) => element.props?.children === '重试');
+  assert.notEqual(retry, null, '陈旧行里有「重试」按钮');
+  retry.props.onClick();
+  await new Promise((resolve) => { setTimeout(resolve, 0); });
+
+  assert.equal(calls.length, 1, '一次请求（第一页）');
+  assert.equal(calls[0].cursor, undefined, '带的是第一页：cursor 是 undefined（追加会带上游标 cursor-2）');
+  assert.equal(calls[0].keyword, '', '还是原来那个查询（没有换筛选）');
+  const landed = store.getSnapshot().market;
+  assert.equal(landed.stale, null, '答案落地 ⇒ 提示消失');
+  assert.equal(landed.pages, 1, '页数从 0 记成 1（没被当成第二页）');
+  const html = renderStore(store);
+  assert.equal(html.includes('data-skc-market-stale'), false, '屏上不再有陈旧行');
+  assert.ok(html.includes('data-skc-market-id="skillhub:ake:gamma"'), '屏上是新答案');
+});
+
+/* ------------- K161 · M2：市场页「已装 ⇒ 更新」的调用链（弹窗 / 一次请求 / 失败分档） ------------- */
+
+/** The one card every K161 case is about. */
+const UPDATE_ID = 'skillhub:ake:dev-god';
+/** The directory the ledger says this skill occupies. */
+const UPDATE_DIR = '/tmp/skills/dev-god';
+
+/**
+ * The ledger row `market/installed` would answer for the card above.
+ * @param {object} [overrides] - fields to replace.
+ * @returns {object} the row.
+ */
+function ledgerRow(overrides = {}) {
+  return {
+    name: 'dev-god',
+    version: '1.0.0',
+    path: UPDATE_DIR,
+    skillFile: `${UPDATE_DIR}/SKILL.md`,
+    exists: true,
+    ...overrides,
+  };
+}
+
+/**
+ * A fake API client that records what the panel asked for.
+ * @param {{update?: Function, install?: Function, installed?: Function, list?: Function}} [overrides] - per-route behaviour.
+ * @returns {{api: object, calls: object[]}} the client and its call log.
+ */
+function fakeApi(overrides = {}) {
+  const calls = [];
+  const api = {
+    marketBootstrap: async () => ({ sources: [], categories: [], categoriesOk: true }),
+    marketList: async (query) => {
+      calls.push(['list', query]);
+      return overrides.list === undefined ? { items: [], next: null } : overrides.list();
+    },
+    marketDetail: async () => null,
+    marketInstalled: async () => {
+      calls.push(['installed']);
+      return overrides.installed === undefined ? { items: {}, readable: true } : overrides.installed();
+    },
+    marketInstall: async (body) => {
+      calls.push(['install', body]);
+      if (overrides.install !== undefined) return overrides.install(body);
+      return {};
+    },
+    marketVersions: async (ref) => {
+      calls.push(['versions', ref]);
+      return { versions: [], total: 0 };
+    },
+    marketUpdate: async (body) => {
+      calls.push(['update', body]);
+      if (overrides.update !== undefined) return overrides.update(body);
+      return { name: body.name, path: body.path, version: body.version, from: '1.0.0' };
+    },
+  };
+  return { api, calls };
+}
+
+/**
+ * A store parked on the market tab with one installed card advertising `version`.
+ * @param {{cardVersion?: string|null, ledger?: object|null}} [options] - card version and ledger row.
+ * @returns {object} the store.
+ */
+function updateStore(options = {}) {
+  const cardVersion = options.cardVersion === undefined ? '2.0.0' : options.cardVersion;
+  const cardItem = item({ version: cardVersion });
+  const ledger = options.ledger === undefined ? ledgerRow() : options.ledger;
+  return marketStore((store) => {
+    if (ledger !== null) store.actions.marketInstalledLoaded({ [UPDATE_ID]: ledger });
+    store.actions.marketPageAppended({
+      pages: [{ sourceId: 'skillhub', page: { items: [cardItem], next: null } }],
+      merged: [cardItem],
+    });
+  });
+}
+
+/**
+ * The card element of the K161 item, as the panel handed it to the card component.
+ * @param {object} tree - an unrendered tree from `mountHooks`.
+ * @returns {object|null} the element.
+ */
+const updateCardOf = (tree) => findCard(tree, UPDATE_ID);
+
+test('K161 点「更新」只开更新弹窗：取消零请求，确认后恰好一次 market/update 且 body 分三个来源', async () => {
+  const { api, calls } = fakeApi();
+  const store = updateStore();
+  const mounted = mountHooks(panel.MarketPanel, { store, api, t });
+
+  const cardElement = updateCardOf(mounted.render());
+  assert.notEqual(cardElement, null, '卡片在屏上');
+  assert.equal(typeof cardElement.props.onUpdate, 'function', '卡片拿到更新入口（不是安装入口）');
+  cardElement.props.onUpdate(cardElement.props.item);
+  assert.deepEqual(
+    store.getSnapshot().market.installs[UPDATE_ID],
+    { state: 'confirm', mode: 'update' },
+    '座位只开弹窗、并记住是哪一个弹窗',
+  );
+  assert.equal(calls.length, 0, '到这一刻一个请求都没发（确认之前不发请求）');
+
+  const tree = mounted.render();
+  assert.notEqual(findByType(tree, confirm.UpdateConfirm), null, '画的是更新弹窗');
+  assert.equal(findByType(tree, confirm.MarketConfirm), null, '不是安装弹窗');
+
+  const html = renderStore(store);
+  assert.ok(html.includes('更新 Dev God'), '标题是 detail.updateTitle（更新 {name}）');
+  assert.ok(html.includes('将从 1.0.0 更新到 2.0.0'), '正文说清方向（detail.updateBody 的 {from} → {to}）');
+  assert.ok(html.includes('1.0.0 → 2.0.0'), '事实表给 {from} → {to}');
+  assert.ok(html.includes(UPDATE_DIR), '事实表给要替换的那个目录（台账 path）');
+  assert.equal(html.includes(`${UPDATE_DIR}/SKILL.md`), false, '目录位写的是目录，不是 SKILL.md');
+  assert.equal(html.includes('技能来自第三方，安装前请确认可信'), false, '更新弹窗不再念一遍首次安装的第三方提示');
+  assert.ok(html.includes('>取消<') && html.includes('>更新<'), '两个按钮：取消 / 更新');
+
+  findByType(mounted.render(), confirm.UpdateConfirm).props.onCancel();
+  assert.equal(UPDATE_ID in store.getSnapshot().market.installs, false, '取消 ⇒ 座位清掉');
+  assert.equal(calls.length, 0, '取消 ⇒ 零请求');
+
+  // 再开一次并确认：这一次要真的发出去。
+  updateCardOf(mounted.render()).props.onUpdate(cardElement.props.item);
+  findByType(mounted.render(), confirm.UpdateConfirm).props.onConfirm();
+  await flush();
+
+  const updates = calls.filter(([name]) => name === 'update');
+  assert.equal(updates.length, 1, '恰好一次 POST market/update（没有第二次）');
+  assert.deepEqual(
+    updates[0][1],
+    { source: 'skillhub', owner: 'ake', slug: 'dev-god', version: '2.0.0', name: 'dev-god', path: `${UPDATE_DIR}/SKILL.md` },
+    'body：身份来自条目、版本取自卡上、name 与 path 取自台账的 skillFile',
+  );
+  assert.notEqual(updates[0][1].path, UPDATE_DIR, 'path 是 SKILL.md 而不是目录（硬约束 6：先认路径再写）');
+  assert.equal(calls.some(([name]) => name === 'versions'), false, '不取 market/versions（版本来自卡上）');
+  assert.equal(calls.filter(([name]) => name === 'install').length, 0, '没有回落到安装路由');
+
+  // 详情头是同一个动作位（client.md §3.9.2）：它拿到的也得是更新入口，否则从详情页出发
+  // 会在已装的目录上再点一次「安装」。
+  store.actions.marketDetailOpen(cardElement.props.item);
+  store.actions.marketDetailReady({ item: cardElement.props.item, installTo: UPDATE_DIR });
+  // Found by the props the detail view has always had (爬回 / 重试 / detail), not by the one
+  // under test - otherwise the assertion would be looking at its own premise.
+  const detail = findElement(
+    mounted.render(),
+    (element) => typeof element.props?.onBack === 'function'
+      && typeof element.props?.onRetry === 'function'
+      && element.props?.detail !== undefined,
+  );
+  assert.notEqual(detail, null, '详情头找得到');
+  assert.equal(typeof detail.props.onUpdate, 'function', '详情头也拿到更新入口（同一个动作位）');
+});
+
+test('K161 更新成功：先写回版本再推通知，checks 就地记成新版本、页头不会再报「可更新」', async () => {
+  // The route answers a version different from the card's, so "which version was written back"
+  // is a real question rather than a coincidence.
+  const { api, calls } = fakeApi({ update: (body) => ({ name: body.name, path: body.path, version: '2.1.0', from: '1.0.0' }) });
+  const real = updateStore();
+  const order = [];
+  const store = {
+    getSnapshot: () => real.getSnapshot(),
+    subscribe: real.subscribe,
+    actions: new Proxy(real.actions, {
+      get(target, prop) {
+        const action = target[prop];
+        if (typeof action !== 'function') return action;
+        return (...args) => {
+          order.push({ name: prop, writtenVersion: real.getSnapshot().market.installed?.[UPDATE_ID]?.version ?? null });
+          return action.apply(target, args);
+        };
+      },
+    }),
+  };
+  const mounted = mountHooks(panel.MarketPanel, { store, api, t });
+  updateCardOf(mounted.render()).props.onUpdate(item({ version: '2.0.0' }));
+  findByType(mounted.render(), confirm.UpdateConfirm).props.onConfirm();
+  await flush();
+
+  const names = order.map((entry) => entry.name);
+  const wrote = names.indexOf('marketInstalledVersion');
+  const noticed = names.indexOf('updateApplied');
+  assert.notEqual(wrote, -1, '写回版本这一步发生了');
+  assert.notEqual(noticed, -1, '推通知这一步发生了');
+  assert.ok(wrote < noticed, '顺序：先写回 installed[id].version，再 updateApplied（反了页头会短暂报「可更新」）');
+  assert.equal(
+    order[noticed].writtenVersion,
+    '2.1.0',
+    'updateApplied 跑的时候台账里已经是新版本（路由答的那个，不是卡上的）',
+  );
+
+  const market = real.getSnapshot().market;
+  assert.equal(market.installed[UPDATE_ID].version, '2.1.0', '台账版本就是路由答的版本');
+  assert.equal(market.installs[UPDATE_ID].state, 'installed', '卡面落「已安装」座位');
+  assert.equal(market.installedDirty, true, '已安装页签标脏（下一跳会重扫）');
+  const notice = real.getSnapshot().notice;
+  assert.equal(notice.kind, 'update-ok', '通知是 update-ok（不是 install-ok）');
+  assert.equal(notice.name, 'dev-god', '通知带名字');
+  assert.equal(notice.version, '2.1.0', '通知带新版本');
+  // 反向：漏记 checks 时，已安装页头会按台账的旧答案报「可更新」。
+  assert.equal(real.getSnapshot().checks[UPDATE_ID]?.latest, '2.1.0', 'checks 就地记成新版本（不留旧的「可更新」结论）');
+
+  const html = renderStore(real);
+  assert.ok(html.includes('>已安装<'), '卡面写着「已安装」');
+  assert.equal(calls.filter(([name]) => name === 'installed').length, 0, '成功这一路不重读台账');
+});
+
+test('K161 已是最新（E_ALREADY_UP_TO_DATE）：不画任何错误行，卡面转「已是最新版本」，checks 照样落', async () => {
+  const { api, calls } = fakeApi({
+    update: async () => { throw Object.assign(new Error('already up to date'), { code: 'E_ALREADY_UP_TO_DATE' }); },
+  });
+  const store = updateStore();
+  // A previous round's answer: the version window belongs to it and must survive this verdict.
+  store.actions.checkLanded([{
+    key: UPDATE_ID,
+    phase: 'ready',
+    candidate: '1.0.0',
+    latest: '1.0.0',
+    versions: [{ version: '1.0.0', at: null }, { version: '0.9.0', at: null }],
+    total: 2,
+  }]);
+  const mounted = mountHooks(panel.MarketPanel, { store, api, t });
+  updateCardOf(mounted.render()).props.onUpdate(item({ version: '2.0.0' }));
+  findByType(mounted.render(), confirm.UpdateConfirm).props.onConfirm();
+  await flush();
+
+  const market = store.getSnapshot().market;
+  assert.equal(store.getSnapshot().checks[UPDATE_ID].versions.length, 2, '上一次答案里的版本清单被继承（不因这个码清空）');
+  assert.equal(store.getSnapshot().checks[UPDATE_ID].total, 2, 'total 也继承');
+  assert.equal(UPDATE_ID in market.installs, false, '不是失败：座位被清掉（不落重试）');
+  assert.equal(market.installed[UPDATE_ID].version, '2.0.0', '台账版本写成卡上那个（服务端确认过就是它）');
+  assert.equal(store.getSnapshot().notice, null, '不弹 toast（没有东西被写过）');
+  assert.equal(store.getSnapshot().checks[UPDATE_ID]?.latest, '2.0.0', 'checks 也落：漏了页头会一直报「可更新」');
+  assert.equal(calls.filter(([name]) => name === 'installed').length, 0, '这个码不在重读集合里');
+
+  const html = renderStore(store);
+  assert.ok(html.includes('>已是最新版本<'), '卡面转「已是最新版本」');
+  assert.equal(html.includes('class="skc_reason"'), false, '卡上没有一行错误原因');
+  assert.equal(html.includes('操作失败：'), false, '也没有兜底错误句');
+});
+
+test('K161 更新失败分档：三个结论句各取自己的 detail.*，防御码按三档取句', async () => {
+  const cases = [
+    { code: 'E_UPDATE_RESTORED', text: '更新失败，已恢复到 1.0.0', reload: false },
+    { code: 'E_UPDATE_LOST', text: '更新失败，技能未安装', reload: true },
+    { code: 'E_UPDATE_UNCONFIRMED', text: '无法确认更新结果，请刷新查看', reload: true },
+    // Three tiers (PM 裁定, 理由见 market-routes.md §8.6 的前端表现栏): the two a reader really
+    // meets each get their own sentence, the two that only appear when the panel and the Host
+    // disagree keep the fallback template (`error.E_UNKNOWN` = `操作失败：{reason}`) - its English
+    // `{reason}` is the bug report, and neither deserves a key of its own.
+    { code: 'E_NOT_MARKET_INSTALLED', text: '本机这份技能不是从技能市场装的，或它的来源信息已被改动，因此不能在市场里更新', reload: false },
+    { code: 'E_BAD_QUERY', text: '请求参数不合规', reload: false },
+    { code: 'E_BAD_REQUEST', text: '操作失败：route said no', reload: false },
+    { code: 'E_INTERNAL', text: '操作失败：route said no', reload: false },
+    { code: 'E_STALE_PATH', text: '技能文件位置已变化，请刷新后重试', reload: true },
+    { code: 'E_SYMLINK_READONLY', text: '软链技能只读，未做任何修改', reload: true },
+    { code: 'E_NOT_WRITABLE', text: '这个技能没有可写的本地文件', reload: true },
+    { code: 'E_NOT_FOUND', text: '这个技能已不存在，请刷新', reload: true },
+  ];
+  const dictionary = JSON.parse(await readFile(join(ROOT, 'locale', 'zh.json'), 'utf8'));
+
+  for (const entry of cases) {
+    const { api, calls } = fakeApi({
+      update: async () => { throw Object.assign(new Error('route said no'), { code: entry.code }); },
+    });
+    const store = updateStore();
+    const mounted = mountHooks(panel.MarketPanel, { store, api, t });
+    updateCardOf(mounted.render()).props.onUpdate(item({ version: '2.0.0' }));
+    findByType(mounted.render(), confirm.UpdateConfirm).props.onConfirm();
+    await flush();
+
+    const seat = store.getSnapshot().market.installs[UPDATE_ID];
+    assert.equal(seat?.state, 'failed', `${entry.code} ⇒ 失败座位`);
+    assert.equal(seat.mode, 'update', `${entry.code} 的失败座位仍记着「更新」（重试不回落到安装）`);
+    assert.equal(seat.reason, entry.text, `${entry.code} 的文案`);
+
+    // 反向：三档各有各的证据。有自己句子的两档不许落兜底句，另两档不许出现任何专属句。
+    if (['E_NOT_MARKET_INSTALLED', 'E_BAD_QUERY', 'E_BAD_REQUEST', 'E_INTERNAL'].includes(entry.code)) {
+      const ownKey = {
+        E_NOT_MARKET_INSTALLED: 'error.E_NOT_MARKET_INSTALLED',
+        E_BAD_QUERY: 'error.E_BAD_QUERY',
+      }[entry.code] ?? null;
+      if (ownKey === null) {
+        assert.equal(seat.reason.startsWith('操作失败：'), true, `${entry.code} 只给 error.E_UNKNOWN 的句子`);
+      } else {
+        assert.equal(seat.reason, dictionary[ownKey], `${entry.code} 给出自己那句 ${ownKey}`);
+        assert.equal(seat.reason.startsWith('操作失败：'), false, `${entry.code} 不再落兜底句`);
+      }
+    }
+
+    const reloaded = calls.filter(([name]) => name === 'installed').length;
+    assert.equal(reloaded, entry.reload === true ? 1 : 0, `${entry.code} 之后${entry.reload ? '补' : '不'}一次台账重读`);
+    assert.equal(calls.filter(([name]) => name === 'update').length, 1, `${entry.code}：只发了一次请求`);
+
+    const html = renderStore(store);
+    assert.ok(html.includes(entry.text), `${entry.code} 的句子上了卡面`);
+    assert.equal(html.includes('>已是最新版本<'), false, `${entry.code} 不是「已是最新」`);
+  }
+});
+
+test('K161 卡面的三个「不发请求」档：卡上无版本 ⇒ 已安装、两侧相等 ⇒ 已是最新版本、无台账 ⇒ 安装', () => {
+  const handlers = { install: [], update: [] };
+  const action = (market, cardItem) => card.InstallAction({
+    item: cardItem,
+    market: { ...market, installs: market.installs ?? {} },
+    t,
+    onInstall: (item) => handlers.install.push(item.slug),
+    onUpdate: (item) => handlers.update.push(item.slug),
+  });
+
+  // ① 卡上没有版本号：台账有也一样——没有目标版本可请求，卡面就写「已安装」。
+  const noVersion = action({ installed: { [UPDATE_ID]: ledgerRow() } }, item({ version: null }));
+  assert.equal(noVersion.props.disabled, true, '「已安装」是禁用位');
+  assert.equal(noVersion.props.onClick, undefined, '没有 onClick：点不出请求');
+  assert.equal(noVersion.props.children, '已安装');
+  assert.equal(noVersion.props.title, `已安装到 ${UPDATE_DIR}`, 'title 给台账目录（market.installedTitle）');
+
+  // ② 两侧逐字相等：已是最新，同样零请求。
+  const latest = action({ installed: { [UPDATE_ID]: ledgerRow() } }, item({ version: '1.0.0' }));
+  assert.equal(latest.props.disabled, true, '「已是最新版本」是禁用位');
+  assert.equal(latest.props.onClick, undefined, '没有 onClick');
+  assert.equal(latest.props.children, '已是最新版本');
+
+  // ③ 台账没有这一条：可装（走原来的安装确认）。
+  const installable = action({ installed: {} }, item({ version: '2.0.0' }));
+  assert.equal(installable.props.disabled, false, '可点');
+  assert.equal(installable.props.children, '安装');
+  installable.props.onClick();
+  assert.deepEqual(handlers, { install: ['dev-god'], update: [] }, '点的是安装，不是更新');
+
+  assert.equal(handlers.install.length, 1, '前两档一个手都没动');
+});
+
+test('K161 失败态的重试回到更新弹窗（座位带 mode），而不落成「安装」', () => {
+  const seen = [];
+  const button = (runtime) => card.InstallAction({
+    item: item({ version: '2.0.0' }),
+    market: { installs: { [UPDATE_ID]: runtime }, installed: { [UPDATE_ID]: ledgerRow() } },
+    t,
+    onInstall: () => seen.push('install'),
+    onUpdate: () => seen.push('update'),
+  });
+
+  const update = button({ state: 'failed', reason: '磁盘满了', mode: 'update' });
+  assert.equal(update.props.disabled, false, '失败态可点');
+  assert.equal(update.props.children, '重试', '文案是「重试」（market.retryInstall）');
+  update.props.onClick();
+  assert.deepEqual(seen, ['update'], '重试走更新');
+
+  // 反向：安装失败的那一回不带 mode，重试仍走安装（两条路不能混）。
+  const install = button({ state: 'failed', reason: '磁盘满了' });
+  install.props.onClick();
+  assert.deepEqual(seen, ['update', 'install'], '不带 mode 的失败态仍走安装');
+});
+
+test('K161 台账没有版本时，更新弹窗把 {from} 写成「未知」（不猜一个版本顶上）', () => {
+  const { api } = fakeApi();
+  const store = updateStore({ ledger: ledgerRow({ version: null }) });
+  const mounted = mountHooks(panel.MarketPanel, { store, api, t });
+  const cardElement = updateCardOf(mounted.render());
+  const view = cardElement.props.market.installed[UPDATE_ID];
+  assert.equal(view.version, null, '先确认台账这一行确实没有版本');
+  cardElement.props.onUpdate(cardElement.props.item);
+
+  const dialog = findByType(mounted.render(), confirm.UpdateConfirm);
+  assert.notEqual(dialog, null, '卡上知道版本、台账不知道 ⇒ 仍然可更新');
+  assert.equal(dialog.props.from, '', 'from 是空串（交给组件取「未知」文案）');
+  assert.equal(dialog.props.to, '2.0.0', 'to 是卡上那个版本');
+
+  const html = renderStore(store);
+  assert.ok(html.includes('未知 → 2.0.0'), '事实表写「未知 → 2.0.0」（market.factUnknown）');
+  assert.ok(html.includes('将从 未知 更新到 2.0.0'), '正文也是「未知 → 2.0.0」');
+});
+
+test('K161 回滚那句用路由给的 from：台账停在旧值时不冒充「恢复到台账版本」', async () => {
+  const { api } = fakeApi({
+    update: async () => {
+      throw Object.assign(new Error('the swap failed'), {
+        code: 'E_UPDATE_RESTORED',
+        data: { name: 'dev-god', path: '/tmp/skills/dev-god', from: '0.9.5' },
+      });
+    },
+  });
+  // 台账这一行是一次扫描前的答案（1.0.0），盘上实际是 0.9.5：恢复的是后者。
+  const store = updateStore();
+  const mounted = mountHooks(panel.MarketPanel, { store, api, t });
+  updateCardOf(mounted.render()).props.onUpdate(item({ version: '2.0.0' }));
+  findByType(mounted.render(), confirm.UpdateConfirm).props.onConfirm();
+  await flush();
+
+  const seat = store.getSnapshot().market.installs[UPDATE_ID];
+  assert.equal(seat.reason, '更新失败，已恢复到 0.9.5', '用路由的 data.from，不是台账里的 1.0.0');
+  assert.equal(seat.reason.includes('1.0.0'), false, '台账那个旧值不许出现在这句里（它会让人以为盘上回到了 1.0.0）');
+});
+
+test('K38 上次成功就是空列表：失败仍是整页错误态，不画「这是上次的结果」（空 ≠ 有结果可留）', () => {
+  const store = staleStore({ empty: true });
+  assert.equal(store.getSnapshot().market.listStatus, 'error', '没有卡片可回填 ⇒ 整页 error');
+  const html = renderStore(store);
+  assert.ok(html.includes('无法连接技能市场'), '整页错误态文案在（market.errorTitle）');
+  assert.equal(html.includes('data-skc-market-stale'), false, '没有陈旧行');
+  assert.equal(html.includes('加载失败，点此重试'), false, '也没有尾部那句（那是追加失败专属）');
+});
+
+/* ---------- K38 · 落地归属（R2 回归）：迟到的答案整条丢弃，不冒充新查询的结果 ---------- */
+
+/**
+ * A promise whose settlement the test decides.
+ * @returns {{promise: Promise<object>, resolve: Function, reject: Function}} the handle.
+ */
+function deferred() {
+  let settle;
+  let fail;
+  const promise = new Promise((resolve, reject) => {
+    settle = resolve;
+    fail = reject;
+  });
+  return { promise, resolve: settle, reject: fail };
+}
+
+/** Two cards, so a list can be told apart from a one-card answer. */
+const RACE_ITEMS = [item({ id: 'skillhub:ake:alpha' }), item({ id: 'skillhub:ake:beta' })];
+
+test('K38 迟到成功：查询已变、新请求还没发出 ⇒ 整条丢弃（不换列表、不写新键快照、不清陈旧标记）', async () => {
+  const late = deferred();
+  const { api } = fakeApi({ list: () => late.promise });
+  // 屏上：当前查询有一份成功的结果，随后刷新失败 ⇒ 陈旧态（那一行就是重试入口）。
+  const store = marketStore((seed) => {
+    seed.actions.marketPageAppended({
+      pages: [{ sourceId: 'skillhub', page: { items: RACE_ITEMS, next: 'cursor-2' } }],
+      merged: RACE_ITEMS,
+    });
+    seed.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 'slow' });
+  });
+  const mounted = mountHooks(panel.MarketPanel, { store, api, t });
+  const retry = findElement(mounted.render(), (element) => element.props?.children === '重试');
+  assert.notEqual(retry, null, '陈旧行里有重试');
+  retry.props.onClick(); // 第一页请求发出去（查询 ''）
+  store.actions.marketCommitKeyword('b'); // 读者改成 b；b 的请求要等下一次 effect 才发出
+  const switched = store.getSnapshot().market;
+  assert.equal(switched.stale, null, 'b 是新的查询：陈旧标记随查询切换清掉');
+
+  late.resolve({ items: [item({ id: 'skillhub:ake:late' })], next: 'cursor-late' });
+  await flush();
+
+  const after = store.getSnapshot().market;
+  assert.equal(after.items, switched.items, 'items 的引用没换：旧答案没有落到屏上');
+  assert.deepEqual(after.items.map((entry) => entry.slug), ['alpha', 'beta'], '屏上还是切查询前那一份');
+  assert.deepEqual(Object.keys(after.snapshots), ['all|null|recommended|'], '没有凭空写出 b 的快照');
+  assert.deepEqual(after.cursors, {}, '旧答案的游标没有写进 b');
+  assert.equal(after.page.status, 'idle', '尾部也没被推进');
+
+  const html = renderStore(store);
+  assert.equal(html.includes('data-skc-market-id="skillhub:ake:late"'), false, '迟到的卡片没有上屏');
+  assert.equal(html.includes('data-skc-market-stale'), false, 'b 没有陈旧行（旧答案不许给它安一个）');
+});
+
+test('K38 迟到追加成功：旧查询的追加落地时，正在看的查询的陈旧标记与列表都不许动', async () => {
+  const late = deferred();
+  const { api } = fakeApi({ list: () => late.promise });
+  const store = marketStore((seed) => {
+    // 查询 ''：成功过一次（有快照），留一张卡
+    seed.actions.marketPageAppended({
+      pages: [{ sourceId: 'skillhub', page: { items: [item({ id: 'skillhub:ake:alpha' })], next: 'cursor-2' } }],
+      merged: [item({ id: 'skillhub:ake:alpha' })],
+    });
+    // 查询 b：一页结果 + 尾部失败（「加载失败，点此重试」那一行就是追加入口）
+    seed.actions.marketCommitKeyword('b');
+    seed.actions.marketPageAppended({
+      pages: [{ sourceId: 'skillhub', page: { items: [item({ id: 'skillhub:ake:beta' })], next: 'cursor-b' } }],
+      merged: [item({ id: 'skillhub:ake:beta' })],
+    });
+    seed.actions.marketPageFailed({ code: 'E_SOURCE_TIMEOUT', message: 'tail slow' });
+  });
+  const mounted = mountHooks(panel.MarketPanel, { store, api, t });
+  const moreFailed = findElement(mounted.render(), (element) => element.props?.children === '加载失败，点此重试');
+  assert.notEqual(moreFailed, null, '尾部那一行在');
+  moreFailed.props.onClick(); // 追加请求发出去（归属查询 b）
+
+  // 读者回到查询 ''，并且它刷新失败 ⇒ 陈旧态（这一份必须活下来）
+  store.actions.marketCommitKeyword('');
+  store.actions.marketListFailed({ code: 'E_SOURCE_UNAVAILABLE', message: 'down' });
+  const watching = store.getSnapshot().market;
+  assert.equal(watching.stale.code, 'E_SOURCE_UNAVAILABLE', '正在看的查询进了陈旧态');
+
+  late.resolve({ items: [item({ id: 'skillhub:ake:late-page' })], next: 'cursor-late' });
+  await flush();
+
+  const after = store.getSnapshot().market;
+  assert.equal(after.stale, watching.stale, '陈旧标记还是那一条（旧追加的答案不许把它清掉）');
+  assert.equal(after.items, watching.items, '列表没被旧追加改写');
+  assert.deepEqual(after.cursors, watching.cursors, '游标没被旧追加写回');
+  assert.equal(after.page.status, 'idle', '尾部仍是 idle（不是旧查询的 done/more）');
+  const html = renderStore(store);
+  assert.ok(html.includes('data-skc-market-stale'), '陈旧行还在屏上');
+  assert.equal(html.includes('data-skc-market-id="skillhub:ake:late-page"'), false, '旧追加的卡片没上屏');
+});
+
+test('K38 迟到失败：查询已变 ⇒ 不进整页错误态，屏上不出现那句错误文案', async () => {
+  const late = deferred();
+  const { api } = fakeApi({ list: () => late.promise });
+  const store = marketStore((seed) => {
+    seed.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 'first slow' });
+  });
+  const mounted = mountHooks(panel.MarketPanel, { store, api, t });
+  const retry = findElement(mounted.render(), (element) => element.props?.children === '重试');
+  assert.notEqual(retry, null, '整页错误态里有重试');
+  retry.props.onClick(); // 查询 '' 的第一页请求发出去
+  store.actions.marketCommitKeyword('b'); // 读者改成 b
+
+  late.reject(Object.assign(new Error('slow'), { code: 'E_SOURCE_TIMEOUT' }));
+  await flush();
+
+  const after = store.getSnapshot().market;
+  assert.equal(after.listStatus, 'idle', 'b 这一屏还没有结果，也没有失败 ⇒ idle（不是 error）');
+  assert.equal(after.page.status, 'idle', '尾部也不是错误');
+  const html = renderStore(store);
+  assert.equal(html.includes('无法连接技能市场'), false, '没有整页错误态文案');
+  assert.equal(html.includes('加载失败，点此重试'), false, '也没有尾部那一行');
+});
+
+test('K38 迟到追加失败：新查询列表下不出现「加载失败，点此重试」', async () => {
+  const late = deferred();
+  const { api } = fakeApi({ list: () => late.promise });
+  const store = marketStore((seed) => {
+    seed.actions.marketPageAppended({
+      pages: [{ sourceId: 'skillhub', page: { items: RACE_ITEMS, next: 'cursor-2' } }],
+      merged: RACE_ITEMS,
+    });
+    seed.actions.marketPageFailed({ code: 'E_SOURCE_TIMEOUT', message: 'tail slow' });
+  });
+  const mounted = mountHooks(panel.MarketPanel, { store, api, t });
+  findElement(mounted.render(), (element) => element.props?.children === '加载失败，点此重试').props.onClick();
+  store.actions.marketSetFilter({ category: 'dev-tools' }); // 换分类：新查询，卡片留着
+
+  late.reject(Object.assign(new Error('tail slow'), { code: 'E_SOURCE_TIMEOUT' }));
+  await flush();
+
+  const after = store.getSnapshot().market;
+  assert.equal(after.page.status, 'idle', '新查询的尾部没被旧查询的失败占据');
+  assert.equal(after.items.length, 2, '卡片还在（换查询不换列表）');
+  const html = renderStore(store);
+  assert.equal(html.includes('加载失败，点此重试'), false, '新列表下面没有那行重试');
+});
+
+test('K38 同键竞速：同一查询连发两次第一页，先发的后到 ⇒ 被令牌挡住，屏上是后发的结果', async () => {
+  const first = deferred();
+  const second = deferred();
+  let issued = 0;
+  const { api } = fakeApi({
+    list: () => {
+      issued += 1;
+      return issued === 1 ? first.promise : second.promise;
+    },
+  });
+  const store = marketStore((seed) => {
+    seed.actions.marketPageAppended({
+      pages: [{ sourceId: 'skillhub', page: { items: RACE_ITEMS, next: 'cursor-2' } }],
+      merged: RACE_ITEMS,
+    });
+    seed.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 'slow' });
+  });
+  const mounted = mountHooks(panel.MarketPanel, { store, api, t });
+  const retry = findElement(mounted.render(), (element) => element.props?.children === '重试');
+  retry.props.onClick(); // 第一次（同一个查询、同一行按钮）
+  retry.props.onClick(); // 第二次：读者连点了两下重试
+  assert.equal(issued, 2, '两次请求都发出去了（这里要验的是结果归属，不是按钮节流）');
+
+  second.resolve({ items: [item({ id: 'skillhub:ake:second' })], next: null });
+  await flush();
+  assert.deepEqual(store.getSnapshot().market.items.map((entry) => entry.slug), ['second'], '后发的那次先落地：屏上是它');
+
+  first.resolve({ items: [item({ id: 'skillhub:ake:first' })], next: null });
+  await flush();
+  assert.deepEqual(
+    store.getSnapshot().market.items.map((entry) => entry.slug),
+    ['second'],
+    '先发的那次迟到：被第一页令牌挡住，没有覆盖新答案',
+  );
+  assert.equal(renderStore(store).includes('data-skc-market-id="skillhub:ake:first"'), false, '迟到的卡片没上屏');
+});
+
+test('K161 装完的卡：写着「已安装」、没有可点的手，这一行永远发不出 market/update', () => {
+  const { api, calls } = fakeApi();
+  const cardItem = item({ version: null });
+  const store = marketStore((seed) => {
+    seed.actions.marketPageAppended({
+      pages: [{ sourceId: 'skillhub', page: { items: [cardItem], next: null } }],
+      merged: [cardItem],
+    });
+    seed.actions.marketInstallStart(UPDATE_ID);
+    seed.actions.marketInstallOk(UPDATE_ID, { name: 'dev-god', path: UPDATE_DIR, version: '1.0.0' });
+  });
+  // 装完的那一行台账是「五键 + skillFile 未知」，与 Host 形状一致但真值还不知道。
+  assert.equal(store.getSnapshot().market.installed[UPDATE_ID].skillFile, null, '先确认这一行确实是「未知」');
+
+  const mounted = mountHooks(panel.MarketPanel, { store, api, t });
+  assert.notEqual(updateCardOf(mounted.render()), null, '卡片在屏上');
+  const action = card.InstallAction({ item: cardItem, market: store.getSnapshot().market, t, onInstall: () => {}, onUpdate: () => {} });
+  assert.equal(action.props.disabled, true, '「已安装」是禁用位');
+  assert.equal(action.props.onClick, undefined, '没有 onClick —— 这一档没有任何请求路径');
+  assert.equal(action.props.children, '已安装', '卡面写「已安装」');
+  assert.equal(action.props.title, `已安装到 ${UPDATE_DIR}`, 'title 给台账目录');
+
+  const html = renderStore(store);
+  assert.ok(html.includes('>已安装<'), '屏上就是「已安装」');
+  assert.equal(html.includes('>安装<'), false, '反向：不是「安装」（那一行缺 skillFile，但座位压着它）');
+  assert.equal(html.includes('>更新<'), false, '反向：也不是「更新」');
+  assert.equal(calls.some(([name]) => name === 'update'), false, '全程没有一次 market/update 由这一行发出');
+
+  // 再渲染几次（会话里座位一直压着这一行）：仍然零请求 —— 「未知」不会被某次渲染猜成真路径。
+  for (let index = 0; index < 3; index += 1) mounted.render();
+  assert.equal(calls.some(([name]) => name === 'update'), false, '多次渲染也不会');
+});
+
+/* ---------- K161 · 防御码在「安装」与「更新」两条路上必须给同一句（R3 的跨路一致性） ---------- */
+
+/** The English note the fake route puts in `{reason}` — the only Latin text either sentence may carry. */
+const ROUTE_NOTE = 'the host refused this body';
+
+/**
+ * The reason one failed request leaves on the card, for one verb and one code.
+ *
+ * `E_NOT_MARKET_INSTALLED` is raised by #16 alone today, so the install leg here is a synthetic
+ * failure: what it pins is the *vocabulary* - one code, one sentence, whichever button was
+ * pressed - not a refusal #9 can actually produce.
+ * @param {'install'|'update'} verb - which route to fail.
+ * @param {string} code - the route's `E_*` code.
+ * @returns {Promise<{reason: string, seat: object, calls: object[]}>} the card's reason and the seat.
+ */
+async function failedReasonOf(verb, code) {
+  const refuse = async () => { throw Object.assign(new Error(ROUTE_NOTE), { code }); };
+  const { api, calls } = fakeApi({ update: refuse, install: refuse });
+  // The install leg needs a card with no ledger row (that is what makes its button say "安装");
+  // the update leg needs the ledger row, otherwise there is no update to confirm.
+  const store = updateStore(verb === 'update' ? {} : { ledger: null });
+  const mounted = mountHooks(panel.MarketPanel, { store, api, t });
+  const cardElement = updateCardOf(mounted.render());
+  if (verb === 'update') {
+    cardElement.props.onUpdate(cardElement.props.item);
+    findByType(mounted.render(), confirm.UpdateConfirm).props.onConfirm();
+  } else {
+    assert.equal(typeof cardElement.props.onInstall, 'function', '安装卡片拿到安装入口');
+    cardElement.props.onInstall(cardElement.props.item);
+    const dialog = findByType(mounted.render(), confirm.MarketConfirm);
+    assert.notEqual(dialog, null, '画的是安装弹窗');
+    dialog.props.onConfirm(cardElement.props.item);
+  }
+  await flush();
+  const seat = store.getSnapshot().market.installs[UPDATE_ID];
+  return { reason: seat?.reason ?? null, seat, calls };
+}
+
+test('K161 四个防御码：安装与更新两条路给同一句；两个各有自己的话，两个只兜底', async () => {
+  const dictionary = JSON.parse(await readFile(join(ROOT, 'locale', 'zh.json'), 'utf8'));
+  const cases = [
+    { code: 'E_NOT_MARKET_INSTALLED', own: 'error.E_NOT_MARKET_INSTALLED' },
+    { code: 'E_BAD_QUERY', own: 'error.E_BAD_QUERY' },
+    { code: 'E_BAD_REQUEST', own: null },
+    { code: 'E_INTERNAL', own: null },
+  ];
+
+  for (const entry of cases) {
+    const installed = await failedReasonOf('install', entry.code);
+    const updated = await failedReasonOf('update', entry.code);
+    assert.equal(installed.seat?.state, 'failed', `${entry.code}：安装这条路落在失败座位`);
+    assert.equal(updated.seat?.state, 'failed', `${entry.code}：更新这条路也落在失败座位`);
+    assert.equal(
+      installed.reason,
+      updated.reason,
+      `${entry.code} 在两条路上必须说同一句（同一个码两种说法，读者会以为是两件事）`,
+    );
+
+    if (entry.own === null) {
+      assert.equal(installed.reason, `操作失败：${ROUTE_NOTE}`, `${entry.code} 只给兜底模板（带 {reason}）`);
+      // 反向：兜底句里除 {reason} 之外不许再有别的拉丁文字，也不许把码本身贴到读者脸上。
+      const withoutReason = installed.reason.split(ROUTE_NOTE).join('');
+      assert.equal(/[A-Za-z]/.test(withoutReason), false, `${entry.code}：兜底句除 {reason} 外没有别的英文`);
+      assert.equal(installed.reason.includes(entry.code), false, `${entry.code}：不把错误码贴上去`);
+      assert.equal(installed.reason.includes('E_UNKNOWN'), false, `${entry.code}：也不贴错误码键名`);
+    } else {
+      assert.equal(installed.reason, dictionary[entry.own], `${entry.code} 给出字典里那句 ${entry.own}`);
+      // 反向：自己的那句话里一个拉丁字母都不该有（否则就是中英混排，读者仍看不懂）。
+      assert.equal(/[A-Za-z]/.test(installed.reason), false, `${entry.code} 的专属句没有中英混排`);
+      assert.equal(installed.reason.startsWith('操作失败：'), false, `${entry.code} 不再落兜底句`);
+    }
+
+    // 两条路各自的请求都只发一次，且没有互相串（安装路不碰 update，更新路不碰 install）。
+    assert.equal(installed.calls.filter(([name]) => name === 'install').length, 1, `${entry.code}：安装路一次 install`);
+    assert.equal(installed.calls.filter(([name]) => name === 'update').length, 0, `${entry.code}：安装路不碰 update`);
+    assert.equal(updated.calls.filter(([name]) => name === 'update').length, 1, `${entry.code}：更新路一次 update`);
+    assert.equal(updated.calls.filter(([name]) => name === 'install').length, 0, `${entry.code}：更新路不碰 install`);
+  }
+
+  // 反向（座位）：安装失败不带 `mode:'update'`，否则重试会去开更新弹窗——那个技能根本还没装。
+  const installSeat = (await failedReasonOf('install', 'E_BAD_QUERY')).seat;
+  assert.equal('mode' in installSeat, false, '安装失败的座位没有 mode（重试仍走安装）');
+  const updateSeat = (await failedReasonOf('update', 'E_BAD_QUERY')).seat;
+  assert.equal(updateSeat.mode, 'update', '更新失败的座位带 mode（重试回到更新弹窗）');
 });

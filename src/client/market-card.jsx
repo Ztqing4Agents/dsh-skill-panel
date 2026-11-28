@@ -44,45 +44,63 @@ import {
   statSegments,
 } from './market-model.js';
 
-/** The action's own label per state; `installing` draws its own seat above. */
+/** The action's own label per resting state; the two in-flight states draw their own seat. */
 const VIEW_LABELS = {
   ready: 'market.install',
   installed: 'market.installed',
+  latest: 'detail.upToDate',
+  update: 'detail.update',
   failed: 'market.retryInstall',
 };
 
+/** The label of the disabled seat while a request is in flight, one per verb. */
+const BUSY_LABELS = {
+  installing: 'market.installing',
+  updating: 'detail.updating',
+};
+
 /**
- * The install seat: one of four states, never a fifth.
+ * The install / update seat: one of seven states, never an eighth.
+ *
+ * Two of them are in flight, one is a verdict ("up to date"), two are resting and clickable
+ * ("install", "update"), and the last is a failure that offers the request it came from. The
+ * retry is not a plain re-send: it opens the dialog again, so the reader sees the versions
+ * once more before a directory is replaced.
  * @param {{item: object, market: object, t: Function, size?: string, className?: string,
- *   onInstall: Function}} props - the item, the market state, translate, button size,
- *   extra class, and the install handler.
+ *   onInstall: Function, onUpdate?: Function}} props - the item, the market state, translate,
+ *   button size, extra class, and the install / update handlers.
  * @returns {import('react').ReactElement} the action.
  */
-export function InstallAction({ item, market, t, size = 'sm', className, onInstall }) {
-  const view = installViewOf(market, marketKeyOf(item));
+export function InstallAction({ item, market, t, size = 'sm', className, onInstall, onUpdate }) {
+  const view = installViewOf(market, marketKeyOf(item), item);
   const name = item.displayName || item.slug || '';
-  if (view.state === 'installing') {
+  if (view.state === 'installing' || view.state === 'updating') {
     return (
       <span className={cn('bundleToggle')}>
         <span className={cn('toggleProgress')} role="status">
-          <span className={cn('progressAnnouncement')}>{t('market.installStarted', { name })}</span>
+          {view.state === 'installing'
+            ? <span className={cn('progressAnnouncement')}>{t('market.installStarted', { name })}</span>
+            : null}
           <StateDot state="ongoing" />
         </span>
         <Button variant="outline" size={size} className={className} disabled>
-          {t('market.installing')}
+          {t(BUSY_LABELS[view.state])}
         </Button>
       </span>
     );
   }
-  const installed = view.state === 'installed';
+  const done = view.state === 'installed' || view.state === 'latest';
+  // A failed update retries the update: installing over a directory that already exists is the
+  // `E_ALREADY_INSTALLED` refusal, not a retry.
+  const run = view.state === 'update' || view.mode === 'update' ? (onUpdate ?? onInstall) : onInstall;
   return (
     <Button
-      variant={installed ? 'ghost' : 'outline'}
+      variant={done ? 'ghost' : 'outline'}
       size={size}
       className={className}
-      disabled={installed}
-      title={installed && view.path !== '' ? t('market.installedTitle', { path: view.path }) : undefined}
-      onClick={installed ? undefined : () => onInstall(item)}
+      disabled={done}
+      title={view.state === 'installed' && view.path !== '' ? t('market.installedTitle', { path: view.path }) : undefined}
+      onClick={done ? undefined : () => run(item)}
     >
       {t(VIEW_LABELS[view.state])}
     </Button>
@@ -107,11 +125,12 @@ export function MarketIcon({ item, title, market, className }) {
 
 /**
  * Render one card of the market grid.
- * @param {{item: object, market: object, t: Function, onOpen: Function, onInstall: Function}} props
- *   the market item, the market state, translate, and the two handlers.
+ * @param {{item: object, market: object, t: Function, onOpen: Function, onInstall: Function,
+ *   onUpdate: Function}} props - the market item, the market state, translate, and the three
+ *   handlers.
  * @returns {import('react').ReactElement} the card.
  */
-export function MarketCard({ item, market, t, onOpen, onInstall }) {
+export function MarketCard({ item, market, t, onOpen, onInstall, onUpdate }) {
   const key = marketKeyOf(item);
   const title = item.displayName || item.slug || '';
   const segments = metaSegments(item);
@@ -119,7 +138,7 @@ export function MarketCard({ item, market, t, onOpen, onInstall }) {
   // One defensive read: the normalization rules (cap, dedupe, truncation) live in the Host
   // and are not copied here.
   const tags = Array.isArray(item.tags) ? item.tags : [];
-  const view = installViewOf(market, key);
+  const view = installViewOf(market, key, item);
   const source = sourceLabelOf(item.sourceId, t);
   return (
     <li className={cn('marketCard')} data-skc-market-id={key}>
@@ -150,7 +169,7 @@ export function MarketCard({ item, market, t, onOpen, onInstall }) {
           )}
         </div>
         <div className={cn('marketCardEnd')}>
-          <InstallAction item={item} market={market} t={t} onInstall={onInstall} />
+          <InstallAction item={item} market={market} t={t} onInstall={onInstall} onUpdate={onUpdate} />
         </div>
       </div>
       <div className={cn('marketBody')}>

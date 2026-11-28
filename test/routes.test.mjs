@@ -3,14 +3,15 @@
  *
  * Contracts: docs/contracts/routes.md §3.3 (route table), §3.3.2 (path identity) and §8.1
  * (local codes); docs/contracts/market-routes.md §3.7 (the market routes) and §8.6 (market codes);
- * case ids K18, K19, K20, K21, K29–K31.
+ * case ids K14 (the one status table the write face has), K18, K19, K20, K21, K29–K31.
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { lstat, mkdir, readFile, realpath, rm, symlink, unlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readFile, realpath, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { ROUTES, makeRoutes } from '../lib/routes.js';
+import { WRITE_STATUS, ROUTES, makeRoutes, statusOf } from '../lib/routes.js';
+import { asLocalError } from '../lib/local/errors.js';
 import { LOOPBACK_HEADERS, callRoute } from './helpers/http.mjs';
 import { ROOT } from './helpers/ssr.mjs';
 import { customTree, skillFile } from './helpers/tree.mjs';
@@ -788,4 +789,172 @@ test('K112 detail 只答 loopback 的 GET：非本机 403、POST 405', async () 
   } finally {
     await mounted.close();
   }
+});
+
+/* -------------------- K14 · 写路由的状态码只有一张表（WRITE_STATUS / statusOf） -------------------- */
+
+/**
+ * The write face's status table, transcribed from `docs/contracts/routes.md` §8.1.
+ *
+ * Typed out here rather than read off `WRITE_STATUS`: an expectation that is the same
+ * object as the implementation cannot fail, and a test that cannot fail is not evidence.
+ *
+ * `via` says which lane carries the code out of the route. Three of them are also in
+ * `asLocalError`'s known set (`FACE_STATUS`), three are raised by the writer after the
+ * route has already decided everything - those three never pass through `asLocalError`
+ * (it would turn them into `500 E_INTERNAL`) and leave only through `statusOf`.
+ * `envelope` is what `fail()` must put in `error.code`: the code itself, not a stand-in.
+ */
+const WRITE_ROWS = [
+  { code: 'E_SYMLINK_READONLY', status: 409, via: 'statusOf + asLocalError', envelope: 'E_SYMLINK_READONLY', lane: 'soft-linked row' },
+  { code: 'E_STALE_PATH', status: 409, via: 'statusOf + asLocalError', envelope: 'E_STALE_PATH', lane: 'row moved since the page loaded' },
+  { code: 'E_NOT_WRITABLE', status: 409, via: 'statusOf + asLocalError', envelope: 'E_NOT_WRITABLE', lane: 'no writable file / outside the root' },
+  { code: 'E_FILE_CHANGED', status: 409, via: 'statusOf', envelope: 'E_FILE_CHANGED', lane: 'writer: fingerprint moved mid-write' },
+  { code: 'E_VERIFY_FAILED', status: 500, via: 'statusOf', envelope: 'E_VERIFY_FAILED', lane: 'writer: read-back disagreed' },
+  { code: 'E_WRITE_FAILED', status: 500, via: 'statusOf', envelope: 'E_WRITE_FAILED', lane: 'writer: the disk refused' },
+];
+
+/** POST one toggle request. @param {object} mounted - mount() result. @param {object} body - JSON body. @returns {Promise<object>} the response. */
+function toggleOf(mounted, body) {
+  return callRoute(mounted.byPath[ROUTES.toggle], {
+    method: 'POST',
+    headers: LOOPBACK_HEADERS,
+    body: JSON.stringify(body),
+  });
+}
+
+test('K14 状态表：六个码逐条对表、表是冻结的、表内没有 2xx、表外一律兜底 500', () => {
+  assert.deepEqual(
+    Object.keys(WRITE_STATUS).sort(),
+    WRITE_ROWS.map((row) => row.code).sort(),
+    '表里恰好是契约列的那六个码（多一个少一个都算改了契约）',
+  );
+  assert.equal(Object.isFrozen(WRITE_STATUS), true, '导出的是冻结表：读的人改不动它');
+  for (const row of WRITE_ROWS) {
+    assert.equal(statusOf(row.code), row.status, `statusOf(${row.code}) ⇒ ${row.status}`);
+    assert.equal(WRITE_STATUS[row.code], row.status, `表里 ${row.code} ⇒ ${row.status}（${row.lane}）`);
+    assert.ok(row.status >= 400 && row.status < 600, `${row.code} 的状态不是成功码`);
+  }
+  assert.equal(
+    Object.values(WRITE_STATUS).some((status) => status < 400),
+    false,
+    '整张表没有一个 2xx：这张表只回答「失败是什么状态」',
+  );
+
+  // 表外：认不出的码、空值、以及从原型链继承来的键（`Object.hasOwn` 才拦得住后一类——
+  // 写成 `WRITE_STATUS[code] ?? 500` 会把 `toString` 这个函数原样吐给 writeJson）。
+  for (const code of ['E_NOPE', 'E_UNKNOWN', '', undefined, null, 'toString', 'constructor']) {
+    assert.equal(statusOf(code), 500, `${String(code)} 不在表里 ⇒ 500`);
+    assert.equal(Object.hasOwn(WRITE_STATUS, code), false, `${String(code)} 确实不是表里的键`);
+  }
+
+  // 403 是共享 guard 的围栏，不是写失败的一种：它不走这张表，也不该被这里改成 500 以外的值。
+  assert.equal('E_FORBIDDEN' in WRITE_STATUS, false, 'E_FORBIDDEN 不进表（围栏在 guard 里，先于写路由）');
+  assert.equal(statusOf('E_FORBIDDEN'), 500, '围栏码不经这张表：这里给的是兜底值，不是它的真实状态');
+});
+
+test('K14 真打四条路：status 与信封 code 成对（软链 / 路径漂移 / 越界 / 写失败）', async () => {
+  // 越界需要一个「扫描得到、但文件在 skillsRoot 之外」的行：注册表提供 filesystem 源的行，
+  // 它的 rank 落在 user-dsh（400）上，因此既不是 builtin（那档 path 恒为 null），也不会
+  // 被扫描收进来。真实机器上这就是「项目级 skills 目录」那类行。临时树由 mount() 建，
+  // 所以这一行的 path 在 mount 之后才填（snapshot 是每次请求现取的，晚填不会错过）。
+  let outsideFile = '';
+  const mounted = await mount({
+    registry: {
+      snapshot: async () => ({
+        complete: true,
+        skills: [{
+          name: 'elsewhere',
+          provider: 'filesystem',
+          source: 'user-dsh',
+          path: outsideFile,
+          description: 'A row whose file sits outside the root.',
+        }],
+      }),
+    },
+  });
+  try {
+    const outsideDir = join(mounted.tree.dshHome, 'elsewhere', 'elsewhere');
+    await mkdir(outsideDir, { recursive: true });
+    await writeFile(join(outsideDir, 'SKILL.md'), skillFile({ name: 'elsewhere' }));
+    outsideFile = join(outsideDir, 'SKILL.md');
+    // The registry row names the file that now exists, so the request below is the one the
+    // browser would send for that row (and the refusal is about the root, not the path).
+    const rows = await callRoute(mounted.byPath[ROUTES.list], { headers: LOOPBACK_HEADERS });
+    const row = rows.json.data.groups.flatMap((group) => group.skills).find((entry) => entry.name === 'elsewhere');
+    assert.equal(row?.path, outsideFile, '注册表给的那一行的 path 就是 roots 之外那个文件');
+
+    const foreign = await toggleOf(mounted, { name: 'elsewhere', path: outsideFile, enabled: false });
+    assert.equal(foreign.status, 409, '越界 ⇒ 409');
+    assert.equal(foreign.json.code, 'E_NOT_WRITABLE', '越界用的是 E_NOT_WRITABLE');
+    assert.ok(foreign.json.message.includes('outside the skills root'), '是「越界」那一支，不是「没有可写文件」那一支');
+
+    const symlinked = await toggleOf(mounted, { name: 'linked-skill', path: mounted.linkedPath, enabled: false });
+    assert.equal(symlinked.status, 409, '软链 ⇒ 409');
+    assert.equal(symlinked.json.code, 'E_SYMLINK_READONLY', '软链用的是 E_SYMLINK_READONLY');
+
+    const drifted = await toggleOf(mounted, {
+      name: 'hand-made',
+      path: join(mounted.tree.skillsRoot, 'commented', 'SKILL.md'),
+      enabled: false,
+    });
+    assert.equal(drifted.status, 409, '路径漂移 ⇒ 409');
+    assert.equal(drifted.json.code, 'E_STALE_PATH', '路径漂移用的是 E_STALE_PATH');
+
+    // 写失败：目录不可写 ⇒ 写入层抛 E_WRITE_FAILED，走的是路由 catch 里的 `statusOf(code)` 那一行，
+    // 也就是 E_FILE_CHANGED / E_VERIFY_FAILED 出站时的同一条通道。
+    const dir = join(mounted.tree.skillsRoot, 'hand-made');
+    const file = join(dir, 'SKILL.md');
+    const before = await readFile(file);
+    await chmod(dir, 0o555);
+    let failed;
+    try {
+      failed = await toggleOf(mounted, { name: 'hand-made', path: file, enabled: false });
+    } finally {
+      await chmod(dir, 0o755);
+    }
+    assert.equal(failed.status, 500, '写盘失败 ⇒ 500');
+    assert.equal(failed.json.code, 'E_WRITE_FAILED', '信封里是写入层抛的那个码，不是 E_INTERNAL');
+    assert.equal((await readFile(file)).equals(before), true, '失败的写没有动过原文件');
+
+    // 成对：四条的 status 都等于表里给那个码的值，信封里的 code 就是那个码本身。
+    for (const [response, row2] of [
+      [symlinked, WRITE_ROWS.find((entry) => entry.code === 'E_SYMLINK_READONLY')],
+      [drifted, WRITE_ROWS.find((entry) => entry.code === 'E_STALE_PATH')],
+      [foreign, WRITE_ROWS.find((entry) => entry.code === 'E_NOT_WRITABLE')],
+      [failed, WRITE_ROWS.find((entry) => entry.code === 'E_WRITE_FAILED')],
+    ]) {
+      assert.equal(response.json.code, row2.envelope, '信封里的 code 就是表里那个码');
+      assert.equal(response.status, row2.status, `${row2.code} 的状态与表一致（不出「${row2.status} 配 E_INTERNAL」）`);
+    }
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K14 asLocalError 只在它认识的那三个 409 上等于表；三个写盘码只能经 statusOf 出站', () => {
+  const carried = WRITE_ROWS.filter((row) => row.via === 'statusOf + asLocalError');
+  const writerOnly = WRITE_ROWS.filter((row) => row.via === 'statusOf');
+  assert.equal(carried.length, 3, '交集恰好三个 409 码');
+  assert.equal(writerOnly.length, 3, '剩下三个只走 statusOf');
+
+  for (const row of carried) {
+    const failure = asLocalError(Object.assign(new Error('x'), { code: row.code }));
+    assert.equal(failure.code, row.code, `${row.code} 在 asLocalError 的已知集里，码原样保留`);
+    assert.equal(failure.status, row.status, `${row.code} 经 asLocalError ⇒ ${row.status}`);
+    assert.equal(failure.status, WRITE_STATUS[row.code], `${row.code} 两条通道给同一个状态`);
+  }
+
+  for (const row of writerOnly) {
+    const failure = asLocalError(Object.assign(new Error('x'), { code: row.code }));
+    assert.equal(failure.code, 'E_INTERNAL', `${row.code} 不在已知集，经 asLocalError 会丢码`);
+    assert.equal(failure.status, 500, `${row.code} 经 asLocalError 一律 500`);
+  }
+
+  // 反向：`E_FILE_CHANGED` 的 409 只有 statusOf 说得出来——经 asLocalError 会变成 500/`E_INTERNAL`，
+  // 也就是「409 配 E_INTERNAL」那个正是要避免的组合。这一条是「它只经 statusOf 出站」的证明。
+  const changed = asLocalError(Object.assign(new Error('x'), { code: 'E_FILE_CHANGED' }));
+  assert.equal(changed.code, 'E_INTERNAL', 'asLocalError 认不出 E_FILE_CHANGED');
+  assert.equal(changed.status, 500, 'asLocalError 会给它 500');
+  assert.notEqual(changed.status, WRITE_STATUS.E_FILE_CHANGED, '而表里它是 409：所以它只能走 statusOf');
 });

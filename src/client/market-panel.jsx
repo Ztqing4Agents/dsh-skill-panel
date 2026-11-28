@@ -23,12 +23,14 @@ import {
   mergeBatches,
   visibleCategories,
   marketKeyOf,
+  marketQueryKeyOf,
   pagedSources,
   reasonKeyOf,
   sourceLabelOf,
+  updateFailKeyOf,
 } from './market-model.js';
 import { MarketCard } from './market-card.jsx';
-import { MarketConfirm } from './market-confirm.jsx';
+import { MarketConfirm, UpdateConfirm } from './market-confirm.jsx';
 import { MarketDetail } from './market-detail.jsx';
 import { MarketFilters } from './market-filters.jsx';
 import { MarketChipsSkeleton, MarketSkeleton, MarketTailSkeleton } from './market-skeleton.jsx';
@@ -41,6 +43,20 @@ const SCROLL_BODY = '[data-skc-body]';
 
 /** Writes land before the frame paints; a string render has no DOM to write to. */
 const usePaintEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
+
+/**
+ * The update failures after which the ledger is one answer old: three of them describe a
+ * directory that no longer matches its record, and the other three are the routes saying "this
+ * row moved". Reading the map again is cheaper than explaining a wrong "installed" badge.
+ */
+const UPDATE_RELOAD_CODES = new Set([
+  'E_UPDATE_LOST',
+  'E_UPDATE_UNCONFIRMED',
+  'E_STALE_PATH',
+  'E_SYMLINK_READONLY',
+  'E_NOT_WRITABLE',
+  'E_NOT_FOUND',
+]);
 
 /**
  * Render the market tab.
@@ -64,6 +80,9 @@ export function MarketPanel({ store, api, t }) {
 
   /** Which `bootstrap` answer is still wanted; an older one is dropped, not applied. */
   const bootToken = useRef(0);
+
+  /** Which page-one request owns the list; an answer from an older one is dropped, not applied. */
+  const firstToken = useRef(0);
 
   /**
    * Read the scope list and one scope's category table, falling back to the built-in
@@ -129,9 +148,23 @@ export function MarketPanel({ store, api, t }) {
     return page !== null && typeof page === 'object' ? page : { items: [], next: null };
   }, [api]);
 
-  /** Fetch page one for the current query, replacing whatever is on screen. @returns {Promise<void>} */
+  /**
+   * Fetch page one for the current query, replacing whatever is on screen.
+   *
+   * Two guards, because a first-page answer that arrives late is not this list's answer:
+   *   - `firstToken` drops it when a newer page-one request has since been issued (a retry, or
+   *     the same query asked twice);
+   *   - `key` is the query the request went out for, captured here rather than read when the
+   *     answer lands. The store refuses a landing whose key is no longer the current one, which
+   *     is what keeps one search's results from being filed under the next search's snapshot
+   *     (and from clearing its stale notice).
+   * @returns {Promise<void>}
+   */
   const loadFirst = useCallback(async () => {
+    firstToken.current += 1;
+    const token = firstToken.current;
     const current = store.getSnapshot().market;
+    const key = marketQueryKeyOf(current);
     store.actions.marketListLoading();
     try {
       const page = await fetchPage({
@@ -141,13 +174,16 @@ export function MarketPanel({ store, api, t }) {
         keyword: current.keyword,
         cursor: undefined,
       });
+      if (token !== firstToken.current) return;
       const items = Array.isArray(page.items) ? page.items : [];
       store.actions.marketPageAppended({
+        key,
         pages: [{ sourceId: current.filters.source, page, items }],
         merged: mergeBatches([{ sourceId: current.filters.source, items }]),
       });
     } catch (error) {
-      store.actions.marketListFailed({ code: error?.code ?? 'E_UNKNOWN', message: error?.message ?? '' });
+      if (token !== firstToken.current) return;
+      store.actions.marketListFailed({ key, code: error?.code ?? 'E_UNKNOWN', message: error?.message ?? '' });
     }
   }, [fetchPage, store]);
 
@@ -157,6 +193,7 @@ export function MarketPanel({ store, api, t }) {
     if (current.listStatus !== 'ready' || current.page.status === 'loading' || appending.current) return;
     const [source] = pagedSources(current);
     if (source === undefined) return;
+    const key = marketQueryKeyOf(current);
     appending.current = true;
     store.actions.marketPageStart();
     try {
@@ -169,11 +206,12 @@ export function MarketPanel({ store, api, t }) {
       });
       const items = Array.isArray(page.items) ? page.items : [];
       store.actions.marketPageAppended({
+        key,
         pages: [{ sourceId: source, page, items }],
         merged: mergeBatches([{ sourceId: source, items }], { existing: current.items }),
       });
     } catch (error) {
-      store.actions.marketPageFailed({ code: error?.code ?? 'E_UNKNOWN', message: error?.message ?? '' });
+      store.actions.marketPageFailed({ key, code: error?.code ?? 'E_UNKNOWN', message: error?.message ?? '' });
     } finally {
       appending.current = false;
     }
@@ -288,16 +326,100 @@ export function MarketPanel({ store, api, t }) {
     }
   }, [api, store, t]);
 
+  /** Ask before overwriting: the update dialog holds the request back. @param {object} item - the market item. @returns {void} */
+  const askUpdate = useCallback((item) => {
+    store.actions.marketInstallConfirm(marketKeyOf(item), 'update');
+  }, [store]);
+
+  /**
+   * Overwrite the installed copy with the card's version, and fold the outcome back.
+   *
+   * Every input comes from an authority rather than from a guess: the identity and the target
+   * version from the card, the skill's name and the file to overwrite from the ledger
+   * (`skillFile`, which the route then re-resolves before writing). The success path writes the
+   * new version back into the ledger first - the card, the installed tab's row and the update
+   * verdict all read it - and only then pushes the toast through `updateApplied`, which is also
+   * what records the `checks` entry; skipping that would leave the installed tab's header
+   * claiming an update is available for the version just installed.
+   * @param {object} item - the market item.
+   * @returns {Promise<void>} resolves when the outcome has been drawn.
+   */
+  const confirmUpdate = useCallback(async (item) => {
+    const id = marketKeyOf(item);
+    // The seat is written before the request, so a second click arriving in the same frame (the
+    // dialog is still on screen) sees `updating` and sends nothing: one confirmation, one write.
+    if (store.getSnapshot().market.installs[id]?.state === 'updating') return;
+    const record = store.getSnapshot().market.installed?.[id] ?? null;
+    const name = typeof record?.name === 'string' ? record.name : '';
+    const dir = typeof record?.path === 'string' ? record.path : '';
+    const skillFile = typeof record?.skillFile === 'string' ? record.skillFile : '';
+    const target = typeof item.version === 'string' ? item.version : '';
+    store.actions.marketUpdateStart(id);
+    try {
+      const result = await api.marketUpdate({
+        source: item.sourceId,
+        owner: item.owner,
+        slug: item.slug,
+        version: target,
+        name,
+        path: skillFile,
+      });
+      const applied = typeof result?.version === 'string' && result.version !== '' ? result.version : target;
+      store.actions.marketInstalledVersion(id, applied);
+      store.actions.updateApplied({ identity: id, name, path: dir, version: applied });
+    } catch (error) {
+      const code = typeof error?.code === 'string' ? error.code : 'E_UNKNOWN';
+      if (code === 'E_ALREADY_UP_TO_DATE') {
+        // Not a failure: the route compared `row.version === version` and they are equal, which is
+        // an authoritative answer for this identity. Writing that version into the ledger and
+        // dropping the runtime seat turns the card into "up to date", and `checks` records the same
+        // verdict - no toast, nothing touched on disk - because leaving it unrecorded would keep
+        // the installed tab offering a version the disk already holds.
+        const known = store.getSnapshot().checks?.[id] ?? null;
+        store.actions.marketInstalledVersion(id, target, null);
+        store.actions.checkLanded([{
+          key: id,
+          phase: 'ready',
+          candidate: target,
+          latest: target,
+          versions: known?.versions ?? [],
+          total: known?.total ?? 0,
+          at: Date.now(),
+          reason: null,
+        }]);
+        return;
+      }
+      const from = typeof error?.data?.from === 'string'
+        ? error.data.from
+        : (typeof record?.version === 'string' ? record.version : '');
+      store.actions.marketUpdateFail(id, t(updateFailKeyOf(code) ?? 'error.E_UNKNOWN', {
+        version: from,
+        from,
+        to: target,
+        source: sourceLabelOf(item.sourceId, t),
+        name,
+        path: dir,
+        reason: error?.message ?? '',
+      }));
+      if (UPDATE_RELOAD_CODES.has(code)) void loadInstalled();
+    }
+  }, [api, loadInstalled, store, t]);
+
   const confirmId = Object.keys(market.installs)
     .find((id) => market.installs[id]?.state === 'confirm') ?? null;
   const confirmItem = confirmId === null
     ? null
     : market.items.find((entry) => marketKeyOf(entry) === confirmId)
       ?? (market.detail !== null && market.detail.id === confirmId ? market.detail.item : null);
+  // Which dialog the seat asked for; the ledger row supplies the versions and the directory the
+  // update would replace, so the dialog states both sides instead of only the incoming one.
+  const confirmUpdateSeat = confirmId !== null && market.installs[confirmId]?.mode === 'update';
+  const confirmRecord = confirmId === null ? null : (market.installed?.[confirmId] ?? null);
   // What "this result set" means for the reader: the four query inputs, nothing else. Changing
   // one of them is a different list and starts at the first card; paging, loading and detail
-  // round-trips leave `scrollTop` alone.
-  const queryKey = `${market.filters.source}|${market.filters.category}|${market.filters.sort}|${market.keyword}`;
+  // round-trips leave `scrollTop` alone. The same key names the stale-result snapshots, so the
+  // spelling lives in one function instead of two.
+  const queryKey = marketQueryKeyOf(market);
   const shownQuery = useRef(queryKey);
 
   // Land the list at the top of its own account, in a paint effect: the reference market
@@ -353,6 +475,7 @@ export function MarketPanel({ store, api, t }) {
           onBack={closeDetail}
           onRetry={() => void loadDetail(market.detail?.item ?? {})}
           onInstall={askInstall}
+          onUpdate={askUpdate}
         />
       ) : (
         <Fragment>
@@ -367,6 +490,22 @@ export function MarketPanel({ store, api, t }) {
             ? <MarketChipsSkeleton />
             : null}
           {loadingFirst ? <MarketSkeleton label={t('market.loading')} /> : null}
+          {/* The refresh failed but a previous answer for this query is still here: one line
+              above the grid says so, and the grid below it is that older answer. Deliberately
+              not the whole-page error state (nothing is missing that the reader can see), and
+              deliberately not the tail's "load failed, tap to retry" row - that one means an
+              append failed, which would be false here. */}
+          {market.stale !== null ? (
+            <div className={cn('marketFailure')} data-skc-market-stale="">
+              <StateDot state="error" />
+              <div className={cn('marketMain')}>
+                <p className={cn('marketError')} role="status">{t('page.refreshError')}</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => void loadFirst()}>
+                {t('market.retry')}
+              </Button>
+            </div>
+          ) : null}
           {market.listStatus === 'error' ? (
             <div className={cn('marketFailure')}>
               <StateDot state="error" />
@@ -397,6 +536,7 @@ export function MarketPanel({ store, api, t }) {
                   t={t}
                   onOpen={openDetail}
                   onInstall={askInstall}
+                  onUpdate={askUpdate}
                 />
               ))}
               {loadingTail ? <MarketTailSkeleton /> : null}
@@ -436,7 +576,18 @@ export function MarketPanel({ store, api, t }) {
           )}
         </Fragment>
       )}
-      {confirmItem === null ? null : (
+      {confirmItem === null ? null : confirmUpdateSeat ? (
+        <UpdateConfirm
+          name={confirmItem.displayName || confirmItem.slug || ''}
+          sourceId={confirmItem.sourceId}
+          from={typeof confirmRecord?.version === 'string' ? confirmRecord.version : ''}
+          to={typeof confirmItem.version === 'string' ? confirmItem.version : ''}
+          target={typeof confirmRecord?.path === 'string' ? confirmRecord.path : ''}
+          t={t}
+          onCancel={() => store.actions.marketInstallCancel(confirmId)}
+          onConfirm={() => void confirmUpdate(confirmItem)}
+        />
+      ) : (
         <MarketConfirm
           item={confirmItem}
           market={market}

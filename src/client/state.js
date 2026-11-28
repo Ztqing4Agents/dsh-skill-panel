@@ -14,8 +14,11 @@
  * No optimistic UI: a row's `enabled` only changes when the host confirms it, and a
  * card reads "installed" only after the install route answered.
  */
-import { MARKET_DEFAULT_SOURCE, marketKeyOf } from './market-model.js';
+import { MARKET_DEFAULT_SOURCE, marketKeyOf, marketQueryKeyOf } from './market-model.js';
 import { identityOf, rowKey, TAB_INSTALLED } from './model.js';
+
+/** How many query results are kept for the "refresh failed, here is what you had" path. */
+const MARKET_SNAPSHOT_LIMIT = 8;
 
 /**
  * @typedef {Object} PageState
@@ -63,6 +66,14 @@ function initialMarket() {
     exhausted: {},
     page: { status: 'idle', code: null, message: null },
     listStatus: 'idle',
+    // Per query (`marketQueryKeyOf`): the list as it last loaded, so a failed refresh can put
+    // it back on screen under a "these are the previous results" line instead of throwing the
+    // page away. Entries are kept per scope, most recently written last, and only the last
+    // MARKET_SNAPSHOT_LIMIT survive: the tab is a session cache, not a database.
+    snapshots: {},
+    // Non-null while what is on screen came from `snapshots` rather than from the last answer:
+    // `{code, message}` of the failure that left it there. Cleared by the next page that lands.
+    stale: null,
     detail: null,
     installed: {},
     installedReady: false,
@@ -152,7 +163,30 @@ function clearedPaging(market) {
     exhausted: {},
     page: { status: 'idle', code: null, message: null },
     listStatus: market.items.length > 0 ? 'ready' : 'idle',
+    // A new query is not the stale one: whatever was restored from a snapshot belongs to the
+    // query the reader just left, so the notice must not survive the switch.
+    stale: null,
   };
+}
+
+/**
+ * Put one query's result into the snapshot map, newest last, oldest dropped past the cap.
+ *
+ * Re-inserting a key instead of overwriting it in place is what makes the eviction order
+ * "least recently written" rather than "first ever written": a scope the reader keeps coming
+ * back to is written again every time and therefore never falls off the end.
+ * @param {Record<string, object>} snapshots - the current map.
+ * @param {string} key - `marketQueryKeyOf` product.
+ * @param {object} entry - `{items, pages, cursors, exhausted}` as it now stands.
+ * @returns {Record<string, object>} the new map.
+ */
+function withSnapshot(snapshots, key, entry) {
+  const next = { ...snapshots };
+  delete next[key];
+  next[key] = entry;
+  const keys = Object.keys(next);
+  for (const stale of keys.slice(0, Math.max(0, keys.length - MARKET_SNAPSHOT_LIMIT))) delete next[stale];
+  return next;
 }
 
 /**
@@ -162,6 +196,23 @@ function clearedPaging(market) {
  * @param {{sourceId: string, code: string}[]} failed - sources that failed this round.
  * @returns {{sourceId: string, code: string}[]} the deduplicated error list.
  */
+
+/**
+ * Whether a card's seat is already writing: `installing` or `updating`.
+ *
+ * One predicate for every action that would move a seat into an in-flight state. Both starts share
+ * it because both cards share one action seat and one rule - a click that arrives while the other
+ * verb is already running must not rewrite the seat, which would strand the first request's answer
+ * on a seat that no longer describes it. The confirm action reads it too, for the same reason: a
+ * dialog must not open over a write that is already in flight.
+ * @param {object} installs - the market sub-state's per-item runtime seats.
+ * @param {string} id - the item's market key.
+ * @returns {boolean} true when the caller must do nothing.
+ */
+function seatIsBusy(installs, id) {
+  const current = installs?.[id]?.state;
+  return current === 'installing' || current === 'updating';
+}
 
 /**
  * Create a store with the shape the page binds to.
@@ -699,25 +750,56 @@ export function createStore() {
     },
     /**
      * The page-one request is in flight.
+     *
+     * While a stale result set is on screen the page counter drops to 0: the answer that is
+     * coming is page one of the same query, so the tail must not read it as an append (a tail
+     * skeleton under a list that is not being extended), and `pages` has to be 1 again when it
+     * lands rather than the restored count plus one.
      * @returns {void}
      */
     marketListLoading: () => {
       setMarket({
         listStatus: 'loading',
         page: { status: 'loading', code: null, message: null },
+        ...(state.market.stale === null ? {} : { pages: 0 }),
       });
     },
     /**
      * The page-one request failed: this is a failure, not an empty list.
+     *
+     * `key` is the query the request went out for (captured by the panel). A failure belonging to
+     * a query the reader has left must not draw its error state under the query that replaced it:
+     * nothing is wrong with the new list, whose own request is about to answer. Same ownership
+     * rule as `marketPageAppended`; callers that omit it mean "the current query".
+     *
+     * Two readings, one action. With a snapshot of this query in hand the failure must not cost
+     * the reader the list they were looking at: the snapshot goes back on screen (items, page
+     * count, cursors, exhausted) and `stale` says so, which the panel draws as one line above
+     * the grid instead of the whole-page error state. Without a snapshot there is nothing to
+     * keep, so the list is cleared exactly as before - and an empty snapshot counts as nothing
+     * to keep: "nothing matched" is not a result this failure can still vouch for, while "we
+     * cannot reach the market" is exactly what happened.
      * @param {{code?: string, message?: string}} error - failure code and note.
      * @returns {void}
      */
     marketListFailed: (error) => {
+      const owned = typeof error?.key === 'string' && error.key !== '' ? error.key : marketQueryKeyOf(state.market);
+      if (owned !== marketQueryKeyOf(state.market)) return;
+      const page = { status: 'error', code: error?.code ?? null, message: error?.message ?? null };
+      const snapshot = state.market.snapshots[marketQueryKeyOf(state.market)] ?? null;
+      const kept = snapshot !== null && Array.isArray(snapshot.items) && snapshot.items.length > 0;
+      if (!kept) {
+        setMarket({ listStatus: 'error', page, items: [], pages: 0 });
+        return;
+      }
       setMarket({
-        listStatus: 'error',
-        page: { status: 'error', code: error?.code ?? null, message: error?.message ?? null },
-        items: [],
-        pages: 0,
+        listStatus: 'ready',
+        page: { status: 'idle', code: null, message: null },
+        items: snapshot.items,
+        pages: snapshot.pages,
+        cursors: snapshot.cursors,
+        exhausted: snapshot.exhausted,
+        stale: { code: page.code, message: page.message },
       });
     },
     /**
@@ -729,12 +811,24 @@ export function createStore() {
     },
     /**
      * A page answered: adopt the merged list and remember that source's cursor.
-     * @param {{pages: {sourceId: string, page: object, items: object[]}[], merged: object[]}} result
-     *   the answered page and the list to render (the array keeps room for several sources
-     *   later, but the market shows one source at a time).
+     *
+     * `key` is the query the request was issued for, captured by the caller when it went out.
+     * It decides two things that must not be decided by "what is on screen now":
+     *   - an answer for a query the reader has left is not this list's answer, so it is dropped
+     *     whole (no card swap, no cursor, no snapshot, and above all no clearing of the stale
+     *     notice, which belongs to the query that replaced it);
+     *   - the snapshot is filed under that key. Reading the key at landing time is exactly how
+     *     one search's results used to end up shown under the next search's "refresh failed"
+     *     banner. Callers that omit `key` (older call sites, tests) mean "the current query".
+     * @param {{key?: string, pages: {sourceId: string, page: object, items: object[]}[],
+     *   merged: object[]}} result - the answered page, the list to render (the array keeps room
+     *   for several sources later, but the market shows one source at a time), and the query it
+     *   belongs to.
      * @returns {void}
      */
     marketPageAppended: (result) => {
+      const key = typeof result?.key === 'string' && result.key !== '' ? result.key : marketQueryKeyOf(state.market);
+      if (key !== marketQueryKeyOf(state.market)) return;
       const pages = Array.isArray(result?.pages) ? result.pages : [];
       const cursors = { ...state.market.cursors };
       const exhausted = { ...state.market.exhausted };
@@ -744,21 +838,39 @@ export function createStore() {
         exhausted[entry.sourceId] = next === null;
       }
       const more = Object.values(cursors).some((cursor) => cursor !== null);
+      const items = Array.isArray(result?.merged) ? result.merged : state.market.items;
+      const count = state.market.pages + (pages.length > 0 ? 1 : 0);
       setMarket({
-        items: Array.isArray(result?.merged) ? result.merged : state.market.items,
-        pages: state.market.pages + (pages.length > 0 ? 1 : 0),
+        items,
+        pages: count,
         cursors,
         exhausted,
         page: { status: more ? 'more' : 'done', code: null, message: null },
         listStatus: 'ready',
+        // An answer that landed is newer than the snapshot it may have replaced, and it is the
+        // one worth restoring next time: this is also where the stale notice goes away.
+        snapshots: withSnapshot(state.market.snapshots, key, {
+          items,
+          pages: count,
+          cursors,
+          exhausted,
+        }),
+        stale: null,
       });
     },
     /**
      * The append request failed: the loaded cards stay, the tail says so.
-     * @param {{code?: string, message?: string}} error - failure code and note.
+     *
+     * Same ownership rule as `marketPageAppended`: a failure for a query the reader has left
+     * must not draw its retry row under the list that replaced it (`clearedPaging` already put
+     * the tail back to `idle` for the new query).
+     * @param {{key?: string, code?: string, message?: string}} error - failure code, note, and
+     *   the query the request belonged to.
      * @returns {void}
      */
     marketPageFailed: (error) => {
+      const key = typeof error?.key === 'string' && error.key !== '' ? error.key : marketQueryKeyOf(state.market);
+      if (key !== marketQueryKeyOf(state.market)) return;
       setMarket({ page: { status: 'error', code: error?.code ?? null, message: error?.message ?? null } });
     },
     /**
@@ -830,13 +942,18 @@ export function createStore() {
       setMarket({ detail: null });
     },
     /**
-     * Ask before installing. No request is sent until the dialog is confirmed.
+     * Ask before writing. No request is sent until the dialog is confirmed.
+     *
+     * One seat, two dialogs: `mode` says which one the panel draws - `install` for a skill that
+     * is not here yet, `update` for one the ledger already owns. Both hold the request back the
+     * same way, and a second click while the first request is in flight is dropped.
      * @param {string} id - the item's market key.
+     * @param {'install'|'update'} [mode] - which dialog to draw; `install` by default.
      * @returns {void}
      */
-    marketInstallConfirm: (id) => {
-      if (state.market.installs[id]?.state === 'installing') return;
-      setInstall(id, { state: 'confirm' });
+    marketInstallConfirm: (id, mode) => {
+      if (seatIsBusy(state.market.installs, id)) return;
+      setInstall(id, { state: 'confirm', mode: mode === 'update' ? 'update' : 'install' });
     },
     /**
      * Dismiss the confirm dialog without installing.
@@ -848,19 +965,35 @@ export function createStore() {
       setInstall(id, null);
     },
     /**
-     * The install route is being called. Idempotent: a second call while installing
-     * does nothing, so a double click cannot send two requests.
+     * The install route is being called. Idempotent through the shared gate: a seat that is
+     * already writing (`installing` or `updating`) is left untouched - no new request generation
+     * and no seat rewrite - so a double click cannot send two requests, and an install click can
+     * never demote an in-flight update to "installing".
      * @param {string} id - the item's market key.
      * @returns {void}
      */
     marketInstallStart: (id) => {
-      if (state.market.installs[id]?.state === 'installing') return;
+      if (seatIsBusy(state.market.installs, id)) return;
       seq += 1;
       setInstall(id, { state: 'installing', seq });
     },
     /**
      * The skill is on disk. The card flips, the installed tab is marked stale, and a
      * toast says where it went and when it takes effect.
+     *
+     * The ledger row written here carries `skillFile: null`, i.e. "unknown", and that is
+     * deliberate: the install route answers with the directory, while the `SKILL.md` inside it is
+     * a string only the Host builds (a write route must be handed a path the Host resolved, never
+     * one the browser assembled). A guessed `join(path, 'SKILL.md')` would be exactly that
+     * assembly. Nothing breaks by leaving it unknown, because:
+     *   - the card reads the runtime seat first (`installs[id].state === 'installed'`), so it says
+     *     "installed" for the rest of the session regardless of this row;
+     *   - `installViewOf` treats a row without a `skillFile` as "no file to overwrite" and never
+     *     offers an update for it, so an incomplete row cannot produce a request that would 409;
+     *   - the next `market/installed` read (mount, tab re-entry after `marketInstalledStale`, or
+     *     any update-failure reload) replaces this row with the Host's, and `skillFile` becomes
+     *     the real path. That is also the only moment an update can be offered, which is right:
+     *     it is the moment the Host has told us where the file is.
      * @param {string} id - the item's market key.
      * @param {{name?: string, path?: string, version?: string|null}} result - route payload.
      * @returns {void}
@@ -877,7 +1010,10 @@ export function createStore() {
         market: {
           ...state.market,
           installs,
-          installed: { ...state.market.installed, [id]: { name, version, path, exists: true } },
+          installed: {
+            ...state.market.installed,
+            [id]: { name, version, path, skillFile: null, exists: true },
+          },
           installedDirty: true,
         },
         notice: { kind: 'install-ok', name, path, code: '', message: '', seq },
@@ -891,6 +1027,67 @@ export function createStore() {
      */
     marketInstallFail: (id, reason) => {
       setInstall(id, { state: 'failed', reason: typeof reason === 'string' ? reason : '' });
+    },
+    /**
+     * The update route is being called. Same seat as the install, same gate, different verb.
+     *
+     * The gate is `seatIsBusy`, exactly as for the install: a seat that is already writing is
+     * left alone, so one confirmation can never send two overwrite requests and an update click
+     * can never be answered with "installing".
+     * @param {string} id - the item's market key.
+     * @returns {void}
+     */
+    marketUpdateStart: (id) => {
+      if (seatIsBusy(state.market.installs, id)) return;
+      seq += 1;
+      setInstall(id, { state: 'updating', seq });
+    },
+    /**
+     * The directory now holds the card's version: write it back before anything else reads it.
+     *
+     * The ledger entry is the card's answer from here on, so leaving it at the old version would
+     * show "update available" for a skill that was just updated. `installedDirty` makes the
+     * installed tab re-scan once, which is the only place the row's version is read from disk.
+     *
+     * `runtime` decides what the card itself shows: the update route leaves the runtime seat at
+     * `installed` (the card must not fall back to "install" while the ledger catches up), while
+     * `E_ALREADY_UP_TO_DATE` passes null so the card is decided by the ledger and reads "up to
+     * date" - no request was made, so no seat should claim one was.
+     * @param {string} id - the item's market key.
+     * @param {string} version - the version now on disk.
+     * @param {'installed'|null} [runtime] - the runtime seat to leave behind; `installed` by default.
+     * @returns {void}
+     */
+    marketInstalledVersion: (id, version, runtime = 'installed') => {
+      const record = state.market.installed?.[id] ?? null;
+      if (record === null) {
+        // No ledger entry to correct: drop the seat rather than leave a spinner behind.
+        setInstall(id, null);
+        return;
+      }
+      const value = typeof version === 'string' && version !== '' ? version : (record.version ?? null);
+      const installed = { ...state.market.installed, [id]: { ...record, version: value } };
+      const installs = { ...state.market.installs };
+      if (runtime === null) delete installs[id];
+      else installs[id] = { state: 'installed', path: record.path ?? '', version: value };
+      setMarket({ installed, installs, installedDirty: true });
+    },
+    /**
+     * The update failed: the card keeps its place and explains itself, with a retry.
+     *
+     * The seat carries `mode: 'update'`, so the retry re-enters the update dialog instead of
+     * the install one - falling back to "install" would ask the route to write a directory that
+     * already exists.
+     * @param {string} id - the item's market key.
+     * @param {string} reason - localized reason, empty for "nothing to say".
+     * @returns {void}
+     */
+    marketUpdateFail: (id, reason) => {
+      setInstall(id, {
+        state: 'failed',
+        reason: typeof reason === 'string' ? reason : '',
+        mode: 'update',
+      });
     },
     /**
      * Remember the list's scroll offset before the detail view replaces it.

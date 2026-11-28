@@ -56,9 +56,10 @@ market = {
   cursors / exhausted,                            // 每源自己的不透明游标与「已耗尽」
   page: {status, code, message},                  // idle | loading | more | done | error（尾部）；loading 同时表示「重取第一页」与「追加下一页」，用 pages 区分
   listStatus: 'idle'|'loading'|'ready'|'error',   // 整页态
+  snapshots / stale,                              // 按查询键（`marketQueryKeyOf`＝`source|category|sort|keyword`）存的上次结果（LRU ≤8、跨 scope 保留）与陈旧标记 `{code,message}`
   detail: null | {id, item, status, data, code},  // 内嵌详情三态
   installed / installedReady,                     // 安装台账 × item.id；只读一次
-  installs: {[id]: {state, reason?, path?, version?, seq?}},   // 确认/安装中/已安装/失败
+  installs: {[id]: {state, mode?, reason?, path?, version?, seq?}},   // 确认（`mode` 说画安装还是更新弹窗）/安装中/更新中/已安装/失败
   icons / iconsTried,                             // 图标缓存 {[key]: url} 与「本会话已问过」{[key]: true}；两个消费者共用（市场条目 + 已装行的 upstream）
   names,                                          // 上游标题缓存 {[key]: title}；与 icons 同键空间、同生命周期
   favorites / favoritesOk,                        // 本地收藏 {[id]:true} 与可用性；**没有 UI 入口**，字段保留，决策见 `decisions.md` L-5（写侧已撤）
@@ -81,7 +82,8 @@ market = {
 | 落点：`source`/`category`/`sort`/`keyword` 任一真的变化 | —— | 面板的 paint effect（`useLayoutEffect`；字符串渲染时降级成 `useEffect`）瞬时把**面板自己那个滚动容器**的 `scrollTop` 写 **0**，不做平滑滚动、不等浏览器夹取：跳变是那一帧的初始状态，不是动画。三条筛选与搜索的落点因此由我们决定、与答案长短无关（真机四条路径都落在 0，且换表那一帧 `scrollTop` 就已经是 0）。刷新**不在**这条里（保留原位置）；翻页、加载态、详情往返也不在（键没变）。落地后首卡在吸顶页头之下 150px，不会被压住 |
 | 关掉来源 / 排序菜单 | —— | 选的是**同一个值**时滚动位置不变。宿主的 `Menu` 关闭时把焦点还给锚点，焦点落在吸顶栏上会让 `.skc_pageBody` 滚回 0（实测 300 → 0，关闭后约 12 ms）；`.skc_marketFilters` 在关闭后把这个 0 写回原偏移（见 `decisions.md` 附录 P-3）。选的是**不同的值**时补偿自动解除，落点交给上一条的 paint effect（顶） |
 | 一页返回 | `listStatus=ready`，`page` 进 `more` 或 `done` | 列表 = 已有项 + 这一页按序拼接（`mergeBatches` 仍接受多源数组，但市场一次只看一个源，只喂一项）；不跨源重排 |
-| 请求失败 | `listStatus=error` | 整页错误态 + 重试；**不出空态**（空 ≠ 失败）。单源没有「部分源失败」这种中间态 |
+| 请求失败（本查询没有可回填的快照：从未成功，或上次成功是空列表） | `listStatus=error` | 整页错误态 + 重试；**不出空态**（空 ≠ 失败）。单源没有「部分源失败」这种中间态 |
+| 请求失败（本查询有上次的**非空**结果） | `listStatus=ready` + `stale={code,message}` | 上次结果回填（`items`/`pages`/`cursors`/`exhausted`）、尾部回 `idle`；屏上只加一条陈旧行（容器 `.skc_marketFailure` + `data-skc-market-stale`，文案 `page.refreshError` + `market.retry`），表示**下面这份是上次的结果**；**不**出整页错误态、**不**出尾部「加载失败，点此重试」（那条专属追加失败）。点重试＝第一页请求，成功后 `stale=null` |
 | 追加返回 | `page` 进 `more` 或 `done` | 当前源 `cursor !== null` 才追加；`items` 追加去重，不重排已有项 |
 | 追加失败 | `page=error` | 底部「加载失败，点此重试」，items 不动 |
 | 触底（距底 200px）或本页没填满视口 | `page=loading` | 同时最多一次（组件内 `useRef` 闸）；**短页不算结束**，判据只有 `next === null` |
@@ -89,9 +91,15 @@ market = {
 | 返回市场 | `detail=null` | 恢复 `scrollTop`，不重拉 |
 | 点安装 | `installs[id].state='confirm'` | 只有确认弹窗，不发请求 |
 | 确认 / 成功 / 失败 | `installing` → `installed` 或 `failed` | 成功：toast + `installedDirty=true` + `installed[id]`；失败：行内原因 + 「重试」 |
+| 点更新（台账命中且版本不等） | `installs[id]={state:'confirm', mode:'update'}` | 只开更新弹窗（`UpdateConfirm`：标题 `detail.updateTitle`、正文 `detail.updateBody`、主按钮 `detail.update`、次按钮 `market.confirmCancel`；事实表给来源 / `{from} → {to}`（未知取 `market.factUnknown`）/ 台账目录），不发请求 |
+| 确认更新 / 成功 / 失败 | `updating` → `installed` 或 `failed` | 成功后**先**写回卡上的版本（`marketInstalledVersion`）**再** `updateApplied`（复用 `update-ok` toast 并记 `checks`，不记则已安装页头会短暂报「可更新」）；`E_ALREADY_UP_TO_DATE` 无文案、转「已是最新版本」，**同样落 `checks`**（`checkLanded`，不弹 toast、不动磁盘——这个码本身就是服务端比过 `row.version === version` 的权威确认）；`E_UPDATE_RESTORED`/`E_UPDATE_LOST`/`E_UPDATE_UNCONFIRMED` 各一句结论句；六个码之后补一次 `loadInstalled()` |
 | 切到已安装页签且 `installedDirty` | 重拉 `list` 一次并清脏 | 用户不必手按刷新 |
 
-两条闸：`installs[id].state === 'installing'` 时按钮 `disabled`，且 action 自身幂等（重复调用直接返回），因此连点只发一次请求。
+两条闸：`installs[id].state === 'installing'`/`'updating'` 时按钮 `disabled`，且两个 start 共用同一道闸（座位在途 ⇒ 直接返回，不换座位），因此连点只发一次请求、两个动作不会互相改写座位。
+
+**卡面七态（`installViewOf`，纯函数）**：台账命中需三条同时成立——`installed[id]` 存在（`id = source:owner:slug`）、`exists !== false`、`skillFile` 非空；缺一即「安装」。命中后按「哪一侧知道版本」分三支：**卡上无版本号 ⇒ `installed`**（disabled + `market.installedTitle` 给台账目录，**不发请求**——`parseUpdateBody` 的 version 白名单不收空串，一条注定 `400 E_BAD_QUERY` 的请求不该接在按钮上，也不猜一个版本顶上去）；两侧皆非空且**逐字相等** ⇒ `latest`（「已是最新版本」disabled，零请求零弹窗）；其余（卡上有版本而台账没有，或两侧皆有且不等）⇒ `update`，台账缺版本时弹窗的 `{from}` 写 `market.factUnknown`。在途两态（`installing`/`updating`）与失败态由运行时座位覆盖。版本只比相等不排序，降级不拦——方向由弹窗的 `{from} → {to}` 呈现，权威仍在服务端 P1/P6。
+
+**落地归属按「发请求那一刻的查询」定，不按落地那一刻的当前查询**：三条落地 action（`marketListFailed`/`marketPageAppended`/`marketPageFailed`）收到的 `key` 是面板发请求时捕获的 `marketQueryKeyOf`，快照就写在它下面；`key` 与当前查询不等 ⇒ **整条丢弃**（不换 `items`、不写快照、不写游标、**不动 `stale`**），因为那是读者已经离开的那份列表。第一页另有一道令牌（`firstToken`，写法同 `boot` 的 `bootToken`）：同键的旧答案迟到时直接丢弃，不覆盖新答案。没有这条，「搜 a → 请求在飞 → 改成 b → a 的答案落地」会把 a 的结果写进 b 的快照，b 随后失败时就变成「打着陈旧标记、显示的却是 a 的结果」。
 
 ### 3.9.2 组件树与文件
 
@@ -102,10 +110,10 @@ SkillsPage (page.jsx：页头 + 两个页签)
 └─ tabPanel(market) → MarketPanel (market-panel.jsx)
     ├─ MarketFilters (market-filters.jsx)：Input(250ms 防抖，× 在框内) / Menu(来源 = 所有来源｜SkillHub｜ClawHub) / Menu(排序) —— **工具栏恒三个子元素** / Pill(分类 chips + 数量)
     ├─ 首屏骨架｜整页错误态（当前源失败）｜空态
-    ├─ ul.skc_marketGrid → MarketCard (market-card.jsx) × N（**头部 = 48 头像 + 标题行（标题 + 来源图）/ 作者行 + 安装位**；正文 = 描述 3 行 / 标签 chips / 三段 `评分·下载·收藏`；动作位只有安装；**追加下一页时**尾部 3 张骨架；头像位是 MarketIcon → tileElement）
+    ├─ ul.skc_marketGrid → MarketCard (market-card.jsx) × N（**头部 = 48 头像 + 标题行（标题 + 来源图）/ 作者行 + 动作位**；正文 = 描述 3 行 / 标签 chips / 三段 `评分·下载·收藏`；动作位只有一个座位（安装｜更新｜安装中…｜正在更新…｜已安装｜已是最新版本｜失败重试，七态见 §3.9.1）；**追加下一页时**尾部 3 张骨架；头像位是 MarketIcon → tileElement）
     ├─ ul 之后：加载更多一行（`skc_marketLoadMore` = 圆点 + `market.loadingMore`，**视觉件 `aria-hidden`**，只在「已有卡片 + 正在追加」时出现；播报仍由上面那条 sr-only `role="status"` 负责）
-    ├─ MarketDetail (market-detail.jsx)：面包屑 + 头 + 事实表 + 概览 + 文件
-    └─ MarketConfirm (market-confirm.jsx)：Modal（width:min(480px,100vw - 32px)）
+    ├─ MarketDetail (market-detail.jsx)：面包屑 + 头（同一个动作位）+ 事实表 + 概览 + 文件
+    └─ MarketConfirm (market-confirm.jsx)：Modal（width:min(480px,100vw - 32px)）——安装确认；更新确认复用同文件的 `UpdateConfirm`（已安装详情页那个，零新增组件）
 SkillDialogs (skill-dialogs.jsx)：`AddSkillDialog`（已安装页签工具栏打开的输入弹窗，三态见 §3.9.7）/ `DeleteConfirm`（详情页头的卸载确认，一行路径事实 + 取消/卸载）
 MarketSkeleton / MarketTailSkeleton (market-skeleton.jsx)
 icon-tile.jsx：IconTile / tileElement / useIconState（共用视觉单元）；plugin-detail.jsx：PluginDetail（内置 provider 页，第二级详情）
@@ -136,16 +144,18 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 | `marketSetInput(text)` | string | 只改 `input` |
 | `marketCommitKeyword(text)` | string | `keyword=input=text`，清分页；**保留 items** |
 | `marketSetFilter({source?,category?,sort?})` | 部分 filters | 合并 + 清分页 + 关详情；**`items` 保留**（重取期间卡片留在屏上，`clearedPaging` 给出 `listStatus`）；切 scope 时 `categoriesLoading=true`；值没变就什么都不做 |
-| `marketListLoading()` / `marketListFailed({code,message})` | —— / 错误 | 整页态 |
+| `marketListLoading()` / `marketListFailed({key,code,message})` | —— / 错误 + 发请求时的查询键 | 整页态：前者进 `loading`（`stale !== null` 时把 `pages` 归 0——重取的是第一页，尾部不许当追加）；后者**本查询有快照 ⇒ 回填 `items`/`pages`/`cursors`/`exhausted` + `stale` + `listStatus:'ready'`**，无快照才清空进 `error`；`key` 与当前查询不等 ⇒ 丢弃（读者已离开那次查询，新列表没有理由背它的错） |
+| `marketInstallStart(id)` / `marketUpdateStart(id)` | id | 座位进 `installing` / `updating`；**两侧同一个闸**：座位已在途（`installing` 或 `updating`）⇒ 直接返回，不 `seq += 1`、不换座位——连点只发一次，且「安装」点不到「正在更新」的座位上（两张卡共用一个动作位，「一次只做一件事」在两侧同语义）。`marketInstallConfirm` 读同一道闸，在途时不开弹窗 |
+| `marketUpdateFail(id,reason)` | 本地化原因 | `failed` + `mode:'update'`（重试回到更新弹窗，不再走「安装」） |
+| `marketInstalledVersion(id,version,runtime='installed')` | 新版本 + 座位 | 静默把台账 `installed[id].version` 写成新版本并置 `installedDirty`；`runtime='installed'` 时卡面落「已安装」，传 `null` 则不留座位（`E_ALREADY_UP_TO_DATE` 用，卡面由台账判成「已是最新版本」） |
 | `marketPageStart()` | —— | `page.status='loading'`（追加用，不清 items） |
-| `marketPageAppended({pages,merged})` | `pages:[{sourceId,page,items}]`、合并结果 | 写该源 cursor/exhausted、`items=merged`、`pages+1`、尾部进 `more` 或 `done` |
-| `marketPageFailed({code,message})` | 错误 | `page.status='error'`，items 不动 |
-| `marketInstalledLoaded(map)` | `{[id]:{name,version,path,exists}}` | 填 `installed` + `installedReady=true` |
+| `marketPageAppended({pages,merged,key})` | `pages:[{sourceId,page,items}]`、合并结果、发请求时的查询键 | 写该源 cursor/exhausted、`items=merged`、`pages+1`、尾部进 `more` 或 `done`、按 **`key`** 写快照并清 `stale`；`key` 与当前查询不等 ⇒ 整条丢弃（见 §3.9.1 的落地归属） |
+| `marketPageFailed({code,message,key})` | 错误 + 发请求时的查询键 | `page.status='error'`，items 不动；`key` 与当前查询不等 ⇒ 丢弃（不给新查询画尾行） |
+| `marketInstalledLoaded(map)` | `{[id]:{name,version,path,skillFile,exists}}` | 填 `installed` + `installedReady=true`（`skillFile` 是 #16 要的那个 `SKILL.md`，见 `market-routes.md` §3.7.1 #8） |
 | `marketDetailOpen(item)` | MarketItem | `detail={id,item,status:'loading'}` |
 | `marketDetailReady(data)` / `marketDetailFailed({code,message})` / `marketDetailClose()` | MarketDetail / 错误 / —— | 详情三态与关闭 |
-| `marketInstallConfirm(id)` / `marketInstallCancel(id)` | id | 确认弹窗开关（**不发请求**） |
-| `marketInstallStart(id)` | id | `state='installing'`（幂等） |
-| `marketInstallOk(id,{name,path,version})` | —— | `installed` + `installed[id]` + `installedDirty` + 推 `notice{kind:'install-ok', name, path, seq}` |
+| `marketInstallConfirm(id,mode)` / `marketInstallCancel(id)` | id + `'install'\|'update'` | 确认弹窗开关（**不发请求**）；`mode` 只说画哪个弹窗（安装确认 / 更新确认），两个在途状态都挡住重复点击 |
+| `marketInstallOk(id,{name,path,version})` | —— | `installed` + `installed[id]` + `installedDirty` + 推 `notice{kind:'install-ok', name, path, seq}`；这一行台账的 `skillFile` 是 **`null`（未知）**——`SKILL.md` 这一层由 Host 拼、客户端不拼，卡面靠运行时座位说「已安装」，下一次 `market/installed` 才带真值 |
 | `marketInstallFail(id, reason)` | 本地化原因 | `state='failed'` + `reason` |
 | `marketNamesSeeded(names)` | `{[id]: title}` | 只合并进 `names`（空值忽略、已有键不覆盖），**不写 `iconsTried`**：列表里的 `displayName` 是已知答案 |
 | `marketNamesReady(names)` | `{[id]: title\|null}` | 批量端点回填：非空才写（覆盖同名种子），`null` 忽略——名字缺失不影响图标 |
@@ -172,7 +182,7 @@ markdown.jsx：MarkdownBoundary / MarkdownBlock（市场详情与已安装详情
 | `marketInstall({source,owner,slug,version})` | `POST market/install` | body 只有身份，**没有 path/files** |
 | `marketIcons({items})` | `POST market/icons` | `items` 是 **`{source,owner,slug}`** 数组（每源 ≤12、合计 **≤24**，一批可混两源）；出参 `{icons:{[key]: url|null}}`；失败静默 |
 | `addSkill({spec})` / `removeSkill({name,path})` | `POST add` / `POST remove` | 前者 body **只有 `spec`**（一个字段吃两种形态：本机目录路径或 GitHub 链接，分类在 Host 侧），出参 `{name,path,files,bytes,source,repo,ref,commit}`（非 git 形态后三个是 `null`）；后者 body 是 `{name, path}`（`path` = 这一行的 `SKILL.md`，硬约束 6），出参 `{name,dir,ledger}`。失败按 `E_ADD_*` / `E_DELETE_IO` / 复用的 §8.6 码取文案（`reasonKeyOf`） |
-| `marketVersions({source,owner,slug})` / `marketUpdate({source,owner,slug,version,name,path})` | `GET market/versions` / `POST market/update` | 前者出参 `{namespace, latest, versions, total}`（新的在前、≤50 条）；后者 body 带 `path`（硬约束 6 的「先认路径再写」），出参 `from` 是更新前版本，失败按 `422/502/503/504` 与 `E_UPDATE_RESTORED`/`E_UPDATE_LOST`/`E_UPDATE_UNCONFIRMED` 分三种落点（`docs/contracts/installed-detail.md`） |
+| `marketVersions({source,owner,slug})` / `marketUpdate({source,owner,slug,version,name,path})` | `GET market/versions` / `POST market/update` | 前者出参 `{namespace, latest, versions, total}`（新的在前、≤50 条）；后者 body 带 `path`（硬约束 6 的「先认路径再写」），出参 `from` 是更新前版本。**市场页这一路**：`version` 取**卡上**的、`name` 与 `path` 取台账（`path` 就是 #8 的 `skillFile`）；**成功与「已是最新」两种结局都落 `checks`**（后者走 `checkLanded`，不弹 toast）；失败按 `E_UPDATE_RESTORED`/`E_UPDATE_LOST`/`E_UPDATE_UNCONFIRMED` 三句结论 + `E_ALREADY_UP_TO_DATE`（非错误，转「已是最新版本」）落点，其余一律走 `reasonKeyOf`（字典里有 `error.E_*` 就说那句、没有就落 `error.E_UNKNOWN`）——所以 `E_NOT_MARKET_INSTALLED` 与 `E_BAD_QUERY` 各有自己的句子，而 `E_BAD_REQUEST`/`E_INTERNAL` 只有兜底的 `{reason}`（理由见 `market-routes.md` §8.6 的前端表现栏）；已安装详情页那一路的分档见 `docs/contracts/installed-detail.md` |
 
 全部走既有 `request()`：文档相对 URL + 信封解包 + `ApiError{code, message, data}`（`data` 是信封里的 `data`，安装失败时用来取冲突路径与声明名）。安装永不自动重试。
 

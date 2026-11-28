@@ -74,6 +74,19 @@ const MARKET_ERROR_CODES = new Set([
   'E_GIT_TIMEOUT',
   'E_GIT_MISSING',
   'E_ADD_AMBIGUOUS_SKILL',
+  // The five the update route raises on the way in (M2). A ledger row can be one scan old, and
+  // a skill directory moves without the panel being told: each of those refusals has its own
+  // sentence, so it must be resolvable instead of printing E_UNKNOWN. Membership only - no new
+  // code is introduced by listing them.
+  'E_STALE_PATH',
+  'E_NOT_FOUND',
+  'E_SYMLINK_READONLY',
+  'E_NOT_WRITABLE',
+  // The one refusal a reader can act on: the copy on disk was not installed from the market (or
+  // its source metadata changed), so "uninstall it on the installed tab and install it again" is
+  // the next step. It is also the only one of the four defensive refusals that earns its own key
+  // (see `updateFailKeyOf`).
+  'E_NOT_MARKET_INSTALLED',
 ]);
 
 /**
@@ -85,6 +98,24 @@ const MARKET_ERROR_CODES = new Set([
 export function marketKeyOf(item) {
   if (typeof item?.id === 'string' && item.id !== '') return item.id;
   return `${item?.sourceId ?? ''}:${item?.owner ?? ''}:${item?.slug ?? ''}`;
+}
+
+/**
+ * The identity of one query: the four inputs that decide "this result set".
+ *
+ * One spelling, two readers: the panel's landing effect (a changed key is a new list, so the
+ * offset goes back to the top) and the stale-result snapshots, which are stored under the same
+ * string. Two spellings would let one of them hold a list the other considers gone.
+ * @param {object} market - the market sub-state.
+ * @returns {string} e.g. `all|null|recommended|pdf`.
+ */
+export function marketQueryKeyOf(market) {
+  const filters = market?.filters ?? {};
+  const source = filters.source ?? MARKET_DEFAULT_SOURCE;
+  const category = filters.category ?? null;
+  const sort = filters.sort ?? 'recommended';
+  const keyword = typeof market?.keyword === 'string' ? market.keyword : '';
+  return `${source}|${category}|${sort}|${keyword}`;
 }
 
 /**
@@ -547,22 +578,55 @@ export function countText(value, locale = '') {
 
 /**
  * Which action a card offers right now, and why the last attempt failed.
+ *
+ * Seven states, decided in a fixed order by two sources. The runtime seat (`installs`) wins
+ * whenever it has an entry: a request is in flight, or one just failed or landed, and the
+ * ledger is one read old. The ledger (`installed`, from `market/installed`) answers the
+ * resting states.
+ *
+ * A ledger hit needs all three of: the entry exists, its directory is still on disk, and the
+ * route said where its `SKILL.md` lives (`skillFile`). Without that file there is nothing to
+ * overwrite, so the card stays installable instead of offering an update that cannot land.
+ *
+ * Versions are compared for equality only, never ordered: upstream may publish a lower version
+ * than the local one, and that is still a different version - the dialog spells it out as
+ * `{from} → {to}` rather than blocking it.
  * @param {object} market - the market sub-state.
  * @param {string} id - the item's market key.
- * @returns {{state: 'ready'|'installing'|'installed'|'failed', path?: string, reason?: string}} the card's state.
+ * @param {object} [item] - the market item, for the version it advertises.
+ * @returns {{state: 'ready'|'installing'|'updating'|'installed'|'latest'|'update'|'failed',
+ *   path?: string, reason?: string, mode?: string, from?: string, to?: string}} the card's state.
  */
-export function installViewOf(market, id) {
+export function installViewOf(market, id, item) {
   const runtime = market?.installs?.[id];
   if (runtime !== undefined && runtime !== null) {
     if (runtime.state === 'installing') return { state: 'installing' };
+    if (runtime.state === 'updating') return { state: 'updating' };
     if (runtime.state === 'installed') return { state: 'installed', path: runtime.path ?? '' };
-    if (runtime.state === 'failed') return { state: 'failed', reason: runtime.reason ?? '' };
+    if (runtime.state === 'failed') {
+      const view = { state: 'failed', reason: runtime.reason ?? '' };
+      // Which request failed decides what the retry does: an update goes back through the
+      // update dialog, an install through the install one.
+      if (runtime.mode === 'update') view.mode = 'update';
+      return view;
+    }
   }
   const record = market?.installed?.[id];
-  if (record !== undefined && record !== null && record.exists !== false) {
-    return { state: 'installed', path: record.path ?? '' };
-  }
-  return { state: 'ready' };
+  if (record === undefined || record === null) return { state: 'ready' };
+  if (record.exists === false) return { state: 'ready' };
+  const skillFile = typeof record.skillFile === 'string' ? record.skillFile : '';
+  if (skillFile === '') return { state: 'ready' };
+  const path = typeof record.path === 'string' ? record.path : '';
+  const to = typeof item?.version === 'string' ? item.version : '';
+  const from = typeof record.version === 'string' ? record.version : '';
+  // No version on the card, whatever the ledger holds: there is no target to ask for, and
+  // `parseUpdateBody` refuses an empty `version`, so an "update" here is a request that can only
+  // fail. Guessing one would install something the reader never chose - the card says installed.
+  if (to === '') return { state: 'installed', path };
+  // A card version but no ledger version: the target is known even though the "from" is not, so
+  // the update is real and the dialog writes "unknown → {to}". Only equality is a verdict.
+  if (from !== '' && from === to) return { state: 'latest', path };
+  return { state: 'update', path, from, to };
 }
 
 /**
@@ -622,6 +686,30 @@ export function detailFacts(detail, market, t, locale = '') {
  */
 export function reasonKeyOf(code) {
   return MARKET_ERROR_CODES.has(code) ? `error.${code}` : 'error.E_UNKNOWN';
+}
+
+/**
+ * The locale key that explains a failed `market/update`, or null when the answer is not an error.
+ *
+ * Three codes describe what happened to the directory *after* the host touched it, so they get
+ * conclusions instead of "try again": rolled back, lost, unconfirmed. `E_ALREADY_UP_TO_DATE` is
+ * not a failure at all - the card becomes "up to date" and no red line is drawn.
+ *
+ * Everything else goes through `reasonKeyOf`, so the two surfaces tell one story: a code with its
+ * own sentence `error.E_*` in the dictionary says that sentence, and a code without one falls back
+ * to `error.E_UNKNOWN`. That is why `E_NOT_MARKET_INSTALLED` (a reader can act on it: uninstall on
+ * the installed tab, then install again) and `E_BAD_QUERY` (refresh the page and look at the card
+ * again) have keys, while `E_BAD_REQUEST` / `E_INTERNAL` - reachable only when the panel and the
+ * Host disagree - keep the fallback template, whose English `{reason}` is the bug report.
+ * @param {string} code - the route's `E_*` code.
+ * @returns {string|null} a locale key, or null when nothing belongs on the card.
+ */
+export function updateFailKeyOf(code) {
+  if (code === 'E_ALREADY_UP_TO_DATE') return null;
+  if (code === 'E_UPDATE_RESTORED') return 'detail.updateRolledBack';
+  if (code === 'E_UPDATE_LOST') return 'detail.updateLost';
+  if (code === 'E_UPDATE_UNCONFIRMED') return 'detail.updateUnknown';
+  return reasonKeyOf(code);
 }
 
 /**

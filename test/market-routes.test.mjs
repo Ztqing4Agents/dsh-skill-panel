@@ -12,7 +12,7 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { chmod, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { ROUTES, makeRoutes } from '../lib/routes.js';
@@ -550,6 +550,54 @@ test('K36 installed：台账读不出来时也降级成 readable=false，不抛 
     assert.equal(response.status, 200, '损坏的台账不把整页打挂');
     assert.equal(response.json.data.readable, false, 'readable=false');
     assert.deepEqual(response.json.data.items, {}, 'items 为空');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('K36 installed：每项恰好 {name,version,path,skillFile,exists}——path 是目录，skillFile 是里面的 SKILL.md', async () => {
+  const mounted = await mount();
+  try {
+    // Install once, so the ledger really holds a row and the answer's versions come from it.
+    const installed = await callRoute(mounted.byPath[ROUTES.marketInstall], {
+      method: 'POST',
+      headers: LOOPBACK_HEADERS,
+      body: JSON.stringify({ source: 'skillhub', owner: 'ake', slug: 'dev-god' }),
+    });
+    assert.equal(installed.status, 200, '先装一个，再读台账');
+
+    const answer = await callRoute(mounted.byPath[ROUTES.marketInstalled], { headers: LOOPBACK_HEADERS });
+    const read = answer.json.data;
+    assert.equal(read.readable, true, '台账可读');
+    assert.deepEqual(Object.keys(read.items), ['skillhub:ake:dev-god'], '键仍是 source:owner:slug');
+    const row = read.items['skillhub:ake:dev-god'];
+    assert.deepEqual(
+      Object.keys(row).sort(),
+      ['exists', 'name', 'path', 'skillFile', 'version'],
+      '恰好五个字段（多一个就是又给浏览器派了一份它不用的活）',
+    );
+    assert.equal(row.name, 'dev-god', 'name 仍是目录名');
+    assert.equal(row.version, '1.0.0', '版本来自台账');
+    assert.equal(row.path, join(mounted.skillsRoot, 'dev-god'), 'path 是目录');
+    assert.equal((await stat(row.path)).isDirectory(), true, 'path 真的还是个目录（写入路由要的是里面的文件）');
+    assert.equal(row.skillFile, join(row.path, 'SKILL.md'), 'skillFile 就是那个目录里的 SKILL.md');
+    assert.notEqual(row.skillFile, row.path, 'skillFile 不是目录本身');
+    assert.equal(row.skillFile.endsWith('/'), false, 'skillFile 不以 / 结尾（它指名的是一份文件）');
+    assert.equal(row.exists, true, '目录还在');
+
+    // 目录被删掉：exists 变 false，skillFile 照给——客户端不该自己拼这个字符串。
+    await rm(row.path, { recursive: true, force: true });
+    const after = await callRoute(mounted.byPath[ROUTES.marketInstalled], { headers: LOOPBACK_HEADERS });
+    const gone = after.json.data.items['skillhub:ake:dev-god'];
+    assert.equal(after.json.data.readable, true, '台账仍可读（目录没了不等于台账坏了）');
+    assert.equal(gone.exists, false, 'exists:false');
+    assert.equal(gone.path, row.path, 'path 不变（记录还在）');
+    assert.equal(
+      gone.skillFile,
+      join(mounted.skillsRoot, 'dev-god', 'SKILL.md'),
+      'skillFile 仍然给出：这一行仍是「装过」的记录，只是文件不在了',
+    );
+    // 无台账的那一档见上面两条既有用例：items:{} + readable:false，这一轮没有改。
   } finally {
     await mounted.close();
   }

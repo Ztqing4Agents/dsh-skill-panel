@@ -43,11 +43,11 @@ export function FactsTable({ rows }) {
 /**
  * Render the detail view of one market item.
  * @param {{detail: object, market: object, t: Function, onBack: Function, onRetry: Function,
- *   onInstall: Function}} props - the detail state, the market state, translate, and the
- *   back / retry / install handlers.
+ *   onInstall: Function, onUpdate: Function}} props - the detail state, the market state,
+ *   translate, and the back / retry / install / update handlers.
  * @returns {import('react').ReactElement} the detail view.
  */
-export function MarketDetail({ detail, market, t, onBack, onRetry, onInstall }) {
+export function MarketDetail({ detail, market, t, onBack, onRetry, onInstall, onUpdate }) {
   const data = detail?.status === 'ready' ? detail.data : null;
   const item = data?.item ?? detail?.item ?? {};
   const title = item.displayName || item.slug || '';
@@ -70,7 +70,7 @@ export function MarketDetail({ detail, market, t, onBack, onRetry, onInstall }) 
             <Tag>{t(`market.source.${item.sourceId}`)}</Tag>
           </div>
         </div>
-        <InstallAction item={item} market={market} t={t} onInstall={onInstall} />
+        <InstallAction item={item} market={market} t={t} onInstall={onInstall} onUpdate={onUpdate} />
       </div>
       {detail?.status === 'loading' ? <p className={cn('marketScope')}>{t('market.detailLoading')}</p> : null}
       {detail?.status === 'error' ? (

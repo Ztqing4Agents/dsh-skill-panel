@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createStore } from '../src/client/state.js';
+import { installViewOf } from '../src/client/market-model.js';
 
 /**
  * A payload with two rows, one of them already off.
@@ -251,7 +252,7 @@ test('K45 市场重取（切来源 / 搜索落定）：只清分页与详情、�
   assert.equal(store.getSnapshot().market.pages, 0, '分页仍是 0');
 });
 
-test('K45 marketListFailed 与 marketPageFailed 语义不同：前者清列表，后者保留已加载卡片', () => {
+test('K45 marketListFailed 与 marketPageFailed 语义不同：第一页全失败（还没有旧结果）清列表，追加失败保留已加载卡片', () => {
   const store = createStore();
   store.actions.marketListLoading();
   store.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 't' });
@@ -376,10 +377,13 @@ test('K45 单源：那一次请求失败就是整页失败（不再有 sourceErr
   // 只钉「没有语义」——界面不再因为它有任何表现。
   assert.deepEqual(ok.sourceErrors ?? [], [], '没有读者，恒为空数组（无论有没有这一行）');
 
+  // M3：同一个查询上一次成功过就有快照可留，失败会变成「陈旧结果 + 一行提示」。这一条验的是
+  // **没有**快照的那条路，所以先换一个还没有答案的查询（快照按查询键存，见 `marketQueryKeyOf`）。
+  store.actions.marketSetFilter({ source: 'clawhub' });
   store.actions.marketListLoading();
   store.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 'timeout' });
   const failed = store.getSnapshot().market;
-  assert.equal(failed.listStatus, 'error', '唯一那个源失败 ⇒ 整页 error 态');
+  assert.equal(failed.listStatus, 'error', '唯一那个源失败且没有旧结果 ⇒ 整页 error 态');
   assert.equal(failed.page.code, 'E_SOURCE_TIMEOUT', '错误码留在 page 上（界面据此选文案）');
 });
 
@@ -388,8 +392,9 @@ test('K45 市场子状态的 action 数量是可核对的：收藏只剩读侧�
   const names = Object.keys(store.actions);
   const market = names.filter((name) => name.startsWith('market'));
   // U20 收尾：`marketReload()` 因「零调用方」被删（页头刷新已随工具条退场），31 → 30；
-  // M14 加 `marketLocale`（分类 chip 按语言取槽，见 K156），30 → 31。
-  assert.equal(market.length, 31, '市场子状态共 31 个 action（U5 撤写侧 3 个，U20 加 marketInstalledStale 1 个、删 marketReload 1 个，M14 加 marketLocale 1 个）');
+  // M14 加 `marketLocale`（分类 chip 按语言取槽，见 K156），30 → 31；M2 加三个更新座位
+  // （`marketUpdateStart` / `marketInstalledVersion` / `marketUpdateFail`），31 → 34。
+  assert.equal(market.length, 34, '市场子状态共 34 个 action（U5 撤写侧 3 个，U20 加 marketInstalledStale 1 个、删 marketReload 1 个，M14 加 marketLocale 1 个，M2 加更新三件 3 个）');
   assert.equal(market.includes('marketLocale'), true, 'M14 的语言落点还在（chips 与分类名的取槽依据）');
   assert.equal(market.includes('marketReload'), false, 'marketReload 已删（零调用方的 action 不留）');
   assert.equal(market.includes('marketFavoritesLoaded'), true, '读侧 action 仍在（bootstrap 仍下发收藏）');
@@ -880,4 +885,460 @@ test('K134/K135 store 语义：添加只推 notice、删除才置台账过期，
   store.actions.marketInstalledStale();
   assert.equal(store.getSnapshot().market.installedReady, false, '重复标记仍是 false');
   assert.deepEqual(store.getSnapshot().market.installed, {}, '重复标记仍不动 map');
+});
+
+/* --------------------- K38 · M3：刷新失败时保住上一份卡片（陈旧结果与会话内快照） --------------------- */
+
+/**
+ * One market item, as the panel would hold it.
+ * @param {string} slug - the item's slug (and its key's tail).
+ * @returns {object} the item.
+ */
+function keptItem(slug) {
+  return {
+    sourceId: 'skillhub', id: `skillhub:ake:${slug}`, owner: 'ake', slug,
+    displayName: slug, summary: 'A fixture item.', version: '1.0.0',
+  };
+}
+
+/**
+ * Land one page of results for the current query.
+ * @param {object} store - the store.
+ * @param {string[]} slugs - the items of that page.
+ * @param {string|null} [next] - the cursor the source handed back.
+ * @returns {void}
+ */
+function landKeptPage(store, slugs, next = null) {
+  const items = slugs.map(marketItem);
+  store.actions.marketPageAppended({
+    pages: [{ sourceId: 'skillhub', page: { items, next } }],
+    merged: items,
+  });
+}
+
+test('K38 刷新失败：本查询有上次的非空结果 ⇒ 回填上一份 + stale，而不是清空整页', () => {
+  const store = createStore();
+  landKeptPage(store, ['alpha', 'beta'], 'cursor-2');
+  const loaded = store.getSnapshot().market;
+  assert.equal(loaded.listStatus, 'ready', '先有一次成功');
+  assert.equal(loaded.pages, 1, '一页');
+
+  store.actions.marketListLoading();
+  store.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 'upstream timed out' });
+  const failed = store.getSnapshot().market;
+
+  assert.equal(failed.listStatus, 'ready', '有旧结果 ⇒ 停在 ready（不是 error）');
+  assert.deepEqual(failed.stale, { code: 'E_SOURCE_TIMEOUT', message: 'upstream timed out' }, 'stale 记着这次失败');
+  assert.equal(failed.page.status, 'idle', '尾部回 idle：没有失败的追加');
+  assert.equal(failed.page.code, null, '整页错误码不落在尾部');
+  assert.deepEqual(failed.items, loaded.items, '卡片原样回填（同一批，不重排）');
+  assert.equal(failed.pages, loaded.pages, '页数回填');
+  assert.deepEqual(failed.cursors, loaded.cursors, '游标回填（数据源还能续）');
+  assert.deepEqual(failed.exhausted, loaded.exhausted, '「已耗尽」回填');
+  assert.deepEqual(failed.cursors, { skillhub: 'cursor-2' }, '游标就是上次那个值');
+});
+
+test('K38 刷新失败：没有可回填的旧结果 ⇒ 仍然清空进整页错误（空 ≠ 有结果可留）', () => {
+  // ① 从未成功过。
+  const fresh = createStore();
+  fresh.actions.marketListLoading();
+  fresh.actions.marketListFailed({ code: 'E_SOURCE_UNAVAILABLE', message: 'down' });
+  const first = fresh.getSnapshot().market;
+  assert.equal(first.listStatus, 'error', '从未成功 ⇒ 整页 error');
+  assert.deepEqual(first.items, [], '列表清空');
+  assert.equal(first.stale, null, '没有陈旧标记（屏上没有任何旧卡片）');
+  assert.equal(first.page.code, 'E_SOURCE_UNAVAILABLE', '错误码留在 page 上');
+
+  // ② 上次成功是空列表：「没有匹配」不是这次失败还能替它担保的结果。
+  const empty = createStore();
+  landKeptPage(empty, [], null);
+  assert.equal(empty.getSnapshot().market.listStatus, 'ready', '空列表也是一次成功');
+  empty.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 'timeout' });
+  const afterEmpty = empty.getSnapshot().market;
+  assert.equal(afterEmpty.listStatus, 'error', '空快照不算「有结果可留」⇒ 整页 error');
+  assert.deepEqual(afterEmpty.items, [], '列表仍是空');
+  assert.equal(afterEmpty.stale, null, '不画陈旧行（它下面没有卡片可画）');
+});
+
+test('K38 快照按查询键隔离、跨 scope 保留：切走的查询回来还能保住自己的卡片', () => {
+  const store = createStore();
+  landKeptPage(store, ['alpha'], null);
+  store.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 'slow' });
+  assert.notEqual(store.getSnapshot().market.stale, null, '本查询有快照 ⇒ 陈旧态');
+
+  // 换一个还没有答案的查询：它没有快照，所以失败就是整页失败——旧查询的卡片不会串过来。
+  store.actions.marketSetFilter({ category: 'dev-tools' });
+  assert.equal(store.getSnapshot().market.stale, null, '换查询清掉陈旧标记（那是上一个查询的事）');
+  store.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 'slow' });
+  const other = store.getSnapshot().market;
+  assert.equal(other.listStatus, 'error', '新查询没有快照 ⇒ 整页错误');
+  assert.deepEqual(other.items, [], '没有把上一个查询的卡片搬过来');
+
+  // 切回原查询：它的快照还在（快照跨 scope 保留，不是「最后一次」的别名）。
+  store.actions.marketSetFilter({ category: null });
+  assert.equal(store.getSnapshot().market.categoriesLoading, false, '同一查询的筛选回到默认');
+  store.actions.marketListFailed({ code: 'E_SOURCE_UNAVAILABLE', message: 'down' });
+  const back = store.getSnapshot().market;
+  assert.equal(back.listStatus, 'ready', '回到原查询 ⇒ 旧快照又能回填');
+  assert.deepEqual(back.items.map((entry) => entry.slug), ['alpha'], '就是原查询那一张卡');
+  assert.equal(back.stale.code, 'E_SOURCE_UNAVAILABLE', 'stale 记新的那次失败');
+});
+
+test('K38 快照最多留 8 份：第 9 个查询挤掉最久未写的那个，重写过的不会掉', () => {
+  const store = createStore();
+  const at = (keyword) => {
+    store.actions.marketCommitKeyword(keyword);
+    landKeptPage(store, [`item-${keyword}`], null);
+  };
+  for (const keyword of ['k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'k7', 'k8']) at(keyword);
+  assert.equal(Object.keys(store.getSnapshot().market.snapshots).length, 8, '八份封顶');
+
+  // Rewrite the oldest: the cap counts "least recently written", not "first ever written".
+  at('k1');
+  assert.equal(Object.keys(store.getSnapshot().market.snapshots).length, 8, '重写不新增一份');
+
+  at('k9');
+  assert.equal(Object.keys(store.getSnapshot().market.snapshots).length, 8, '第 9 个查询之后仍是 8 份');
+
+  // k2 was the oldest untouched one, so it is the one that fell off; k1 and k9 are both here.
+  store.actions.marketCommitKeyword('k2');
+  store.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 'slow' });
+  assert.equal(store.getSnapshot().market.listStatus, 'error', 'k2 被挤掉了 ⇒ 整页错误');
+
+  store.actions.marketCommitKeyword('k1');
+  store.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 'slow' });
+  assert.equal(store.getSnapshot().market.listStatus, 'ready', 'k1 重写过 ⇒ 还留着');
+  assert.deepEqual(store.getSnapshot().market.items.map((entry) => entry.slug), ['item-k1'], '回填的是 k1 自己那一条');
+
+  store.actions.marketCommitKeyword('k9');
+  store.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 'slow' });
+  assert.equal(store.getSnapshot().market.listStatus, 'ready', '最新写进去的 k9 留着');
+});
+
+test('K38 陈旧态下重取第一页：pages 归 0（尾部不当追加），成功后 stale 清空、pages 回到 1', () => {
+  const store = createStore();
+  landKeptPage(store, ['alpha', 'beta'], 'cursor-2');
+  store.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 'slow' });
+  assert.equal(store.getSnapshot().market.stale !== null, true, '先进入陈旧态');
+
+  store.actions.marketListLoading();
+  const retrying = store.getSnapshot().market;
+  assert.equal(retrying.pages, 0, '重取的是第一页 ⇒ pages 归 0（面板据此不画尾部骨架/加载更多）');
+  assert.equal(retrying.items.length, 2, '旧卡片留在屏上（不清空）');
+  assert.notEqual(retrying.stale, null, '重试期间陈旧标记还在：屏上确实还是旧结果');
+  assert.equal(retrying.page.status, 'loading', '尾部在加载（但 pages=0，面板不把它当追加）');
+
+  landKeptPage(store, ['gamma'], 'cursor-3');
+  const landed = store.getSnapshot().market;
+  assert.equal(landed.stale, null, '答案落地 ⇒ 陈旧标记消失');
+  assert.equal(landed.pages, 1, '第一页 ⇒ pages 就是 1（不是旧页数 +1）');
+  assert.deepEqual(landed.items.map((entry) => entry.slug), ['gamma'], '屏上是新答案');
+  assert.deepEqual(landed.cursors, { skillhub: 'cursor-3' }, '游标跟着新答案');
+
+  // 新答案同时成为下一次失败的快照。
+  store.actions.marketListFailed({ code: 'E_SOURCE_UNAVAILABLE', message: 'down' });
+  assert.equal(store.getSnapshot().market.listStatus, 'ready', '新答案就是下一份快照');
+  assert.deepEqual(store.getSnapshot().market.items.map((entry) => entry.slug), ['gamma'], '回填的是最后一次成功的那份');
+});
+
+/* ------------------- K161 · M2：更新座位的状态语义（进入更新 / 幂等 / 失败带 mode / 写回版本） ------------------- */
+
+/** The market key every K161 state case uses. */
+const UPDATE_KEY = 'skillhub:ake:dev-god';
+
+/**
+ * A ledger row for the card above.
+ * @param {object} [overrides] - fields to replace.
+ * @returns {object} the row.
+ */
+function updateLedgerRow(overrides = {}) {
+  return {
+    name: 'dev-god',
+    version: '1.0.0',
+    path: '/tmp/skills/dev-god',
+    skillFile: '/tmp/skills/dev-god/SKILL.md',
+    exists: true,
+    ...overrides,
+  };
+}
+
+test('K161 marketInstallConfirm 的 mode：说清画哪个弹窗，且在途时连点也只开一次', () => {
+  const store = createStore();
+  store.actions.marketInstallConfirm(UPDATE_KEY, 'update');
+  assert.deepEqual(store.getSnapshot().market.installs[UPDATE_KEY], { state: 'confirm', mode: 'update' }, '更新弹窗');
+  store.actions.marketInstallConfirm(UPDATE_KEY);
+  assert.deepEqual(store.getSnapshot().market.installs[UPDATE_KEY], { state: 'confirm', mode: 'install' }, '缺省是安装弹窗');
+
+  // 取消只清「确认」那一档：正在跑的那一次不许被弹窗关掉。
+  store.actions.marketInstallCancel(UPDATE_KEY);
+  assert.equal(UPDATE_KEY in store.getSnapshot().market.installs, false, '取消清掉座位');
+
+  store.actions.marketUpdateStart(UPDATE_KEY);
+  store.actions.marketInstallConfirm(UPDATE_KEY, 'update');
+  assert.equal(store.getSnapshot().market.installs[UPDATE_KEY].state, 'updating', '更新在途时再点不开弹窗（一次确认一次写）');
+});
+
+test('K161 marketUpdateStart 幂等：第二次点击不换 seq，在途两种座位都拦住', () => {
+  const store = createStore();
+  store.actions.marketUpdateStart(UPDATE_KEY);
+  const first = store.getSnapshot().market.installs[UPDATE_KEY];
+  assert.equal(first.state, 'updating', '进「正在更新」');
+  store.actions.marketUpdateStart(UPDATE_KEY);
+  assert.equal(store.getSnapshot().market.installs[UPDATE_KEY].seq, first.seq, '连点不产生第二次请求的代次');
+
+  // 不对称已统一（用户裁定）：两个 start 共用同一道闸，座位在途（`installing` / `updating`）
+  // 时谁都不改写它、也不产生新的代次 —— 两张卡共用一个动作位，「一次只做一件事」在两侧同语义。
+  store.actions.marketInstallStart(UPDATE_KEY);
+  const afterCross = store.getSnapshot().market.installs[UPDATE_KEY];
+  assert.equal(afterCross.state, 'updating', '在「正在更新」的座位上，安装 start 停手（不改写成安装中）');
+  assert.equal(afterCross.seq, first.seq, '也不产生第二次请求的代次');
+  store.actions.marketUpdateStart(UPDATE_KEY);
+  assert.equal(
+    store.getSnapshot().market.installs[UPDATE_KEY].state,
+    'updating',
+    '同一个座位上，更新 start 同样停手（两侧同一个闸）',
+  );
+
+  // 另一条腿：从「安装中」起手，更新 start 也必须停手（两侧闸都认这两档）。
+  store.actions.marketInstallStart('other:ake:x');
+  store.actions.marketUpdateStart('other:ake:x');
+  assert.equal(
+    store.getSnapshot().market.installs['other:ake:x'].state,
+    'installing',
+    '安装中的座位上，更新 start 不开第二次写',
+  );
+});
+
+test('K161 marketUpdateFail：座位带 mode=update，重试因此回到更新弹窗', () => {
+  const store = createStore();
+  store.actions.marketUpdateFail(UPDATE_KEY, '磁盘满了');
+  assert.deepEqual(
+    store.getSnapshot().market.installs[UPDATE_KEY],
+    { state: 'failed', reason: '磁盘满了', mode: 'update' },
+    '失败座位记着这是哪一次请求',
+  );
+  store.actions.marketUpdateFail(UPDATE_KEY);
+  assert.equal(store.getSnapshot().market.installs[UPDATE_KEY].reason, '', '没给原因就是空串（卡片不画无意义的一行）');
+});
+
+test('K161 marketInstalledVersion：静默写回台账版本并标脏；runtime=null 时不留座位', () => {
+  const store = createStore();
+  store.actions.marketInstalledLoaded({ [UPDATE_KEY]: updateLedgerRow() });
+  store.actions.marketUpdateStart(UPDATE_KEY);
+
+  store.actions.marketInstalledVersion(UPDATE_KEY, '2.0.0');
+  const afterApply = store.getSnapshot().market;
+  assert.deepEqual(afterApply.installed[UPDATE_KEY], updateLedgerRow({ version: '2.0.0' }), '台账版本换成新版本，其余字段原样');
+  assert.deepEqual(
+    afterApply.installs[UPDATE_KEY],
+    { state: 'installed', path: '/tmp/skills/dev-god', version: '2.0.0' },
+    '卡面落「已安装」座位',
+  );
+  assert.equal(afterApply.installedDirty, true, '已安装页签标脏（下一跳重扫）');
+
+  // 「已是最新」这一路不留座位：卡面该由台账判成「已是最新版本」，而不是「已安装」。
+  store.actions.marketUpdateStart(UPDATE_KEY);
+  store.actions.marketInstalledVersion(UPDATE_KEY, '2.0.0', null);
+  assert.equal(UPDATE_KEY in store.getSnapshot().market.installs, false, 'runtime=null ⇒ 座位清掉');
+
+  // 版本入参不合法时保留台账原值（不把版本写成空）。
+  store.actions.marketInstalledVersion(UPDATE_KEY, '');
+  assert.equal(store.getSnapshot().market.installed[UPDATE_KEY].version, '2.0.0', '空版本不覆盖已有值');
+
+  // 台账里没有这一条：只清座位，不凭空造一条台账。
+  store.actions.marketUpdateStart('unknown:ake:x');
+  store.actions.marketInstalledVersion('unknown:ake:x', '9.9.9');
+  assert.equal('unknown:ake:x' in store.getSnapshot().market.installs, false, '没有台账可更正 ⇒ 不留转圈的座位');
+  assert.equal('unknown:ake:x' in store.getSnapshot().market.installed, false, '也不会凭空写一条台账');
+});
+
+/* ------------- K38 · 落地归属按「发请求那一刻的查询」定（迟到答案整条丢弃，R2 回归） ------------- */
+
+/** The query key the market state spells for one keyword, as `docs/contracts/client.md` §3.9.1 spells it. */
+const QUERY_KEY = (keyword, category = 'null') => `all|${category}|recommended|${keyword}`;
+
+test('K38 迟到成功（查询已变）：不换 items、不写游标、不写新查询的快照、不清 stale', () => {
+  const store = createStore();
+  store.actions.marketCommitKeyword('a');
+  landKeptPage(store, ['alpha'], 'cursor-a');
+  const before = store.getSnapshot().market;
+
+  // 读者改成 b，b 的请求还没发出（面板里隔着一次 effect）——a 的答案在这窗口里落地。
+  store.actions.marketCommitKeyword('b');
+  const switched = store.getSnapshot().market;
+  assert.equal(switched.listStatus, 'ready', '切查询时列表留在屏上（clearedPaging 的语义）');
+  assert.deepEqual(switched.cursors, {}, 'b 的分页是新的：游标清掉');
+
+  store.actions.marketPageAppended({
+    key: QUERY_KEY('a'),
+    pages: [{ sourceId: 'skillhub', page: { items: [keptItem('late-a')], next: 'cursor-late' } }],
+    merged: [keptItem('late-a')],
+  });
+  const after = store.getSnapshot().market;
+  assert.equal(after.items, switched.items, 'items 的引用都没换（a 的答案整条丢弃，不是「先换再丢」）');
+  assert.deepEqual(after.items.map((entry) => entry.slug), ['alpha'], '屏上还是切查询前那一份');
+  assert.deepEqual(after.cursors, {}, 'a 的游标没有写进 b');
+  assert.deepEqual(Object.keys(after.snapshots), [QUERY_KEY('a')], '快照只有 a 那一份：b 的键不许凭空出现');
+  assert.equal(after.stale, null, 'b 没有陈旧标记');
+  assert.equal(after.page.status, 'idle', '尾部也没被 a 的答案推进');
+
+  // 反向：同键落地照常生效——否则上面几条会「因为全部丢弃」而假绿。
+  store.actions.marketCommitKeyword('a');
+  store.actions.marketPageAppended({
+    key: QUERY_KEY('a'),
+    pages: [{ sourceId: 'skillhub', page: { items: [keptItem('real-a')], next: null } }],
+    merged: [keptItem('real-a')],
+  });
+  assert.deepEqual(store.getSnapshot().market.items.map((entry) => entry.slug), ['real-a'], '回到 a 且答案归属正确 ⇒ 正常落地');
+  assert.equal(before.items.length, 1, '探针基线没变（上一步只有一张卡）');
+});
+
+test('K38 迟到失败（查询已变）：listStatus 不动、不画错误态，屏上的列表不陪它背错', () => {
+  const store = createStore();
+  store.actions.marketCommitKeyword('a');
+  // a 的请求在飞（面板已发出去）
+  store.actions.marketListLoading();
+  // 读者改成 b：分页清掉，列表还是空的 ⇒ idle
+  store.actions.marketCommitKeyword('b');
+  assert.equal(store.getSnapshot().market.listStatus, 'idle', 'b 这一屏还没有任何结果');
+
+  store.actions.marketListFailed({ key: QUERY_KEY('a'), code: 'E_SOURCE_TIMEOUT', message: 'slow' });
+  const after = store.getSnapshot().market;
+  assert.equal(after.listStatus, 'idle', 'a 的失败不许把 b 打进整页错误态');
+  assert.equal(after.page.status, 'idle', '尾部也没有错误');
+  assert.equal(after.page.code, null, '错误码不落在 b 上');
+  assert.deepEqual(after.items, [], '列表仍是空的（没有被「清空」动作碰过）');
+  assert.equal(after.stale, null, 'b 没有可回填的旧结果，也就没有陈旧标记');
+});
+
+test('K38 迟到追加失败 / 迟到追加成功：都不改新查询的尾部与游标', () => {
+  const store = createStore();
+  store.actions.marketCommitKeyword('a');
+  landKeptPage(store, ['alpha'], 'cursor-a');
+  store.actions.marketPageStart();
+
+  // 切到分类 b：分页清掉，卡片留着
+  store.actions.marketSetFilter({ category: 'dev-tools' });
+  const switched = store.getSnapshot().market;
+  assert.equal(switched.page.status, 'idle', '新查询的尾部是 idle');
+  assert.deepEqual(switched.cursors, {}, '游标清掉');
+
+  store.actions.marketPageFailed({ key: QUERY_KEY('a'), code: 'E_SOURCE_UNAVAILABLE', message: 'down' });
+  assert.equal(store.getSnapshot().market.page.status, 'idle', '旧查询的追加失败不画在新查询的尾部（否则会出现「加载失败，点此重试」）');
+
+  store.actions.marketPageAppended({
+    key: QUERY_KEY('a'),
+    pages: [{ sourceId: 'skillhub', page: { items: [keptItem('late-page')], next: 'cursor-late' } }],
+    merged: [keptItem('alpha'), keptItem('late-page')],
+  });
+  const after = store.getSnapshot().market;
+  assert.deepEqual(after.cursors, {}, '旧答案不许写回游标');
+  assert.deepEqual(
+    Object.keys(after.snapshots),
+    [QUERY_KEY('a')],
+    '快照仍只有第一页那份（a 的键），分类查询的键没有被旧答案凭空写出来',
+  );
+  assert.deepEqual(after.items.map((entry) => entry.slug), ['alpha'], '新查询的列表没被旧答案追加');
+});
+
+test('K38 key 缺省＝当前查询（既有调用点与测试不必逐个改签名）', () => {
+  const store = createStore();
+  store.actions.marketPageAppended({
+    pages: [{ sourceId: 'skillhub', page: { items: [keptItem('alpha')], next: null } }],
+    merged: [keptItem('alpha')],
+  });
+  assert.deepEqual(Object.keys(store.getSnapshot().market.snapshots), [QUERY_KEY('')], '不带 key ⇒ 记在当前查询下');
+  store.actions.marketListFailed({ code: 'E_SOURCE_TIMEOUT', message: 'slow' });
+  assert.equal(store.getSnapshot().market.listStatus, 'ready', '不带 key 的失败仍按当前查询回填');
+  assert.notEqual(store.getSnapshot().market.stale, null, '陈旧标记照常');
+});
+
+test('K161 装完那一行台账是「五键 + skillFile 未知」：客户端不拼 SKILL.md，也绝不因此开出更新', () => {
+  const store = createStore();
+  const id = 'skillhub:ake:fresh';
+  store.actions.marketInstallStart(id);
+  store.actions.marketInstallOk(id, { name: 'fresh', path: '/tmp/skills/fresh', version: '1.0.0' });
+  const market = store.getSnapshot().market;
+
+  assert.deepEqual(
+    Object.keys(market.installed[id]).sort(),
+    ['exists', 'name', 'path', 'skillFile', 'version'],
+    '五个键，与 #8 的形状一致（缺键会让「这一行是什么」在客户端有两种读法）',
+  );
+  assert.equal(market.installed[id].skillFile, null, '未知就显式写 null：`join(path, SKILL.md)` 只能由 Host 拼（硬约束 6）');
+  assert.equal(market.installed[id].path, '/tmp/skills/fresh', 'path 仍是目录');
+  assert.equal(market.installs[id].state, 'installed', '运行时座位说「已安装」');
+  assert.equal(market.installedDirty, true, '已安装页签标脏');
+
+  // 反向：这一行永远接不出一个更新请求——没有 skillFile 就没有可覆盖的文件。
+  const card = { id, version: '2.0.0' };
+  assert.deepEqual(installViewOf(market, id, card), { state: 'installed', path: '/tmp/skills/fresh' }, '座位在 ⇒ 已安装（不是更新）');
+  const withoutSeat = { ...market, installs: {} };
+  assert.deepEqual(
+    installViewOf(withoutSeat, id, card),
+    { state: 'ready' },
+    '把座位摘掉也只落「安装」：缺 skillFile 的行不许给出更新入口',
+  );
+
+  // 只有 Host 那条带真 skillFile 的行回来，这一条才可能落到「已是最新」/「更新」。
+  store.actions.marketInstalledLoaded({
+    [id]: { name: 'fresh', version: '1.0.0', path: '/tmp/skills/fresh', skillFile: '/tmp/skills/fresh/SKILL.md', exists: true },
+  });
+  const hosted = { ...store.getSnapshot().market, installs: {} };
+  assert.deepEqual(
+    installViewOf(hosted, id, card),
+    { state: 'update', path: '/tmp/skills/fresh', from: '1.0.0', to: '2.0.0' },
+    'Host 的真形状回来之后才有「更新」',
+  );
+});
+
+test('K161 一道闸三处调用：两个 start 与确认弹窗，在两种在途座位上都停手且 seq 不变', () => {
+  const id = UPDATE_KEY;
+  /** The three actions that must share one gate, with the arguments each needs. */
+  const CALLERS = [
+    { name: 'marketInstallStart', call: (store) => store.actions.marketInstallStart(id) },
+    { name: 'marketUpdateStart', call: (store) => store.actions.marketUpdateStart(id) },
+    { name: 'marketInstallConfirm(install)', call: (store) => store.actions.marketInstallConfirm(id) },
+    { name: 'marketInstallConfirm(update)', call: (store) => store.actions.marketInstallConfirm(id, 'update') },
+  ];
+  /** How to put a seat into each in-flight state through the public actions only. */
+  const SEEDS = [
+    { seat: 'installing', seed: (store) => store.actions.marketInstallStart(id) },
+    { seat: 'updating', seed: (store) => store.actions.marketUpdateStart(id) },
+  ];
+
+  for (const seed of SEEDS) {
+    for (const caller of CALLERS) {
+      const store = createStore();
+      seed.seed(store);
+      const before = store.getSnapshot().market.installs[id];
+      assert.equal(before.state, seed.seat, `先造出 ${seed.seat} 座位`);
+
+      caller.call(store);
+      const after = store.getSnapshot().market.installs[id];
+      assert.deepEqual(
+        after,
+        before,
+        `${caller.name} 打在 ${seed.seat} 座位上：整条座位一字不动（状态、mode、seq 都不换）`,
+      );
+    }
+  }
+
+  // 正向对照：闸不是「一律返回」。空座位上四个调用者各自都能真的把座位推成在途/确认态，
+  // 且两个 start 会拿到新的代次（seq 递增）。
+  const fresh = createStore();
+  fresh.actions.marketInstallStart(id);
+  const installSeq = fresh.getSnapshot().market.installs[id].seq;
+  assert.equal(fresh.getSnapshot().market.installs[id].state, 'installing', '空座位 ⇒ 安装能开始');
+  const other = createStore();
+  other.actions.marketUpdateStart(id);
+  assert.equal(other.getSnapshot().market.installs[id].state, 'updating', '空座位 ⇒ 更新能开始');
+  const confirmOnly = createStore();
+  confirmOnly.actions.marketInstallConfirm(id, 'update');
+  assert.deepEqual(
+    confirmOnly.getSnapshot().market.installs[id],
+    { state: 'confirm', mode: 'update' },
+    '空座位 ⇒ 弹窗能开（没有 mode 之外的多余字段）',
+  );
+  assert.ok(Number.isInteger(installSeq) && installSeq > 0, 'start 会给这一次请求一个代次');
 });

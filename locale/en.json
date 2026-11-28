@@ -181,6 +181,7 @@
   "error.E_BAD_QUERY": "The request parameters are not valid",
   "error.E_SKILL_NAME_INVALID": "This package declares an invalid name: {name}",
   "error.E_ALREADY_INSTALLED": "A skill with this name already exists: {path}",
+  "error.E_NOT_MARKET_INSTALLED": "This copy on disk was not installed from the skill market (or its source metadata has changed), so it cannot be updated from here",
   "error.E_PACKAGE_INVALID": "This skill’s package is incomplete, over the size limit, or contains symlinks",
   "error.E_DOWNLOAD_FAILED": "Could not download the skill package: {reason}",
   "error.E_INSTALL_IO": "Could not write the skill directory: {reason}",

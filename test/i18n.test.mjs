@@ -26,6 +26,8 @@ const ROUTE_CODES = [
   'E_BAD_QUERY', 'E_SOURCE_UNKNOWN', 'E_SOURCE_UNAVAILABLE', 'E_SOURCE_TIMEOUT',
   'E_SOURCE_BAD_RESPONSE', 'E_SKILL_NAME_INVALID', 'E_ALREADY_INSTALLED',
   'E_PACKAGE_INVALID', 'E_DOWNLOAD_FAILED', 'E_INSTALL_IO', 'E_INSTALL_BUSY',
+  // M2 收口：这一码用户真会遇到（装了别处的同名目录），有自己的句子与下一步，不再落兜底句。
+  'E_NOT_MARKET_INSTALLED',
 ];
 
 /** CJK blocks the gate rejects inside source files. */

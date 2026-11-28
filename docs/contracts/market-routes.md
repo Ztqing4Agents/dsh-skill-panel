@@ -19,7 +19,7 @@
 | 5 | `GET /api/dsh-skill-panel/market/bootstrap` | `source`（可选，`all`（缺省）/`skillhub`/`clawhub`——只算这一档的计数）；`?refresh=1` 绕过分类表与计数的缓存，仅调试 | `{source, sources:[{id,labelKey,hasCategories,packageKind}], categories:[{key,name,nameEn,count:number\|null}], categoriesOk:boolean, categoriesStale:boolean, total:number\|null, countsOk:boolean, favorites:string[], favoritesOk:boolean}`；`sources` 是**三个 scope**（`all` 排第一），`source` 回显这三个数字属于哪一档 | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_QUERY`、`500 E_INTERNAL`。分类表失败**不报错**：`categoriesOk:false` + 空数组；计数失败**也不报错**：那一项 `count:null`、`countsOk:false`（`total:null`），两者都不影响列表；`categoriesStale:true` 表示缓存兜底 |
 | 6 | `GET /api/dsh-skill-panel/market/list` | `source`（可选，**scope**：缺省 = `all`，取值 `all`/`skillhub`/`clawhub`；`all` 与缺省都不给上游传 `source`，`skillhub`→`community`，`clawhub`→`clawhub`）、`sort=recommended\|updated\|downloads\|stars`、`category`、`keyword`（≤ 64 字符）、`limit=1..24`（默认 12）、`cursor`（该 scope 自己的不透明游标） | `{source, sort, keyword, category, items:[MarketItem], next:string\|null, total:number\|null}` | `403`、`405`、`400 E_BAD_QUERY`、`502 E_SOURCE_BAD_RESPONSE`、`503 E_SOURCE_UNAVAILABLE`、`504 E_SOURCE_TIMEOUT`、`500 E_INTERNAL` |
 | 7 | `GET /api/dsh-skill-panel/market/detail` | `source`（必填）、`owner`、`slug`（必填）、`version`（可选） | `MarketDetail`（§3.8.1） | 同 #6 |
-| 8 | `GET /api/dsh-skill-panel/market/installed` | 无 | `{items:{[id]:{name,version,path,exists:boolean}}, readable:boolean}` | `403`、`405`、`500 E_INTERNAL` |
+| 8 | `GET /api/dsh-skill-panel/market/installed` | 无 | `{items:{[id]:{name,version,path,skillFile,exists:boolean}}, readable:boolean}`——`path` 是目录、`skillFile` 是其中的 `SKILL.md`（客户端拿它去 #16，不自己拼） | `403`、`405`、`500 E_INTERNAL` |
 | 9 | `POST /api/dsh-skill-panel/market/install` | `{source, owner, slug, version?}`（`objectOnly`，≤ 64 KiB；**没有 path / files / name 字段**） | `{name, path, version, source, owner, slug, files:number, bytes:number}` | `403`、`405`、`400 E_BAD_REQUEST`、`400 E_BAD_QUERY`、`409 E_ALREADY_INSTALLED`、`422 E_SKILL_NAME_INVALID`、`422 E_PACKAGE_INVALID`、`429 E_INSTALL_BUSY`、`502 E_DOWNLOAD_FAILED`、`502 E_SOURCE_BAD_RESPONSE`、`503 E_SOURCE_UNAVAILABLE`、`504 E_SOURCE_TIMEOUT`、`500 E_INSTALL_IO`、`500 E_INTERNAL` |
 | 11 | `POST /api/dsh-skill-panel/market/icons` | body `{items:[{source?, owner, slug}], source?}`：`items` ≤ **24**，每条 `source`/`owner`/`slug` 走 §3.7.3 的上游白名单；`source` 逐条给，顶层 `source` 只是**兼容默认值**（item 优先，详见 §3.7.5） | `{icons:{'<source>:<owner>:<slug>': iconUrl\|null}, names:{同键→上游标题\|null}}`——两图的**键集合与顺序逐键相同**，缺名也是「键在、值 `null`」 | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_REQUEST`（`items` 缺失/为空/超 24）、`400 E_BAD_QUERY`（标识符不合白名单，或 `source` 未注册）、`500 E_INTERNAL`。单条失败只让该项 `null`，**单源失败只让该源 `null`**，整体仍 `200` |
 | 13 | `POST /api/dsh-skill-panel/market/favorite` | `{source, owner, slug, favorited:boolean}`（`objectOnly`，≤ 64 KiB；**没有 id / path / version 生效位**） | `{favorites:string[], favorited:boolean}`（权威全量列表，最新在前；`favorited` 是实际生效的状态） | `403 E_FORBIDDEN`、`405 E_METHOD`、`400 E_BAD_REQUEST`（body 非对象 / `favorited` 非布尔）、`400 E_BAD_QUERY`（身份不合白名单或源未注册）、`409 E_FAVORITE_FULL`、`500 E_FAVORITE_IO`、`500 E_INTERNAL` |
@@ -137,7 +137,7 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 
 #### 3.7.7 `market/update` 的覆盖安装契约
 
-- **前置校验（路由层，顺序不许换）**：P0 `parseUpdateBody` 白名单 → P1 按 `name` **重新扫描**定位行（`404 E_NOT_FOUND`）→ P2 软链 `409 E_SYMLINK_READONLY` → P3 `row.path !== path` `409 E_STALE_PATH` → P4 越界 `409 E_NOT_WRITABLE` → P5 `_meta.json` 的 `source`/`ownerId`/`slug` 与请求**逐字相等**，否则 `409 E_NOT_MARKET_INSTALLED` → P6 `row.version === version` `409 E_ALREADY_UP_TO_DATE`（只比相等，不排序）→ P7 与 `install` **共用同一张锁表**与 `MAX_CONCURRENT_INSTALLS`（`429 E_INSTALL_BUSY`）。
+- **前置校验（路由层，顺序不许换）**：P0 `parseUpdateBody` 白名单 → P1 按 `name` **重新扫描**定位行（`404 E_NOT_FOUND`）→ P2 软链 `409 E_SYMLINK_READONLY` → P3 `row.path !== path` `409 E_STALE_PATH`（客户端这个 `path` 取自 #8 的 `skillFile`：台账行给的是目录，`SKILL.md` 这一层由 Host 拼、由浏览器原样回传——硬约束 6 的「先认路径再写」，客户端不拼字符串） → P4 越界 `409 E_NOT_WRITABLE` → P5 `_meta.json` 的 `source`/`ownerId`/`slug` 与请求**逐字相等**，否则 `409 E_NOT_MARKET_INSTALLED`（这一码有自己的文案与下一步：去「已安装」页卸载后重装，见 §8.6） → P6 `row.version === version` `409 E_ALREADY_UP_TO_DATE`（只比相等，不排序）→ P7 与 `install` **共用同一张锁表**与 `MAX_CONCURRENT_INSTALLS`（`429 E_INSTALL_BUSY`）。
 - **落盘十个阶段（U1–U10）、四条回滚路径与三条不变式见 `docs/contracts/market.md` §7.11**：实现在 `lib/market/install.js` 的 `update(ref, target)`，复用安装的暂存/元数据/回读/台账内部件。
 - **三个新码只描述「动过磁盘之后」的结局**：`E_UPDATE_RESTORED`（回滚成功，旧版本逐字节完整）/ `E_UPDATE_LOST`（目录已不在，旧版本留在 `.skc-backup-*`）/ `E_UPDATE_UNCONFIRMED`（新版本已落位回读通过，台账未写）。动手之前失败一律走 `E_INSTALL_IO` 与上游码——不许拿 `E_INSTALL_IO` 糊「已回滚」这种结论。
 
@@ -147,7 +147,7 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 
 | code | HTTP | 含义 | 前端表现 |
 | --- | --- | --- | --- |
-| `E_BAD_QUERY` | 400 | 参数不过白名单（源未知、`sort`/`limit`/`cursor` 非法、`owner/slug/version` 不合规） | 行内原因；正常不可达（参数源自 bootstrap 与已校验的条目） |
+| `E_BAD_QUERY` | 400 | 参数不过白名单（源未知、`sort`/`limit`/`cursor` 非法、`owner/slug/version` 不合规） | **有自己的文案** `error.E_BAD_QUERY`（#17/#18 与 #16 共用这一句）；下一步是刷新页面再看这张卡，正常不可达（参数源自 bootstrap 与已校验的条目） |
 | `E_BAD_REQUEST` | 400 | install 的 body 非法 / 超 64 KiB / 不是对象 | 行内原因 |
 | `E_SOURCE_UNKNOWN` | 400 | 来源不再在注册表里 | 客户端兜底文案（列表与详情实际用 `E_BAD_QUERY` 表达同一个事实，见 §3.7.2 第 1 条） |
 | `E_SOURCE_UNAVAILABLE` | 503 | 上游连不上 / 5xx / 限流 | 该源失败：部分源提示条；两源都失败才整页错误态 |
@@ -161,7 +161,7 @@ fail(k) ⇔ ∄ skillsRoot/<name>
 | `E_INSTALL_IO` | 500 | 落盘失败（权限、磁盘、rename、台账写失败、回读不一致） | 行内原因 + 「重试」 |
 | `E_FAVORITE_FULL` | 409 | 收藏已达上限（500 条），且这次是新增 | toast 说明上限，按钮回滚到点击前的状态 |
 | `E_FAVORITE_IO` | 500 | 收藏写盘失败（权限、磁盘、rename） | toast 说明写盘失败（带原因），按钮回滚 |
-| `E_NOT_MARKET_INSTALLED` | 409 | 目标行不是市场装：`_meta.json` 的 `source`/`ownerId`/`slug` 与请求不逐字相等，或这一行没有可写路径 | 行内原因；**防御性**（只有行在面板打开后被换掉才见得到），客户端回落 `error.E_UNKNOWN` |
+| `E_NOT_MARKET_INSTALLED` | 409 | 目标行不是市场装：`_meta.json` 的 `source`/`ownerId`/`slug` 与请求不逐字相等，或这一行没有可写路径 | **有自己的文案** `error.E_NOT_MARKET_INSTALLED`（用户真会遇到：本机这份不是市场装的、或来源元数据被改过——下一步是去「已安装」页卸载后重装）；行内原因，不落兜底句 |
 | `E_ALREADY_UP_TO_DATE` | 409 | 请求的目标版本与本地版本**逐字相等**（没有可做的事；只比相等、不排序） | 不作错误提示：客户端把卡面直接落回「已是最新版本」 |
 | `E_UPDATE_RESTORED` | 500 | 更新在交换或落位回读阶段失败、**已回滚**（旧版本逐字节完整，`data` 带 `from`） | 卡面回「可更新到 {to}」+ 行内原因「更新失败，已恢复到 {from}」；可再点更新（幂等） |
 | `E_UPDATE_LOST` | 500 | 更新失败且回滚也失败：目录已不在，旧版本留在 `.skc-backup-*`（`data` 带 `from`） | 详情转 `E_NOT_FOUND` 态 + 「更新失败，技能未安装」+ 触发重扫 |

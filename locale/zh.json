@@ -181,6 +181,7 @@
   "error.E_BAD_QUERY": "请求参数不合规",
   "error.E_SKILL_NAME_INVALID": "这个技能的包声明了不合规的名字：{name}",
   "error.E_ALREADY_INSTALLED": "本机已有同名技能：{path}",
+  "error.E_NOT_MARKET_INSTALLED": "本机这份技能不是从技能市场装的，或它的来源信息已被改动，因此不能在市场里更新",
   "error.E_PACKAGE_INVALID": "这个技能的包不完整、超过体积上限，或含软链",
   "error.E_DOWNLOAD_FAILED": "下载技能包失败：{reason}",
   "error.E_INSTALL_IO": "写入技能目录失败：{reason}",

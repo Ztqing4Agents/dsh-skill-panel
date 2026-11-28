@@ -982,15 +982,15 @@ test('K148⑥ 降级：座位缺失 / start 抛错 ⇒ 第二行禁用 + 换副�
   assert.equal(brokenHints[1], t('add.createWithAgentOff'), '副行同步换成降级那句');
 });
 
-test('K148⑦ 字典 197 键，四枚新键各自非空且中英都有', async () => {
+test('K148⑦ 字典 198 键，四枚新键各自非空且中英都有', async () => {
   const { readFile } = await import('node:fs/promises');
   const { join } = await import('node:path');
   const root = join(import.meta.dirname, '..');
   const zh = JSON.parse(await readFile(join(root, 'locale', 'zh.json'), 'utf8'));
   const en = JSON.parse(await readFile(join(root, 'locale', 'en.json'), 'utf8'));
   const keys = (dict) => Object.keys(dict).filter((key) => key !== 'meta');
-  assert.equal(keys(zh).length + Object.keys(zh.meta).length, 197, 'zh 共 197 项');
-  assert.equal(keys(en).length + Object.keys(en.meta).length, 197, 'en 共 197 项');
+  assert.equal(keys(zh).length + Object.keys(zh.meta).length, 198, 'zh 共 198 项');
+  assert.equal(keys(en).length + Object.keys(en.meta).length, 198, 'en 共 198 项');
   for (const key of ['add.fromPath', 'add.fromPathHint', 'add.createWithAgent', 'add.createWithAgentHint', 'add.createWithAgentOff']) {
     assert.equal(typeof zh[key], 'string', `zh 有 ${key}`);
     assert.equal(zh[key].length > 0, true, `zh 的 ${key} 非空`);

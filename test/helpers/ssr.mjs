@@ -47,6 +47,8 @@ const SOURCES = {
   skillDialogs: 'skill-dialogs.jsx',
   pluginDetail: 'plugin-detail.jsx',
   markdown: 'markdown.jsx',
+  panel: 'market-panel.jsx',
+  confirm: 'market-confirm.jsx',
 };
 
 /** Bundles already built in this process, by cache key. */

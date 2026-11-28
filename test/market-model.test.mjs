@@ -39,6 +39,7 @@ import {
   sourceDescriptors,
   sourceLabelOf,
   statSegments,
+  updateFailKeyOf,
   visibleCategories,
 } from '../src/client/market-model.js';
 import { createStore } from '../src/client/state.js';
@@ -285,20 +286,118 @@ test('K37 installViewOf 四态：ready / installing / installed / failed，运�
     { state: 'failed', reason: '磁盘满了' },
     '失败带原因',
   );
+  // M2：台账命中还要求路由给出 `skillFile`（没有它就没有可覆盖的文件），且卡片没有版本号、
+  // 台账有 ⇒ 「已安装」而不是「可更新」——这一档不许猜版本。
+  const ledger = { name: 'dev-god', version: '1.0.0', path: '/tmp/y', skillFile: '/tmp/y/SKILL.md', exists: true };
   assert.deepEqual(
-    installViewOf({ installs: {}, installed: { [id]: { name: 'dev-god', path: '/tmp/y', exists: true } } }, id),
+    installViewOf({ installs: {}, installed: { [id]: ledger } }, id),
     { state: 'installed', path: '/tmp/y' },
     '台账说装过',
   );
   assert.deepEqual(
-    installViewOf({ installs: {}, installed: { [id]: { name: 'dev-god', path: '/tmp/y', exists: false } } }, id),
+    installViewOf({ installs: {}, installed: { [id]: { ...ledger, exists: false } } }, id),
     { state: 'ready' },
     '台账有记录但目录不见了 ⇒ 可再装（exists:false）',
   );
   assert.deepEqual(
-    installViewOf({ installs: { [id]: { state: 'failed', reason: 'r' } }, installed: { [id]: { exists: true, path: '/p' } } }, id),
+    installViewOf({ installs: {}, installed: { [id]: { ...ledger, skillFile: undefined } } }, id),
+    { state: 'ready' },
+    '台账没有 skillFile ⇒ 没有可覆盖的文件，仍可装（M2 的三条判据缺一不可）',
+  );
+  assert.deepEqual(
+    installViewOf({ installs: { [id]: { state: 'failed', reason: 'r' } }, installed: { [id]: ledger } }, id),
     { state: 'failed', reason: 'r' },
     '运行时失败优先于台账（否则重试按钮会消失）',
+  );
+});
+
+test('K161 卡面七态：台账三条判据 + 版本只比相等，失败码分档', () => {
+  // The pure half of the market page's "already installed ⇒ update" entry (docs/contracts/
+  // acceptance.md D.16). The panel half - one request, the write-back order, the reload set -
+  // is driven through a fake `api` in the component layer.
+  const id = 'skillhub:ake:dev-god';
+  const ledger = { name: 'dev-god', version: '1.0.0', path: '/tmp/y', skillFile: '/tmp/y/SKILL.md', exists: true };
+  const view = (record, version) => installViewOf({ installs: {}, installed: { [id]: record } }, id, { id, version });
+
+  // ① A ledger hit needs all three: the entry, the directory, and the file inside it.
+  assert.deepEqual(view({ ...ledger, skillFile: '' }, '2.0.0'), { state: 'ready' }, '没有 skillFile ⇒ 无文件可覆盖，仍可装');
+  assert.deepEqual(view({ ...ledger, exists: false }, '2.0.0'), { state: 'ready' }, '目录已不在 ⇒ 仍可装');
+  assert.deepEqual(
+    installViewOf({ installs: {}, installed: {} }, id, { id, version: '2.0.0' }),
+    { state: 'ready' },
+    '台账没有这一条 ⇒ 可装',
+  );
+
+  // ② Versions: equality only, no ordering, and "unknown on the card" never guesses a target.
+  assert.deepEqual(view(ledger, '1.0.0'), { state: 'latest', path: '/tmp/y' }, '两侧逐字相等 ⇒ 已是最新');
+  assert.deepEqual(
+    view(ledger, '2.0.0'),
+    { state: 'update', path: '/tmp/y', from: '1.0.0', to: '2.0.0' },
+    '版本不同 ⇒ 可更新',
+  );
+  assert.deepEqual(
+    view(ledger, '0.9.0'),
+    { state: 'update', path: '/tmp/y', from: '1.0.0', to: '0.9.0' },
+    '降级不拦：只比相等、不排序，方向交给弹窗',
+  );
+  assert.deepEqual(view(ledger, ''), { state: 'installed', path: '/tmp/y' }, '卡上无版本、台账有 ⇒ 已安装（不猜版本）');
+  assert.deepEqual(view(ledger, null), { state: 'installed', path: '/tmp/y' }, '卡上版本是 null 同「无版本」');
+  assert.deepEqual(
+    view({ ...ledger, version: '' }, '2.0.0'),
+    { state: 'update', path: '/tmp/y', from: '', to: '2.0.0' },
+    '台账无版本但卡上有 ⇒ 仍可更新（目标版本已知，`{from}` 写「未知」）',
+  );
+  // 收口裁决（2026-11-28）：卡上无版本一律「已安装」，两侧都未知也一样 —— 空 `version` 发给
+  // #16 必被 `parseUpdateBody` 的白名单拒成 `400 E_BAD_QUERY`，一条注定失败的请求不该接在按钮上。
+  assert.deepEqual(
+    view({ ...ledger, version: '' }, ''),
+    { state: 'installed', path: '/tmp/y' },
+    '两侧都无版本 ⇒ 已安装（零请求；旧口径「任一方未知即 update」已作废）',
+  );
+
+  // ③ The runtime seat wins over the ledger, and a failed update keeps its verb.
+  assert.deepEqual(
+    installViewOf({ installs: { [id]: { state: 'updating' } }, installed: { [id]: ledger } }, id, { id, version: '2.0.0' }),
+    { state: 'updating' },
+    '在途时运行时优先（台账还是上一读的答案）',
+  );
+  assert.deepEqual(
+    installViewOf(
+      { installs: { [id]: { state: 'failed', reason: 'r', mode: 'update' } }, installed: { [id]: ledger } },
+      id,
+      { id, version: '2.0.0' },
+    ),
+    { state: 'failed', reason: 'r', mode: 'update' },
+    '更新失败带 mode，重试回到更新弹窗（不落成「安装」）',
+  );
+
+  // ④ The failure vocabulary: three conclusions, one silence, four defensive unknowns, and the
+  // market codes that already have a sentence of their own.
+  assert.equal(updateFailKeyOf('E_UPDATE_RESTORED'), 'detail.updateRolledBack', '已回滚');
+  assert.equal(updateFailKeyOf('E_UPDATE_LOST'), 'detail.updateLost', '目录已不在');
+  assert.equal(updateFailKeyOf('E_UPDATE_UNCONFIRMED'), 'detail.updateUnknown', '无法确认');
+  assert.equal(updateFailKeyOf('E_ALREADY_UP_TO_DATE'), null, '不是错误：无文案，卡面转「已是最新版本」');
+  // 三档（PM 裁定，理由见 market-routes.md §8.6 的前端表现栏）：读者真会遇到、有下一步的两个
+  // 码各有自己的句子；只在面板与 Host 不一致时出现的两个码继续走兜底模板。
+  assert.equal(updateFailKeyOf('E_NOT_MARKET_INSTALLED'), 'error.E_NOT_MARKET_INSTALLED', '不是市场装的 ⇒ 自己的句子');
+  assert.equal(updateFailKeyOf('E_BAD_QUERY'), 'error.E_BAD_QUERY', '参数不合规 ⇒ 自己的句子（刷新页面再看这张卡）');
+  for (const code of ['E_BAD_REQUEST', 'E_INTERNAL']) {
+    assert.equal(updateFailKeyOf(code), 'error.E_UNKNOWN', `${code} 只给兜底文案`);
+  }
+  for (const code of ['E_STALE_PATH', 'E_NOT_FOUND', 'E_SYMLINK_READONLY', 'E_NOT_WRITABLE', 'E_INSTALL_BUSY']) {
+    assert.equal(updateFailKeyOf(code), `error.${code}`, `${code} 有自己的句子`);
+  }
+
+  // 跨路一致（机制层）：安装路走 `reasonKeyOf`，更新路走 `updateFailKeyOf`；四个防御码两张表必须
+  // 落在同一个键上，否则同一个失败在两条路上会有两种说法。`E_ALREADY_UP_TO_DATE` 是唯一的例外
+  // （更新路说「什么都不用说」，安装路根本遇不到这个码）。
+  for (const code of ['E_NOT_MARKET_INSTALLED', 'E_BAD_QUERY', 'E_BAD_REQUEST', 'E_INTERNAL']) {
+    assert.equal(updateFailKeyOf(code), reasonKeyOf(code), `${code}：两条路取同一个键`);
+  }
+  assert.notEqual(
+    updateFailKeyOf('E_ALREADY_UP_TO_DATE'),
+    reasonKeyOf('E_ALREADY_UP_TO_DATE'),
+    '「已是最新」只对更新路有意义：这里必须是两张表唯一分叉的地方',
   );
 });
 
